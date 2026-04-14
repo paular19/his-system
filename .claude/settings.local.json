@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /c/Users/ramos/his-system/src/app/\\\\\\(dashboard\\\\\\)/admision/[id\\\\\\)/)",
+      "Bash(xargs grep -l \"Orden\\\\|OrdenPractica\\\\|numeroAutorizacion\")",
+      "Bash(grep -E \"\\\\.ts$|\\\\.tsx$\")",
+      "Bash(done)",
+      "Bash(ls -la /c/Users/ramos/his-system/src/app/\\\\\\(dashboard\\\\\\)/)"
+    ]
+  }
+}

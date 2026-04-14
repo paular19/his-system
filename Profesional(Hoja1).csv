@@ -1,0 +1,21 @@
+PrfID,PrfNombre,PrfMatric,EspID,TpfCodig,PrfDomic,PrvID,LodID,PrfCP,PrfTelef,PrfTelCel,PrfEmail,PrfEstad,PrfFchEst,UsuCodig
+1,Dr. Juan Pérez,12345,1,MED,Av. Siempre Viva 123,1,1,4400,3874123456,3874987654,juan.perez@hospital.com,A,2024-01-01,SUPERVISOR
+2,Dra. María González,23456,2,PED,Calle Falsa 456,1,2,4401,3874234567,3874876543,maria.gonzalez@hospital.com,A,2024-01-02,SUPERVISOR
+3,Dr. Carlos Rodríguez,34567,3,CAR,Plaza Mayor 789,1,3,4402,3874345678,3874765432,carlos.rodriguez@hospital.com,A,2024-01-03,SUPERVISOR
+4,Dra. Ana López,45678,4,GIN,Ruta 5 Km 10,1,4,4403,3874456789,3874654321,ana.lopez@hospital.com,A,2024-01-04,SUPERVISOR
+5,Dr. Roberto Martínez,56789,5,TRA,Barrio Centro 101,1,5,4404,3874567890,3874543210,roberto.martinez@hospital.com,A,2024-01-05,SUPERVISOR
+6,Dra. Laura Fernández,67890,6,DER,Av. Libertador 202,1,6,4405,3874678901,3874432109,laura.fernandez@hospital.com,A,2024-01-06,SUPERVISOR
+7,Dr. Miguel Sánchez,78901,7,URO,Calle Comercio 303,1,7,4406,3874789012,3874321098,miguel.sanchez@hospital.com,A,2024-01-07,SUPERVISOR
+8,Dra. Patricia Díaz,89012,8,PSI,Plaza 25 de Mayo 404,1,8,4407,3874890123,3874210987,patricia.diaz@hospital.com,A,2024-01-08,SUPERVISOR
+9,Dr. Alejandro Ruiz,90123,9,ORT,Av. San Martín 505,1,9,4408,3874901234,3874109876,alejandro.ruiz@hospital.com,A,2024-01-09,SUPERVISOR
+10,Dra. Silvia Morales,1234,10,OFT,Ruta 9 Km 5,1,10,4409,3874012345,3874098765,silvia.morales@hospital.com,A,2024-01-10,SUPERVISOR
+11,Dr. Fernando Herrera,2345,11,NEU,Barrio Norte 606,1,11,4410,3874123456,3874987654,fernando.herrera@hospital.com,A,2024-01-11,SUPERVISOR
+12,Dra. Gabriela Castro,3456,12,END,Calle Belgrano 707,1,12,4411,3874234567,3874876543,gabriela.castro@hospital.com,A,2024-01-12,SUPERVISOR
+13,Dr. Eduardo Vargas,4567,13,CIR,Plaza España 808,1,13,4412,3874345678,3874765432,eduardo.vargas@hospital.com,A,2024-01-13,SUPERVISOR
+14,Dra. Carolina Medina,5678,14,RAD,Av. Rivadavia 909,1,14,4413,3874456789,3874654321,carolina.medina@hospital.com,A,2024-01-14,SUPERVISOR
+15,Dr. Ricardo Silva,6789,15,ANP,Ruta 34 Km 15,1,15,4414,3874567890,3874543210,ricardo.silva@hospital.com,A,2024-01-15,SUPERVISOR
+16,Dra. Mariana Torres,7890,16,HEM,Barrio Sur 1010,1,16,4415,3874678901,3874432109,mariana.torres@hospital.com,A,2024-01-16,SUPERVISOR
+17,Dr. Pablo Ramírez,8901,17,INF,Calle Mitre 1111,1,17,4416,3874789012,3874321098,pablo.ramirez@hospital.com,A,2024-01-17,SUPERVISOR
+18,Dra. Valeria Flores,9012,18,NEO,Plaza Independencia 1212,1,18,4417,3874890123,3874210987,valeria.flores@hospital.com,A,2024-01-18,SUPERVISOR
+19,Dr. Diego Acosta,123,19,REU,Av. Güemes 1313,1,19,4418,3874901234,3874109876,diego.acosta@hospital.com,A,2024-01-19,SUPERVISOR
+20,Dra. Sofia Navarro,234,20,GER,Ruta 40 Km 20,1,20,4419,3874012345,3874098765,sofia.navarro@hospital.com,A,2024-01-20,SUPERVISOR

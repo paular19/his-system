@@ -1,0 +1,1001 @@
+// ============================================
+// SCHEMA PRISMA - SISTEMA HIS
+// Fuente de verdad: base legacy compatible
+// No modificar @map ni nombres de columnas
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// ENTIDADES PRINCIPALES
+// ============================================
+
+model Paciente {
+  id              Int  @id @default(autoincrement()) @map("PacID")
+  historiaClinica Int? @unique @map("PacHC")
+
+  // Identificación
+  apellido        String    @map("PacApell") @db.VarChar(100)
+  nombre          String    @map("PacNom") @db.VarChar(100)
+  nombreCompleto  String    @map("PacNomCom") @db.VarChar(200)
+  tipoDocumento   String?   @map("PacTipDoc") @db.Char(3)
+  numeroDocumento Int?      @unique @map("PacNroDoc")
+  cuil            Decimal?  @map("PacCUIL") @db.Decimal(11, 0)
+  fechaNacimiento DateTime? @map("PacFchNac") @db.Timestamp(6)
+
+  // Demografía
+  sexo        String? @map("PacSexo") @db.Char(1)
+  estadoCivil String? @map("PacEstCiv") @db.Char(1)
+  paisId      Int?    @map("PaiID")
+  profesionId Int?    @map("PfeID")
+
+  // Ubicación
+  domicilio   String? @map("PacDomic") @db.VarChar(200)
+  provinciaId Int?    @map("PrvID")
+  localidadId Int?    @map("LodID")
+  barrioId    Int?    @map("BarID")
+
+  // Contacto
+  telefonoFijo    String? @map("PacTelef") @db.VarChar(50)
+  telefonoLaboral String? @map("PacTelLab") @db.VarChar(50)
+  celular1        String? @map("PacTelCel1") @db.VarChar(50)
+  celular2        String? @map("PacTelCel2") @db.VarChar(50)
+  email           String? @map("PacEmail") @db.VarChar(100)
+
+  // Obra Social
+  obraSocialId         Int?    @map("OSID")
+  planId               Int?    @map("PosID")
+  numeroAfiliado       String? @map("PacOSNroAf") @db.VarChar(50)
+  obraSocialCoseguroId Int?    @map("OSIDCoseguro")
+
+  // Tutor (para menores/incapaces)
+  nombreTutor   String? @map("PacTutor") @db.VarChar(100)
+  telefonoTutor String? @map("PacTutTelef") @db.VarChar(50)
+  empleoTutor   String? @map("PacTutEmpleo") @db.VarChar(100)
+
+  // Administrativo
+  observaciones     String?  @map("PacObser") @db.Text
+  usuarioAlta       String   @map("UsuCodig") @db.Char(10)
+  fechaAlta         DateTime @map("PacFchIni") @db.Timestamp(6)
+  fechaModificacion DateTime @map("PacFchEst") @db.Timestamp(6)
+  gravidadId        Int?     @map("GraID")
+
+  // Relaciones
+  pais              Pais?               @relation(fields: [paisId], references: [id])
+  provincia         Provincia?          @relation("PacienteProvincia", fields: [provinciaId], references: [id])
+  localidad         Localidad?          @relation("PacienteLocalidad", fields: [provinciaId, localidadId], references: [provinciaId, id])
+  barrio            Barrio?             @relation("PacienteBarrio", fields: [provinciaId, localidadId, barrioId], references: [provinciaId, localidadId, id])
+  profesion         Profesion?          @relation(fields: [profesionId], references: [id])
+  obraSocial        ObraSocial?         @relation(fields: [obraSocialId], references: [id])
+  plan              PlanObraSocial?     @relation(fields: [obraSocialId, planId], references: [obraSocialId, id])
+  turnos            Turno[]
+  ingresos          Ingreso[]
+  movimientos       MovimientoIngreso[]
+  pacienteHistorial PacienteHistorial[]
+
+  @@index([numeroDocumento])
+  @@index([apellido, nombre])
+  @@map("Paciente")
+}
+
+model PacienteHistorial {
+  id         Int @id @default(autoincrement()) @map("PacHisID")
+  pacienteId Int @map("PacID")
+
+  tipoCambio    String   @map("PacHisTipoCambio") @db.Char(1)
+  usuarioCambio String   @map("PacHisUsuCambio") @db.Char(10)
+  fechaCambio   DateTime @map("PacHisFchCambio") @db.Timestamp(6)
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id])
+
+  @@map("PacienteHis")
+}
+
+model Turno {
+  profesionalId Int      @map("PrfID")
+  fechaTurno    DateTime @map("TurFecha") @db.Timestamp(6)
+
+  tipoTurnoCodigo String? @map("TTuCodig") @db.Char(5)
+  duracion        Int?    @map("TurDurTur") @db.SmallInt
+
+  pacienteId      Int?    @map("PacID")
+  tipoDocumento   String? @map("TdoCodig") @db.Char(3)
+  numeroDocumento Int?    @map("PacNroDoc")
+  nombrePaciente  String? @map("TurPacNom") @db.VarChar(200)
+  telefono        String? @map("TurTelef") @db.VarChar(50)
+  email           String? @map("TurEmail") @db.VarChar(100)
+
+  obraSocialId   Int?    @map("OSID")
+  planId         Int?    @map("PosID")
+  coseguroId     Int?    @map("OSCodigCoseguro")
+  numeroAfiliado String? @map("TurOSNroAf") @db.VarChar(50)
+
+  estado      String?   @map("TurEstad") @db.Char(1)
+  fechaEstado DateTime? @map("TurFchEst") @db.Timestamp(6)
+
+  fechaSolicitud   DateTime? @map("TurFchSol") @db.Timestamp(6)
+  fechaLlegada     DateTime? @map("TurFchLlego") @db.Timestamp(6)
+  fechaAtencion    DateTime? @map("TurFchAten") @db.Timestamp(6)
+  usuarioSolicitud String?   @map("TurUsuSol") @db.Char(10)
+  usuarioLlegada   String?   @map("TurUsuLlego") @db.Char(10)
+  usuarioAtencion  String?   @map("TurUsuAten") @db.Char(10)
+
+  importe          Decimal? @map("TurImporte") @db.Decimal(18, 2)
+  senia            Decimal? @map("TurImpSenia") @db.Decimal(18, 2)
+  sinCargo         Boolean? @map("TurSinCargo")
+  numeroBono       String?  @map("TurNroBono") @db.VarChar(50)
+  numeroReferencia String?  @map("TurNroRef") @db.VarChar(50)
+
+  observaciones   String? @map("TurObserv") @db.VarChar(500)
+  sedeId          Int?    @map("SedID")
+  ubicacionId     Int?    @map("UbiID")
+  ingresoId       Int?    @map("IngID")
+  usuarioRegistro String  @map("UsuCodig") @db.Char(10)
+
+  profesional    Profesional?     @relation(fields: [profesionalId], references: [id])
+  paciente       Paciente?        @relation(fields: [pacienteId], references: [id])
+  ingreso        Ingreso?         @relation(fields: [ingresoId], references: [id])
+  obraSocial     ObraSocial?      @relation(fields: [obraSocialId], references: [id])
+  plan           PlanObraSocial?  @relation(fields: [obraSocialId, planId], references: [obraSocialId, id])
+  turnoHistorial TurnoHistorial[]
+
+  @@id([profesionalId, fechaTurno])
+  @@index([pacienteId])
+  @@index([fechaTurno])
+  @@index([estado])
+  @@map("Turno")
+}
+
+model TurnoHistorial {
+  id            Int      @id @default(autoincrement()) @map("TurID")
+  profesionalId Int      @map("PrfID")
+  fechaTurno    DateTime @map("TurFecha") @db.Timestamp(6)
+
+  tipoCambio    String    @map("TurTipoCambio") @db.Char(1)
+  usuarioCambio String    @map("TurUsuCambio") @db.Char(10)
+  fechaCambio   DateTime? @map("TurFchCambio") @db.Timestamp(6)
+
+  turno Turno @relation(fields: [profesionalId, fechaTurno], references: [profesionalId, fechaTurno])
+
+  @@map("TurnoHis")
+}
+
+model TurnoExtra {
+  profesionalId Int      @map("PrfID")
+  fecha         DateTime @map("TexFecha") @db.Timestamp(6)
+  duracion      Int      @map("TexDurTur") @db.SmallInt
+  fechaSistema  DateTime @map("TexFchSis") @db.Timestamp(6)
+  usuario       String   @map("UsuCodig") @db.Char(10)
+
+  profesional Profesional @relation(fields: [profesionalId], references: [id])
+
+  @@id([profesionalId, fecha])
+  @@map("TurnosExtra")
+}
+
+model Ingreso {
+  id                Int    @id @default(autoincrement()) @map("IngID")
+  tipoIngresoCodigo String @map("TigCodig") @db.Char(3)
+  numeroIngreso     Int    @map("IngNro")
+
+  pacienteId      Int?      @map("PacID")
+  nombre          String?   @map("IngNom") @db.VarChar(200)
+  fechaNacimiento DateTime? @map("IngFchNac") @db.Timestamp(6)
+  edad            Int?      @map("IngEdad") @db.SmallInt
+
+  fechaIngreso        DateTime? @map("IngFchIngreso") @db.Timestamp(6)
+  fechaEgreso         DateTime? @map("IngFchEgreso") @db.Timestamp(6)
+  fechaEgresoPrevista DateTime? @map("IngFchEgresoPrevista") @db.Timestamp(6)
+  fechaObito          DateTime? @map("IngFchObito") @db.Timestamp(6)
+
+  tipoInternacionCodigo          String? @map("TinCodig") @db.Char(3)
+  patologiaId                    Int?    @map("PatID")
+  descripcionPatologia           String? @map("IngPatDescrip") @db.VarChar(500)
+  patologiaDefinitivaId          Int?    @map("IngPatDef")
+  descripcionPatologiaDefinitiva String? @map("IngPatDefDescrip") @db.VarChar(500)
+  motivoEgresoCodigo             String? @map("MegCodig") @db.Char(2)
+  servicioId                     Int?    @map("SerID")
+
+  camaId          Int? @map("CamID")
+  tipoOcupacionId Int? @map("TOcuID")
+  sedeId          Int? @map("SedID")
+
+  profesionalGuardiaId   Int? @map("PrfIDGuardia")
+  profesionalTratanteId  Int? @map("PrfIDTratante")
+  centroDerivanteId      Int? @map("CenIDDerivante")
+  profesionalDerivanteId Int? @map("PrdIDDerivante")
+
+  obraSocialId   Int?      @map("OSID")
+  planId         Int?      @map("PosID")
+  numeroAfiliado String?   @map("IngOSNroAf") @db.VarChar(50)
+  grupoOS        Decimal?  @map("IngOSGpo") @db.Decimal(5, 2)
+  repeticionOS   Decimal?  @map("IngOSRep") @db.Decimal(5, 2)
+  pmi            Boolean?  @map("IngOSPmi")
+  pmiFechaInicio DateTime? @map("IngOSPmiFchIni") @db.Timestamp(6)
+  pmiFechaFin    DateTime? @map("IngOSPmiFchFin") @db.Timestamp(6)
+
+  obraSocialCoseguroId   Int?    @map("OSIDCoseg")
+  planCoseguroId         Int?    @map("PosIDCoseg")
+  numeroAfiliadoCoseguro String? @map("IngOSNroAfCoseg") @db.VarChar(50)
+
+  artEmpleador          String?   @map("IngARTEmp") @db.VarChar(100)
+  artEmpleadorCUIT      Decimal?  @map("IngARTEmpCUIT") @db.Decimal(11, 0)
+  artEmpleadorTelefono  String?   @map("IngARTEmpTel") @db.VarChar(50)
+  artEmpleadorDomicilio String?   @map("IngARTEmpDom") @db.VarChar(200)
+  artNumeroSiniestro    String?   @map("IngARTNumSin") @db.VarChar(50)
+  artFechaSiniestro     DateTime? @map("IngARTFchSin") @db.Timestamp(6)
+
+  nombreTutor          String? @map("IngTutor") @db.VarChar(100)
+  tipoDocumentoTutor   String? @map("IngTutTipDoc") @db.Char(3)
+  numeroDocumentoTutor Int?    @map("IngTutNroDoc")
+  empleoTutor          String? @map("IngTutEmpleo") @db.VarChar(100)
+  telefonoTutor        String? @map("IngTutTelef") @db.VarChar(50)
+
+  conceptoId         Int?     @map("CtoID")
+  cantidad           Decimal? @map("CcdCantidad") @db.Decimal(10, 2)
+  numeroAutorizacion String?  @map("IngPraNumAut") @db.VarChar(50)
+  senia              Decimal? @map("IngImpSenia") @db.Decimal(18, 2)
+  importeTurno       Decimal? @map("IngTurImporte") @db.Decimal(18, 2)
+  sinCargo           Boolean? @map("IngSinCargo")
+
+  estado      String?   @map("IngEstad") @db.Char(1)
+  fechaEstado DateTime? @map("IngFchEst") @db.Timestamp(6)
+
+  observaciones String?         @map("IngObser") @db.Text
+  usuario       String?         @map("UsuCodig") @db.Char(10)
+  gravidadId    Int?            @map("GraID")
+  obraSocial    ObraSocial?     @relation(fields: [obraSocialId], references: [id])
+  plan          PlanObraSocial? @relation(fields: [obraSocialId, planId], references: [obraSocialId, id])
+
+  paciente            Paciente?                @relation(fields: [pacienteId], references: [id])
+  tipoIngreso         TipoIngreso              @relation(fields: [tipoIngresoCodigo], references: [codigo])
+  tipoInternacion     TipoInternacion?         @relation(fields: [tipoInternacionCodigo], references: [codigo])
+  motivoEgreso        MotivoEgreso?            @relation(fields: [motivoEgresoCodigo], references: [codigo])
+  profesionalGuardia  Profesional?             @relation("IngresoGuardia", fields: [profesionalGuardiaId], references: [id])
+  profesionalTratante Profesional?             @relation("IngresoTratante", fields: [profesionalTratanteId], references: [id])
+  cama                Cama?                    @relation(fields: [camaId], references: [id])
+  turnos              Turno[]
+  ingresoPatologias   IngresoPatologia[]
+  movimientosIngreso  MovimientoIngreso[]
+  ingresoHistorial    IngresoHistorial[]
+  ordenes             Orden[]
+  practicas           Practica[]
+  informes            InformeHospitalizacion[]
+  ingresoSubtipo      IngresoSubtipo?
+  informeAmbulatorio  InformeAmbulatorio?
+
+  @@unique([tipoIngresoCodigo, numeroIngreso])
+  @@index([pacienteId])
+  @@index([fechaIngreso])
+  @@index([estado])
+  @@map("Ingreso")
+}
+
+model IngresoHistorial {
+  id        Int @id @default(autoincrement()) @map("IngHisID")
+  ingresoId Int @map("IngID")
+
+  tipoCambio    String    @map("IngHisTipoCambio") @db.Char(1)
+  usuarioCambio String    @map("IngHisUsuCambio") @db.Char(10)
+  fechaCambio   DateTime? @map("IngHisFchCambio") @db.Timestamp(6)
+
+  ingreso Ingreso @relation(fields: [ingresoId], references: [id])
+
+  @@map("IngresoHis")
+}
+
+model IngresoPatologia {
+  id            Int      @id @default(autoincrement()) @map("InpID")
+  ingresoId     Int      @map("IngID")
+  patologiaId   Int?     @map("PatID")
+  fecha         DateTime @map("InpFecha") @db.Timestamp(6)
+  descripcion   String?  @map("InpDescrip") @db.VarChar(500)
+  observaciones String?  @map("InpObs") @db.VarChar(500)
+  estado        String   @map("InpEstado") @db.Char(1)
+  fechaEstado   DateTime @map("InpFchEstado") @db.Timestamp(6)
+  usuario       String   @map("UsuCodig") @db.Char(10)
+
+  ingreso Ingreso @relation(fields: [ingresoId], references: [id])
+
+  @@map("IngresoPatologia")
+}
+
+model MovimientoIngreso {
+  id                   Int       @id @default(autoincrement()) @map("MinID")
+  ingresoId            Int?      @map("IngID")
+  pacienteId           Int?      @map("PacID")
+  tipoMovimientoCodigo String    @map("TmiCodig") @db.Char(3)
+  fecha                DateTime? @map("MinFecha") @db.Timestamp(6)
+  fechaVencimiento     DateTime? @map("MinFchVto") @db.Timestamp(6)
+  concepto             String?   @map("MinConcep") @db.VarChar(200)
+  signo                Int       @map("MinSigno") @db.SmallInt
+  importe              Decimal   @map("MinImporte") @db.Decimal(18, 2)
+  saldo                Decimal   @map("MinSaldo") @db.Decimal(18, 2)
+  estado               String    @map("MinEstado") @db.Char(1)
+  fechaEstado          DateTime  @map("MinFchEstado") @db.Timestamp(6)
+  usuario              String    @map("UsuCodig") @db.Char(10)
+
+  ingreso        Ingreso?              @relation(fields: [ingresoId], references: [id])
+  paciente       Paciente?             @relation(fields: [pacienteId], references: [id])
+  tipoMovimiento TipoMovimientoIngreso @relation(fields: [tipoMovimientoCodigo], references: [codigo])
+
+  @@index([ingresoId])
+  @@index([pacienteId])
+  @@map("MovIngreso")
+}
+
+model Profesional {
+  id                    Int     @id @default(autoincrement()) @map("PrfID")
+  nombre                String  @map("PrfNombre") @db.VarChar(200)
+  matricula             Int?    @map("PrfMatric")
+  especialidadId        Int?    @map("EspID")
+  tipoProfesionalCodigo String? @map("TpfCodig") @db.Char(3)
+
+  domicilio    String? @map("PrfDomic") @db.VarChar(200)
+  provinciaId  Int?    @map("PrvID")
+  localidadId  Int?    @map("LodID")
+  codigoPostal String? @map("PrfCP") @db.VarChar(10)
+  telefono     String? @map("PrfTelef") @db.VarChar(50)
+  celular      String? @map("PrfTelCel") @db.VarChar(50)
+  email        String? @map("PrfEmail") @db.VarChar(100)
+
+  estado      String   @map("PrfEstad") @db.Char(1)
+  fechaEstado DateTime @map("PrfFchEst") @db.Timestamp(6)
+  usuario     String   @map("UsuCodig") @db.Char(10)
+
+  turnos                  Turno[]
+  turnosExtra             TurnoExtra[]
+  ingresosComoGuardia     Ingreso[]                @relation("IngresoGuardia")
+  ingresosComoTratante    Ingreso[]                @relation("IngresoTratante")
+  ordenesComoPrescritor   Orden[]                  @relation("OrdenPrescriptor")
+  informesComoEfector     InformeHospitalizacion[] @relation("InformeEfector")
+  informesComoPrescriptor InformeHospitalizacion[] @relation("InformePrescriptor")
+
+  @@map("Profesional")
+}
+
+// ============================================
+// INTERNACIÓN - GESTIÓN DE CAMAS
+// ============================================
+
+model Cama {
+  id            Int      @id @default(autoincrement()) @map("CamID")
+  identificador String   @map("CamIdentif") @db.VarChar(20)
+  habitacion    String?  @map("CamHabitacion") @db.VarChar(50)
+  sector        String   @map("CamSector") @db.VarChar(30)
+  // Sector: PISO | TERAPIA_INTENSIVA | TERAPIA_INTERMEDIA
+  estado        String   @map("CamEstado") @db.VarChar(20)
+  // Estado: DISPONIBLE | OCUPADA | RESERVADA | MANTENIMIENTO
+  observaciones String?  @map("CamObservaciones") @db.VarChar(500)
+  sedeId        Int?     @map("SedID")
+  usuario       String   @map("UsuCodig") @db.Char(10)
+  fechaEstado   DateTime @map("CamFchEstado") @db.Timestamp(6)
+
+  ingresos Ingreso[]
+
+  @@index([estado])
+  @@index([sector])
+  @@map("Cama")
+}
+
+// ============================================
+// INTERNACIÓN — INFORME DE HOSPITALIZACIÓN
+// ============================================
+
+model InformeHospitalizacion {
+  id                       Int      @id @default(autoincrement()) @map("InhID")
+  ingresoId                Int      @map("IngID")
+  fecha                    DateTime @map("InhFecha") @db.Timestamp(6)
+  numeroReferencia         String?  @map("InhNroRef") @db.VarChar(50)
+  profesionalEfectorId     Int?     @map("PrfIDEfector")
+  profesionalPrescriptorId Int?     @map("PrfIDPrescriptor")
+  estado                   String   @map("InhEstado") @db.Char(1)
+  // Estado: A=Abierto, C=Cerrado
+  usuario                  String   @map("UsuCodig") @db.Char(10)
+  fechaEstado              DateTime @map("InhFchEstado") @db.Timestamp(6)
+
+  ingreso                Ingreso      @relation(fields: [ingresoId], references: [id])
+  profesionalEfector     Profesional? @relation("InformeEfector", fields: [profesionalEfectorId], references: [id])
+  profesionalPrescriptor Profesional? @relation("InformePrescriptor", fields: [profesionalPrescriptorId], references: [id])
+
+  @@index([ingresoId])
+  @@map("InformeHosp")
+}
+
+// ============================================
+// ADMISIÓN — SUBTIPO DE ADMISIÓN
+// ============================================
+
+model SubtipoAdmision {
+  codigo      String   @id @map("SAdCodig") @db.Char(3)
+  descripcion String   @map("SAdDescrip") @db.VarChar(100)
+  estado      String   @default("A") @map("SAdEstado") @db.Char(1)
+  usuario     String   @map("UsuCodig") @db.Char(10)
+  fechaEstado DateTime @map("SAdFchEstado") @db.Timestamp(6)
+
+  ingresos IngresoSubtipo[]
+
+  @@map("SubtipoAdmision")
+}
+
+model IngresoSubtipo {
+  id                    Int    @id @default(autoincrement()) @map("InSuID")
+  ingresoId             Int    @unique @map("IngID")
+  subtipoAdmisionCodigo String @map("SAdCodig") @db.Char(3)
+
+  // Campos comunes
+  profesionalId Int? @map("PrfID")
+
+  // Turno/Práctica Ambulatoria
+  profesionalIdTurno Int?      @map("PrfIDTurno")
+  fechaTurno         DateTime? @map("TurFecha") @db.Timestamp(6)
+  practicaCodigo     String?   @map("NPrCodig") @db.VarChar(50)
+
+  // Derivación
+  centroDerivante            String? @map("CenDerivante") @db.VarChar(200)
+  profesionalDerivanteNombre String? @map("PrfDerNombre") @db.VarChar(200)
+  motivoDerivacion           String? @map("InSuMotDer") @db.VarChar(500)
+  diagnosticoDerivacion      String? @map("InSuDiagDer") @db.VarChar(500)
+
+  // Indicación Médica
+  profesionalIndicadorId Int?    @map("PrfIDInd")
+  tipoIndicacion         String? @map("InSuTipInd") @db.VarChar(100)
+  descripcionIndicacion  String? @map("InSuDescInd") @db.VarChar(500)
+
+  usuario     String   @map("UsuCodig") @db.Char(10)
+  fechaEstado DateTime @map("InSuFchEstado") @db.Timestamp(6)
+
+  ingreso         Ingreso         @relation(fields: [ingresoId], references: [id], onDelete: Cascade)
+  subtipoAdmision SubtipoAdmision @relation(fields: [subtipoAdmisionCodigo], references: [codigo])
+
+  @@index([subtipoAdmisionCodigo])
+  @@map("IngresoSubtipo")
+}
+
+// ============================================
+// ADMISIÓN — INFORME AMBULATORIO
+// ============================================
+
+model InformeAmbulatorio {
+  id               Int      @id @default(autoincrement()) @map("InfAmbID")
+  ingresoId        Int      @unique @map("IngID")
+  fecha            DateTime @map("InfAmbFecha") @db.Timestamp(6)
+  numeroReferencia String?  @map("InfAmbNroRef") @db.VarChar(50)
+
+  profesionalId Int? @map("PrfID")
+
+  estado      String   @map("InfAmbEstado") @db.Char(1)
+  // Estado: A=Abierto, C=Cerrado
+  usuario     String   @map("UsuCodig") @db.Char(10)
+  fechaEstado DateTime @map("InfAmbFchEstado") @db.Timestamp(6)
+
+  ingreso Ingreso @relation(fields: [ingresoId], references: [id], onDelete: Cascade)
+
+  @@index([ingresoId])
+  @@map("InformeAmb")
+}
+
+// ============================================
+// CAJA - COMPROBANTES
+// ============================================
+
+model Comprobante {
+  id                Int      @id @default(autoincrement()) @map("CmpID")
+  tipoComprobante   String   @map("CmpTipo") @db.VarChar(30)
+  // Tipo: RECIBO_COMUN | TICKET_CAJA | RECIBO_PROVISORIO
+  numeroComprobante String   @map("CmpNro") @db.VarChar(20)
+  pacienteId        Int?     @map("PacID")
+  ingresoId         Int?     @map("IngID")
+  fecha             DateTime @map("CmpFecha") @db.Timestamp(6)
+  monto             Decimal  @map("CmpMonto") @db.Decimal(18, 2)
+  concepto          String   @map("CmpConcepto") @db.VarChar(500)
+  formaPago         String   @map("CmpFormaPago") @db.VarChar(50)
+  // FormaPago: EFECTIVO | TARJETA_DEBITO | TARJETA_CREDITO | TRANSFERENCIA | CHEQUE
+  estado            String   @map("CmpEstado") @db.Char(1)
+  // Estado: A=Activo, A=Anulado
+  fechaEstado       DateTime @map("CmpFchEstado") @db.Timestamp(6)
+  usuario           String   @map("UsuCodig") @db.Char(10)
+  observaciones     String?  @map("CmpObser") @db.VarChar(500)
+
+  @@index([pacienteId])
+  @@index([fecha])
+  @@index([tipoComprobante])
+  @@map("Comprobante")
+}
+
+// ============================================
+// NOMENCLADOR DE PRESTACIONES (COTIZADOR)
+// ============================================
+
+model NomencladorPrestacion {
+  id          Int      @id @default(autoincrement()) @map("NprID")
+  codigo      String   @unique @map("NprCodig") @db.VarChar(20)
+  descripcion String   @map("NprDescrip") @db.VarChar(500)
+  categoria   String   @map("NprCategoria") @db.VarChar(30)
+  // Categoria: HONORARIOS | QUIROFANO | ANESTESIA | MATERIAL_DESCARTABLE
+  valor       Decimal  @map("NprValor") @db.Decimal(18, 2)
+  estado      String   @map("NprEstado") @db.Char(1)
+  fechaEstado DateTime @map("NprFchEstado") @db.Timestamp(6)
+  usuario     String   @map("UsuCodig") @db.Char(10)
+
+  @@index([categoria])
+  @@index([codigo])
+  @@map("NomPrestacion")
+}
+
+// ============================================
+// AUDITORÍA DEL SISTEMA
+// ============================================
+
+model AuditLog {
+  id          Int      @id @default(autoincrement()) @map("AudID")
+  usuario     String   @map("AudUsuario") @db.VarChar(100)
+  accion      String   @map("AudAccion") @db.VarChar(50)
+  // Accion: CREAR | MODIFICAR | ELIMINAR | CONSULTAR | LOGIN | LOGOUT
+  entidad     String   @map("AudEntidad") @db.VarChar(100)
+  registroId  String?  @map("AudRegistroID") @db.VarChar(50)
+  detalle     String?  @map("AudDetalle") @db.Text
+  direccionIp String?  @map("AudIP") @db.VarChar(50)
+  userAgent   String?  @map("AudUserAgent") @db.VarChar(500)
+  fecha       DateTime @default(now()) @map("AudFecha") @db.Timestamp(6)
+
+  @@index([usuario])
+  @@index([entidad])
+  @@index([fecha])
+  @@map("AuditLog")
+}
+
+// ============================================
+// TABLAS MAESTRAS / CATÁLOGOS
+// ============================================
+
+model Pais {
+  id               Int     @id @default(autoincrement()) @map("PaiID")
+  descripcion      String? @map("PaiDescrip") @db.VarChar(100)
+  codigoTelefonico String? @map("PaiCarTel") @db.VarChar(5)
+
+  provincias Provincia[]
+  pacientes  Paciente[]
+
+  @@map("Pais")
+}
+
+model Provincia {
+  id     Int    @map("PrvID")
+  nombre String @map("PrvNom") @db.VarChar(100)
+  paisId Int?   @map("PaiID")
+
+  pais        Pais?       @relation(fields: [paisId], references: [id])
+  localidades Localidad[]
+  pacientes   Paciente[]  @relation("PacienteProvincia")
+
+  @@id([id])
+  @@map("Provincia")
+}
+
+model Localidad {
+  provinciaId  Int     @map("PrvID")
+  id           Int     @map("LodID")
+  descripcion  String? @map("LodDescrip") @db.VarChar(100)
+  codigoPostal String? @map("LodCP") @db.VarChar(10)
+
+  provincia Provincia  @relation(fields: [provinciaId], references: [id])
+  barrios   Barrio[]
+  pacientes Paciente[] @relation("PacienteLocalidad")
+
+  @@id([provinciaId, id])
+  @@map("Localidad")
+}
+
+model Barrio {
+  provinciaId Int     @map("PrvID")
+  localidadId Int     @map("LodID")
+  id          Int     @map("BarID")
+  descripcion String? @map("BarDescrip") @db.VarChar(100)
+
+  localidad Localidad  @relation(fields: [provinciaId, localidadId], references: [provinciaId, id])
+  pacientes Paciente[] @relation("PacienteBarrio")
+
+  @@id([provinciaId, localidadId, id])
+  @@map("Barrio")
+}
+
+model Profesion {
+  id          Int    @id @default(autoincrement()) @map("PfeID")
+  descripcion String @map("PfeDescrip") @db.VarChar(100)
+
+  pacientes Paciente[]
+
+  @@map("Profesion")
+}
+
+model Parentesco {
+  codigo                Int     @id @map("ParCodig")
+  descripcion           String? @map("ParDescrip") @db.VarChar(100)
+  grupoParentescoCodigo String? @map("GpaCodig") @db.Char(2)
+
+  grupoParentesco GrupoParentesco? @relation(fields: [grupoParentescoCodigo], references: [codigo])
+
+  @@map("Parentesco")
+}
+
+model GrupoParentesco {
+  codigo      String  @id @map("GpaCodig") @db.Char(2)
+  descripcion String? @map("GpaDescrip") @db.VarChar(100)
+
+  parentescos Parentesco[]
+
+  @@map("GrupoParentesco")
+}
+
+model TipoIngreso {
+  codigo        String  @id @map("TigCodig") @db.Char(3)
+  descripcion   String? @map("TigDecrip") @db.VarChar(100)
+  proximoNumero Int     @map("TigProxNum")
+
+  ingresos Ingreso[]
+
+  @@map("TipoIngreso")
+}
+
+model TipoInternacion {
+  codigo        String   @id @map("TinCodig") @db.Char(3)
+  descripcion   String?  @map("TinDescrip") @db.VarChar(100)
+  esAmbulatorio Boolean? @map("TinAmbulatorio")
+
+  ingresos Ingreso[]
+
+  @@map("TipoInternacion")
+}
+
+model MotivoEgreso {
+  codigo      String @id @map("MegCodig") @db.Char(2)
+  descripcion String @map("MegDescrip") @db.VarChar(100)
+
+  ingresos Ingreso[]
+
+  @@map("MotivoEgreso")
+}
+
+model TipoMovimientoIngreso {
+  codigo      String @id @map("TmiCodig") @db.Char(3)
+  descripcion String @map("TmiDescrip") @db.VarChar(100)
+  signo       Int?   @map("TmiSigno") @db.SmallInt
+
+  movimientos MovimientoIngreso[]
+
+  @@map("TipMovIngreso")
+}
+
+model Diagnostico {
+  id            Int     @id @default(autoincrement()) @map("DiaID")
+  descripcion   String? @map("DiaDescrip") @db.VarChar(500)
+  codigoCIE10   String? @map("DiaCodCie10") @db.Char(10)
+  capituloId    Int?    @map("CCapCodig")
+  subcapituloId Int?    @map("CSubCodig")
+
+  capitulo    CIE10Capitulo?    @relation(fields: [capituloId], references: [codigo])
+  subcapitulo CIE10Subcapitulo? @relation(fields: [capituloId, subcapituloId], references: [capituloId, codigo])
+
+  @@map("Diagnostico")
+}
+
+model CIE10Capitulo {
+  codigo      Int    @id @map("CCapCodig")
+  descripcion String @map("CCapDescrip") @db.VarChar(200)
+
+  subcapitulos CIE10Subcapitulo[]
+  diagnosticos Diagnostico[]
+
+  @@map("CIE10Capitulo")
+}
+
+model CIE10Subcapitulo {
+  capituloId  Int    @map("CCapCodig")
+  codigo      Int    @map("CSubCodig")
+  descripcion String @map("CSubDescrip") @db.VarChar(200)
+
+  capitulo     CIE10Capitulo @relation(fields: [capituloId], references: [codigo])
+  diagnosticos Diagnostico[]
+
+  @@id([capituloId, codigo])
+  @@map("CIE10Subcapitulo")
+}
+
+model OSTipoTurno {
+  id                Int     @id @default(autoincrement()) @map("OttID")
+  tipoTurnoCodigo   String  @map("TTuCodig") @db.Char(5)
+  obraSocialId      Int     @map("OSID")
+  nomencladorCodigo String? @map("NprCodig") @db.Char(10)
+
+  @@map("OSTipoTurno")
+}
+
+model Formulario {
+  id          Int      @id @default(autoincrement()) @map("ForID")
+  descripcion String   @map("ForDescrip") @db.VarChar(200)
+  tipo        String?  @map("ForTipo") @db.Char(1)
+  estado      String?  @map("ForEstado") @db.Char(1)
+  fechaEstado DateTime @map("ForFchEstado") @db.Timestamp(6)
+  usuario     String?  @map("UsuCodig") @db.Char(10)
+
+  detalles FormularioDetalle[]
+
+  @@map("Form")
+}
+
+model FormularioDetalle {
+  id               Int      @id @default(autoincrement()) @map("FodID")
+  formularioId     Int      @map("ForID")
+  orden            Int      @map("FodOrden")
+  campo            String   @map("FodCampo") @db.VarChar(100)
+  descripcionCampo String?  @map("FodDescCampo") @db.VarChar(200)
+  tipoCampo        String?  @map("FodTipoCampo") @db.VarChar(50)
+  requerido        Boolean? @map("FodRequerido")
+
+  formulario Formulario @relation(fields: [formularioId], references: [id])
+
+  @@map("FormDet")
+}
+
+model Esquema {
+  id            Int       @id @default(autoincrement()) @map("EsqID")
+  descripcion   String?   @map("EsqDescrip") @db.VarChar(200)
+  tipoEsquemaId Int       @map("TEsqID")
+  genero        String?   @map("EsqGenero") @db.Char(1)
+  edadInicio    Int?      @map("EsqEdadIni")
+  edadFin       Int?      @map("EsqEdadFin")
+  estado        String?   @map("EsqEstado") @db.Char(1)
+  fechaEstado   DateTime? @map("EsqFchEstado") @db.Timestamp(6)
+  usuario       String?   @map("UsuCodig") @db.Char(10)
+
+  detalles EsquemaDetalle[]
+
+  @@map("Esquema")
+}
+
+model EsquemaDetalle {
+  id           Int      @id @default(autoincrement()) @map("EsdID")
+  esquemaId    Int      @map("EsqID")
+  formularioId Int      @map("ForID")
+  orden        Int?     @map("EsdOrden")
+  descripcion  String?  @map("EsdDescrip") @db.VarChar(200)
+  requerido    Boolean? @map("EsqReq")
+
+  esquema Esquema @relation(fields: [esquemaId], references: [id])
+
+  @@map("EsquemaDet")
+}
+
+// ============================================
+// OBRA SOCIAL (LEGACY)
+// ============================================
+
+// Modelo para Plan de Obra Social
+model PlanObraSocial {
+  obraSocialId Int    @map("OSID")
+  id           Int    @map("PosID")
+  descripcion  String @map("PosDescrip") @db.VarChar(200)
+
+  // Información adicional
+  norma          String? @map("PosNorma") @db.Text
+  exportarIOSE   String? @map("PosExportIOSE") @db.Char(1)
+  codigoAnterior String? @map("PosCodOld") @db.VarChar(50)
+
+  // Administrativo
+  estado          String   @map("PosEstado") @db.Char(1)
+  fechaEstado     DateTime @map("PosFchEstado") @db.Timestamp(6)
+  usuarioRegistro String   @map("UsuCodig") @db.Char(10)
+
+  // Relaciones
+  obraSocial ObraSocial @relation(fields: [obraSocialId], references: [id])
+
+  pacientes Paciente[]
+  turnos    Turno[]
+  ingresos  Ingreso[]
+  ordenes   Orden[]
+  practicas Practica[]
+
+  @@id([obraSocialId, id])
+  @@index([estado])
+  @@map("PlanOSoc")
+}
+
+// Actualizar modelo ObraSocial existente
+model ObraSocial {
+  id               Int      @id @map("OSID")
+  nombre           String   @map("OSNom") @db.VarChar(200)
+  requiereCoseguro String?  @map("OSReqCoseg") @db.Char(1)
+  estado           String   @map("OSEstad") @db.Char(1)
+  fechaEstado      DateTime @map("OSFchEst") @db.Timestamp(6)
+
+  // Relaciones
+  planes    PlanObraSocial[]
+  pacientes Paciente[]
+  turnos    Turno[]
+  ingresos  Ingreso[]
+  ordenes   Orden[]
+  practicas Practica[]
+
+  @@map("ObraSocial")
+}
+
+model Orden {
+  puestoNumero Int @map("PueNum")
+  numero       Int @map("OrdNum")
+
+  // Relación con Ingreso
+  ingresoId Int? @map("IngID")
+
+  // Datos de la orden
+  descripcion  String?  @map("OrdDescrip") @db.VarChar(255)
+  fechaEmision DateTime @map("OrdFchEmi") @db.Timestamp(6)
+  fechaPedido  DateTime @map("OrdFchPed") @db.Timestamp(6)
+
+  // Número de autorización (generalmente vacío a este nivel)
+  numeroAutorizacion String? @map("OrdNumAut") @db.VarChar(15)
+
+  // Paciente y OS
+  pacienteId     Int?   @map("PacID")
+  nombrePaciente String @map("OrdNom") @db.VarChar(50)
+  numeroAfiliado String @map("OrdNumAfil") @db.VarChar(30)
+  obraSocialId   Int    @map("OSID")
+  planId         Int    @map("PosID")
+
+  // Coseguro
+  obraSocialCoseguroId Int? @map("OSIDCoseg")
+  planCoseguroId       Int? @map("PosIDCoseg")
+
+  // Profesional prescriptor
+  profesionalId Int @map("PrfID")
+
+  // Tipo de orden
+  tipoOrdenCodigo String @map("TorCodig") @db.Char(3)
+
+  // Patología
+  patologiaId          Int?    @map("PatID")
+  descripcionPatologia String? @map("OrdPatDescrip") @db.VarChar(300)
+
+  // Importes
+  importeTotal    Decimal? @map("OrdImpTotal") @db.Decimal(12, 2)
+  importeCargoPac Decimal? @map("OprImpCargoPac") @db.Decimal(12, 2)
+
+  // Administrativo
+  estado          String   @map("OrdEstad") @db.Char(1)
+  fechaEstado     DateTime @map("OrdFchEst") @db.Timestamp(6)
+  usuarioRegistro String   @map("UsuCodig") @db.Char(10)
+
+  // Relaciones
+  ingreso     Ingreso?        @relation(fields: [ingresoId], references: [id])
+  obraSocial  ObraSocial      @relation(fields: [obraSocialId], references: [id])
+  plan        PlanObraSocial  @relation(fields: [obraSocialId, planId], references: [obraSocialId, id])
+  profesional Profesional     @relation("OrdenPrescriptor", fields: [profesionalId], references: [id])
+  tipoOrden   TipoOrden       @relation(fields: [tipoOrdenCodigo], references: [codigo])
+  items       OrdenPractica[] // Aquí están las prácticas con autorizaciones
+
+  @@id([puestoNumero, numero])
+  @@index([ingresoId])
+  @@index([estado])
+  @@index([fechaEmision])
+  @@map("Orden")
+}
+
+model OrdenPractica {
+  puestoNumero Int @map("PueNum")
+  ordenNumero  Int @map("OrdNum")
+  item         Int @map("OprItem")
+
+  // Práctica
+  convenioId            Int     @map("NConCodig")
+  codigoPractica        String  @map("NPrCodig") @db.Char(8)
+  convenioValorId       Int?    @map("NConCodigValor")
+  tipoDiferencialCodigo String? @map("NpfCodig") @db.Char(3)
+
+  // ⭐ NÚMERO DE AUTORIZACIÓN - ESTE ES EL CAMPO CLAVE
+  numeroAutorizacion String? @map("OprNumAut") @db.VarChar(15)
+
+  // Cantidades y valores
+  fecha                  DateTime @map("OprFch") @db.Timestamp(6)
+  cantidad               Decimal  @map("OprCant") @db.Decimal(8, 2)
+  cantidadModuloIntegral Decimal? @map("OprCantModInt") @db.Decimal(5, 2)
+
+  // Importes
+  importeTotal         Decimal? @map("OprImpTotal") @db.Decimal(12, 2)
+  importeCargoPaciente Decimal? @map("OprImpCargoPac") @db.Decimal(12, 2)
+  porcentajeCargoPac   Decimal? @map("OprPorcenCargoPac") @db.Decimal(5, 2)
+
+  // Facturación
+  tipoFacturacion String  @map("OprTipFact") @db.Char(1)
+  modulo          String? @map("OprModulo") @db.Char(8)
+
+  // Vinculación con práctica ejecutada
+  practicaId Int? @map("PraID")
+
+  // Relaciones
+  orden               Orden                @relation(fields: [puestoNumero, ordenNumero], references: [puestoNumero, numero], onDelete: Cascade, onUpdate: Cascade)
+  practica            Practica?            @relation(fields: [practicaId], references: [id])
+  nomencladorPractica NomencladorPractica? @relation(fields: [convenioId, codigoPractica], references: [convenioId, codigo])
+
+  @@id([puestoNumero, ordenNumero, item])
+  @@index([practicaId])
+  @@map("OrdenPrac")
+}
+
+model Practica {
+  id        Int @id @default(autoincrement()) @map("PraID")
+  ingresoId Int @map("IngID")
+
+  // Práctica
+  convenioId      Int    @map("NConCodig")
+  codigoPractica  String @map("NPrCodig") @db.Char(8)
+  convenioValorId Int    @map("NConCodigValor")
+
+  // Fechas y cantidades
+  fecha    DateTime @map("PraFch") @db.Timestamp(6)
+  cantidad Decimal  @map("PraCant") @db.Decimal(8, 2)
+
+  // ⭐ NÚMERO DE AUTORIZACIÓN (copiado desde OrdenPractica)
+  numeroAutorizacion String? @map("PraNumAut") @db.VarChar(50)
+
+  // Obra Social
+  obraSocialId Int? @map("OSID")
+  planId       Int? @map("PosID")
+
+  // Facturación
+  facturable      Boolean  @map("PraFacturar")
+  motivoNoFactura String?  @map("PraMotNoFact") @db.Char(2)
+  importeTotal    Decimal? @map("PraImpTotal") @db.Decimal(12, 2)
+
+  // Relación con Orden
+  puestoNumero Int? @map("PueNum")
+  ordenNumero  Int? @map("OrdNum")
+  ordenItem    Int? @map("OprItem")
+
+  // Administrativo
+  estado          String?   @map("PraEstad") @db.Char(1)
+  usuarioRegistro String    @map("UsuCodig") @db.Char(10)
+  fechaUsuario    DateTime? @map("PraFchUsu") @db.Timestamp(6)
+
+  // Relaciones
+  ingreso             Ingreso              @relation(fields: [ingresoId], references: [id])
+  obraSocial          ObraSocial?          @relation(fields: [obraSocialId], references: [id])
+  plan                PlanObraSocial?      @relation(fields: [obraSocialId, planId], references: [obraSocialId, id])
+  ordenPractica       OrdenPractica[]
+  nomencladorPractica NomencladorPractica? @relation(fields: [convenioId, codigoPractica], references: [convenioId, codigo])
+
+  @@index([ingresoId])
+  @@index([fecha])
+  @@map("Practica")
+}
+
+model TipoOrden {
+  codigo      String @id @map("TorCodig") @db.Char(3)
+  descripcion String @map("TorDescrip") @db.VarChar(100)
+
+  ordenes Orden[]
+
+  @@map("TipoOrden")
+}
+
+// Modelo Prisma para el nomenclador
+model NomencladorPractica {
+  convenioId  Int     @map("NConCodig")
+  codigo      String  @map("NPrCodig") @db.Char(8)
+  descripcion String  @map("NPrDescrip") @db.VarChar(500)
+  categoriaId String? @map("NcpCodig") @db.Char(5)
+
+  // Relaciones
+  ordenPracticas OrdenPractica[]
+  practicas      Practica[]
+
+  @@id([convenioId, codigo])
+  @@map("NPractica")
+}

@@ -4,7 +4,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
-import { ChevronRight, Printer } from 'lucide-react'
+import { ChevronRight, Printer, FileText } from 'lucide-react'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Informe de Hospitalización' }
@@ -33,6 +33,24 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
       cama: true,
       obraSocial: true,
       plan: true,
+      ingresoPatologias: {
+        orderBy: { fecha: 'desc' },
+        take: 10,
+      },
+      evoluciones: {
+        orderBy: { fecha: 'desc' },
+        take: 20,
+        include: { profesional: true },
+      },
+      medicaciones: {
+        where: { estado: { in: ['A', 'S'] } },
+        orderBy: { fechaInicio: 'desc' },
+        include: { profesional: true },
+      },
+      practicas: {
+        orderBy: { fecha: 'desc' },
+        take: 20,
+      },
       informes: {
         orderBy: { fecha: 'desc' },
         take: 1,
@@ -44,7 +62,7 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
     },
   })
 
-  if (!ingreso || ingreso.tipoIngresoCodigo !== 'I') notFound()
+  if (!ingreso || ingreso.tipoIngresoCodigo !== 'INT') notFound()
 
   const informe = ingreso.informes[0] ?? null
 
@@ -74,27 +92,34 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
     switch (e) {
       case 'A': return 'Abierto'
       case 'C': return 'Cerrado'
-      default:  return e ?? '—'
+      default: return e ?? '—'
     }
   }
 
   return (
     <>
       <Header titulo="Informe de Hospitalización" />
-      <div className="p-6 max-w-4xl space-y-4">
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-1 text-xs text-gray-500">
+      <div className="p-6 max-w-4xl space-y-6 print:space-y-4">
+        {/* Breadcrumb (no-print) */}
+        <nav className="flex items-center gap-1 text-xs text-gray-500 print:hidden">
           <Link href="/dashboard/internacion" className="hover:text-gray-700">Internación</Link>
           <ChevronRight className="h-3 w-3" />
           <Link href={`/dashboard/admision/${ingresoId}`} className="hover:text-gray-700">
-            I-{ingreso.numeroIngreso}
+            INT-{ingreso.numeroIngreso}
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-gray-900 font-medium">Informe de Hospitalización</span>
+          <span className="text-gray-900 font-medium">Informe</span>
         </nav>
 
-        {/* Acciones */}
-        <div className="flex justify-end gap-2">
+        {/* Acciones (no-print) */}
+        <div className="flex justify-end gap-2 print:hidden">
+          <Link
+            href={`/dashboard/internacion/${ingresoId}`}
+            className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <FileText className="h-4 w-4" />
+            Detalle
+          </Link>
           <button
             onClick={() => window.print()}
             className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
@@ -105,247 +130,170 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
         </div>
 
         {/* Cabecera del informe */}
-        <div className="his-card">
+        <div className="border-b-2 pb-4 print:pb-3">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Informe de Hospitalización</h2>
+              <h1 className="text-2xl font-bold text-gray-900 print:text-xl">Informe de Hospitalización</h1>
               {informe && (
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Fecha: {fmtDate(informe.fecha)} &nbsp;·&nbsp; Estado:{' '}
-                  <span className={informe.estado === 'C' ? 'text-red-600' : 'text-green-600'}>
+                <p className="text-xs text-gray-500 mt-1">
+                  Emitido: {fmtDate(informe.fecha)} &nbsp;·&nbsp; Estado:{' '}
+                  <span className={informe.estado === 'C' ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
                     {estadoLabel(informe.estado)}
                   </span>
-                  &nbsp;·&nbsp; Usuario: {informe.usuario}
                 </p>
               )}
             </div>
             <div className="text-right">
-              <p className="text-xl font-mono font-bold text-blue-700">I-{ingreso.numeroIngreso}</p>
-              <p className="text-xs text-gray-500">Código de ingreso</p>
+              <p className="text-3xl font-mono font-bold text-blue-700 print:text-2xl">INT-{ingreso.numeroIngreso}</p>
+              <p className="text-xs text-gray-500 print:text-[10px]">Código de Ingreso</p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-6 print:gap-4 print:text-sm">
           {/* Datos del Paciente */}
-          <div className="his-card space-y-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2">
-              Información del Paciente
-            </h3>
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Historia Clínica</dt>
-                <dd className="font-medium">{ingreso.paciente?.historiaClinica ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Nombre</dt>
-                <dd className="font-medium text-right max-w-52">
-                  {ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Documento</dt>
-                <dd className="font-medium">
-                  {ingreso.paciente?.tipoDocumento ?? ''} {ingreso.paciente?.numeroDocumento ?? '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Sexo</dt>
-                <dd className="font-medium">
-                  {ingreso.paciente?.sexo === 'M' ? 'Masculino' : ingreso.paciente?.sexo === 'F' ? 'Femenino' : '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Fecha de Nacimiento</dt>
-                <dd className="font-medium">{fmtDate(ingreso.paciente?.fechaNacimiento)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Edad</dt>
-                <dd className="font-medium">{edad()}</dd>
-              </div>
+          <div>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Información del Paciente</h2>
+            <dl className="space-y-1.5 print:space-y-1">
+              <DataRow label="Historia Clínica" value={ingreso.paciente?.historiaClinica?.toString() ?? '—'} />
+              <DataRow label="Nombre" value={ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? '—'} />
+              <DataRow label="Documento" value={`${ingreso.paciente?.tipoDocumento ?? '—'} ${ingreso.paciente?.numeroDocumento ?? '—'}`} />
+              <DataRow label="Edad" value={edad()} />
+              <DataRow label="Género" value={ingreso.paciente?.sexo === 'M' ? 'Masculino' : ingreso.paciente?.sexo === 'F' ? 'Femenino' : '—'} />
             </dl>
           </div>
 
-          {/* Datos de la Internación */}
-          <div className="his-card space-y-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2">
-              Información de la Internación
-            </h3>
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Tipo de Ingreso</dt>
-                <dd className="font-medium">{ingreso.tipoIngreso.descripcion}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Tipo de Internación</dt>
-                <dd className="font-medium">{ingreso.tipoInternacion?.descripcion ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Fecha/Hora Ingreso</dt>
-                <dd className="font-medium">{fmt(ingreso.fechaIngreso)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Fecha/Hora Egreso</dt>
-                <dd className="font-medium">
-                  {ingreso.fechaEgreso ? fmt(ingreso.fechaEgreso) : <span className="text-green-600">En curso</span>}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Días de Internación</dt>
-                <dd className="font-medium">{diasEstancia()}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Estado</dt>
-                <dd className="font-medium">
-                  {ingreso.estado === 'A' ? 'Activo' : ingreso.estado === 'C' ? 'Cerrado' : ingreso.estado ?? '—'}
-                </dd>
-              </div>
+          {/* Datos de Hospitalización */}
+          <div>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Hospitalización</h2>
+            <dl className="space-y-1.5 print:space-y-1">
+              <DataRow label="Tipo" value={ingreso.tipoInternacion?.descripcion ?? '—'} />
+              <DataRow label="Cama" value={ingreso.cama ? `${ingreso.cama.identificador} (${ingreso.cama.sector})` : '—'} />
+              <DataRow label="Ingreso" value={fmt(ingreso.fechaIngreso)} />
+              <DataRow label="Alta prevista" value={fmtDate(ingreso.fechaEgresoPrevista)} />
+              {ingreso.fechaEgreso && <DataRow label="Alta real" value={fmtDate(ingreso.fechaEgreso)} />}
+              <DataRow label="Estancia" value={diasEstancia()} />
             </dl>
           </div>
 
-          {/* Información Médica */}
-          <div className="his-card space-y-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2">
-              Información Médica
-            </h3>
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Patología de Ingreso</dt>
-                <dd className="font-medium text-right max-w-52">
-                  {ingreso.descripcionPatologia ?? 'Sin determinar'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Diagnóstico</dt>
-                <dd className="font-medium text-right max-w-52">
-                  {ingreso.descripcionPatologiaDefinitiva ?? '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Habitación</dt>
-                <dd className="font-medium">{ingreso.cama?.habitacion ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Cama</dt>
-                <dd className="font-medium">{ingreso.cama?.identificador ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Médico Tratante</dt>
-                <dd className="font-medium text-right max-w-52">
-                  {ingreso.profesionalTratante?.nombre ?? '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Médico de Guardia</dt>
-                <dd className="font-medium text-right max-w-52">
-                  {ingreso.profesionalGuardia?.nombre ?? '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Motivo de Egreso</dt>
-                <dd className="font-medium">{ingreso.motivoEgreso?.descripcion ?? '—'}</dd>
-              </div>
+          {/* Obra Social */}
+          <div>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Cobertura</h2>
+            <dl className="space-y-1.5 print:space-y-1">
+              <DataRow label="Obra Social" value={ingreso.obraSocial?.nombre ?? '—'} />
+              <DataRow label="Plan" value={ingreso.plan?.descripcion ?? '—'} />
+              <DataRow label="Afiliado" value={ingreso.numeroAfiliado ?? '—'} />
             </dl>
           </div>
 
-          {/* Cobertura */}
-          <div className="his-card space-y-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2">
-              Cobertura Médica
-            </h3>
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Obra Social</dt>
-                <dd className="font-medium text-right max-w-52">
-                  {ingreso.obraSocial ? `${ingreso.obraSocial.nombre}` : '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Plan</dt>
-                <dd className="font-medium text-right max-w-52">
-                  {ingreso.plan?.descripcion ?? '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Nro de Afiliado</dt>
-                <dd className="font-medium">{ingreso.numeroAfiliado ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">PMI</dt>
-                <dd className="font-medium">
-                  {ingreso.pmi === true ? 'Sí' : ingreso.pmi === false ? 'No' : '—'}
-                  {ingreso.pmiFechaInicio && ` (${fmtDate(ingreso.pmiFechaInicio)} — ${fmtDate(ingreso.pmiFechaFin)})`}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          {/* Contacto de Emergencia */}
-          <div className="his-card space-y-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2">
-              Contacto de Emergencia
-            </h3>
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Tutor / Responsable</dt>
-                <dd className="font-medium">{ingreso.nombreTutor ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Teléfono</dt>
-                <dd className="font-medium">{ingreso.telefonoTutor ?? '—'}</dd>
-              </div>
-            </dl>
-          </div>
-
-          {/* Datos Administrativos */}
-          <div className="his-card space-y-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2">
-              Información Administrativa
-            </h3>
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Nro Autorización</dt>
-                <dd className="font-medium">{ingreso.numeroAutorizacion ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Sin Cargo</dt>
-                <dd className="font-medium">{ingreso.sinCargo ? 'Sí' : 'No'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Importe Seña</dt>
-                <dd className="font-medium">
-                  {ingreso.senia != null ? `$${Number(ingreso.senia).toLocaleString('es-AR')}` : '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Usuario que Registró</dt>
-                <dd className="font-medium">{ingreso.usuario ?? '—'}</dd>
-              </div>
-              {informe?.profesionalEfector && (
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Prof. Efector</dt>
-                  <dd className="font-medium">{informe.profesionalEfector.nombre}</dd>
-                </div>
-              )}
-              {informe?.profesionalPrescriptor && (
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Prof. Prescriptor</dt>
-                  <dd className="font-medium">{informe.profesionalPrescriptor.nombre}</dd>
-                </div>
-              )}
+          {/* Profesionales */}
+          <div>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Médicos</h2>
+            <dl className="space-y-1.5 print:space-y-1">
+              <DataRow label="Guardia" value={ingreso.profesionalGuardia?.nombre ?? '—'} />
+              <DataRow label="Tratante" value={ingreso.profesionalTratante?.nombre ?? '—'} />
+              {informe?.profesionalEfector && <DataRow label="Efector" value={informe.profesionalEfector.nombre} />}
+              {informe?.profesionalPrescriptor && <DataRow label="Prescriptor" value={informe.profesionalPrescriptor.nombre} />}
             </dl>
           </div>
         </div>
 
-        {ingreso.observaciones && (
-          <div className="his-card space-y-2">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Observaciones
-            </h3>
-            <p className="text-sm text-gray-700">{ingreso.observaciones}</p>
+        {/* Diagnósticos */}
+        {(ingreso.descripcionPatologia || ingreso.ingresoPatologias.length > 0) && (
+          <div className="border-t pt-4 print:pt-2">
+            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Diagnósticos</h2>
+            {ingreso.descripcionPatologia && (
+              <p className="text-xs text-gray-700 mb-2 print:mb-1 italic">Patología: {ingreso.descripcionPatologia}</p>
+            )}
+            {ingreso.ingresoPatologias.length > 0 && (
+              <ul className="space-y-1 text-xs print:space-y-0.5">
+                {ingreso.ingresoPatologias.map((p) => (
+                  <li key={p.id} className="text-gray-700">
+                    • {p.descripcion ?? `Patología ${p.patologiaId}`}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
+
+        {/* Medicaciones activas */}
+        {ingreso.medicaciones.length > 0 && (
+          <div className="border-t pt-4 print:pt-2">
+            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Medicaciones</h2>
+            <div className="space-y-2 print:space-y-1 text-xs">
+              {ingreso.medicaciones.map((med) => (
+                <div key={med.id} className="flex justify-between gap-2">
+                  <div className="flex-1">
+                    <span className="font-medium text-gray-900">{med.nombre}</span>
+                    {med.dosis && <span className="text-gray-600"> - {med.dosis}</span>}
+                    {med.viaAdministracion && <span className="text-gray-500 print:hidden"> ({med.viaAdministracion})</span>}
+                  </div>
+                  <span className="text-gray-500 text-right shrink-0">{med.frecuencia ?? 'S/F'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Prácticas realizadas */}
+        {ingreso.practicas.length > 0 && (
+          <div className="border-t pt-4 print:pt-2">
+            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Procedimientos Realizados</h2>
+            <ul className="space-y-1 print:space-y-0.5 text-xs">
+              {ingreso.practicas.map((p) => (
+                <li key={p.id} className="text-gray-700">
+                  • {fmtDate(p.fecha)} - Cód. {p.codigoPractica} · Cant. {String(p.cantidad)}
+                  {p.numeroAutorizacion && <span className="text-gray-500"> (Auth: {p.numeroAutorizacion})</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Evolución clínica (resumen últimas notas) */}
+        {ingreso.evoluciones.length > 0 && (
+          <div className="border-t pt-4 print:pt-2">
+            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Evolución Clínica (últimas 5 notas)</h2>
+            <div className="space-y-3 print:space-y-2 text-xs">
+              {ingreso.evoluciones.slice(0, 5).map((ev) => (
+                <div key={ev.id} className="border-l-2 border-blue-300 pl-2 print:pl-1 py-1">
+                  <div className="flex justify-between items-start">
+                    <span className="font-medium text-gray-900">{fmtDate(ev.fecha)}</span>
+                    <span className="text-yellow-700 bg-yellow-50 print:bg-transparent px-1.5 py-0.5 rounded text-[10px] print:text-[9px]">
+                      {ev.tipo}
+                    </span>
+                  </div>
+                  <p className="text-gray-700 mt-0.5 whitespace-pre-wrap text-[11px] print:text-[10px]">{ev.descripcion}</p>
+                  {ev.profesional && (
+                    <p className="text-gray-500 text-[10px] print:text-[9px] mt-0.5">Dr. {ev.profesional.nombre}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+            {ingreso.evoluciones.length > 5 && (
+              <p className="text-xs text-gray-500 mt-2 print:mt-1">
+                ... y {ingreso.evoluciones.length - 5} notas adicionales en el sistema
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Footer para impresión */}
+        <div className="hidden print:block border-t pt-4 mt-8 text-center text-xs text-gray-400">
+          <p>Informe generado automáticamente - Válido con firma autorizada</p>
+          <p>{new Date().toLocaleString('es-AR')}</p>
+        </div>
       </div>
     </>
+  )
+}
+
+function DataRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <dt className="text-gray-500 font-medium">{label}</dt>
+      <dd className="text-gray-900 text-right font-medium">{value}</dd>
+    </div>
   )
 }

@@ -8,11 +8,15 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import type { PacienteResumen } from '@/modules/admision/types'
+import {
+  buscarAdmisionesActivasPorPaciente,
+  obtenerContextoAdmisionParaOrden,
+} from '@/modules/orden/repository'
 
 export const metadata: Metadata = { title: 'Nueva Autorización' }
 
 interface PageProps {
-  searchParams: Promise<{ pacienteId?: string }>
+  searchParams: Promise<{ pacienteId?: string; q?: string; ingresoId?: string }>
 }
 
 export default async function NuevaAutorizacionPage({ searchParams }: PageProps) {
@@ -21,7 +25,7 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
     redirect('/dashboard/ambulatorio')
   }
 
-  const [obraSocialesRows, planes, profesionales, tiposIngreso] = await Promise.all([
+  const [obraSocialesRows, planes, profesionales] = await Promise.all([
     prisma.$queryRaw<Array<{ id: number; nombre: string }>>`
       SELECT "OSID"::int AS id, BTRIM("OSNom") AS nombre
       FROM "ObraSocial"
@@ -38,16 +42,22 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
       select: { id: true, nombre: true, matricula: true },
       orderBy: { nombre: 'asc' },
     }),
-    prisma.tipoIngreso.findMany({
-      orderBy: { descripcion: 'asc' },
-    }),
   ])
 
   // Pre-cargar paciente si viene por query param
   const params = await searchParams
   let pacienteInicial: PacienteResumen | null = null
+  const q = params.q?.trim() ?? ''
+  const ingresoId = params.ingresoId ? parseInt(params.ingresoId, 10) : NaN
 
-  if (params.pacienteId) {
+  const [admisiones, admisionSeleccionada] = await Promise.all([
+    q.length >= 2 ? buscarAdmisionesActivasPorPaciente(q) : Promise.resolve([]),
+    Number.isFinite(ingresoId) && ingresoId > 0
+      ? obtenerContextoAdmisionParaOrden(ingresoId)
+      : Promise.resolve(null),
+  ])
+
+  if (!admisionSeleccionada && params.pacienteId) {
     const pacienteId = parseInt(params.pacienteId, 10)
     if (!isNaN(pacienteId)) {
       const p = await prisma.paciente.findUnique({
@@ -76,6 +86,18 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
     }
   }
 
+  if (admisionSeleccionada?.paciente) {
+    pacienteInicial = {
+      id: admisionSeleccionada.paciente.id,
+      historiaClinica: null,
+      nombreCompleto: admisionSeleccionada.paciente.nombreCompleto,
+      tipoDocumento: admisionSeleccionada.paciente.tipoDocumento,
+      numeroDocumento: admisionSeleccionada.paciente.numeroDocumento,
+      obraSocialId: admisionSeleccionada.obraSocialId ?? admisionSeleccionada.paciente.obraSocialId,
+      numeroAfiliado: admisionSeleccionada.numeroAfiliado ?? admisionSeleccionada.paciente.numeroAfiliado,
+    }
+  }
+
   return (
     <>
       <Header titulo="Nueva Autorización" />
@@ -88,6 +110,59 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
           <span className="text-gray-900 font-medium">Nueva Autorización</span>
         </nav>
 
+        <section className="space-y-3">
+          <form className="flex gap-2" method="GET">
+            <input
+              name="q"
+              defaultValue={q}
+              placeholder="Buscar admisión: nombre o DNI del paciente"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Buscar
+            </button>
+          </form>
+
+          {q.length >= 2 && (
+            <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
+              {admisiones.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-gray-500">Sin admisiones activas para esa búsqueda.</p>
+              ) : (
+                admisiones.map((adm) => {
+                  const seleccionada = admisionSeleccionada?.id === adm.id
+                  const nombrePaciente = adm.paciente?.nombreCompleto ?? adm.nombre ?? 'Sin nombre'
+                  return (
+                    <Link
+                      key={adm.id}
+                      href={`/dashboard/ambulatorio/nueva?q=${encodeURIComponent(q)}&ingresoId=${adm.id}`}
+                      className={`block px-3 py-2 text-sm hover:bg-gray-50 ${seleccionada ? 'bg-blue-50' : 'bg-white'}`}
+                    >
+                      <p className="font-medium text-gray-900">
+                        {adm.tipoIngresoCodigo}-{adm.numeroIngreso} · {nombrePaciente}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        DNI: {adm.paciente?.numeroDocumento ?? '-'} · Ingreso:{' '}
+                        {adm.fechaIngreso
+                          ? new Date(adm.fechaIngreso).toLocaleString('es-AR')
+                          : 'Sin fecha'}
+                      </p>
+                    </Link>
+                  )
+                })
+              )}
+            </div>
+          )}
+
+          {admisionSeleccionada && (
+            <p className="text-xs text-blue-700 font-medium">
+              ✓ Admisión {admisionSeleccionada.tipoIngresoCodigo}-{admisionSeleccionada.numeroIngreso} seleccionada
+            </p>
+          )}
+        </section>
+
         <ConsultaForm
           obraSociales={obraSocialesRows}
           planes={planes.map((p) => ({
@@ -97,8 +172,8 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
           }))}
           profesionales={profesionales}
           pacienteInicial={pacienteInicial}
+          admisionInicial={admisionSeleccionada}
           usuario={usuario.codigoUsuario}
-          tiposIngreso={tiposIngreso.map((t) => ({ codigo: t.codigo, descripcion: t.descripcion }))}
         />
       </div>
     </>

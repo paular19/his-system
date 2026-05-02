@@ -15,3 +15,28 @@ export async function crearOrdenAmbulatorio(data: CrearOrdenInput, usuario: stri
 
   return orden
 }
+
+export async function crearOrdenesAmbulatoriasPorPractica(data: CrearOrdenInput, usuario: string) {
+  const ordenes = [] as Array<{ puestoNumero: number; numero: number }>
+
+  for (const item of data.items) {
+    const orden = await crearOrdenAmbulatorio(
+      {
+        ...data,
+        items: [item],
+      },
+      usuario
+    )
+    ordenes.push({ puestoNumero: orden.puestoNumero, numero: orden.numero })
+  }
+
+  await registrarAudit({
+    usuario,
+    accion: 'CREAR',
+    entidad: 'Orden',
+    registroId: data.ingresoId ?? data.pacienteId ?? 'N/A',
+    detalle: `Generación individual de ${ordenes.length} órdenes desde admisión`,
+  })
+
+  return ordenes
+}

@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import type { PacienteResumen } from '@/modules/admision/types'
+import { asegurarCosegurosIPSS } from '@/lib/utils/coseguros'
 
 export const metadata: Metadata = { title: 'Nueva Admisión' }
 
@@ -27,50 +28,57 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
     orderBy: { nombre: 'asc' },
   })
 
-  const subtipos = await prisma.subtipoAdmision.findMany({
-    where: { estado: 'A' },
+  const codigosSubtipoAdmision = ['RAY', 'GUA', 'CUR', 'SUT', 'ECG', 'ECO', 'DER', 'TUR']
+  const ordenSubtipos = new Map(codigosSubtipoAdmision.map((codigo, i) => [codigo, i]))
+
+  const subtiposRaw = await prisma.subtipoAdmision.findMany({
+    where: {
+      estado: 'A',
+      codigo: { in: codigosSubtipoAdmision },
+    },
     select: { codigo: true, descripcion: true },
-    orderBy: { descripcion: 'asc' },
   })
+
+  const subtipos = subtiposRaw.sort(
+    (a, b) => (ordenSubtipos.get(a.codigo) ?? 999) - (ordenSubtipos.get(b.codigo) ?? 999)
+  )
 
   let obraSociales: Array<{ id: number; nombre: string; requiereCoseguro: boolean }> = []
   let planes: Array<{ id: number; nombre: string; obraSocialId: number | null }> = []
+  let coseguros: Array<{ id: number; nombre: string }> = []
 
   try {
-    const obraSocialesRows = await prisma.$queryRaw<Array<{ id: number; nombre: string; requiereCoseguro: boolean; activa: boolean }>>`
-      SELECT
-        "OSID"::int AS id,
-        COALESCE(
-          NULLIF(BTRIM(COALESCE(to_jsonb(os) ->> 'OSNom', to_jsonb(os) ->> 'OBRA_SOCIAL')), ''),
-          'Sin nombre'
-        ) AS nombre,
-        CASE
-          WHEN LOWER(BTRIM(COALESCE(to_jsonb(os) ->> 'REQUIERE_COSEGURO', to_jsonb(os) ->> 'OSReqCoseg', 'No'))) IN ('si', 'sí', 's', '1', 'true', 't') THEN true
-          ELSE false
-        END AS "requiereCoseguro",
-        CASE
-          WHEN LOWER(BTRIM(COALESCE(to_jsonb(os) ->> 'ESTADO', to_jsonb(os) ->> 'OSEstad', 'Activa'))) IN ('activa', 'activo', 'a', '1', 'true', 't') THEN true
-          ELSE false
-        END AS activa
-      FROM "ObraSocial" os
-      ORDER BY nombre ASC
-    `
-    obraSociales = obraSocialesRows
-      .filter((obraSocial) => obraSocial.activa)
-      .map(({ id, nombre, requiereCoseguro }) => ({ id, nombre, requiereCoseguro }))
+    const rows = await prisma.obraSocial.findMany({
+      where: { estado: 'A' },
+      select: { id: true, nombre: true, requiereCoseguro: true },
+      orderBy: { nombre: 'asc' },
+    })
+    obraSociales = rows.map((os) => ({
+      id: os.id,
+      nombre: os.nombre,
+      requiereCoseguro: os.requiereCoseguro === 'S',
+    }))
   } catch (error) {
     console.error('[ADMISION] No se pudieron cargar obras sociales:', error)
   }
 
   try {
-    planes = await prisma.$queryRaw<Array<{ id: number; nombre: string; obraSocialId: number | null }>>`
-      SELECT
-        "PosID"::int AS id,
-        COALESCE(NULLIF(BTRIM("PosDescrip"), ''), CONCAT('Plan ', "PosID"::text)) AS nombre,
-        "OSID"::int AS "obraSocialId"
-      FROM "PlanOSoc"
-      ORDER BY nombre ASC
-    `
+    coseguros = await asegurarCosegurosIPSS()
+  } catch (error) {
+    console.error('[ADMISION] No se pudieron asegurar/cargar coseguros de IPSS:', error)
+  }
+
+  try {
+    const rows = await prisma.planObraSocial.findMany({
+      where: { estado: 'A' },
+      select: { id: true, descripcion: true, obraSocialId: true },
+      orderBy: { descripcion: 'asc' },
+    })
+    planes = rows.map((p) => ({
+      id: p.id,
+      nombre: p.descripcion,
+      obraSocialId: p.obraSocialId,
+    }))
   } catch {
     // PlanOSoc puede no existir aún
   }
@@ -87,10 +95,20 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
         select: {
           id: true,
           historiaClinica: true,
+          apellido: true,
+          nombre: true,
           nombreCompleto: true,
           tipoDocumento: true,
           numeroDocumento: true,
+          sexo: true,
+          fechaNacimiento: true,
+          domicilio: true,
+          telefonoFijo: true,
+          celular1: true,
+          email: true,
           obraSocialId: true,
+          planId: true,
+          obraSocialCoseguroId: true,
           numeroAfiliado: true,
         },
       })
@@ -98,10 +116,20 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
         pacienteInicial = {
           id: p.id,
           historiaClinica: p.historiaClinica,
+          apellido: p.apellido,
+          nombre: p.nombre,
           nombreCompleto: p.nombreCompleto,
           tipoDocumento: p.tipoDocumento,
           numeroDocumento: p.numeroDocumento,
+          sexo: p.sexo,
+          fechaNacimiento: p.fechaNacimiento,
+          domicilio: p.domicilio,
+          telefonoFijo: p.telefonoFijo,
+          celular1: p.celular1,
+          email: p.email,
           obraSocialId: p.obraSocialId,
+          planId: p.planId,
+          obraSocialCoseguroId: p.obraSocialCoseguroId,
           numeroAfiliado: p.numeroAfiliado,
         }
       }
@@ -125,6 +153,7 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
           profesionales={profesionales}
           obraSociales={obraSociales}
           planes={planes}
+          coseguros={coseguros}
           subtipos={subtipos}
           pacienteInicial={pacienteInicial}
         />

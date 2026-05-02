@@ -133,8 +133,9 @@ export async function getPlanesAction(): Promise<{ id: number; nombre: string; o
     throw new Error('Sin permisos para consultar planes')
   }
   const { prisma } = await import('@/lib/db')
-  return prisma.plan.findMany({
-    select: { id: true, nombre: true, obraSocialId: true },
-    orderBy: { nombre: 'asc' },
+  const planes = await prisma.planObraSocial.findMany({
+    select: { id: true, descripcion: true, obraSocialId: true },
+    orderBy: { descripcion: 'asc' },
   })
+  return planes.map(p => ({ id: p.id, nombre: p.descripcion, obraSocialId: p.obraSocialId }))
 }

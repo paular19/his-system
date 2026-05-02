@@ -94,9 +94,21 @@ export function PacienteForm({
   const planesDisponibles = obraSocialIdSeleccionada
     ? planes.filter((plan) => plan.obraSocialId === obraSocialIdSeleccionada)
     : []
-  const cosegurosDisponibles = obraSocialIdSeleccionada
-    ? coseguros.filter((coseguro) => coseguro.id === obraSocialIdSeleccionada)
-    : []
+
+  function normalizarNomOS(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+  const esIPSS = (() => {
+    const tokens = normalizarNomOS(obraSocialSeleccionada?.nombre ?? '').split(' ')
+    return tokens.includes('IPSS') || tokens.includes('IPS')
+  })()
+  const cosegurosDisponibles = esIPSS ? coseguros : []
 
   const obraSocialRegister = register('obraSocialId', {
     setValueAs: (value) => (value === '' ? undefined : Number(value)),
@@ -403,32 +415,7 @@ export function PacienteForm({
             )}
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Plan</label>
-            <select
-              {...planRegister}
-              disabled={!obraSocialIdSeleccionada || planesDisponibles.length === 0}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-500"
-            >
-              <option value="">
-                {!obraSocialIdSeleccionada
-                  ? '-- Seleccione obra social primero --'
-                  : planesDisponibles.length === 0
-                    ? '-- Sin planes cargados --'
-                    : '-- Seleccionar plan --'}
-              </option>
-              {planesDisponibles.map((plan) => (
-                <option key={plan.id} value={String(plan.id)}>
-                  {plan.descripcion}
-                </option>
-              ))}
-            </select>
-            {errors.planId && (
-              <p className="text-xs text-red-500 mt-1">{String(errors.planId.message)}</p>
-            )}
-          </div>
-
-          {obraSocialIdSeleccionada && (
+          {obraSocialIdSeleccionada && esIPSS && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">¿Tiene coseguro?</label>
               <select
@@ -450,7 +437,7 @@ export function PacienteForm({
             </div>
           )}
 
-          {obraSocialIdSeleccionada && tieneCoseguro === 'SI' && (
+          {obraSocialIdSeleccionada && esIPSS && tieneCoseguro === 'SI' && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Coseguro <span className="text-red-500">*</span>

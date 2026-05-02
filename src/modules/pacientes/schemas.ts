@@ -29,12 +29,13 @@ export const CrearPacienteSchema = z.object({
     .number()
     .int()
     .positive('El número de documento debe ser positivo')
+    .max(99_999_999, 'El número de documento no puede superar 8 dígitos')
     .optional()
     .nullable(),
   cuil: z
     .string()
     .trim()
-    .regex(/^\d{11}$/, 'El CUIL debe tener 11 dígitos sin guiones')
+    .regex(/^\d{10,11}$/, 'El CUIL debe tener 10 u 11 dígitos sin guiones')
     .optional()
     .nullable(),
   fechaNacimiento: z.coerce.date().optional().nullable(),
@@ -83,7 +84,7 @@ export type ActualizarPacienteInput = z.infer<typeof ActualizarPacienteSchema>
 // Parámetros de búsqueda y listado
 export const BusquedaPacienteSchema = z.object({
   q: z.string().max(200).trim().optional(),
-  numeroDocumento: z.coerce.number().int().positive().optional(),
+  numeroDocumento: z.coerce.number().int().positive().max(99_999_999).optional(),
   apellido: z.string().max(100).trim().optional(),
   nombre: z.string().max(100).trim().optional(),
   historiaClinica: z.coerce.number().int().positive().optional(),

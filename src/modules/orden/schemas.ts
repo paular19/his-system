@@ -6,6 +6,7 @@ export const OrdenPracticaItemSchema = z.object({
   descripcionPractica: z.string().min(1),
   cantidad: z.number().min(0.01),
   tipoFacturacion: z.string().length(1).default('H'),
+  numeroAutorizacion: z.string().max(50).optional().nullable(),
   importeTotal: z.number().optional(),
   porcentajeCargoPac: z.number().min(0).max(100).optional(),
 })
@@ -21,7 +22,7 @@ export const CrearOrdenSchema = z.object({
 
   // Obra social
   obraSocialId: z.number().int().positive(),
-  planId: z.number().int().positive(),
+  planId: z.number().int().positive().optional().nullable(),
   obraSocialCoseguroId: z.number().int().positive().optional(),
   planCoseguroId: z.number().int().positive().optional(),
 

@@ -12,10 +12,20 @@ interface BuscarPacienteProps {
 interface ApiPaciente {
   id: number
   historiaClinica: number | null
+  apellido: string | null
+  nombre: string | null
   nombreCompleto: string
   tipoDocumento: string | null
   numeroDocumento: number | null
+  sexo: string | null
+  fechaNacimiento: string | null
+  domicilio: string | null
+  telefonoFijo: string | null
+  celular1: string | null
+  email: string | null
   obraSocialId: number | null
+  planId: number | null
+  obraSocialCoseguroId: number | null
   numeroAfiliado: string | null
 }
 
@@ -52,10 +62,20 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
     onSeleccionar({
       id: paciente.id,
       historiaClinica: paciente.historiaClinica,
+      apellido: paciente.apellido,
+      nombre: paciente.nombre,
       nombreCompleto: paciente.nombreCompleto,
       tipoDocumento: paciente.tipoDocumento,
       numeroDocumento: paciente.numeroDocumento,
+      sexo: paciente.sexo,
+      fechaNacimiento: paciente.fechaNacimiento,
+      domicilio: paciente.domicilio,
+      telefonoFijo: paciente.telefonoFijo,
+      celular1: paciente.celular1,
+      email: paciente.email,
       obraSocialId: paciente.obraSocialId,
+      planId: paciente.planId,
+      obraSocialCoseguroId: paciente.obraSocialCoseguroId,
       numeroAfiliado: paciente.numeroAfiliado,
     })
     setResultados([])

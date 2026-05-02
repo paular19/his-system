@@ -4,6 +4,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
 import { PacienteForm } from '@/components/pacientes/paciente-form'
 import { prisma } from '@/lib/db'
+import { asegurarCosegurosIPSS } from '@/lib/utils/coseguros'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -46,7 +47,7 @@ export default async function NuevoPacientePage() {
     obraSocialId: plan.obraSocialId,
   }))
 
-  const coseguros = obraSociales.map((os) => ({ id: os.id, nombre: os.nombre }))
+  const coseguros = await asegurarCosegurosIPSS()
 
   return (
     <>

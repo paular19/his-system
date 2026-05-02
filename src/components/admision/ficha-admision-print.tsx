@@ -1,14 +1,37 @@
 'use client'
 
+import { useEffect } from 'react'
 import { formatearFecha, formatearFechaHora, calcularEdad } from '@/lib/utils'
-import type { IngresoConRelaciones } from '@/modules/admision/types'
+import type { IngresoDetalle } from '@/modules/admision/types'
+import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 
 interface FichaAdmisionPrintProps {
-    ingreso: IngresoConRelaciones
+    ingreso: IngresoDetalle
 }
 
 export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
     const edad = ingreso.fechaNacimiento ? calcularEdad(ingreso.fechaNacimiento) : null
+    const observacionesLimpias = limpiarObservacionesAdmision(ingreso.observaciones)
+
+    useEffect(() => {
+        const originalTitle = document.title
+        const handleBeforePrint = () => {
+            // Prevent browser print headers from showing the page title text.
+            document.title = ' '
+        }
+        const handleAfterPrint = () => {
+            document.title = originalTitle
+        }
+
+        window.addEventListener('beforeprint', handleBeforePrint)
+        window.addEventListener('afterprint', handleAfterPrint)
+
+        return () => {
+            window.removeEventListener('beforeprint', handleBeforePrint)
+            window.removeEventListener('afterprint', handleAfterPrint)
+            document.title = originalTitle
+        }
+    }, [])
 
     const LABEL_ESTADO: Record<string, string> = {
         A: 'Activo',
@@ -21,81 +44,119 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
         <>
             <style>{`
                 @media print {
-                    /* Reset global */
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    html, body { width: 100%; margin: 0; padding: 0; background: white; }
-                    
+                    html, body {
+                        width: 100%;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white;
+                    }
+
                     /* Ocultar navegación y elementos de UI no imprimibles */
-                    nav, aside, [role="navigation"], .sidebar, button, .flex-1.pl-60,
+                    nav, aside, [role="navigation"], .sidebar, button,
                     header, .no-print, .navbar { display: none !important; }
                     .print-hidden { display: none !important; }
-                    
-                    /* Asegurar visibilidad de la ficha */
-                    .print-ficha { display: block !important; visibility: visible !important; }
-                    
-                    /* Layout */
-                    main { padding: 0 !important; margin: 0 !important; }
-                    
+
+                    /* Evitar corrimiento por el layout del dashboard */
+                    .flex-1.pl-60 {
+                        padding-left: 0 !important;
+                    }
+                    main {
+                        padding: 0 !important;
+                        margin: 0 !important;
+                    }
+
+                    /* Asegurar visibilidad y centrado de la ficha */
                     .print-ficha {
-                        width: 100%;
-                        page-break-after: avoid;
-                        padding: 30px;
+                        display: block !important;
+                        visibility: visible !important;
+                        width: 190mm;
+                        max-width: 190mm;
+                        margin: 0 auto;
+                        padding: 6mm;
+                        page-break-after: auto;
+                        break-after: auto;
                         font-family: Arial, sans-serif;
-                        font-size: 11pt;
+                        font-size: 10pt;
                         color: #000;
                     }
                     
-                    .print-ficha h1 { font-size: 16pt; font-weight: bold; margin: 0 0 4px; text-align: center; }
-                    .print-ficha h2 { font-size: 13pt; font-weight: bold; margin: 12px 0 6px; }
-                    .print-ficha p { margin: 2px 0; }
-                    
-                    .print-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
-                    .print-header-clinic { font-size: 14pt; font-weight: bold; }
-                    .print-header-sub { font-size: 9pt; color: #333; }
-                    
-                    .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-                    
-                    .print-section { border: 1px solid #000; padding: 8px; margin-bottom: 8px; page-break-inside: avoid; }
-                    .print-section-title { font-weight: bold; font-size: 10pt; border-bottom: 1px solid #000; margin-bottom: 6px; padding-bottom: 4px; }
-                    
-                    table { width: 100%; border-collapse: collapse; margin: 6px 0; page-break-inside: avoid; }
-                    table td { border: 1px solid #999; padding: 4px 6px; font-size: 9pt; }
-                    table th { background: #ddd; border: 1px solid #999; padding: 4px 6px; font-weight: bold; }
-                    
-                    .print-item { border-left: 3px solid #0066cc; padding-left: 6px; margin: 4px 0; }
-                    
-                    @page { size: A4; margin: 10mm; }
+                    .print-ficha h1 { font-size: 16pt; font-weight: bold; margin: 0 0 2px; text-align: center; }
+                    .print-ficha h2 { font-size: 12pt; font-weight: bold; margin: 8px 0 4px; }
+                    .print-ficha p { margin: 1px 0; }
+
+                    .print-header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
+                    .print-header-row { display: flex; gap: 12px; align-items: flex-start; }
+                    .print-header-clinica { min-width: 170px; }
+                    .print-header-clinica-nombre { font-size: 13pt; font-weight: bold; line-height: 1.1; }
+                    .print-header-sub { font-size: 8.5pt; color: #333; line-height: 1.1; }
+                    .print-header-info { flex: 1; }
+                    .print-header-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+                    .print-header-table td { border: none; padding: 1px 4px 1px 0; }
+                    .print-label { font-weight: bold; color: #555; white-space: nowrap; }
+                    .print-value { color: #000; }
+                    .print-nro-ingreso { font-weight: bold; font-size: 11pt; }
+
+                    .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+
+                    .print-section { border: 1px solid #000; padding: 6px; margin-bottom: 6px; page-break-inside: avoid; }
+                    .print-section-title { font-weight: bold; font-size: 9pt; border-bottom: 1px solid #000; margin-bottom: 4px; padding-bottom: 3px; }
+
+                    table { width: 100%; border-collapse: collapse; margin: 4px 0; page-break-inside: avoid; }
+                    table td { border: 1px solid #999; padding: 3px 4px; font-size: 8.5pt; }
+                    table th { background: #ddd; border: 1px solid #999; padding: 3px 4px; font-weight: bold; }
+
+                    .print-item { border-left: 3px solid #0066cc; padding-left: 5px; margin: 3px 0; }
+
+                    @page { size: A4; margin: 5mm; }
                 }
                 @media screen { .print-ficha { display: none !important; } }
             `}</style>
 
             <div className="print-ficha">
                 <div className="print-header">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className="h-16 w-16 rounded-full bg-blue-900 text-white flex items-center justify-center font-bold text-lg">
-                                HIS
-                            </div>
-                            <div className="text-left">
-                                <div className="print-header-clinic">CLÍNICA SAN RAFAEL</div>
-                                <div className="print-header-sub">Av. Siempre Viva 1234 · CABA</div>
-                                <div className="print-header-sub">Tel: (011) 1234-5678 · info@clinicasanrafael.com</div>
-                            </div>
+                    <div className="print-header-row">
+                        <div className="print-header-clinica">
+                            <div className="print-header-clinica-nombre">CLINICA SAN RAFAEL</div>
+                            <div className="print-header-sub">Sistema HIS</div>
+                            <div className="print-header-sub">Av. Siempre Viva 1234 · CABA</div>
+                            <div className="print-header-sub">Tel: (011) 1234-5678</div>
                         </div>
-                        <div className="text-left md:text-right">
-                            <div className="print-header-clinic">FICHA DE ADMISIÓN AMBULATORIA</div>
-                            <div className="print-header-sub mt-1">Fecha de impresión: {formatearFechaHora(new Date())}</div>
+                        <div className="print-header-info">
+                            <table className="print-header-table">
+                                <tbody>
+                                    <tr>
+                                        <td className="print-label">Documento:</td>
+                                        <td className="print-value">FICHA DE ADMISION</td>
+                                        <td className="print-label">Fecha impresion:</td>
+                                        <td className="print-value">{formatearFechaHora(new Date())}</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="print-label">Paciente:</td>
+                                        <td className="print-value" colSpan={3}>
+                                            {(ingreso.nombre ?? ingreso.paciente?.nombreCompleto ?? '—').toUpperCase()}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="print-label">Nro ingreso:</td>
+                                        <td className="print-value print-nro-ingreso">
+                                            {ingreso.tipoIngresoCodigo}-{ingreso.numeroIngreso}
+                                        </td>
+                                        <td className="print-label">Fecha ingreso:</td>
+                                        <td className="print-value">{formatearFechaHora(ingreso.fechaIngreso)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="print-label">Cobertura:</td>
+                                        <td className="print-value" colSpan={3}>
+                                            {ingreso.obraSocial?.nombre ?? '—'} - {ingreso.plan?.descripcion ?? '—'}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
 
-                <div className="text-center mb-6">
-                    <p className="text-lg font-mono font-bold text-blue-700 mt-2">
-                        {ingreso.tipoIngresoCodigo}-{ingreso.numeroIngreso}
-                    </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     {/* Información del Paciente */}
                     <div className="border border-gray-300 rounded-lg p-4">
                         <h3 className="text-sm font-semibold text-gray-700 border-b pb-2 mb-3">
@@ -137,7 +198,11 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                         <dl className="space-y-2 text-sm">
                             <div className="flex justify-between">
                                 <dt className="text-gray-600">Tipo de Ingreso:</dt>
-                                <dd className="font-medium">{ingreso.tipoIngreso?.descripcion ?? ingreso.tipoIngresoCodigo}</dd>
+                                <dd className="font-medium">
+                                    {ingreso.ingresoSubtipo?.subtipoAdmision?.descripcion
+                                        ?? ingreso.tipoIngreso?.descripcion
+                                        ?? ingreso.tipoIngresoCodigo}
+                                </dd>
                             </div>
                             <div className="flex justify-between">
                                 <dt className="text-gray-600">Fecha de Ingreso:</dt>
@@ -167,9 +232,79 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                     </div>
                 </div>
 
+                {/* Información específica del subtipo */}
+                {ingreso.ingresoSubtipo && (() => {
+                    const sub = ingreso.ingresoSubtipo!
+                    const codigo = sub.subtipoAdmisionCodigo
+                    if (codigo === 'DER') return (
+                        <div className="border border-gray-300 rounded-lg p-3 mb-4">
+                            <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
+                                INFORMACIÓN DE DERIVACIÓN
+                            </h3>
+                            <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                {sub.centroDerivante && <div className="flex justify-between">
+                                    <dt className="text-gray-600">Centro Derivante:</dt>
+                                    <dd className="font-medium">{sub.centroDerivante}</dd>
+                                </div>}
+                                {sub.profesionalDerivanteNombre && <div className="flex justify-between">
+                                    <dt className="text-gray-600">Profesional Derivante:</dt>
+                                    <dd className="font-medium">{sub.profesionalDerivanteNombre}</dd>
+                                </div>}
+                                {sub.motivoDerivacion && <div className="col-span-full flex justify-between">
+                                    <dt className="text-gray-600">Motivo:</dt>
+                                    <dd className="font-medium">{sub.motivoDerivacion}</dd>
+                                </div>}
+                                {sub.diagnosticoDerivacion && <div className="col-span-full flex justify-between">
+                                    <dt className="text-gray-600">Diagnóstico de Derivación:</dt>
+                                    <dd className="font-medium">{sub.diagnosticoDerivacion}</dd>
+                                </div>}
+                            </dl>
+                        </div>
+                    )
+                    if (codigo === 'TUR' || codigo === 'RAY' || codigo === 'PAM') return (
+                        <div className="border border-gray-300 rounded-lg p-3 mb-4">
+                            <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
+                                TURNO / PRÁCTICA
+                            </h3>
+                            <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                {sub.practicaCodigo && <div className="flex justify-between">
+                                    <dt className="text-gray-600">Práctica:</dt>
+                                    <dd className="font-medium">{sub.practicaCodigo}</dd>
+                                </div>}
+                                {sub.fechaTurno && <div className="flex justify-between">
+                                    <dt className="text-gray-600">Fecha de Turno:</dt>
+                                    <dd className="font-medium">{formatearFechaHora(sub.fechaTurno)}</dd>
+                                </div>}
+                            </dl>
+                        </div>
+                    )
+                    if (codigo === 'IND') return (
+                        <div className="border border-gray-300 rounded-lg p-3 mb-4">
+                            <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
+                                INDICACIÓN MÉDICA
+                            </h3>
+                            <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                {sub.profesionalIndicadorNombre && <div className="flex justify-between">
+                                    <dt className="text-gray-600">Profesional Indicador:</dt>
+                                    <dd className="font-medium">{sub.profesionalIndicadorNombre}</dd>
+                                </div>}
+                                {sub.tipoIndicacion && <div className="flex justify-between">
+                                    <dt className="text-gray-600">Tipo de Indicación:</dt>
+                                    <dd className="font-medium">{sub.tipoIndicacion}</dd>
+                                </div>}
+                                {sub.descripcionIndicacion && <div className="col-span-full flex justify-between">
+                                    <dt className="text-gray-600">Descripción:</dt>
+                                    <dd className="font-medium">{sub.descripcionIndicacion}</dd>
+                                </div>}
+                            </dl>
+                        </div>
+                    )
+                    return null
+                })()}
+
                 {/* Cobertura Médica */}
-                <div className="border border-gray-300 rounded-lg p-4 mb-6">
-                    <h3 className="text-sm font-semibold text-gray-700 border-b pb-2 mb-3">
+                <div className="border border-gray-300 rounded-lg p-3 mb-4">
+                    <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
                         COBERTURA MÉDICA
                     </h3>
                     <dl className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -179,7 +314,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                         </div>
                         <div className="flex justify-between">
                             <dt className="text-gray-600">Plan:</dt>
-                            <dd className="font-medium">{ingreso.plan?.nombre ?? '—'}</dd>
+                            <dd className="font-medium">{ingreso.plan?.descripcion ?? '—'}</dd>
                         </div>
                         <div className="flex justify-between">
                             <dt className="text-gray-600">N° Afiliado:</dt>
@@ -190,8 +325,8 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
 
                 {/* Diagnóstico */}
                 {(ingreso.descripcionPatologia || ingreso.descripcionPatologiaDefinitiva) && (
-                    <div className="border border-gray-300 rounded-lg p-4 mb-6">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-2 mb-3">
+                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
+                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
                             DIAGNÓSTICO
                         </h3>
                         {ingreso.descripcionPatologia && (
@@ -214,19 +349,19 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                 )}
 
                 {/* Observaciones */}
-                {ingreso.observaciones && (
-                    <div className="border border-gray-300 rounded-lg p-4 mb-6">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-2 mb-3">
+                {observacionesLimpias && (
+                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
+                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
                             OBSERVACIONES
                         </h3>
-                        <p className="text-sm text-gray-900 whitespace-pre-line">{ingreso.observaciones}</p>
+                        <p className="text-sm text-gray-900 whitespace-pre-line">{observacionesLimpias}</p>
                     </div>
                 )}
 
                 {/* Diagnósticos Registrados */}
                 {ingreso.ingresoPatologias.length > 0 && (
-                    <div className="border border-gray-300 rounded-lg p-4 mb-6">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-2 mb-3">
+                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
+                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
                             DIAGNÓSTICOS REGISTRADOS
                         </h3>
                         <div className="space-y-2">
@@ -245,8 +380,8 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
 
                 {/* Movimientos */}
                 {ingreso.movimientosIngreso.length > 0 && (
-                    <div className="border border-gray-300 rounded-lg p-4 mb-6">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-2 mb-3">
+                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
+                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
                             MOVIMIENTOS DEL INGRESO
                         </h3>
                         <div className="overflow-x-auto">
@@ -281,7 +416,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                 )}
 
                 {/* Pie de página */}
-                <div className="text-center text-xs text-gray-500 mt-8 pt-4 border-t border-gray-300">
+                <div className="text-center text-xs text-gray-500 mt-4 pt-2 border-t border-gray-300">
                     <p>Documento generado por el Sistema de Gestión Hospitalaria</p>
                     <p>Fecha: {formatearFechaHora(new Date())}</p>
                 </div>

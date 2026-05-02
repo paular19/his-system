@@ -15,17 +15,13 @@ async function main() {
 
   // ── TipoIngreso ──────────────────────────────────────────
   const tiposIngreso = [
-    { codigo: 'A',   descripcion: 'Ambulatorio',          proximoNumero: 1 },
-    { codigo: 'G',   descripcion: 'Guardia / Turno',      proximoNumero: 1 },
-    { codigo: 'I',   descripcion: 'Internado',             proximoNumero: 1 },
-    { codigo: 'M',   descripcion: 'Mantenimiento',         proximoNumero: 1 },
-    { codigo: 'R',   descripcion: 'Reserva',               proximoNumero: 1 },
-    { codigo: 'T',   descripcion: 'ART',                   proximoNumero: 1 },
+    { codigo: 'AMB', descripcion: 'Ambulatorio', proximoNumero: 1 },
+    { codigo: 'INT', descripcion: 'Internacion', proximoNumero: 1 },
   ]
 
   for (const tipo of tiposIngreso) {
     await prisma.tipoIngreso.upsert({
-      where:  { codigo: tipo.codigo },
+      where: { codigo: tipo.codigo },
       update: { descripcion: tipo.descripcion },
       create: tipo,
     })
@@ -34,16 +30,16 @@ async function main() {
 
   // ── TipoInternacion ──────────────────────────────────────
   const tiposInternacion = [
-    { codigo: 'GEN', descripcion: 'General',              esAmbulatorio: false },
-    { codigo: 'UTI', descripcion: 'Terapia Intensiva',    esAmbulatorio: false },
-    { codigo: 'CIR', descripcion: 'Cirugía Programada',   esAmbulatorio: false },
-    { codigo: 'OBS', descripcion: 'Observación',          esAmbulatorio: true  },
-    { codigo: 'CON', descripcion: 'Consulta / Indicación',esAmbulatorio: true  },
+    { codigo: 'GEN', descripcion: 'General', esAmbulatorio: false },
+    { codigo: 'UTI', descripcion: 'Terapia Intensiva', esAmbulatorio: false },
+    { codigo: 'CIR', descripcion: 'Cirugía Programada', esAmbulatorio: false },
+    { codigo: 'OBS', descripcion: 'Observación', esAmbulatorio: true },
+    { codigo: 'CON', descripcion: 'Consulta / Indicación', esAmbulatorio: true },
   ]
 
   for (const tipo of tiposInternacion) {
     await prisma.tipoInternacion.upsert({
-      where:  { codigo: tipo.codigo },
+      where: { codigo: tipo.codigo },
       update: { descripcion: tipo.descripcion, esAmbulatorio: tipo.esAmbulatorio },
       create: tipo,
     })
@@ -61,7 +57,7 @@ async function main() {
 
   for (const motivo of motivosEgreso) {
     await prisma.motivoEgreso.upsert({
-      where:  { codigo: motivo.codigo },
+      where: { codigo: motivo.codigo },
       update: { descripcion: motivo.descripcion },
       create: motivo,
     })
@@ -70,16 +66,16 @@ async function main() {
 
   // ── TipoMovimientoIngreso ─────────────────────────────────
   const tiposMovimiento = [
-    { codigo: 'ING', descripcion: 'Ingreso',   signo:  1 },
-    { codigo: 'EGR', descripcion: 'Egreso',    signo: -1 },
-    { codigo: 'PAG', descripcion: 'Pago',      signo: -1 },
-    { codigo: 'CAR', descripcion: 'Cargo',     signo:  1 },
-    { codigo: 'AJU', descripcion: 'Ajuste',    signo:  1 },
+    { codigo: 'ING', descripcion: 'Ingreso', signo: 1 },
+    { codigo: 'EGR', descripcion: 'Egreso', signo: -1 },
+    { codigo: 'PAG', descripcion: 'Pago', signo: -1 },
+    { codigo: 'CAR', descripcion: 'Cargo', signo: 1 },
+    { codigo: 'AJU', descripcion: 'Ajuste', signo: 1 },
   ]
 
   for (const tipo of tiposMovimiento) {
     await prisma.tipoMovimientoIngreso.upsert({
-      where:  { codigo: tipo.codigo },
+      where: { codigo: tipo.codigo },
       update: { descripcion: tipo.descripcion, signo: tipo.signo },
       create: tipo,
     })
@@ -96,7 +92,7 @@ async function main() {
 
   for (const tipo of tiposOrden) {
     await prisma.tipoOrden.upsert({
-      where:  { codigo: tipo.codigo },
+      where: { codigo: tipo.codigo },
       update: { descripcion: tipo.descripcion },
       create: tipo,
     })

@@ -5,6 +5,7 @@ import { redirect, notFound } from 'next/navigation'
 import { obtenerPaciente } from '@/modules/pacientes/service'
 import { PacienteForm } from '@/components/pacientes/paciente-form'
 import { prisma } from '@/lib/db'
+import { asegurarCosegurosIPSS } from '@/lib/utils/coseguros'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -65,7 +66,7 @@ export default async function EditarPacientePage({ params }: PageProps) {
     obraSocialId: plan.obraSocialId,
   }))
 
-  const coseguros = obraSociales.map((os) => ({ id: os.id, nombre: os.nombre }))
+  const coseguros = await asegurarCosegurosIPSS()
 
   // Convertir tipos Prisma a valores compatibles con inputs HTML
   const valoresIniciales = {

@@ -91,7 +91,8 @@ export function InternacionForm({
 
     try {
       const body = {
-        tipoIngresoCodigo: 'I',
+        tipoIngresoCodigo: 'INT',
+        subtipoAdmisionCodigo: null,
         pacienteId: paciente.id,
         fechaIngreso: fechaIngreso ? new Date(fechaIngreso).toISOString() : undefined,
         fechaEgresoPrevista: fechaEgresoPrevista
@@ -151,7 +152,7 @@ export function InternacionForm({
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Paciente</h3>
         <BuscarPaciente
-          pacienteInicial={paciente}
+          pacienteSeleccionado={paciente}
           onSeleccionar={handleSeleccionarPaciente}
         />
       </div>

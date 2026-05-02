@@ -17,9 +17,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const skip = parseInt(searchParams.get('skip') ?? '0', 10)
     const take = parseInt(searchParams.get('take') ?? '20', 10)
-    const solo = searchParams.get('solo') as 'ambulatorio' | 'internacion' | null
+    const pendienteParam = searchParams.get('pendiente')
+    const pendiente = pendienteParam === 'true' ? true : pendienteParam === 'false' ? false : undefined
 
-    const resultado = await listarOrdenes({ skip, take, solo: solo ?? 'ambulatorio' })
+    const resultado = await listarOrdenes({ skip, take, pendiente })
     return apiOk(resultado)
   } catch (err) {
     return manejarErrorApi(err)

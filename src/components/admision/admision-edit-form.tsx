@@ -3,15 +3,29 @@
 import { useState, useEffect, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Loader2 } from 'lucide-react'
+import { Save, Loader2, CheckCircle2, AlertCircle, Search, Plus, X } from 'lucide-react'
 import { updateIngresoAction, getProfesionalesAction, getMotivosEgresoAction } from '@/modules/admision/actions'
 import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
 import type { ActualizarIngresoInput } from '@/modules/admision/schemas'
-import type { IngresoConRelaciones } from '@/modules/admision/types'
+import type { IngresoDetalle } from '@/modules/admision/types'
+import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 
 interface AdmisionEditFormProps {
-    ingreso: IngresoConRelaciones
+    ingreso: IngresoDetalle
     onSuccess: () => void
+}
+
+interface PracticaBusquedaItem {
+    convenioId: number
+    codigo: string
+    descripcion: string
+}
+
+interface PracticaEditable {
+    convenioId: number | null
+    codigo: string
+    descripcion: string
+    cantidad: number
 }
 
 export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) {
@@ -19,14 +33,25 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
     const [profesionales, setProfesionales] = useState<{ id: number; nombre: string }[]>([])
     const [motivosEgreso, setMotivosEgreso] = useState<{ codigo: string; descripcion: string }[]>([])
     const [isLoadingData, setIsLoadingData] = useState(true)
+    const [successMsg, setSuccessMsg] = useState<string | null>(null)
+    const [errorMsg, setErrorMsg] = useState<string | null>(null)
+    const [busquedaPractica, setBusquedaPractica] = useState('')
+    const [buscandoPractica, setBuscandoPractica] = useState(false)
+    const [resultadosPractica, setResultadosPractica] = useState<PracticaBusquedaItem[]>([])
+    const [practicasAgregar, setPracticasAgregar] = useState<PracticaEditable[]>([])
+
+    // Convierte un Date/string/null a YYYY-MM-DD para <input type="date">
+    const toDateStr = (d: Date | string | null | undefined) =>
+        d ? new Date(d).toISOString().split('T')[0] : ''
 
     const form = useForm<ActualizarIngresoInput>({
         resolver: zodResolver(ActualizarIngresoSchema),
         defaultValues: {
-            subtipoAdmisionCodigo: ingreso.subtipoAdmision?.codigo,
-            fechaIngreso: ingreso.fechaIngreso ? new Date(ingreso.fechaIngreso) : undefined,
-            fechaEgresoPrevista: ingreso.fechaEgresoPrevista ? new Date(ingreso.fechaEgresoPrevista) : undefined,
-            fechaEgreso: ingreso.fechaEgreso ? new Date(ingreso.fechaEgreso) : undefined,
+            subtipoAdmisionCodigo: ingreso.ingresoSubtipo?.subtipoAdmisionCodigo,
+            // Los inputs type="date" necesitan string YYYY-MM-DD, no objetos Date
+            fechaIngreso: toDateStr(ingreso.fechaIngreso) as unknown as Date,
+            fechaEgresoPrevista: toDateStr(ingreso.fechaEgresoPrevista) as unknown as Date,
+            fechaEgreso: toDateStr(ingreso.fechaEgreso) as unknown as Date,
             profesionalGuardiaId: ingreso.profesionalGuardiaId ?? undefined,
             profesionalTratanteId: ingreso.profesionalTratanteId ?? undefined,
             camaId: ingreso.camaId ?? undefined,
@@ -36,9 +61,9 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
             numeroAfiliado: ingreso.numeroAfiliado ?? undefined,
             descripcionPatologia: ingreso.descripcionPatologia ?? undefined,
             descripcionPatologiaDefinitiva: ingreso.descripcionPatologiaDefinitiva ?? undefined,
-            observaciones: ingreso.observaciones ?? undefined,
+            observaciones: limpiarObservacionesAdmision(ingreso.observaciones) ?? undefined,
             estado: ingreso.estado ?? undefined,
-            motivoEgresoCodigo: ingreso.motivoEgreso?.codigo ?? undefined,
+            motivoEgresoCodigo: ingreso.motivoEgresoCodigo ?? undefined,
         } as Partial<ActualizarIngresoInput>,
     })
 
@@ -61,14 +86,122 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         loadData()
     }, [])
 
+    const buscarPractica = async () => {
+        if (busquedaPractica.trim().length < 2) return
+
+        const convenioId = ingreso.obraSocialId ?? undefined
+        if (!convenioId) {
+            setErrorMsg('La admisión no tiene obra social asignada para buscar prácticas')
+            return
+        }
+
+        setErrorMsg(null)
+        setBuscandoPractica(true)
+        setResultadosPractica([])
+        try {
+            const params = new URLSearchParams({
+                q: busquedaPractica.trim(),
+                convenioId: String(convenioId),
+            })
+            const res = await fetch(`/api/practicas-nomenclador?${params.toString()}`)
+            const json = await res.json()
+            if (json.ok) {
+                const data = Array.isArray(json.data) ? json.data : []
+                setResultadosPractica(data as PracticaBusquedaItem[])
+            }
+        } catch {
+            setResultadosPractica([])
+        } finally {
+            setBuscandoPractica(false)
+        }
+    }
+
+    const agregarPractica = (practica: PracticaBusquedaItem) => {
+        setPracticasAgregar((prev) => {
+            const idx = prev.findIndex((p) => p.codigo === practica.codigo)
+            if (idx >= 0) {
+                return prev.map((p, index) => index === idx ? { ...p, cantidad: p.cantidad + 1 } : p)
+            }
+
+            return [
+                ...prev,
+                {
+                    convenioId: practica.convenioId,
+                    codigo: practica.codigo,
+                    descripcion: practica.descripcion,
+                    cantidad: 1,
+                },
+            ]
+        })
+        setBusquedaPractica('')
+        setResultadosPractica([])
+    }
+
+    const agregarPracticaManual = () => {
+        if (!busquedaPractica.trim()) return
+        const convenioId = ingreso.obraSocialId ?? null
+        if (!convenioId) {
+            setErrorMsg('La admisión no tiene obra social asignada para agregar prácticas manuales')
+            return
+        }
+
+        setPracticasAgregar((prev) => [
+            ...prev,
+            {
+                convenioId,
+                codigo: busquedaPractica.trim().slice(0, 8).toUpperCase(),
+                descripcion: busquedaPractica.trim(),
+                cantidad: 1,
+            },
+        ])
+        setBusquedaPractica('')
+        setResultadosPractica([])
+        setErrorMsg(null)
+    }
+
+    const quitarPractica = (codigo: string) => {
+        setPracticasAgregar((prev) => prev.filter((p) => p.codigo !== codigo))
+    }
+
+    const actualizarCantidadPractica = (codigo: string, cantidad: number) => {
+        setPracticasAgregar((prev) => prev.map((p) => p.codigo === codigo ? { ...p, cantidad } : p))
+    }
+
     const onSubmit = (data: ActualizarIngresoInput) => {
+        setSuccessMsg(null)
+        setErrorMsg(null)
+
+        // Sanear selects numéricos: la opción vacía con valueAsNumber devuelve NaN.
+        // Si el campo tenía valor y ahora es NaN → el usuario lo limpió → null.
+        // Si nunca tuvo valor y sigue vacío → no tocar → undefined.
+        const sanitizeNum = (
+            val: number | null | undefined,
+            original: number | null | undefined
+        ): number | null | undefined => {
+            if (typeof val === 'number' && isNaN(val)) {
+                return original != null ? null : undefined
+            }
+            return val
+        }
+
+        const sanitized: ActualizarIngresoInput = {
+            ...data,
+            profesionalGuardiaId: sanitizeNum(data.profesionalGuardiaId, ingreso.profesionalGuardiaId),
+            profesionalTratanteId: sanitizeNum(data.profesionalTratanteId, ingreso.profesionalTratanteId),
+            practicasAgregar: practicasAgregar.length > 0 ? practicasAgregar : undefined,
+            // Fechas vacías: string vacío no debe pisar valores existentes
+            fechaIngreso: (data.fechaIngreso as unknown as string) ? data.fechaIngreso : undefined,
+            fechaEgresoPrevista: (data.fechaEgresoPrevista as unknown as string) ? data.fechaEgresoPrevista : undefined,
+            fechaEgreso: (data.fechaEgreso as unknown as string) ? data.fechaEgreso : undefined,
+        }
+
         startTransition(async () => {
             try {
-                await updateIngresoAction(ingreso.id, data)
-                alert('Ingreso actualizado correctamente')
-                onSuccess()
+                await updateIngresoAction(ingreso.id, sanitized)
+                setSuccessMsg('Ingreso actualizado correctamente')
+                setTimeout(() => onSuccess(), 1200)
             } catch (error) {
-                alert('Error al actualizar el ingreso')
+                setErrorMsg('Error al actualizar el ingreso')
                 console.error(error)
             }
         })
@@ -90,7 +223,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                         id="fechaIngreso"
                         type="date"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        {...form.register('fechaIngreso', { valueAsDate: true })}
+                        {...form.register('fechaIngreso')}
                     />
                     {form.formState.errors.fechaIngreso && (
                         <p className="text-sm text-red-600">{form.formState.errors.fechaIngreso.message}</p>
@@ -106,7 +239,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                         id="fechaEgreso"
                         type="date"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        {...form.register('fechaEgreso', { valueAsDate: true })}
+                        {...form.register('fechaEgreso')}
                     />
                     {form.formState.errors.fechaEgreso && (
                         <p className="text-sm text-red-600">{form.formState.errors.fechaEgreso.message}</p>
@@ -122,7 +255,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                         id="fechaEgresoPrevista"
                         type="date"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        {...form.register('fechaEgresoPrevista', { valueAsDate: true })}
+                        {...form.register('fechaEgresoPrevista')}
                     />
                     {form.formState.errors.fechaEgresoPrevista && (
                         <p className="text-sm text-red-600">{form.formState.errors.fechaEgresoPrevista.message}</p>
@@ -194,27 +327,29 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                     )}
                 </div>
 
-                {/* Motivo Egreso */}
-                <div className="space-y-2">
-                    <label htmlFor="motivoEgresoCodigo" className="block text-sm font-medium text-gray-700">
-                        Motivo Egreso
-                    </label>
-                    <select
-                        id="motivoEgresoCodigo"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        {...form.register('motivoEgresoCodigo')}
-                    >
-                        <option value="">Seleccionar motivo</option>
-                        {motivosEgreso.map((motivo) => (
-                            <option key={motivo.codigo} value={motivo.codigo}>
-                                {motivo.descripcion}
-                            </option>
-                        ))}
-                    </select>
-                    {form.formState.errors.motivoEgresoCodigo && (
-                        <p className="text-sm text-red-600">{form.formState.errors.motivoEgresoCodigo.message}</p>
-                    )}
-                </div>
+                {/* Motivo Egreso — sólo internación */}
+                {ingreso.tipoIngresoCodigo === 'INT' && (
+                    <div className="space-y-2">
+                        <label htmlFor="motivoEgresoCodigo" className="block text-sm font-medium text-gray-700">
+                            Motivo Egreso
+                        </label>
+                        <select
+                            id="motivoEgresoCodigo"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            {...form.register('motivoEgresoCodigo')}
+                        >
+                            <option value="">Seleccionar motivo</option>
+                            {motivosEgreso.map((motivo) => (
+                                <option key={motivo.codigo} value={motivo.codigo}>
+                                    {motivo.descripcion}
+                                </option>
+                            ))}
+                        </select>
+                        {form.formState.errors.motivoEgresoCodigo && (
+                            <p className="text-sm text-red-600">{form.formState.errors.motivoEgresoCodigo.message}</p>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Diagnóstico Presuntivo */}
@@ -267,6 +402,145 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                     <p className="text-sm text-red-600">{form.formState.errors.observaciones.message}</p>
                 )}
             </div>
+
+            <div className="space-y-4">
+                <div>
+                    <h3 className="text-sm font-medium text-gray-700">Prácticas</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                        Las prácticas ya registradas se muestran abajo. Desde acá podés agregar nuevas.
+                    </p>
+                </div>
+
+                {ingreso.practicas.length > 0 && (
+                    <div className="rounded-md border overflow-hidden">
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                                <tr>
+                                    <th className="px-3 py-2 text-left">Código</th>
+                                    <th className="px-3 py-2 text-left">Práctica ya cargada</th>
+                                    <th className="px-3 py-2 text-right">Cant.</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {ingreso.practicas.map((p) => (
+                                    <tr key={p.id} className="bg-white">
+                                        <td className="px-3 py-2 font-mono text-xs text-gray-600">{p.codigoPractica.trim()}</td>
+                                        <td className="px-3 py-2 text-gray-900">{p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()}</td>
+                                        <td className="px-3 py-2 text-right text-gray-700">{Number(p.cantidad)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            value={busquedaPractica}
+                            onChange={(e) => setBusquedaPractica(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    void buscarPractica()
+                                }
+                            }}
+                            placeholder="Buscar práctica por código o descripción..."
+                            className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => void buscarPractica()}
+                        disabled={buscandoPractica || busquedaPractica.trim().length < 2}
+                        className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                    >
+                        {buscandoPractica ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Buscar'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={agregarPracticaManual}
+                        disabled={!busquedaPractica.trim()}
+                        className="rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                        title="Agregar práctica manual"
+                    >
+                        <Plus className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {resultadosPractica.length > 0 && (
+                    <div className="rounded-md border bg-white shadow-sm max-h-48 overflow-y-auto divide-y">
+                        {resultadosPractica.map((p) => (
+                            <button
+                                key={`${p.convenioId}-${p.codigo}`}
+                                type="button"
+                                onClick={() => agregarPractica(p)}
+                                className="w-full text-left px-3 py-2.5 hover:bg-blue-50 transition-colors"
+                            >
+                                <p className="text-sm font-medium text-gray-900">{p.descripcion}</p>
+                                <p className="text-xs text-gray-500">Código: {p.codigo.trim()}</p>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {practicasAgregar.length > 0 && (
+                    <div className="rounded-md border overflow-hidden">
+                        <table className="w-full text-sm">
+                            <thead className="bg-blue-50 text-xs text-gray-500 uppercase">
+                                <tr>
+                                    <th className="px-3 py-2 text-left">Código</th>
+                                    <th className="px-3 py-2 text-left">Nueva práctica</th>
+                                    <th className="px-3 py-2 text-center w-20">Cant.</th>
+                                    <th className="px-3 py-2 w-10"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {practicasAgregar.map((p) => (
+                                    <tr key={p.codigo} className="bg-white">
+                                        <td className="px-3 py-2 font-mono text-xs text-gray-600">{p.codigo.trim()}</td>
+                                        <td className="px-3 py-2 text-gray-900">{p.descripcion}</td>
+                                        <td className="px-3 py-2">
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                step={1}
+                                                value={p.cantidad}
+                                                onChange={(e) => actualizarCantidadPractica(p.codigo, parseInt(e.target.value, 10) || 1)}
+                                                className="w-full text-center rounded border border-gray-200 px-1 py-0.5 text-sm"
+                                            />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => quitarPractica(p.codigo)}
+                                                className="text-red-400 hover:text-red-600"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {successMsg && (
+                <div className="flex items-center gap-2 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    {successMsg}
+                </div>
+            )}
+            {errorMsg && (
+                <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    {errorMsg}
+                </div>
+            )}
 
             <div className="flex justify-end gap-4">
                 <button

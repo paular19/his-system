@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body: unknown = await request.json()
-    const data = DiagnosticoIngresoSchema.parse({ ...body, ingresoId })
+    const data = DiagnosticoIngresoSchema.parse({ ...(body as Record<string, unknown>), ingresoId })
 
     const diagnostico = await admisionService.registrarDiagnostico(
       data,

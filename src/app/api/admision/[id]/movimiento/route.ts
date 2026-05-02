@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body: unknown = await request.json()
-    const data = MovimientoIngresoSchema.parse({ ...body, ingresoId })
+    const data = MovimientoIngresoSchema.parse({ ...(body as Record<string, unknown>), ingresoId })
 
     const movimiento = await admisionService.registrarMovimiento(
       data,

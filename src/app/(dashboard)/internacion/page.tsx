@@ -189,7 +189,7 @@ export default async function InternacionPage() {
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <Link
-                          href={`/dashboard/admision/${item.id}`}
+                          href={`/dashboard/internacion/${item.id}`}
                           className="flex items-center gap-2 hover:text-blue-600"
                         >
                           <User className="h-4 w-4 text-gray-400 flex-shrink-0" />

@@ -28,6 +28,8 @@ export interface PacienteListItem {
 export interface PacienteBusqueda {
   id: number
   historiaClinica: number | null
+  apellido: string | null
+  nombre: string | null
   nombreCompleto: string
   domicilio: string | null
   tipoDocumento: string | null
@@ -38,6 +40,8 @@ export interface PacienteBusqueda {
   celular1: string | null
   email: string | null
   obraSocialId: number | null
+  planId: number | null
+  obraSocialCoseguroId: number | null
   obraSocialNombre: string | null
   planDescripcion: string | null
   numeroAfiliado: string | null

@@ -149,7 +149,9 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-600 text-xs">
-                        {ingreso.tipoIngreso?.descripcion ?? ingreso.tipoIngresoCodigo}
+                        {ingreso.ingresoSubtipo?.subtipoAdmision?.descripcion
+                          ?? ingreso.tipoIngreso?.descripcion
+                          ?? ingreso.tipoIngresoCodigo}
                       </td>
                       <td className="px-4 py-3 text-gray-600">
                         {formatearFecha(ingreso.fechaIngreso)}
@@ -196,11 +198,10 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
                   <Link
                     key={p}
                     href={`/dashboard/admision?q=${params.q ?? ''}&estado=${params.estado ?? ''}&pagina=${p}`}
-                    className={`rounded px-2 py-1 ${
-                      p === resultado.paginacion.pagina
+                    className={`rounded px-2 py-1 ${p === resultado.paginacion.pagina
                         ? 'bg-blue-600 text-white'
                         : 'hover:bg-gray-100'
-                    }`}
+                      }`}
                   >
                     {p}
                   </Link>

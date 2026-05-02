@@ -7,23 +7,23 @@ interface TarjetaCamaProps {
 }
 
 const ESTADO_STYLES: Record<string, string> = {
-  DISPONIBLE:    'bg-green-50 border-green-300 hover:bg-green-100',
-  OCUPADA:       'bg-red-50 border-red-300 hover:bg-red-100',
-  RESERVADA:     'bg-yellow-50 border-yellow-300 hover:bg-yellow-100',
+  DISPONIBLE: 'bg-green-50 border-green-300 hover:bg-green-100',
+  OCUPADA: 'bg-red-50 border-red-300 hover:bg-red-100',
+  RESERVADA: 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100',
   MANTENIMIENTO: 'bg-gray-100 border-gray-300 hover:bg-gray-200',
 }
 
 const ESTADO_TEXT: Record<string, string> = {
-  DISPONIBLE:    'text-green-700',
-  OCUPADA:       'text-red-700',
-  RESERVADA:     'text-yellow-700',
+  DISPONIBLE: 'text-green-700',
+  OCUPADA: 'text-red-700',
+  RESERVADA: 'text-yellow-700',
   MANTENIMIENTO: 'text-gray-500',
 }
 
 const ESTADO_DOT: Record<string, string> = {
-  DISPONIBLE:    'bg-green-500',
-  OCUPADA:       'bg-red-500',
-  RESERVADA:     'bg-yellow-500',
+  DISPONIBLE: 'bg-green-500',
+  OCUPADA: 'bg-red-500',
+  RESERVADA: 'bg-yellow-500',
   MANTENIMIENTO: 'bg-gray-400',
 }
 
@@ -104,7 +104,7 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
   // Ocupada → link al ingreso
   if (cama.estado === 'OCUPADA' && cama.ocupante) {
     return (
-      <Link href={`/dashboard/admision/${cama.ocupante.ingresoId}`}>
+      <Link href={`/dashboard/internacion/${cama.ocupante.ingresoId}`}>
         {contenido}
       </Link>
     )

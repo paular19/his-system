@@ -78,7 +78,7 @@ export function AutorizacionPrint({
           const codigoBarras = generarCodigoBarras(item.puestoNumero, item.ordenNumero, item.item)
 
           return (
-            <div key={item._key ?? idx} className="autorizacion-pagina">
+            <div key={`${item.puestoNumero}-${item.ordenNumero}-${item.item}`} className="autorizacion-pagina">
               {/* ====== LADO FRONTAL ====== */}
               <div className="autorizacion-frente">
                 {/* Header */}

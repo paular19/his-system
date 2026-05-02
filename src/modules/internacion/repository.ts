@@ -1,13 +1,26 @@
 import { prisma } from '@/lib/db'
-import type { Cama } from '@prisma/client'
+import type { Cama, Prisma } from '@prisma/client'
 import type {
   CamaConOcupante,
   MapaCamas,
   DisponibilidadSector,
   InternacionListItem,
+  InternacionDetalle,
+  EvolucionItem,
+  MedicacionItem,
+  TransferenciaItem,
+  PracticaItem,
 } from './types'
 import { SECTOR_CAMA, SECTOR_LABEL } from './types'
-import type { ActualizarCamaInput, BusquedaInternacionInput } from './schemas'
+import type {
+  ActualizarCamaInput,
+  BusquedaInternacionInput,
+  CrearEvolucionInput,
+  CrearMedicacionInput,
+  ActualizarMedicacionInput,
+  TransferirCamaInput,
+  CrearPracticaInput,
+} from './schemas'
 import type { ResultadoPaginado } from '@/types'
 
 // ============================================
@@ -29,11 +42,11 @@ async function mapearCamaConOcupante(
     ...cama,
     ocupante: ingreso
       ? {
-          ingresoId: ingreso.id,
-          numeroIngreso: ingreso.numeroIngreso,
-          nombre: ingreso.nombre ?? 'Sin nombre',
-          fechaIngreso: ingreso.fechaIngreso,
-        }
+        ingresoId: ingreso.id,
+        numeroIngreso: ingreso.numeroIngreso,
+        nombre: ingreso.nombre ?? 'Sin nombre',
+        fechaIngreso: ingreso.fechaIngreso,
+      }
       : null,
   }
 }
@@ -136,11 +149,7 @@ export async function obtenerInternacionesActivas(
   const { pagina, porPagina, q, sector } = params
   const skip = (pagina - 1) * porPagina
 
-  type WhereClause = Parameters<typeof prisma.ingreso.findMany>[0] extends { where?: infer W }
-    ? W
-    : never
-
-  const where: WhereClause = {
+  const where: Prisma.IngresoWhereInput = {
     tipoIngresoCodigo: 'INT',
     estado: 'A',
   }
@@ -202,4 +211,375 @@ export async function obtenerInternacionesActivas(
       totalPaginas: Math.ceil(total / porPagina),
     },
   }
+}
+
+// ============================================
+// DETALLE DE INTERNACIÓN
+// ============================================
+
+export async function obtenerInternacionDetalle(id: number): Promise<InternacionDetalle | null> {
+  const ingreso = await prisma.ingreso.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      numeroIngreso: true,
+      tipoIngresoCodigo: true,
+      nombre: true,
+      fechaIngreso: true,
+      fechaEgresoPrevista: true,
+      fechaEgreso: true,
+      estado: true,
+      descripcionPatologia: true,
+      numeroAfiliado: true,
+      paciente: {
+        select: {
+          id: true,
+          nombreCompleto: true,
+          numeroDocumento: true,
+          tipoDocumento: true,
+          fechaNacimiento: true,
+          celular1: true,
+          obraSocialId: true,
+        },
+      },
+      cama: {
+        select: { id: true, identificador: true, sector: true, habitacion: true },
+      },
+      profesionalGuardia: { select: { id: true, nombre: true } },
+      profesionalTratante: { select: { id: true, nombre: true } },
+      obraSocial: { select: { id: true, nombre: true } },
+      plan: { select: { id: true, descripcion: true } },
+      ingresoPatologias: {
+        select: { id: true, patologiaId: true, descripcion: true, estado: true, fecha: true },
+        orderBy: { fecha: 'desc' },
+      },
+      evoluciones: {
+        select: {
+          id: true,
+          ingresoId: true,
+          fecha: true,
+          tipo: true,
+          descripcion: true,
+          tensionArterial: true,
+          frecuenciaCardiaca: true,
+          frecuenciaRespiratoria: true,
+          temperatura: true,
+          saturacionO2: true,
+          usuario: true,
+          profesional: { select: { id: true, nombre: true } },
+        },
+        orderBy: { fecha: 'desc' },
+      },
+      medicaciones: {
+        select: {
+          id: true,
+          ingresoId: true,
+          nombre: true,
+          dosis: true,
+          viaAdministracion: true,
+          frecuencia: true,
+          fechaInicio: true,
+          fechaFin: true,
+          observaciones: true,
+          estado: true,
+          usuario: true,
+          profesional: { select: { id: true, nombre: true } },
+        },
+        orderBy: { fechaInicio: 'desc' },
+      },
+      transferencias: {
+        select: {
+          id: true,
+          ingresoId: true,
+          fecha: true,
+          motivo: true,
+          usuario: true,
+          camaOrigen: { select: { id: true, identificador: true, sector: true } },
+          camaDestino: { select: { id: true, identificador: true, sector: true } },
+          profesional: { select: { id: true, nombre: true } },
+        },
+        orderBy: { fecha: 'desc' },
+      },
+      practicas: {
+        select: {
+          id: true,
+          ingresoId: true,
+          convenioId: true,
+          codigoPractica: true,
+          fecha: true,
+          cantidad: true,
+          numeroAutorizacion: true,
+          facturable: true,
+          estado: true,
+          usuarioRegistro: true,
+        },
+        orderBy: { fecha: 'desc' },
+      },
+      ordenes: {
+        select: {
+          puestoNumero: true,
+          numero: true,
+          fechaEmision: true,
+          estado: true,
+          items: {
+            select: {
+              item: true,
+              codigoPractica: true,
+              cantidad: true,
+              numeroAutorizacion: true,
+            },
+          },
+        },
+        orderBy: { fechaEmision: 'desc' },
+      },
+    },
+  })
+
+  if (!ingreso) return null
+
+  return {
+    ...ingreso,
+    evoluciones: ingreso.evoluciones.map((e) => ({
+      ...e,
+      temperatura: e.temperatura ? Number(e.temperatura) : null,
+    })) as EvolucionItem[],
+    medicaciones: ingreso.medicaciones as MedicacionItem[],
+    transferencias: ingreso.transferencias as TransferenciaItem[],
+    practicas: ingreso.practicas.map((p) => ({
+      ...p,
+      usuario: p.usuarioRegistro,
+      descripcionPractica: null,
+      cantidad: Number(p.cantidad),
+    })) as PracticaItem[],
+    ordenes: ingreso.ordenes.map((o) => ({
+      ...o,
+      items: o.items.map((i) => ({
+        ...i,
+        cantidad: Number(i.cantidad),
+      })),
+    })),
+  } as InternacionDetalle
+}
+
+// ============================================
+// PRÁCTICAS
+// ============================================
+
+export async function crearPractica(
+  data: CrearPracticaInput,
+  usuario: string
+): Promise<PracticaItem> {
+  const practica = await prisma.practica.create({
+    data: {
+      ingresoId: data.ingresoId,
+      convenioId: data.convenioId,
+      codigoPractica: data.codigoPractica.padEnd(8).slice(0, 8),
+      convenioValorId: 0,
+      fecha: data.fecha,
+      cantidad: data.cantidad,
+      numeroAutorizacion: data.numeroAutorizacion ?? null,
+      facturable: data.facturable,
+      usuarioRegistro: usuario.slice(0, 10),
+    },
+    select: {
+      id: true,
+      ingresoId: true,
+      convenioId: true,
+      codigoPractica: true,
+      fecha: true,
+      cantidad: true,
+      numeroAutorizacion: true,
+      facturable: true,
+      estado: true,
+      usuarioRegistro: true,
+    },
+  })
+  return {
+    ...practica,
+    usuario: practica.usuarioRegistro,
+    descripcionPractica: data.descripcionPractica ?? null,
+    cantidad: Number(practica.cantidad),
+  } as PracticaItem
+}
+
+// ============================================
+// EVOLUCIÓN CLÍNICA
+// ============================================
+
+export async function crearEvolucion(
+  data: CrearEvolucionInput,
+  usuario: string
+): Promise<EvolucionItem> {
+  const ev = await prisma.evolucionIngreso.create({
+    data: {
+      ingresoId: data.ingresoId,
+      fecha: new Date(),
+      tipo: data.tipo,
+      descripcion: data.descripcion,
+      tensionArterial: data.tensionArterial ?? null,
+      frecuenciaCardiaca: data.frecuenciaCardiaca ?? null,
+      frecuenciaRespiratoria: data.frecuenciaRespiratoria ?? null,
+      temperatura: data.temperatura ?? null,
+      saturacionO2: data.saturacionO2 ?? null,
+      profesionalId: data.profesionalId ?? null,
+      usuario: usuario.slice(0, 10),
+      fechaEstado: new Date(),
+    },
+    select: {
+      id: true,
+      ingresoId: true,
+      fecha: true,
+      tipo: true,
+      descripcion: true,
+      tensionArterial: true,
+      frecuenciaCardiaca: true,
+      frecuenciaRespiratoria: true,
+      temperatura: true,
+      saturacionO2: true,
+      usuario: true,
+      profesional: { select: { id: true, nombre: true } },
+    },
+  })
+  return {
+    ...ev,
+    temperatura: ev.temperatura ? Number(ev.temperatura) : null,
+  } as EvolucionItem
+}
+
+// ============================================
+// MEDICACIÓN
+// ============================================
+
+export async function crearMedicacion(
+  data: CrearMedicacionInput,
+  usuario: string
+): Promise<MedicacionItem> {
+  return prisma.medicacionIngreso.create({
+    data: {
+      ingresoId: data.ingresoId,
+      nombre: data.nombre,
+      dosis: data.dosis ?? null,
+      viaAdministracion: data.viaAdministracion ?? null,
+      frecuencia: data.frecuencia ?? null,
+      fechaInicio: data.fechaInicio,
+      fechaFin: data.fechaFin ?? null,
+      observaciones: data.observaciones ?? null,
+      profesionalId: data.profesionalId ?? null,
+      estado: 'A',
+      usuario: usuario.slice(0, 10),
+      fechaEstado: new Date(),
+    },
+    select: {
+      id: true,
+      ingresoId: true,
+      nombre: true,
+      dosis: true,
+      viaAdministracion: true,
+      frecuencia: true,
+      fechaInicio: true,
+      fechaFin: true,
+      observaciones: true,
+      estado: true,
+      usuario: true,
+      profesional: { select: { id: true, nombre: true } },
+    },
+  }) as Promise<MedicacionItem>
+}
+
+export async function actualizarMedicacion(
+  id: number,
+  data: ActualizarMedicacionInput,
+  usuario: string
+): Promise<MedicacionItem> {
+  return prisma.medicacionIngreso.update({
+    where: { id },
+    data: {
+      estado: data.estado,
+      fechaFin: data.fechaFin ?? null,
+      observaciones: data.observaciones ?? null,
+      usuario: usuario.slice(0, 10),
+      fechaEstado: new Date(),
+    },
+    select: {
+      id: true,
+      ingresoId: true,
+      nombre: true,
+      dosis: true,
+      viaAdministracion: true,
+      frecuencia: true,
+      fechaInicio: true,
+      fechaFin: true,
+      observaciones: true,
+      estado: true,
+      usuario: true,
+      profesional: { select: { id: true, nombre: true } },
+    },
+  }) as Promise<MedicacionItem>
+}
+
+// ============================================
+// TRANSFERENCIA DE CAMA
+// ============================================
+
+export async function transferirCama(
+  data: TransferirCamaInput,
+  usuario: string
+): Promise<TransferenciaItem> {
+  const ingreso = await prisma.ingreso.findUnique({
+    where: { id: data.ingresoId },
+    select: { id: true, camaId: true },
+  })
+  if (!ingreso) throw new Error('Internación no encontrada')
+
+  const camaDestino = await prisma.cama.findUnique({ where: { id: data.camaDestinoId } })
+  if (!camaDestino) throw new Error('Cama destino no encontrada')
+  if (camaDestino.estado !== 'DISPONIBLE') throw new Error('La cama destino no está disponible')
+
+  const transferencia = await prisma.$transaction(async (tx) => {
+    // Liberar cama origen
+    if (ingreso.camaId) {
+      await tx.cama.update({
+        where: { id: ingreso.camaId },
+        data: { estado: 'DISPONIBLE', usuario: usuario.slice(0, 10), fechaEstado: new Date() },
+      })
+    }
+
+    // Ocupar cama destino
+    await tx.cama.update({
+      where: { id: data.camaDestinoId },
+      data: { estado: 'OCUPADA', usuario: usuario.slice(0, 10), fechaEstado: new Date() },
+    })
+
+    // Actualizar ingreso
+    await tx.ingreso.update({
+      where: { id: data.ingresoId },
+      data: { camaId: data.camaDestinoId },
+    })
+
+    // Registrar transferencia
+    return tx.transferenciaIngreso.create({
+      data: {
+        ingresoId: data.ingresoId,
+        camaOrigenId: ingreso.camaId ?? null,
+        camaDestinoId: data.camaDestinoId,
+        fecha: new Date(),
+        motivo: data.motivo ?? null,
+        profesionalId: data.profesionalId ?? null,
+        usuario: usuario.slice(0, 10),
+        fechaEstado: new Date(),
+      },
+      select: {
+        id: true,
+        ingresoId: true,
+        fecha: true,
+        motivo: true,
+        usuario: true,
+        camaOrigen: { select: { id: true, identificador: true, sector: true } },
+        camaDestino: { select: { id: true, identificador: true, sector: true } },
+        profesional: { select: { id: true, nombre: true } },
+      },
+    })
+  })
+
+  return transferencia as TransferenciaItem
 }

@@ -13,6 +13,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:import-practicas": "tsx prisma/import-practicas-nomenclador.ts",
+    "db:import-nomenclador-xls": "tsx prisma/import-nomenclador-xls.ts",
     "db:import-obras": "tsx prisma/import-obras-sociales-planes.ts",
     "db:import-pacientes": "tsx prisma/import-pacientes-historial.ts",
     "db:import-geo-profesion": "tsx prisma/import-localidad-barrio-profesion.ts",
@@ -62,6 +63,7 @@
     "tailwindcss": "^4.0.12",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.21.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "xlsx": "^0.18.5"
   }
 }

@@ -7,18 +7,38 @@ import type {
   MovimientoIngreso,
   TipoMovimientoIngreso,
   Cama,
+  ObraSocial,
+  PlanObraSocial,
+  IngresoSubtipo,
+  SubtipoAdmision,
 } from '@prisma/client'
+
+export type IngresoSubtipoConRelaciones = IngresoSubtipo & {
+  subtipoAdmision: Pick<SubtipoAdmision, 'codigo' | 'descripcion'>
+}
 
 export type IngresoConRelaciones = Ingreso & {
   paciente?: Paciente | null
   tipoIngreso?: TipoIngreso | null
   profesionalGuardia?: Profesional | null
   profesionalTratante?: Profesional | null
+  ingresoSubtipo?: IngresoSubtipoConRelaciones | null
 }
 
 // Tipo completo para la ficha de ingreso
 export type IngresoDetalle = IngresoConRelaciones & {
+  obraSocial?: Pick<ObraSocial, 'id' | 'nombre'> | null
+  plan?: Pick<PlanObraSocial, 'obraSocialId' | 'id' | 'descripcion'> | null
   cama?: (Pick<Cama, 'id' | 'identificador' | 'sector' | 'habitacion'>) | null
+  practicas: Array<{
+    id: number
+    convenioId: number
+    codigoPractica: string
+    cantidad: number
+    fecha: Date
+    numeroAutorizacion: string | null
+    nomencladorPractica: { descripcion: string } | null
+  }>
   ingresoPatologias: IngresoPatologia[]
   movimientosIngreso: (MovimientoIngreso & {
     tipoMovimiento: TipoMovimientoIngreso
@@ -36,6 +56,9 @@ export interface IngresoListItem {
   estado: string | null
   obraSocialId: number | null
   tipoIngreso: { codigo: string; descripcion: string | null } | null
+  ingresoSubtipo: {
+    subtipoAdmision: { codigo: string; descripcion: string | null } | null
+  } | null
   paciente: { id: number; nombreCompleto: string; numeroDocumento: number | null } | null
 }
 
@@ -43,10 +66,20 @@ export interface IngresoListItem {
 export interface PacienteResumen {
   id: number
   historiaClinica: number | null
+  apellido?: string | null
+  nombre?: string | null
   nombreCompleto: string
   tipoDocumento: string | null
   numeroDocumento: number | null
+  sexo?: string | null
+  fechaNacimiento?: Date | string | null
+  domicilio?: string | null
+  telefonoFijo?: string | null
+  celular1?: string | null
+  email?: string | null
   obraSocialId: number | null
+  planId?: number | null
+  obraSocialCoseguroId?: number | null
   numeroAfiliado: string | null
 }
 

@@ -2,9 +2,25 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Plus, Trash2, Search } from 'lucide-react'
 import { BuscarPaciente } from './buscar-paciente'
 import { createIngresoAction } from '@/modules/admision/actions'
 import type { PacienteResumen } from '@/modules/admision/types'
+
+interface ItemPractica {
+  convenioId: number | null
+  codigo: string
+  descripcion: string
+  cantidad: number
+}
+
+interface ItemMedicacion {
+  nombre: string
+  dosis: string
+  viaAdministracion: string
+  frecuencia: string
+  observaciones: string
+}
 
 interface ProfesionalOption {
   id: number
@@ -23,6 +39,11 @@ interface PlanOption {
   obraSocialId: number | null
 }
 
+interface CoseguroOption {
+  id: number
+  nombre: string
+}
+
 interface SubtipoAdmisionOption {
   codigo: string
   descripcion: string
@@ -32,14 +53,31 @@ interface AdmisionFormProps {
   profesionales: ProfesionalOption[]
   obraSociales: ObraSocialOption[]
   planes: PlanOption[]
+  coseguros: CoseguroOption[]
   subtipos: SubtipoAdmisionOption[]
   pacienteInicial?: PacienteResumen | null
+}
+
+function normalizarTexto(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function esNombreIPSS(nombre: string): boolean {
+  const tokens = normalizarTexto(nombre).split(' ')
+  return tokens.includes('IPSS') || tokens.includes('IPS')
 }
 
 export function AdmisionForm({
   profesionales,
   obraSociales,
   planes,
+  coseguros,
   subtipos,
   pacienteInicial,
 }: AdmisionFormProps) {
@@ -48,8 +86,8 @@ export function AdmisionForm({
   const [error, setError] = useState<string | null>(null)
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
 
-  // Tipo de ingreso: ambulatorio
-  const tipoIngresoCodigo = 'A'
+  // Tipo de ingreso por defecto para admisión general
+  const tipoIngresoCodigo = 'AMB'
 
   // Estado general
   const [fechaIngreso, setFechaIngreso] = useState(
@@ -62,7 +100,12 @@ export function AdmisionForm({
   const [obraSocialId, setObraSocialId] = useState(
     pacienteInicial?.obraSocialId?.toString() ?? ''
   )
-  const [planId, setPlanId] = useState('')
+  const [planId, setPlanId] = useState(
+    pacienteInicial?.planId?.toString() ?? ''
+  )
+  const [obraSocialCoseguroId, setObraSocialCoseguroId] = useState(
+    pacienteInicial?.obraSocialCoseguroId?.toString() ?? ''
+  )
   const [numeroAfiliado, setNumeroAfiliado] = useState(
     pacienteInicial?.numeroAfiliado ?? ''
   )
@@ -76,24 +119,104 @@ export function AdmisionForm({
   const [profesionalDerivanteNombre, setProfesionalDerivanteNombre] = useState('')
   const [motivoDerivacion, setMotivoDerivacion] = useState('')
   const [diagnosticoDerivacion, setDiagnosticoDerivacion] = useState('')
-  const [profesionalIndicadorId, setProfesionalIndicadorId] = useState('')
+  const [profesionalIndicadorNombre, setProfesionalIndicadorNombre] = useState('')
   const [tipoIndicacion, setTipoIndicacion] = useState('')
   const [descripcionIndicacion, setDescripcionIndicacion] = useState('')
+
+  // Prácticas y medicamentos (para GUA/DER/IND)
+  const [practicas, setPracticas] = useState<ItemPractica[]>([])
+  const [medicaciones, setMedicaciones] = useState<ItemMedicacion[]>([])
+
+  // Búsqueda de prácticas
+  const [buscandoPractica, setBuscandoPractica] = useState(false)
+  const [terminoBusquedaPractica, setTerminoBusquedaPractica] = useState('')
+  const [resultadosPractica, setResultadosPractica] = useState<{ convenioId: number; codigo: string; descripcion: string }[]>([])
+
+  // Nueva medicación
+  const [nuevaMedNombre, setNuevaMedNombre] = useState('')
+  const [nuevaMedDosis, setNuevaMedDosis] = useState('')
+  const [nuevaMedVia, setNuevaMedVia] = useState('')
+  const [nuevaMedFrecuencia, setNuevaMedFrecuencia] = useState('')
+  const [nuevaMedObs, setNuevaMedObs] = useState('')
+
+  const subtiposConPracticasMeds = ['GUA', 'DER', 'TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'IND', 'PAM']
+  const subtiposTurnoPractica = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM']
+  const mostrarPanelPracticasMeds = subtiposConPracticasMeds.includes(subtipoAdmisionCodigo)
+
+  const buscarPracticaNomenclador = async () => {
+    if (!terminoBusquedaPractica.trim()) return
+    setBuscandoPractica(true)
+    setResultadosPractica([])
+    try {
+      const res = await fetch(
+        `/api/practicas-nomenclador?q=${encodeURIComponent(terminoBusquedaPractica.trim())}&porPagina=10`
+      )
+      const json = await res.json()
+      if (json.ok) {
+        const raw = json.data
+        setResultadosPractica(Array.isArray(raw) ? raw : (raw?.items ?? []))
+      }
+    } catch {
+      // ignorar error silencioso
+    } finally {
+      setBuscandoPractica(false)
+    }
+  }
+
+  const agregarPractica = (practica: { convenioId: number; codigo: string; descripcion: string }) => {
+    if (practicas.some((p) => p.codigo === practica.codigo)) return
+    setPracticas((prev) => [
+      ...prev,
+      {
+        convenioId: practica.convenioId,
+        codigo: practica.codigo,
+        descripcion: practica.descripcion,
+        cantidad: 1,
+      },
+    ])
+    setResultadosPractica([])
+    setTerminoBusquedaPractica('')
+  }
+
+  const quitarPractica = (codigo: string) => {
+    setPracticas((prev) => prev.filter((p) => p.codigo !== codigo))
+  }
+
+  const agregarMedicacion = () => {
+    if (!nuevaMedNombre.trim()) return
+    setMedicaciones((prev) => [
+      ...prev,
+      { nombre: nuevaMedNombre, dosis: nuevaMedDosis, viaAdministracion: nuevaMedVia, frecuencia: nuevaMedFrecuencia, observaciones: nuevaMedObs },
+    ])
+    setNuevaMedNombre('')
+    setNuevaMedDosis('')
+    setNuevaMedVia('')
+    setNuevaMedFrecuencia('')
+    setNuevaMedObs('')
+  }
+
+  const quitarMedicacion = (idx: number) => {
+    setMedicaciones((prev) => prev.filter((_, i) => i !== idx))
+  }
 
   const planesDisponibles = obraSocialId
     ? planes.filter((plan) => String(plan.obraSocialId ?? '') === obraSocialId)
     : planes
+  const obraSocialSeleccionada = obraSociales.find((os) => String(os.id) === obraSocialId)
+  const esIPSS = esNombreIPSS(obraSocialSeleccionada?.nombre ?? '')
 
   // Sincronizar cobertura cuando cambia el paciente
   const handleSeleccionarPaciente = (p: PacienteResumen | null) => {
     setPaciente(p)
     if (p) {
       setObraSocialId(p.obraSocialId ? p.obraSocialId.toString() : '')
-      setPlanId('')
+      setPlanId(p.planId ? p.planId.toString() : '')
+      setObraSocialCoseguroId(p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : '')
       setNumeroAfiliado(p.numeroAfiliado ?? '')
     } else {
       setObraSocialId('')
       setPlanId('')
+      setObraSocialCoseguroId('')
       setNumeroAfiliado('')
     }
   }
@@ -125,15 +248,18 @@ export function AdmisionForm({
         profesionalTratanteId: profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null,
         obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
         planId: planId ? parseInt(planId, 10) : null,
+        obraSocialCoseguroId: obraSocialCoseguroId ? parseInt(obraSocialCoseguroId, 10) : null,
         numeroAfiliado: numeroAfiliado || null,
         descripcionPatologia: descripcionPatologia || null,
         observaciones: observaciones || null,
+        practicas: practicas.length > 0 ? practicas : undefined,
+        medicaciones: medicaciones.length > 0 ? medicaciones : undefined,
       }
 
       // Agregar campos específicos según el subtipo
       if (subtipoAdmisionCodigo === 'GUA') {
         body.profesionalGuardiaId = profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null
-      } else if (subtipoAdmisionCodigo === 'TUR' || subtipoAdmisionCodigo === 'RAY' || subtipoAdmisionCodigo === 'PAM') {
+      } else if (subtiposTurnoPractica.includes(subtipoAdmisionCodigo)) {
         body.profesionalIdTurno = profesionalIdTurno ? parseInt(profesionalIdTurno, 10) : null
         body.practicaCodigo = practicaCodigo || null
       } else if (subtipoAdmisionCodigo === 'DER') {
@@ -142,7 +268,7 @@ export function AdmisionForm({
         body.motivoDerivacion = motivoDerivacion || null
         body.diagnosticoDerivacion = diagnosticoDerivacion || null
       } else if (subtipoAdmisionCodigo === 'IND') {
-        body.profesionalIndicadorId = profesionalIndicadorId ? parseInt(profesionalIndicadorId, 10) : null
+        body.profesionalIndicadorNombre = profesionalIndicadorNombre || null
         body.tipoIndicacion = tipoIndicacion || null
         body.descripcionIndicacion = descripcionIndicacion || null
       }
@@ -175,6 +301,28 @@ export function AdmisionForm({
           onSeleccionar={handleSeleccionarPaciente}
           pacienteSeleccionado={paciente}
         />
+        {paciente && (
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1.5 text-xs text-gray-600">
+            {paciente.fechaNacimiento && (
+              <div><span className="text-gray-400">Fecha nac.:</span> {new Date(paciente.fechaNacimiento).toLocaleDateString('es-AR')}</div>
+            )}
+            {paciente.sexo && (
+              <div><span className="text-gray-400">Sexo:</span> {paciente.sexo === 'M' ? 'Masculino' : paciente.sexo === 'F' ? 'Femenino' : paciente.sexo}</div>
+            )}
+            {paciente.domicilio && (
+              <div className="col-span-2 md:col-span-1"><span className="text-gray-400">Domicilio:</span> {paciente.domicilio}</div>
+            )}
+            {paciente.telefonoFijo && (
+              <div><span className="text-gray-400">Tel.:</span> {paciente.telefonoFijo}</div>
+            )}
+            {paciente.celular1 && (
+              <div><span className="text-gray-400">Cel.:</span> {paciente.celular1}</div>
+            )}
+            {paciente.email && (
+              <div className="col-span-2 md:col-span-1"><span className="text-gray-400">Email:</span> {paciente.email}</div>
+            )}
+          </div>
+        )}
         {!paciente && (
           <p className="mt-2 text-xs text-gray-400">
             Busque el paciente por nombre, apellido o DNI. Si no existe,{' '}
@@ -306,6 +454,10 @@ export function AdmisionForm({
       {/* Campos específicos - TURNO/RAYOS/PRÁCTICA */}
       {(subtipoAdmisionCodigo === 'TUR' ||
         subtipoAdmisionCodigo === 'RAY' ||
+        subtipoAdmisionCodigo === 'CUR' ||
+        subtipoAdmisionCodigo === 'SUT' ||
+        subtipoAdmisionCodigo === 'ECG' ||
+        subtipoAdmisionCodigo === 'ECO' ||
         subtipoAdmisionCodigo === 'PAM') && (
           <div className="his-card p-5 border-l-4 border-green-500">
             <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
@@ -420,18 +572,14 @@ export function AdmisionForm({
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   Profesional Indicador
                 </label>
-                <select
-                  value={profesionalIndicadorId}
-                  onChange={(e) => setProfesionalIndicadorId(e.target.value)}
+                <input
+                  type="text"
+                  value={profesionalIndicadorNombre}
+                  onChange={(e) => setProfesionalIndicadorNombre(e.target.value)}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Seleccionar profesional --</option>
-                  {profesionales.map((prof) => (
-                    <option key={prof.id} value={String(prof.id)}>
-                      {prof.nombre}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Ej: Dr. Juan Pérez, Enfermero, Kinésiologo, etc."
+                  maxLength={200}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -478,6 +626,7 @@ export function AdmisionForm({
               onChange={(e) => {
                 setObraSocialId(e.target.value)
                 setPlanId('')
+                setObraSocialCoseguroId('')
               }}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
@@ -486,27 +635,6 @@ export function AdmisionForm({
                 <option key={obraSocial.id} value={String(obraSocial.id)}>
                   {obraSocial.nombre}
                   {obraSocial.requiereCoseguro ? ' (requiere coseguro)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Plan</label>
-            <select
-              value={planId}
-              onChange={(e) => setPlanId(e.target.value)}
-              disabled={!obraSocialId || planesDisponibles.length === 0}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-500"
-            >
-              <option value="">
-                {!obraSocialId
-                  ? '-- Seleccione obra social primero --'
-                  : '-- Seleccionar plan --'}
-              </option>
-              {planesDisponibles.map((plan) => (
-                <option key={plan.id} value={String(plan.id)}>
-                  {plan.nombre}
                 </option>
               ))}
             </select>
@@ -524,6 +652,29 @@ export function AdmisionForm({
               placeholder="123456789"
             />
           </div>
+
+          {esIPSS && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Coseguro (solo IPSS)
+              </label>
+              <select
+                value={obraSocialCoseguroId}
+                onChange={(e) => setObraSocialCoseguroId(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">-- Sin coseguro --</option>
+                {coseguros.map((coseguro) => (
+                  <option key={coseguro.id} value={String(coseguro.id)}>
+                    {coseguro.nombre}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-amber-700">
+                Si el paciente tiene IPSS con coseguro, seleccione uno. Si no, deje "Sin coseguro".
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -556,6 +707,169 @@ export function AdmisionForm({
           placeholder="Observaciones adicionales del ingreso..."
         />
       </div>
+
+      {/* Prácticas y medicamentos (Guardia / Derivación / Indicación médica) */}
+      {mostrarPanelPracticasMeds && (
+        <>
+          {/* Panel de prácticas */}
+          <div className="his-card p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
+              Prácticas realizadas
+            </h3>
+            <div className="flex gap-2 mb-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={terminoBusquedaPractica}
+                  onChange={(e) => setTerminoBusquedaPractica(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void buscarPracticaNomenclador() } }}
+                  placeholder="Buscar práctica en nomenclador..."
+                  className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void buscarPracticaNomenclador()}
+                disabled={buscandoPractica || !terminoBusquedaPractica.trim()}
+                className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors"
+              >
+                {buscandoPractica ? 'Buscando...' : 'Buscar'}
+              </button>
+            </div>
+            {resultadosPractica.length > 0 && (
+              <div className="mb-3 rounded-md border bg-white shadow-sm max-h-48 overflow-y-auto divide-y">
+                {resultadosPractica.map((p) => (
+                  <button
+                    key={p.codigo}
+                    type="button"
+                    onClick={() => agregarPractica(p)}
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors text-sm"
+                  >
+                    <span className="font-mono text-xs text-gray-500 mr-2">{p.codigo}</span>
+                    {p.descripcion}
+                  </button>
+                ))}
+              </div>
+            )}
+            {practicas.length > 0 ? (
+              <div className="divide-y border rounded-md">
+                {practicas.map((p) => (
+                  <div key={p.codigo} className="flex items-center gap-3 px-3 py-2">
+                    <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
+                    <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <label className="text-xs text-gray-500">Cant.</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={p.cantidad}
+                        onChange={(e) => setPracticas((prev) => prev.map((x) => x.codigo === p.codigo ? { ...x, cantidad: Math.max(1, parseInt(e.target.value) || 1) } : x))}
+                        className="w-14 rounded border border-gray-300 px-2 py-1 text-xs text-center"
+                      />
+                    </div>
+                    <button type="button" onClick={() => quitarPractica(p.codigo)} className="text-red-400 hover:text-red-600 transition-colors">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">No se han agregado prácticas.</p>
+            )}
+          </div>
+
+          {/* Panel de medicamentos */}
+          <div className="his-card p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
+              Medicamentos administrados
+            </h3>
+            {/* Formulario para agregar */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-3 rounded-md bg-gray-50 border">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Medicamento <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={nuevaMedNombre}
+                  onChange={(e) => setNuevaMedNombre(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: Ibuprofeno"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Dosis</label>
+                <input
+                  type="text"
+                  value={nuevaMedDosis}
+                  onChange={(e) => setNuevaMedDosis(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: 400mg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Vía de administración</label>
+                <input
+                  type="text"
+                  value={nuevaMedVia}
+                  onChange={(e) => setNuevaMedVia(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: Oral, EV, IM"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Frecuencia</label>
+                <input
+                  type="text"
+                  value={nuevaMedFrecuencia}
+                  onChange={(e) => setNuevaMedFrecuencia(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: Cada 8 hs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Observaciones</label>
+                <input
+                  type="text"
+                  value={nuevaMedObs}
+                  onChange={(e) => setNuevaMedObs(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Notas adicionales"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={agregarMedicacion}
+                  disabled={!nuevaMedNombre.trim()}
+                  className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  <Plus className="h-4 w-4" /> Agregar
+                </button>
+              </div>
+            </div>
+            {medicaciones.length > 0 ? (
+              <div className="divide-y border rounded-md">
+                {medicaciones.map((m, idx) => (
+                  <div key={idx} className="flex items-center gap-3 px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800">{m.nombre}</p>
+                      <p className="text-xs text-gray-500">
+                        {[m.dosis, m.viaAdministracion, m.frecuencia].filter(Boolean).join(' · ')}
+                        {m.observaciones && <> — {m.observaciones}</>}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => quitarMedicacion(idx)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">No se han agregado medicamentos.</p>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Acciones */}
       <div className="flex items-center justify-end gap-3 pb-4">

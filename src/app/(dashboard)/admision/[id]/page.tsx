@@ -6,6 +6,7 @@ import { obtenerIngreso } from '@/modules/admision/service'
 import type { Metadata } from 'next'
 import { FichaIngresoClient } from '@/components/admision/ficha-ingreso-client'
 import { FichaAdmisionPrint } from '@/components/admision/ficha-admision-print'
+import Link from 'next/link'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -33,6 +34,15 @@ export default async function FichaIngresoPage({ params }: PageProps) {
 
   const puedeModificar = tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')
   const puedeAgregarDiagnostico = tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+  const puedeGenerarAutorizacion = tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
+
+  // Serializar Decimal → string para evitar error de Client Component
+  const ingresoSerializado = {
+    ...ingreso,
+    paciente: ingreso.paciente
+      ? { ...ingreso.paciente, cuil: ingreso.paciente.cuil?.toString() ?? null }
+      : ingreso.paciente,
+  }
 
   return (
     <>
@@ -40,9 +50,10 @@ export default async function FichaIngresoPage({ params }: PageProps) {
         titulo={`${ingreso.tipoIngreso?.descripcion ?? ingreso.tipoIngresoCodigo} — ${ingreso.tipoIngresoCodigo}-${ingreso.numeroIngreso}`}
       />
       <FichaIngresoClient
-        ingreso={ingreso}
+        ingreso={ingresoSerializado as typeof ingreso}
         puedeModificar={puedeModificar}
         puedeAgregarDiagnostico={puedeAgregarDiagnostico}
+        puedeGenerarAutorizacion={puedeGenerarAutorizacion}
       />
     </>
   )

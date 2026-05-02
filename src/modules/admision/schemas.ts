@@ -8,7 +8,7 @@ import { z } from 'zod'
 const CrearIngresoBaseSchema = z.object({
   pacienteId: z.number().int().positive('Paciente requerido'),
   tipoIngresoCodigo: z.string().min(1).max(3, 'Tipo de ingreso requerido'),
-  subtipoAdmisionCodigo: z.string().min(1).max(3, 'Tipo de admisión requerido'),
+  subtipoAdmisionCodigo: z.string().max(3).optional().nullable(),
   fechaIngreso: z.coerce.date().optional(),
   fechaEgresoPrevista: z.coerce.date().optional().nullable(),
   tipoInternacionCodigo: z.string().max(3).optional().nullable(),
@@ -19,6 +19,9 @@ const CrearIngresoBaseSchema = z.object({
   obraSocialId: z.number().int().positive().optional().nullable(),
   planId: z.number().int().positive().optional().nullable(),
   numeroAfiliado: z.string().max(50).trim().optional().nullable(),
+  obraSocialCoseguroId: z.number().int().positive().optional().nullable(),
+  planCoseguroId: z.number().int().positive().optional().nullable(),
+  numeroAfiliadoCoseguro: z.string().max(50).trim().optional().nullable(),
   descripcionPatologia: z.string().max(500).trim().optional().nullable(),
   observaciones: z.string().max(2000).trim().optional().nullable(),
   // Campos específicos para turnos/práctica
@@ -31,9 +34,23 @@ const CrearIngresoBaseSchema = z.object({
   motivoDerivacion: z.string().max(500).trim().optional().nullable(),
   diagnosticoDerivacion: z.string().max(500).trim().optional().nullable(),
   // Campos específicos para indicación médica
-  profesionalIndicadorId: z.number().int().positive().optional().nullable(),
+  profesionalIndicadorNombre: z.string().max(200).trim().optional().nullable(),
   tipoIndicacion: z.string().max(100).trim().optional().nullable(),
   descripcionIndicacion: z.string().max(500).trim().optional().nullable(),
+  // Prácticas y medicamentos al ingreso (GUA/DER/IND)
+  practicas: z.array(z.object({
+    convenioId: z.number().int().positive().optional().nullable(),
+    codigo: z.string().min(1).max(50),
+    descripcion: z.string().max(500),
+    cantidad: z.number().int().min(1).default(1),
+  })).optional(),
+  medicaciones: z.array(z.object({
+    nombre: z.string().min(1).max(200),
+    dosis: z.string().max(100).optional().nullable(),
+    viaAdministracion: z.string().max(100).optional().nullable(),
+    frecuencia: z.string().max(100).optional().nullable(),
+    observaciones: z.string().max(500).optional().nullable(),
+  })).optional(),
 })
 
 export const CrearIngresoSchema = CrearIngresoBaseSchema.refine(
@@ -56,11 +73,19 @@ export type CrearIngresoInput = z.infer<typeof CrearIngresoSchema>
 export const ActualizarIngresoSchema = CrearIngresoBaseSchema.omit({
   pacienteId: true,
   tipoIngresoCodigo: true,
+  practicas: true,
 }).extend({
+  subtipoAdmisionCodigo: z.string().max(3).optional(),
   estado: z.enum(['A', 'E', 'P', 'X']).optional(),
   motivoEgresoCodigo: z.string().max(2).optional().nullable(),
   fechaEgreso: z.coerce.date().optional().nullable(),
   descripcionPatologiaDefinitiva: z.string().max(500).trim().optional().nullable(),
+  practicasAgregar: z.array(z.object({
+    convenioId: z.number().int().positive().optional().nullable(),
+    codigo: z.string().min(1).max(50),
+    descripcion: z.string().max(500),
+    cantidad: z.number().int().min(1).default(1),
+  })).optional(),
 }).refine(
   (data) => {
     // Si hay planId, debe haber obraSocialId

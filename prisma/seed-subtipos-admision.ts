@@ -4,41 +4,102 @@ async function main() {
     const ahora = new Date()
     const usuario = 'SYSTEM'
 
-    const subtipos = [
+    const subtiposActivos = [
         {
             codigo: 'GUA',
-            descripcion: 'Por Guardia',
+            descripcion: 'Atencion por guardia',
         },
         {
             codigo: 'TUR',
-            descripcion: 'Por Turno Asignado',
+            descripcion: 'Por turno',
         },
         {
             codigo: 'RAY',
-            descripcion: 'Por Rayos/Radiología',
+            descripcion: 'Radiografias',
         },
         {
-            codigo: 'PAM',
-            descripcion: 'Práctica Ambulatoria',
+            codigo: 'CUR',
+            descripcion: 'Curaciones',
+        },
+        {
+            codigo: 'SUT',
+            descripcion: 'Suturas',
+        },
+        {
+            codigo: 'ECG',
+            descripcion: 'Electrocardiogramas',
+        },
+        {
+            codigo: 'ECO',
+            descripcion: 'Ecografias',
         },
         {
             codigo: 'DER',
-            descripcion: 'Derivación',
-        },
-        {
-            codigo: 'IND',
-            descripcion: 'Indicación Médica',
+            descripcion: 'Derivacion',
         },
     ]
 
-    for (const subtipo of subtipos) {
+    const subtiposInactivos = [
+        // Legacy ambulatorio
+        {
+            codigo: 'PAM',
+            descripcion: 'Practica Ambulatoria',
+        },
+        {
+            codigo: 'IND',
+            descripcion: 'Indicacion Medica',
+        },
+        // Internacion legacy
+        {
+            codigo: 'PRG',
+            descripcion: 'Programada',
+        },
+        {
+            codigo: 'URG',
+            descripcion: 'Urgencia',
+        },
+        {
+            codigo: 'EME',
+            descripcion: 'Emergencia',
+        },
+        {
+            codigo: 'TRA',
+            descripcion: 'Traslado',
+        },
+    ]
+
+    for (const subtipo of subtiposActivos) {
         await prisma.subtipoAdmision.upsert({
             where: { codigo: subtipo.codigo },
-            update: {},
+            update: {
+                descripcion: subtipo.descripcion,
+                estado: 'A',
+                usuario,
+                fechaEstado: ahora,
+            },
             create: {
                 codigo: subtipo.codigo,
                 descripcion: subtipo.descripcion,
                 estado: 'A',
+                usuario,
+                fechaEstado: ahora,
+            },
+        })
+    }
+
+    for (const subtipo of subtiposInactivos) {
+        await prisma.subtipoAdmision.upsert({
+            where: { codigo: subtipo.codigo },
+            update: {
+                descripcion: subtipo.descripcion,
+                estado: 'I',
+                usuario,
+                fechaEstado: ahora,
+            },
+            create: {
+                codigo: subtipo.codigo,
+                descripcion: subtipo.descripcion,
+                estado: 'I',
                 usuario,
                 fechaEstado: ahora,
             },

@@ -26,17 +26,17 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',       href: '/dashboard',                  icon: LayoutDashboard },
-  { label: 'Pacientes',       href: '/dashboard/pacientes',        icon: Users },
-  { label: 'Admisión',        href: '/dashboard/admision',         icon: ClipboardList },
-  { label: 'Internación',     href: '/dashboard/internacion',      icon: BedDouble },
-  { label: 'Turnos',          href: '/dashboard/turnos',           icon: CalendarClock },
-  { label: 'Autorizaciones',  href: '/dashboard/ambulatorio',      icon: FilePlus },
-  { label: 'Historia Clínica',href: '/dashboard/historia-clinica', icon: FileText },
-  { label: 'Facturación',     href: '/dashboard/facturacion',      icon: Receipt },
-  { label: 'Caja',            href: '/dashboard/caja',             icon: Calculator },
-  { label: 'Cotizador',       href: '/dashboard/cotizador',        icon: Activity },
-  { label: 'Auditoría',       href: '/dashboard/auditoria',        icon: ShieldCheck },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Pacientes', href: '/dashboard/pacientes', icon: Users },
+  { label: 'Admisión', href: '/dashboard/admision', icon: ClipboardList },
+  { label: 'Internación', href: '/dashboard/internacion', icon: BedDouble },
+  { label: 'Turnos', href: '/dashboard/turnos', icon: CalendarClock },
+  { label: 'Autorizaciones', href: '/dashboard/ambulatorio', icon: FilePlus },
+  { label: 'Historia Clínica', href: '/dashboard/historia-clinica', icon: FileText },
+  { label: 'Facturación', href: '/dashboard/facturacion', icon: Receipt },
+  { label: 'Caja', href: '/dashboard/caja', icon: Calculator },
+  { label: 'Cotizador', href: '/dashboard/cotizador', icon: Activity },
+  { label: 'Auditoría', href: '/dashboard/auditoria', icon: ShieldCheck },
 ]
 
 export function Sidebar() {
@@ -67,7 +67,7 @@ export function Sidebar() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={item.href as any}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 isActive

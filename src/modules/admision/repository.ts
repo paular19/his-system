@@ -21,6 +21,9 @@ const incluirRelacionesBase = {
   tipoIngreso: true,
   profesionalGuardia: true,
   profesionalTratante: true,
+  ingresoSubtipo: {
+    include: { subtipoAdmision: { select: { codigo: true, descripcion: true } } },
+  },
 } as const
 
 const incluirRelacionesDetalle = {
@@ -28,6 +31,11 @@ const incluirRelacionesDetalle = {
   tipoIngreso: true,
   profesionalGuardia: true,
   profesionalTratante: true,
+  ingresoSubtipo: {
+    include: { subtipoAdmision: { select: { codigo: true, descripcion: true } } },
+  },
+  obraSocial: { select: { id: true, nombre: true } },
+  plan: { select: { obraSocialId: true, id: true, descripcion: true } },
   cama: {
     select: { id: true, identificador: true, sector: true, habitacion: true },
   },
@@ -37,6 +45,19 @@ const incluirRelacionesDetalle = {
   movimientosIngreso: {
     include: { tipoMovimiento: true },
     orderBy: { fecha: 'desc' as const },
+  },
+  practicas: {
+    where: { OR: [{ estado: 'A' }, { estado: null }] },
+    orderBy: [{ fecha: 'desc' as const }, { id: 'desc' as const }],
+    select: {
+      id: true,
+      convenioId: true,
+      codigoPractica: true,
+      cantidad: true,
+      fecha: true,
+      numeroAutorizacion: true,
+      nomencladorPractica: { select: { descripcion: true } },
+    },
   },
 } as const
 
@@ -80,6 +101,9 @@ export async function crearIngreso(
         obraSocialId: data.obraSocialId ?? null,
         planId: (data.obraSocialId && data.planId) ? data.planId : null,
         numeroAfiliado: data.numeroAfiliado ?? null,
+        obraSocialCoseguroId: data.obraSocialCoseguroId ?? null,
+        planCoseguroId: data.planCoseguroId ?? null,
+        numeroAfiliadoCoseguro: data.numeroAfiliadoCoseguro ?? null,
         observaciones: data.observaciones ?? null,
         estado: 'A',
         fechaEstado: ahora,
@@ -94,7 +118,7 @@ export async function crearIngreso(
         data: {
           ingresoId: ingreso.id,
           subtipoAdmisionCodigo: data.subtipoAdmisionCodigo,
-          profesionalId: data.profesionalGuardiaId ?? data.profesionalIndicadorId ?? null,
+          profesionalId: data.profesionalGuardiaId ?? null,
           profesionalIdTurno: data.profesionalIdTurno ?? null,
           fechaTurno: data.fechaTurno ?? null,
           practicaCodigo: data.practicaCodigo ?? null,
@@ -102,7 +126,7 @@ export async function crearIngreso(
           profesionalDerivanteNombre: data.profesionalDerivanteNombre ?? null,
           motivoDerivacion: data.motivoDerivacion ?? null,
           diagnosticoDerivacion: data.diagnosticoDerivacion ?? null,
-          profesionalIndicadorId: data.profesionalIndicadorId ?? null,
+          profesionalIndicadorNombre: data.profesionalIndicadorNombre ?? null,
           tipoIndicacion: data.tipoIndicacion ?? null,
           descripcionIndicacion: data.descripcionIndicacion ?? null,
           usuario: usuarioAlta,
@@ -148,6 +172,7 @@ export async function actualizarIngreso(
     'tipoInternacionCodigo', 'descripcionPatologia', 'descripcionPatologiaDefinitiva',
     'profesionalGuardiaId', 'profesionalTratanteId', 'camaId', 'sedeId',
     'obraSocialId', 'planId', 'numeroAfiliado',
+    'obraSocialCoseguroId', 'planCoseguroId', 'numeroAfiliadoCoseguro',
     'motivoEgresoCodigo', 'observaciones', 'estado',
   ] as const
 
@@ -213,6 +238,13 @@ export async function buscarIngresos(
         estado: true,
         obraSocialId: true,
         tipoIngreso: { select: { codigo: true, descripcion: true } },
+        ingresoSubtipo: {
+          select: {
+            subtipoAdmision: {
+              select: { codigo: true, descripcion: true },
+            },
+          },
+        },
         paciente: {
           select: { id: true, nombreCompleto: true, numeroDocumento: true },
         },

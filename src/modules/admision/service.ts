@@ -38,8 +38,8 @@ export async function crearIngreso(
     throw new Error(`Tipo de ingreso "${data.tipoIngresoCodigo}" no válido`)
   }
 
-  // Verificar que el subtipo de admisión existe
-  if (data.subtipoAdmisionCodigo) {
+  // Verificar que el subtipo de admisión existe (solo si se envió)
+  if (data.subtipoAdmisionCodigo && data.subtipoAdmisionCodigo.trim() !== '') {
     const subtipoAdmision = await prisma.subtipoAdmision.findUnique({
       where: { codigo: data.subtipoAdmisionCodigo },
     })
@@ -51,7 +51,7 @@ export async function crearIngreso(
   const ingreso = await repo.crearIngreso(data, paciente, usuario)
 
   // Auto-generar informe de hospitalización para internaciones
-  if (data.tipoIngresoCodigo === 'I') {
+  if (data.tipoIngresoCodigo === 'INT') {
     await prisma.informeHospitalizacion.create({
       data: {
         ingresoId: ingreso.id,
@@ -63,21 +63,32 @@ export async function crearIngreso(
     })
   }
   // Auto-generar informe ambulatorio para admisiones ambulatorias, derivaciones e indicaciones médicas
-  else if (
-    data.tipoIngresoCodigo === 'A' &&
-    (data.subtipoAdmisionCodigo === 'AMB' ||
-      data.subtipoAdmisionCodigo === 'DER' ||
-      data.subtipoAdmisionCodigo === 'IND' ||
-      data.subtipoAdmisionCodigo === 'TUR' ||
-      data.subtipoAdmisionCodigo === 'RAY' ||
-      data.subtipoAdmisionCodigo === 'PAM')
+  const subtiposInformeAmbulatorio = new Set([
+    'RAY',
+    'GUA',
+    'CUR',
+    'SUT',
+    'ECG',
+    'ECO',
+    'DER',
+    'TUR',
+    // Compatibilidad con códigos anteriores
+    'AMB',
+    'IND',
+    'PAM',
+  ])
+
+  if (
+    data.tipoIngresoCodigo === 'AMB' &&
+    !!data.subtipoAdmisionCodigo &&
+    subtiposInformeAmbulatorio.has(data.subtipoAdmisionCodigo)
   ) {
     await prisma.informeAmbulatorio.create({
       data: {
         ingresoId: ingreso.id,
         fecha: new Date(),
         estado: 'A',
-        profesionalId: data.profesionalGuardiaId ?? data.profesionalIndicadorId ?? null,
+        profesionalId: data.profesionalGuardiaId ?? null,
         usuario: usuario.slice(0, 10),
         fechaEstado: new Date(),
       },
@@ -92,6 +103,55 @@ export async function crearIngreso(
     detalle: `Ingreso ${ingreso.tipoIngresoCodigo}-${ingreso.numeroIngreso} creado para ${paciente.nombreCompleto}`,
     direccionIp: ip,
   })
+
+  // Registrar prácticas al ingreso como entidades reales (no en observaciones)
+  if (data.practicas && data.practicas.length > 0) {
+    const practicasSinConvenio = data.practicas.filter(
+      (p) => !(p.convenioId ?? data.obraSocialId)
+    )
+
+    if (practicasSinConvenio.length > 0) {
+      throw new Error(
+        'No se pudo determinar el convenio de una o más prácticas. Seleccioná una obra social y volvés a intentarlo.'
+      )
+    }
+
+    await prisma.practica.createMany({
+      data: data.practicas.map((p) => ({
+        ingresoId: ingreso.id,
+        convenioId: (p.convenioId ?? data.obraSocialId) as number,
+        codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
+        convenioValorId: 0,
+        fecha: new Date(),
+        cantidad: p.cantidad,
+        numeroAutorizacion: null,
+        obraSocialId: data.obraSocialId ?? null,
+        planId: data.planId ?? null,
+        facturable: true,
+        estado: 'A',
+        usuarioRegistro: usuario.slice(0, 10),
+        fechaUsuario: new Date(),
+      })),
+    })
+  }
+
+  // Registrar medicamentos al ingreso si se enviaron
+  if (data.medicaciones && data.medicaciones.length > 0) {
+    await prisma.medicacionIngreso.createMany({
+      data: data.medicaciones.map((m) => ({
+        ingresoId: ingreso.id,
+        nombre: m.nombre,
+        dosis: m.dosis ?? null,
+        viaAdministracion: m.viaAdministracion ?? null,
+        frecuencia: m.frecuencia ?? null,
+        observaciones: m.observaciones ?? null,
+        fechaInicio: new Date(),
+        estado: 'A',
+        usuario: usuario.slice(0, 10),
+        fechaEstado: new Date(),
+      })),
+    })
+  }
 
   return ingreso
 }
@@ -130,6 +190,39 @@ export async function actualizarIngreso(
   }
 
   const actualizado = await repo.actualizarIngreso(id, data, usuario)
+
+  if (data.practicasAgregar && data.practicasAgregar.length > 0) {
+    const obraSocialId = data.obraSocialId ?? existe.obraSocialId ?? null
+    const planId = data.planId ?? existe.planId ?? null
+
+    const practicasSinConvenio = data.practicasAgregar.filter(
+      (p) => !(p.convenioId ?? obraSocialId)
+    )
+
+    if (practicasSinConvenio.length > 0) {
+      throw new Error(
+        'No se pudo determinar el convenio de una o más prácticas. Seleccioná una obra social y volvés a intentarlo.'
+      )
+    }
+
+    await prisma.practica.createMany({
+      data: data.practicasAgregar.map((p) => ({
+        ingresoId: id,
+        convenioId: (p.convenioId ?? obraSocialId) as number,
+        codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
+        convenioValorId: 0,
+        fecha: new Date(),
+        cantidad: p.cantidad,
+        numeroAutorizacion: null,
+        obraSocialId,
+        planId,
+        facturable: true,
+        estado: 'A',
+        usuarioRegistro: usuario.slice(0, 10),
+        fechaUsuario: new Date(),
+      })),
+    })
+  }
 
   await registrarAudit({
     usuario,

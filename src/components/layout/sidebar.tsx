@@ -9,11 +9,7 @@ import {
   BedDouble,
   Stethoscope,
   Receipt,
-  Calculator,
   LayoutDashboard,
-  FileText,
-  ShieldCheck,
-  Activity,
   CalendarClock,
   FilePlus,
 } from 'lucide-react'
@@ -32,11 +28,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Internación', href: '/dashboard/internacion', icon: BedDouble },
   { label: 'Turnos', href: '/dashboard/turnos', icon: CalendarClock },
   { label: 'Autorizaciones', href: '/dashboard/ambulatorio', icon: FilePlus },
-  { label: 'Historia Clínica', href: '/dashboard/historia-clinica', icon: FileText },
   { label: 'Facturación', href: '/dashboard/facturacion', icon: Receipt },
-  { label: 'Caja', href: '/dashboard/caja', icon: Calculator },
-  { label: 'Cotizador', href: '/dashboard/cotizador', icon: Activity },
-  { label: 'Auditoría', href: '/dashboard/auditoria', icon: ShieldCheck },
 ]
 
 export function Sidebar() {

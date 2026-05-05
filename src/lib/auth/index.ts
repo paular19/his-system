@@ -9,39 +9,14 @@ export interface UsuarioSesion {
   codigoUsuario: string
 }
 
-function normalizarRol(valor: unknown): RolHIS {
-  if (typeof valor !== 'string') return ROLES.ADMISION
-
-  const normalizado = valor
-    .trim()
-    .toUpperCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-
-  if (normalizado in ROLES) {
-    return ROLES[normalizado as keyof typeof ROLES]
-  }
-
-  return ROLES.ADMISION
-}
-
 function resolverRolDesdeMetadata(user: Awaited<ReturnType<typeof currentUser>>): RolHIS {
-  const publico = (user?.publicMetadata ?? {}) as Record<string, unknown>
-  const inseguro = ((user as unknown as { unsafeMetadata?: Record<string, unknown> })?.unsafeMetadata ?? {})
-
-  const candidato =
-    publico.rol ??
-    publico.role ??
-    inseguro.rol ??
-    inseguro.role
-
-  const rol = normalizarRol(candidato)
-
-  if (rol === ROLES.ADMISION && typeof candidato !== 'string') {
-    console.warn('[auth] Rol no encontrado en metadata, usando ADMISION por defecto')
+  const rolMetadata = user?.publicMetadata?.rol as string | undefined
+  const rolesValidos = Object.values(ROLES) as string[]
+  if (rolMetadata && rolesValidos.includes(rolMetadata)) {
+    return rolMetadata as RolHIS
   }
-
-  return rol
+  // Fallback por defecto
+  return ROLES.ADMISION
 }
 
 /**
@@ -60,7 +35,7 @@ export async function getUsuarioSesion(): Promise<UsuarioSesion> {
     throw new Error('Usuario no encontrado')
   }
 
-  // Acepta variantes de metadata para evitar rechazos por formato
+  // Rol fijo temporal hasta completar configuración RBAC en Clerk.
   const rol = resolverRolDesdeMetadata(user)
   const codigoUsuario =
     (user.publicMetadata?.codigoUsuario as string) ?? userId.slice(0, 10)

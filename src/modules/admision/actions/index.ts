@@ -27,13 +27,14 @@ import type { ResultadoPaginado } from '@/types'
 
 export async function createIngresoAction(
   data: CrearIngresoInput
-): Promise<IngresoConRelaciones> {
+): Promise<{ id: number }> {
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'CREAR')) {
     throw new Error('Sin permisos para crear ingresos')
   }
   const validado = CrearIngresoSchema.parse(data)
-  return service.crearIngreso(validado, usuario.codigoUsuario)
+  const ingreso = await service.crearIngreso(validado, usuario.codigoUsuario)
+  return { id: ingreso.id }
 }
 
 export async function updateIngresoAction(

@@ -45,12 +45,39 @@ async function obtenerValoresPracticas(codigosPractica: string[]): Promise<Map<s
         select: { codigo: true, valor: true },
     })
 
-    return new Map(
+    const result = new Map(
         prestaciones.map((prestacion) => [normalizarCodigoPractica(prestacion.codigo), Number(prestacion.valor ?? 0)])
     )
+
+    // Fallback: para códigos sin precio en el nomenclador, buscar el último precio
+    // unitario conocido en prácticas ya facturadas con el mismo código.
+    const sinPrecio = codigos.filter((c) => !result.has(c) || result.get(c) === 0)
+    if (sinPrecio.length > 0) {
+        const codigosConEspacio = sinPrecio.map((c) => c.padEnd(8, ' '))
+        const historicos = await prisma.practica.findMany({
+            where: {
+                codigoPractica: { in: codigosConEspacio },
+                importeTotal: { not: null, gt: 0 },
+                cantidad: { gt: 0 },
+            },
+            orderBy: { id: 'desc' },
+            select: { codigoPractica: true, importeTotal: true, cantidad: true },
+            take: sinPrecio.length * 10,
+        })
+
+        for (const h of historicos) {
+            const clave = normalizarCodigoPractica(h.codigoPractica)
+            if (!result.has(clave) || result.get(clave) === 0) {
+                const precioUnitario = Number(h.importeTotal) / Number(h.cantidad)
+                if (precioUnitario > 0) result.set(clave, precioUnitario)
+            }
+        }
+    }
+
+    return result
 }
 
-async function obtenerValorPractica(codigoPractica: string): Promise<number> {
+export async function obtenerValorPractica(codigoPractica: string): Promise<number> {
     const valores = await obtenerValoresPracticas([codigoPractica])
     return valores.get(normalizarCodigoPractica(codigoPractica)) ?? 0
 }
@@ -398,6 +425,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     for (const p of ingreso.practicas) {
         const vinculoPorItem = ordenVinculadaPorPractica.get(p.id)
+        const tieneVinculoExplicitoEnDB = Boolean(p.ordenNumero || p.puestoNumero)
         const ordenPuestoNumero =
             p.puestoNumero ??
             vinculoPorItem?.puestoNumero ??
@@ -422,31 +450,38 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             Number(p.cantidad),
             reglaFacturacion
         )
+        const importeFromDb = p.importeTotal != null ? Number(String(p.importeTotal)) : null
+        const cant = Number(p.cantidad)
+        const precioUnitario = cobertura.precioUnitarioFacturable > 0
+            ? cobertura.precioUnitarioFacturable
+            : (importeFromDb !== null && cant > 0 ? importeFromDb / cant : cobertura.precioUnitarioFacturable)
         prestaciones.push({
             uid: `PRACTICA:${p.id}`,
             tipo: 'PRACTICA',
             referencia: `PRA-${p.id}`,
             fecha: p.fecha,
             descripcion: p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim(),
-            cantidad: Number(p.cantidad),
-            precioUnitario: cobertura.precioUnitarioFacturable,
-            importeTotal: Number(p.importeTotal ?? cobertura.importeTotalFacturable),
+            cantidad: cant,
+            precioUnitario,
+            importeTotal: importeFromDb ?? cobertura.importeTotalFacturable,
             facturada: Boolean(p.ordenNumero) || (Boolean(vinculoPorItem) && ordenVinculadaActiva),
             matriculaProfesional,
             ordenPuestoNumero,
             ordenNumero,
             convenioId: p.convenioId,
             codigoPractica: p.codigoPractica.trim(),
-            numeroAutorizacion: resolverNumeroAutorizacion(
-                p.numeroAutorizacion,
-                resolverNumeroAutorizacion(
-                    vinculoPorItem?.numeroAutorizacion,
+            numeroAutorizacion: tieneVinculoExplicitoEnDB
+                ? resolverNumeroAutorizacion(
+                    p.numeroAutorizacion,
                     resolverNumeroAutorizacion(
-                        claveOrdenItem ? autorizacionPorOrdenItem.get(claveOrdenItem) : null,
-                        claveOrden ? autorizacionPorOrden.get(claveOrden) : null
+                        vinculoPorItem?.numeroAutorizacion,
+                        resolverNumeroAutorizacion(
+                            claveOrdenItem ? autorizacionPorOrdenItem.get(claveOrdenItem) : null,
+                            claveOrden ? autorizacionPorOrden.get(claveOrden) : null
+                        )
                     )
                 )
-            ),
+                : (p.numeroAutorizacion?.trim() || null),
             origen: {
                 ingresoId: ingreso.id,
                 practicaId: p.id,
@@ -478,9 +513,9 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 cantidad: Number(it.cantidad),
                 precioUnitario:
                     Number(it.cantidad) > 0
-                        ? Number(it.importeTotal ?? 0) / Number(it.cantidad)
-                        : Number(it.importeTotal ?? 0),
-                importeTotal: Number(it.importeTotal ?? 0),
+                        ? Number(String(it.importeTotal ?? 0)) / Number(it.cantidad)
+                        : Number(String(it.importeTotal ?? 0)),
+                importeTotal: Number(String(it.importeTotal ?? 0)),
                 facturada: true,
                 matriculaProfesional: o.profesional?.matricula ?? null,
                 ordenPuestoNumero: o.puestoNumero,

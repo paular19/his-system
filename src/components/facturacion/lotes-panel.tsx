@@ -1,8 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { LoteFacturacionListItem } from '@/modules/facturacion/types'
+import { PaginationControls } from '@/components/ui/pagination-controls'
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
 
 const ESTADO_LABEL: Record<string, { label: string; cls: string }> = {
     PEN: { label: 'Pendiente', cls: 'bg-yellow-100 text-yellow-800' },
@@ -17,8 +20,9 @@ const TIPO_LABEL: Record<string, string> = {
 
 function formatPeriodo(periodo: string) {
     const [anio, mes] = periodo.split('-')
+    if (!anio || !mes) return periodo
     const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-    return `${meses[parseInt(mes) - 1]} ${anio}`
+    return `${meses[parseInt(mes, 10) - 1]} ${anio}`
 }
 
 function formatMonto(n: number) {
@@ -27,21 +31,38 @@ function formatMonto(n: number) {
 
 export function LotesPanel() {
     const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
     const [lotes, setLotes] = useState<LoteFacturacionListItem[]>([])
     const [total, setTotal] = useState(0)
-    const [pagina, setPagina] = useState(1)
     const [loading, setLoading] = useState(false)
     const [mostrarForm, setMostrarForm] = useState(false)
 
-    // Filter state
-    const [filtroEstado, setFiltroEstado] = useState('')
-    const [filtroPeriodo, setFiltroPeriodo] = useState('')
-    const [filtroTipo, setFiltroTipo] = useState('')
+    const pagina = Math.max(1, Number(searchParams.get('page') ?? searchParams.get('pagina') ?? 1))
+    const porPaginaRaw = Math.max(1, Number(searchParams.get('limit') ?? searchParams.get('porPagina') ?? 20))
+    const porPagina = PAGE_SIZE_OPTIONS.includes(porPaginaRaw as (typeof PAGE_SIZE_OPTIONS)[number])
+        ? porPaginaRaw
+        : 20
+    const filtroEstado = searchParams.get('estado') ?? ''
+    const filtroPeriodo = searchParams.get('periodo') ?? ''
+    const filtroTipo = searchParams.get('tipo') ?? ''
+
+    const updateSearch = useCallback((mutator: (sp: URLSearchParams) => void) => {
+        const sp = new URLSearchParams(searchParams.toString())
+        mutator(sp)
+        if (!sp.get('page')) sp.set('page', '1')
+        if (!sp.get('limit')) sp.set('limit', String(porPagina))
+        // Limpieza de aliases legacy para evitar contenido duplicado.
+        sp.delete('pagina')
+        sp.delete('porPagina')
+        const href = `${pathname}?${sp.toString()}`
+        router.push(href as never, { scroll: false })
+    }, [pathname, porPagina, router, searchParams])
 
     const cargarLotes = useCallback(async () => {
         setLoading(true)
         try {
-            const sp = new URLSearchParams({ pagina: String(pagina), porPagina: '20' })
+            const sp = new URLSearchParams({ pagina: String(pagina), porPagina: String(porPagina) })
             if (filtroEstado) sp.set('estado', filtroEstado)
             if (filtroPeriodo) sp.set('periodo', filtroPeriodo)
             if (filtroTipo) sp.set('tipo', filtroTipo)
@@ -56,11 +77,10 @@ export function LotesPanel() {
         } finally {
             setLoading(false)
         }
-    }, [pagina, filtroEstado, filtroPeriodo, filtroTipo])
+    }, [filtroEstado, filtroPeriodo, filtroTipo, pagina, porPagina])
 
     useEffect(() => { cargarLotes() }, [cargarLotes])
 
-    const porPagina = 20
     const totalPaginas = Math.max(1, Math.ceil(total / porPagina))
 
     return (
@@ -73,7 +93,14 @@ export function LotesPanel() {
                         <input
                             type="month"
                             value={filtroPeriodo}
-                            onChange={(e) => { setFiltroPeriodo(e.target.value); setPagina(1) }}
+                            onChange={(e) => {
+                                const value = e.target.value
+                                updateSearch((sp) => {
+                                    if (value) sp.set('periodo', value)
+                                    else sp.delete('periodo')
+                                    sp.set('page', '1')
+                                })
+                            }}
                             className="border rounded px-3 py-1.5 text-sm"
                         />
                     </div>
@@ -81,7 +108,14 @@ export function LotesPanel() {
                         <label className="block text-xs font-medium text-gray-600 mb-1">Estado</label>
                         <select
                             value={filtroEstado}
-                            onChange={(e) => { setFiltroEstado(e.target.value); setPagina(1) }}
+                            onChange={(e) => {
+                                const value = e.target.value
+                                updateSearch((sp) => {
+                                    if (value) sp.set('estado', value)
+                                    else sp.delete('estado')
+                                    sp.set('page', '1')
+                                })
+                            }}
                             className="border rounded px-3 py-1.5 text-sm"
                         >
                             <option value="">Todos</option>
@@ -94,7 +128,14 @@ export function LotesPanel() {
                         <label className="block text-xs font-medium text-gray-600 mb-1">Tipo</label>
                         <select
                             value={filtroTipo}
-                            onChange={(e) => { setFiltroTipo(e.target.value); setPagina(1) }}
+                            onChange={(e) => {
+                                const value = e.target.value
+                                updateSearch((sp) => {
+                                    if (value) sp.set('tipo', value)
+                                    else sp.delete('tipo')
+                                    sp.set('page', '1')
+                                })
+                            }}
                             className="border rounded px-3 py-1.5 text-sm"
                         >
                             <option value="">Todos</option>
@@ -183,28 +224,15 @@ export function LotesPanel() {
                 </table>
             </div>
 
-            {/* Paginación */}
-            {totalPaginas > 1 && (
-                <div className="flex justify-end gap-2 text-sm">
-                    <button
-                        disabled={pagina <= 1}
-                        onClick={() => setPagina((p) => p - 1)}
-                        className="px-3 py-1 border rounded disabled:opacity-40"
-                    >
-                        ← Anterior
-                    </button>
-                    <span className="px-3 py-1 text-gray-600">
-                        {pagina} / {totalPaginas}
-                    </span>
-                    <button
-                        disabled={pagina >= totalPaginas}
-                        onClick={() => setPagina((p) => p + 1)}
-                        className="px-3 py-1 border rounded disabled:opacity-40"
-                    >
-                        Siguiente →
-                    </button>
-                </div>
-            )}
+            <PaginationControls
+                currentPage={Math.min(pagina, totalPaginas)}
+                totalPages={totalPaginas}
+                totalItems={total}
+                pageSize={porPagina}
+                allowedPageSizes={PAGE_SIZE_OPTIONS as unknown as number[]}
+                pageParam="page"
+                pageSizeParam="limit"
+            />
 
             {/* Modal crear lote */}
             {mostrarForm && (

@@ -4,6 +4,7 @@
 
 export const ROLES = {
   ADMIN: 'ADMIN',
+  OPERADOR: 'OPERADOR',
   ADMISION: 'ADMISION',
   MEDICO: 'MEDICO',
   ENFERMERIA: 'ENFERMERIA',
@@ -59,6 +60,14 @@ export const MATRIZ_PERMISOS: MatrizPermisos = {
     AUDITORIA: ['LEER'],
     COTIZADOR: ['LEER', 'CREAR', 'MODIFICAR', 'ELIMINAR'],
   },
+  OPERADOR: {
+    PACIENTES: ['LEER', 'CREAR', 'MODIFICAR'],
+    ADMISION: ['LEER', 'CREAR', 'MODIFICAR'],
+    INTERNACION: ['LEER', 'CREAR', 'MODIFICAR'],
+    GUARDIA: ['LEER', 'CREAR', 'MODIFICAR'],
+    AMBULATORIO: ['LEER', 'CREAR', 'MODIFICAR'],
+    COTIZADOR: ['LEER', 'CREAR'],
+  },
   ADMISION: {
     PACIENTES: ['LEER', 'CREAR', 'MODIFICAR'],
     ADMISION: ['LEER', 'CREAR', 'MODIFICAR'],
@@ -107,11 +116,11 @@ export function tienePermiso(
   modulo: ModuloHIS,
   permiso: PermisoHIS
 ): boolean {
-  // Modo testing: se deshabilita el control RBAC para evitar 403.
-  void rol
-  void modulo
-  void permiso
-  return true
+  const permisosRol = MATRIZ_PERMISOS[rol]
+  if (!permisosRol) return false
+  const permisosModulo = permisosRol[modulo]
+  if (!permisosModulo) return false
+  return permisosModulo.includes(permiso)
 }
 
 /**

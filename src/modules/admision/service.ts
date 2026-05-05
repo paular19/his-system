@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { registrarAudit } from '@/lib/security/audit'
+import { calcularImporteFacturable, resolverReglaFacturacion } from '@/modules/facturacion/cobertura'
 import * as repo from './repository'
 import type {
   CrearIngresoInput,
@@ -116,22 +117,74 @@ export async function crearIngreso(
       )
     }
 
+    // Calcular importeTotal para cada práctica
+    const obraSocial = data.obraSocialId
+      ? await prisma.obraSocial.findUnique({
+          where: { id: data.obraSocialId },
+          select: { nombre: true },
+        })
+      : null
+    const regla = resolverReglaFacturacion(obraSocial?.nombre, Boolean(data.obraSocialCoseguroId))
+
+    const codigos = Array.from(
+      new Set(data.practicas.map((p) => p.codigo.trim().toUpperCase()))
+    )
+    const prestaciones = codigos.length
+      ? await prisma.nomencladorPrestacion.findMany({
+          where: { codigo: { in: codigos } },
+          select: { codigo: true, valor: true },
+        })
+      : []
+    const valorNomenclador = new Map(
+      prestaciones.map((pre) => [pre.codigo.trim().toUpperCase(), Number(pre.valor ?? 0)])
+    )
+
+    // Fallback histórico para códigos sin precio en el nomenclador
+    const sinPrecio = codigos.filter((c) => !valorNomenclador.has(c) || valorNomenclador.get(c) === 0)
+    if (sinPrecio.length > 0) {
+      const codigosConEspacio = sinPrecio.map((c) => c.padEnd(8, ' '))
+      const historicos = await prisma.practica.findMany({
+        where: {
+          codigoPractica: { in: codigosConEspacio },
+          importeTotal: { not: null, gt: 0 },
+          cantidad: { gt: 0 },
+        },
+        orderBy: { id: 'desc' },
+        select: { codigoPractica: true, importeTotal: true, cantidad: true },
+        take: sinPrecio.length * 10,
+      })
+      for (const h of historicos) {
+        const clave = h.codigoPractica.trim().toUpperCase()
+        if (!valorNomenclador.has(clave) || valorNomenclador.get(clave) === 0) {
+          const precioUnitario = Number(h.importeTotal) / Number(h.cantidad)
+          if (precioUnitario > 0) valorNomenclador.set(clave, precioUnitario)
+        }
+      }
+    }
+
+    const ahora = new Date()
     await prisma.practica.createMany({
-      data: data.practicas.map((p) => ({
-        ingresoId: ingreso.id,
-        convenioId: (p.convenioId ?? data.obraSocialId) as number,
-        codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
-        convenioValorId: 0,
-        fecha: new Date(),
-        cantidad: p.cantidad,
-        numeroAutorizacion: null,
-        obraSocialId: data.obraSocialId ?? null,
-        planId: data.planId ?? null,
-        facturable: true,
-        estado: 'A',
-        usuarioRegistro: usuario.slice(0, 10),
-        fechaUsuario: new Date(),
-      })),
+      data: data.practicas.map((p) => {
+        const clave = p.codigo.trim().toUpperCase()
+        const precio = valorNomenclador.get(clave) ?? 0
+        const cobertura = calcularImporteFacturable(precio, p.cantidad, regla)
+        return {
+          ingresoId: ingreso.id,
+          convenioId: (p.convenioId ?? data.obraSocialId) as number,
+          codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
+          convenioValorId: 0,
+          fecha: ahora,
+          cantidad: p.cantidad,
+          numeroAutorizacion: null,
+          obraSocialId: data.obraSocialId ?? null,
+          planId: data.planId ?? null,
+          facturable: true,
+          estado: 'A',
+          importeTotal: cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null,
+          usuarioRegistro: usuario.slice(0, 10),
+          fechaUsuario: ahora,
+        }
+      }),
     })
   }
 
@@ -205,22 +258,69 @@ export async function actualizarIngreso(
       )
     }
 
+    // Calcular importeTotal para cada práctica
+    const obraSocialParaRegla = obraSocialId
+      ? await prisma.obraSocial.findUnique({ where: { id: obraSocialId }, select: { nombre: true } })
+      : null
+    const obraSocialCoseguroId = data.obraSocialCoseguroId ?? existe.obraSocialCoseguroId ?? null
+    const reglaEdit = resolverReglaFacturacion(obraSocialParaRegla?.nombre, Boolean(obraSocialCoseguroId))
+
+    const codigosEdit = Array.from(new Set(data.practicasAgregar.map((p) => p.codigo.trim().toUpperCase())))
+    const prestacionesEdit = codigosEdit.length
+      ? await prisma.nomencladorPrestacion.findMany({
+          where: { codigo: { in: codigosEdit } },
+          select: { codigo: true, valor: true },
+        })
+      : []
+    const valorNomencladorEdit = new Map(
+      prestacionesEdit.map((pre) => [pre.codigo.trim().toUpperCase(), Number(pre.valor ?? 0)])
+    )
+
+    const sinPrecioEdit = codigosEdit.filter((c) => !valorNomencladorEdit.has(c) || valorNomencladorEdit.get(c) === 0)
+    if (sinPrecioEdit.length > 0) {
+      const codigosConEspacioEdit = sinPrecioEdit.map((c) => c.padEnd(8, ' '))
+      const historicosEdit = await prisma.practica.findMany({
+        where: {
+          codigoPractica: { in: codigosConEspacioEdit },
+          importeTotal: { not: null, gt: 0 },
+          cantidad: { gt: 0 },
+        },
+        orderBy: { id: 'desc' },
+        select: { codigoPractica: true, importeTotal: true, cantidad: true },
+        take: sinPrecioEdit.length * 10,
+      })
+      for (const h of historicosEdit) {
+        const clave = h.codigoPractica.trim().toUpperCase()
+        if (!valorNomencladorEdit.has(clave) || valorNomencladorEdit.get(clave) === 0) {
+          const precioUnitario = Number(h.importeTotal) / Number(h.cantidad)
+          if (precioUnitario > 0) valorNomencladorEdit.set(clave, precioUnitario)
+        }
+      }
+    }
+
+    const ahoraEdit = new Date()
     await prisma.practica.createMany({
-      data: data.practicasAgregar.map((p) => ({
-        ingresoId: id,
-        convenioId: (p.convenioId ?? obraSocialId) as number,
-        codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
-        convenioValorId: 0,
-        fecha: new Date(),
-        cantidad: p.cantidad,
-        numeroAutorizacion: null,
-        obraSocialId,
-        planId,
-        facturable: true,
-        estado: 'A',
-        usuarioRegistro: usuario.slice(0, 10),
-        fechaUsuario: new Date(),
-      })),
+      data: data.practicasAgregar.map((p) => {
+        const clave = p.codigo.trim().toUpperCase()
+        const precio = valorNomencladorEdit.get(clave) ?? 0
+        const cobertura = calcularImporteFacturable(precio, p.cantidad, reglaEdit)
+        return {
+          ingresoId: id,
+          convenioId: (p.convenioId ?? obraSocialId) as number,
+          codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
+          convenioValorId: 0,
+          fecha: ahoraEdit,
+          cantidad: p.cantidad,
+          numeroAutorizacion: null,
+          obraSocialId,
+          planId,
+          facturable: true,
+          estado: 'A',
+          importeTotal: cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null,
+          usuarioRegistro: usuario.slice(0, 10),
+          fechaUsuario: ahoraEdit,
+        }
+      }),
     })
   }
 

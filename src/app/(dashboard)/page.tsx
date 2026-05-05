@@ -1,38 +1,80 @@
 import { Header } from '@/components/layout/header'
+import { prisma } from '@/lib/db'
 import { Users, BedDouble, ClipboardList, Activity } from 'lucide-react'
 
-const stats = [
-  {
-    label: 'Pacientes registrados',
-    value: '-',
-    icon: Users,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
-  },
-  {
-    label: 'Internados hoy',
-    value: '-',
-    icon: BedDouble,
-    color: 'text-green-600',
-    bg: 'bg-green-50',
-  },
-  {
-    label: 'Admisiones hoy',
-    value: '-',
-    icon: ClipboardList,
-    color: 'text-orange-600',
-    bg: 'bg-orange-50',
-  },
-  {
-    label: 'Turnos pendientes',
-    value: '-',
-    icon: Activity,
-    color: 'text-purple-600',
-    bg: 'bg-purple-50',
-  },
-]
+function inicioYFinDelDia() {
+  const inicio = new Date()
+  inicio.setHours(0, 0, 0, 0)
 
-export default function DashboardPage() {
+  const fin = new Date(inicio)
+  fin.setDate(fin.getDate() + 1)
+
+  return { inicio, fin }
+}
+
+export default async function DashboardPage() {
+  const { inicio, fin } = inicioYFinDelDia()
+
+  let pacientesRegistrados = 0
+  let internadosHoy = 0
+  let admisionesHoy = 0
+
+  try {
+    ;[pacientesRegistrados, internadosHoy, admisionesHoy] = await Promise.all([
+      prisma.paciente.count(),
+      prisma.ingreso.count({
+        where: {
+          tipoIngresoCodigo: 'INT',
+          fechaIngreso: {
+            gte: inicio,
+            lt: fin,
+          },
+        },
+      }),
+      prisma.ingreso.count({
+        where: {
+          fechaIngreso: {
+            gte: inicio,
+            lt: fin,
+          },
+        },
+      }),
+    ])
+  } catch {
+    // Si hay un problema de acceso a DB, mostrar cero y mantener operativo el dashboard.
+  }
+
+  const stats = [
+    {
+      label: 'Pacientes registrados',
+      value: pacientesRegistrados.toLocaleString('es-AR'),
+      icon: Users,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+    },
+    {
+      label: 'Internados hoy',
+      value: internadosHoy.toLocaleString('es-AR'),
+      icon: BedDouble,
+      color: 'text-green-600',
+      bg: 'bg-green-50',
+    },
+    {
+      label: 'Admisiones hoy',
+      value: admisionesHoy.toLocaleString('es-AR'),
+      icon: ClipboardList,
+      color: 'text-orange-600',
+      bg: 'bg-orange-50',
+    },
+    {
+      label: 'Turnos pendientes',
+      value: 'Pendiente',
+      icon: Activity,
+      color: 'text-gray-600',
+      bg: 'bg-gray-100',
+    },
+  ]
+
   return (
     <>
       <Header titulo="Dashboard" />

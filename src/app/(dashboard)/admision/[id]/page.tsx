@@ -36,12 +36,18 @@ export default async function FichaIngresoPage({ params }: PageProps) {
   const puedeAgregarDiagnostico = tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
   const puedeGenerarAutorizacion = tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
 
-  // Serializar Decimal → string para evitar error de Client Component
+  // Serializar campos Decimal → tipos planos para Client Components
   const ingresoSerializado = {
     ...ingreso,
     paciente: ingreso.paciente
-      ? { ...ingreso.paciente, cuil: ingreso.paciente.cuil?.toString() ?? null }
+      ? { ...ingreso.paciente, cuil: ingreso.paciente.cuil?.toNumber() ?? null }
       : ingreso.paciente,
+    practicas: ingreso.practicas.map((p) => ({
+      ...p,
+      cantidad: typeof p.cantidad === 'object' && p.cantidad !== null
+        ? Number(p.cantidad.toString())
+        : Number(p.cantidad),
+    })),
   }
 
   return (

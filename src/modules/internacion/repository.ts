@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db'
 import type { Cama, Prisma } from '@prisma/client'
+import { calcularImporteFacturable, resolverReglaFacturacion } from '@/modules/facturacion/cobertura'
+import { obtenerValorPractica } from '@/modules/facturacion/repository'
 import type {
   CamaConOcupante,
   MapaCamas,
@@ -369,16 +371,43 @@ export async function crearPractica(
   data: CrearPracticaInput,
   usuario: string
 ): Promise<PracticaItem> {
+  const codigo = data.codigoPractica.padEnd(8).slice(0, 8)
+  const cantidad = Number(data.cantidad)
+
+  // Look up price from nomenclador
+  const ingreso = await prisma.ingreso.findUnique({
+    where: { id: data.ingresoId },
+    select: {
+      obraSocialId: true,
+      obraSocialCoseguroId: true,
+      obraSocial: { select: { nombre: true } },
+    },
+  })
+
+  let importeTotal: number | null = null
+  if (ingreso) {
+    const regla = resolverReglaFacturacion(
+      ingreso.obraSocial?.nombre,
+      Boolean(ingreso.obraSocialCoseguroId)
+    )
+    const valorPractica = await obtenerValorPractica(codigo.trim())
+    if (valorPractica > 0) {
+      const cobertura = calcularImporteFacturable(valorPractica, cantidad, regla)
+      importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null
+    }
+  }
+
   const practica = await prisma.practica.create({
     data: {
       ingresoId: data.ingresoId,
       convenioId: data.convenioId,
-      codigoPractica: data.codigoPractica.padEnd(8).slice(0, 8),
+      codigoPractica: codigo,
       convenioValorId: 0,
       fecha: data.fecha,
-      cantidad: data.cantidad,
+      cantidad,
       numeroAutorizacion: data.numeroAutorizacion ?? null,
       facturable: data.facturable,
+      importeTotal,
       usuarioRegistro: usuario.slice(0, 10),
     },
     select: {

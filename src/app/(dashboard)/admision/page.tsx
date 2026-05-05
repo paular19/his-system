@@ -7,16 +7,25 @@ import { formatearFecha } from '@/lib/utils'
 import Link from 'next/link'
 import { Plus, Search, ClipboardList } from 'lucide-react'
 import type { Metadata } from 'next'
+import { cache } from 'react'
+import { PaginationControls } from '@/components/ui/pagination-controls'
 
-export const metadata: Metadata = { title: 'Admisión' }
+const DEFAULT_PAGE = 1
+const DEFAULT_LIMIT = 20
+const LIMIT_OPTIONS = [10, 20, 50, 100] as const
+
+interface SearchParamsInput {
+  q?: string
+  tipoIngresoCodigo?: string
+  estado?: string
+  page?: string
+  limit?: string
+  pagina?: string
+  porPagina?: string
+}
 
 interface PageProps {
-  searchParams: Promise<{
-    q?: string
-    tipoIngresoCodigo?: string
-    estado?: string
-    pagina?: string
-  }>
+  searchParams: Promise<SearchParamsInput>
 }
 
 const BADGE_ESTADO: Record<string, string> = {
@@ -33,18 +42,110 @@ const LABEL_ESTADO: Record<string, string> = {
   X: 'Anulado',
 }
 
+function parsePositiveInt(value: string | undefined, fallback: number) {
+  if (!value) return fallback
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback
+  return parsed
+}
+
+function normalizarSearchParams(params: SearchParamsInput) {
+  const pageRaw = params.page ?? params.pagina
+  const limitRaw = params.limit ?? params.porPagina
+
+  const page = parsePositiveInt(pageRaw, DEFAULT_PAGE)
+  const parsedLimit = parsePositiveInt(limitRaw, DEFAULT_LIMIT)
+  const limit = LIMIT_OPTIONS.includes(parsedLimit as (typeof LIMIT_OPTIONS)[number])
+    ? parsedLimit
+    : DEFAULT_LIMIT
+
+  return {
+    q: params.q?.trim() || undefined,
+    tipoIngresoCodigo: params.tipoIngresoCodigo || undefined,
+    estado: params.estado || undefined,
+    page,
+    limit,
+  }
+}
+
+function buildQueryString(params: {
+  q?: string
+  tipoIngresoCodigo?: string
+  estado?: string
+  page: number
+  limit: number
+}) {
+  const sp = new URLSearchParams()
+  if (params.q) sp.set('q', params.q)
+  if (params.tipoIngresoCodigo) sp.set('tipoIngresoCodigo', params.tipoIngresoCodigo)
+  if (params.estado) sp.set('estado', params.estado)
+  sp.set('page', String(params.page))
+  sp.set('limit', String(params.limit))
+  return sp.toString()
+}
+
+const buscarIngresosCached = cache(buscarIngresos)
+
+export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
+  const raw = await searchParams
+  const normalizados = normalizarSearchParams(raw)
+  const filtros = normalizados.q ? ` - ${normalizados.q}` : ''
+  const pageSuffix = normalizados.page > 1 ? ` - Página ${normalizados.page}` : ''
+
+  return {
+    title: `Admisión${filtros}${pageSuffix}`,
+    alternates: {
+      canonical: `/dashboard/admision?${buildQueryString(normalizados)}`,
+    },
+  }
+}
+
 export default async function AdmisionPage({ searchParams }: PageProps) {
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'LEER')) redirect('/dashboard')
 
-  const params = await searchParams
-  const resultado = await buscarIngresos({
-    q: params.q,
-    tipoIngresoCodigo: params.tipoIngresoCodigo,
-    estado: params.estado,
-    pagina: params.pagina ? parseInt(params.pagina, 10) : 1,
-    porPagina: 20,
-  })
+  const rawParams = await searchParams
+  const params = normalizarSearchParams(rawParams)
+
+  const canonicalQuery = buildQueryString(params)
+  const hasLegacyParams = Boolean(rawParams.pagina || rawParams.porPagina)
+  const hasNonCanonicalQuery = buildQueryString({
+    q: rawParams.q?.trim() || undefined,
+    tipoIngresoCodigo: rawParams.tipoIngresoCodigo || undefined,
+    estado: rawParams.estado || undefined,
+    page: parsePositiveInt(rawParams.page ?? rawParams.pagina, DEFAULT_PAGE),
+    limit: LIMIT_OPTIONS.includes(parsePositiveInt(rawParams.limit ?? rawParams.porPagina, DEFAULT_LIMIT) as (typeof LIMIT_OPTIONS)[number])
+      ? parsePositiveInt(rawParams.limit ?? rawParams.porPagina, DEFAULT_LIMIT)
+      : DEFAULT_LIMIT,
+  }) !== canonicalQuery
+
+  if (hasLegacyParams || hasNonCanonicalQuery) {
+    redirect(`/dashboard/admision?${canonicalQuery}`)
+  }
+
+  let resultado
+  try {
+    // cache() evita trabajo duplicado en el mismo request para los mismos filtros.
+    resultado = await buscarIngresosCached({
+      q: params.q,
+      tipoIngresoCodigo: params.tipoIngresoCodigo,
+      estado: params.estado,
+      pagina: params.page,
+      porPagina: params.limit,
+    })
+  } catch (error) {
+    throw new Error(
+      `No fue posible cargar los ingresos: ${error instanceof Error ? error.message : 'error desconocido'}`
+    )
+  }
+
+  if (resultado.paginacion.totalPaginas > 0 && params.page > resultado.paginacion.totalPaginas) {
+    const qs = buildQueryString({
+      ...params,
+      page: resultado.paginacion.totalPaginas,
+    })
+    redirect(`/dashboard/admision?${qs}`)
+  }
 
   const puedeCrear = tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
 
@@ -81,6 +182,8 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
             >
               Buscar
             </button>
+            <input type="hidden" name="page" value="1" />
+            <input type="hidden" name="limit" value={String(params.limit)} />
           </form>
 
           {puedeCrear && (
@@ -185,30 +288,16 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
           </div>
 
           {/* Paginación */}
-          {resultado.paginacion.totalPaginas > 1 && (
-            <div className="border-t px-4 py-3 flex items-center justify-between text-xs text-gray-500">
-              <span>
-                Mostrando {resultado.items.length} de {resultado.paginacion.total} resultados
-              </span>
-              <div className="flex items-center gap-1">
-                {Array.from(
-                  { length: resultado.paginacion.totalPaginas },
-                  (_, i) => i + 1
-                ).map((p) => (
-                  <Link
-                    key={p}
-                    href={`/dashboard/admision?q=${params.q ?? ''}&estado=${params.estado ?? ''}&pagina=${p}`}
-                    className={`rounded px-2 py-1 ${p === resultado.paginacion.pagina
-                        ? 'bg-blue-600 text-white'
-                        : 'hover:bg-gray-100'
-                      }`}
-                  >
-                    {p}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
+          <PaginationControls
+            className="border-t"
+            currentPage={resultado.paginacion.pagina}
+            totalPages={Math.max(1, resultado.paginacion.totalPaginas)}
+            totalItems={resultado.paginacion.total}
+            pageSize={resultado.paginacion.porPagina}
+            allowedPageSizes={LIMIT_OPTIONS as unknown as number[]}
+            pageParam="page"
+            pageSizeParam="limit"
+          />
         </div>
       </div>
     </>

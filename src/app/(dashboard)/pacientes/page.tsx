@@ -7,11 +7,71 @@ import { formatearFecha, calcularEdad } from '@/lib/utils'
 import Link from 'next/link'
 import { Plus, Search, User } from 'lucide-react'
 import type { Metadata } from 'next'
+import { cache } from 'react'
+import { PaginationControls } from '@/components/ui/pagination-controls'
 
-export const metadata: Metadata = { title: 'Pacientes' }
+const DEFAULT_PAGE = 1
+const DEFAULT_LIMIT = 20
+const LIMIT_OPTIONS = [10, 20, 50, 100] as const
+
+interface SearchParamsInput {
+  q?: string
+  page?: string
+  limit?: string
+  pagina?: string
+  porPagina?: string
+}
 
 interface PageProps {
-  searchParams: Promise<{ q?: string; pagina?: string }>
+  searchParams: Promise<SearchParamsInput>
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number) {
+  if (!value) return fallback
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback
+  return parsed
+}
+
+function normalizarSearchParams(params: SearchParamsInput) {
+  const pageRaw = params.page ?? params.pagina
+  const limitRaw = params.limit ?? params.porPagina
+
+  const page = parsePositiveInt(pageRaw, DEFAULT_PAGE)
+  const parsedLimit = parsePositiveInt(limitRaw, DEFAULT_LIMIT)
+  const limit = LIMIT_OPTIONS.includes(parsedLimit as (typeof LIMIT_OPTIONS)[number])
+    ? parsedLimit
+    : DEFAULT_LIMIT
+
+  return {
+    q: params.q?.trim() || undefined,
+    page,
+    limit,
+  }
+}
+
+function buildQueryString(params: { q?: string; page: number; limit: number }) {
+  const sp = new URLSearchParams()
+  if (params.q) sp.set('q', params.q)
+  sp.set('page', String(params.page))
+  sp.set('limit', String(params.limit))
+  return sp.toString()
+}
+
+const buscarPacientesCached = cache(buscarPacientes)
+
+export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
+  const raw = await searchParams
+  const normalizados = normalizarSearchParams(raw)
+  const filtros = normalizados.q ? ` - ${normalizados.q}` : ''
+  const pageSuffix = normalizados.page > 1 ? ` - Página ${normalizados.page}` : ''
+
+  return {
+    title: `Pacientes${filtros}${pageSuffix}`,
+    alternates: {
+      canonical: `/dashboard/pacientes?${buildQueryString(normalizados)}`,
+    },
+  }
 }
 
 export default async function PacientesPage({ searchParams }: PageProps) {
@@ -21,33 +81,38 @@ export default async function PacientesPage({ searchParams }: PageProps) {
     redirect('/dashboard')
   }
 
-  const params = await searchParams
-  const resultado = await buscarPacientes({
+  const rawParams = await searchParams
+  const params = normalizarSearchParams(rawParams)
+
+  const canonicalQuery = buildQueryString(params)
+  const hasLegacyParams = Boolean(rawParams.pagina || rawParams.porPagina)
+  const hasNonCanonicalQuery = buildQueryString({
+    q: rawParams.q?.trim() || undefined,
+    page: parsePositiveInt(rawParams.page ?? rawParams.pagina, DEFAULT_PAGE),
+    limit: LIMIT_OPTIONS.includes(parsePositiveInt(rawParams.limit ?? rawParams.porPagina, DEFAULT_LIMIT) as (typeof LIMIT_OPTIONS)[number])
+      ? parsePositiveInt(rawParams.limit ?? rawParams.porPagina, DEFAULT_LIMIT)
+      : DEFAULT_LIMIT,
+  }) !== canonicalQuery
+
+  if (hasLegacyParams || hasNonCanonicalQuery) {
+    redirect(`/dashboard/pacientes?${canonicalQuery}`)
+  }
+
+  const resultado = await buscarPacientesCached({
     q: params.q,
-    pagina: params.pagina ? parseInt(params.pagina, 10) : 1,
-    porPagina: 20,
+    pagina: params.page,
+    porPagina: params.limit,
   })
 
+  if (resultado.paginacion.totalPaginas > 0 && params.page > resultado.paginacion.totalPaginas) {
+    const qs = buildQueryString({
+      ...params,
+      page: resultado.paginacion.totalPaginas,
+    })
+    redirect(`/dashboard/pacientes?${qs}`)
+  }
+
   const puedeCrear = tienePermiso(usuario.rol, 'PACIENTES', 'CREAR')
-
-  const paginaActual = resultado.paginacion.pagina
-  const totalPaginas = resultado.paginacion.totalPaginas
-  const paginasCompactas: Array<number | '...'> = (() => {
-    if (totalPaginas <= 7) {
-      return Array.from({ length: totalPaginas }, (_, i) => i + 1)
-    }
-
-    const pages: Array<number | '...'> = [1]
-    const inicio = Math.max(2, paginaActual - 1)
-    const fin = Math.min(totalPaginas - 1, paginaActual + 1)
-
-    if (inicio > 2) pages.push('...')
-    for (let p = inicio; p <= fin; p += 1) pages.push(p)
-    if (fin < totalPaginas - 1) pages.push('...')
-
-    pages.push(totalPaginas)
-    return pages
-  })()
 
   return (
     <>
@@ -71,6 +136,8 @@ export default async function PacientesPage({ searchParams }: PageProps) {
             >
               Buscar
             </button>
+            <input type="hidden" name="page" value="1" />
+            <input type="hidden" name="limit" value={String(params.limit)} />
           </form>
 
           {puedeCrear && (
@@ -217,52 +284,16 @@ export default async function PacientesPage({ searchParams }: PageProps) {
             </table>
           </div>
 
-          {/* Paginación */}
-          {resultado.paginacion.totalPaginas > 1 && (
-            <div className="border-t px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-gray-500">
-              <span>
-                Mostrando {resultado.items.length} de {resultado.paginacion.total} resultados
-              </span>
-              <div className="flex items-center gap-1 flex-wrap">
-                {paginaActual > 1 && (
-                  <Link
-                    href={`/dashboard/pacientes?q=${params.q ?? ''}&pagina=${paginaActual - 1}`}
-                    className="rounded px-2 py-1 hover:bg-gray-100"
-                  >
-                    Anterior
-                  </Link>
-                )}
-
-                {paginasCompactas.map((p, idx) =>
-                  p === '...' ? (
-                    <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">
-                      ...
-                    </span>
-                  ) : (
-                    <Link
-                      key={p}
-                      href={`/dashboard/pacientes?q=${params.q ?? ''}&pagina=${p}`}
-                      className={`rounded px-2 py-1 ${p === resultado.paginacion.pagina
-                          ? 'bg-blue-600 text-white'
-                          : 'hover:bg-gray-100'
-                        }`}
-                    >
-                      {p}
-                    </Link>
-                  )
-                )}
-
-                {paginaActual < totalPaginas && (
-                  <Link
-                    href={`/dashboard/pacientes?q=${params.q ?? ''}&pagina=${paginaActual + 1}`}
-                    className="rounded px-2 py-1 hover:bg-gray-100"
-                  >
-                    Siguiente
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
+          <PaginationControls
+            className="border-t"
+            currentPage={resultado.paginacion.pagina}
+            totalPages={Math.max(1, resultado.paginacion.totalPaginas)}
+            totalItems={resultado.paginacion.total}
+            pageSize={resultado.paginacion.porPagina}
+            allowedPageSizes={LIMIT_OPTIONS as unknown as number[]}
+            pageParam="page"
+            pageSizeParam="limit"
+          />
         </div>
       </div>
     </>

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { Header } from '@/components/layout/header'
 import { prisma } from '@/lib/db'
 import { Users, BedDouble, ClipboardList, Activity } from 'lucide-react'

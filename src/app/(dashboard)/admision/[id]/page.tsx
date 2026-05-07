@@ -44,9 +44,7 @@ export default async function FichaIngresoPage({ params }: PageProps) {
       : ingreso.paciente,
     practicas: ingreso.practicas.map((p) => ({
       ...p,
-      cantidad: typeof p.cantidad === 'object' && p.cantidad !== null
-        ? Number(p.cantidad.toString())
-        : Number(p.cantidad),
+      cantidad: Number(String(p.cantidad)),
     })),
   }
 

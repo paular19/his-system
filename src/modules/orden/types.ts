@@ -120,6 +120,7 @@ export type AdmisionOrdenContexto = {
     cantidad: number
     fecha: Date
     numeroAutorizacion: string | null
+    importeTotal: number | null
   }>
   medicaciones: Array<{
     id: number

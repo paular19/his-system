@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { anularOrdenFacturacion } from '@/modules/facturacion/service'
-import { apiResponse } from '@/lib/utils/response'
+import { apiOk, apiError, apiValidationError } from '@/lib/utils/response'
 import { currentUser } from '@clerk/nextjs/server'
 import { z } from 'zod'
 
@@ -17,16 +17,16 @@ export async function POST(req: NextRequest) {
         const body = await req.json() as unknown
         const parsed = AnularOrdenSchema.safeParse(body)
         if (!parsed.success) {
-            return NextResponse.json(apiResponse.error('Datos inválidos'), { status: 400 })
+            return apiValidationError(parsed.error)
         }
 
         const ip = req.headers.get('x-forwarded-for') ?? undefined
 
         await anularOrdenFacturacion(parsed.data.puestoNumero, parsed.data.numero, usuario, ip)
 
-        return NextResponse.json(apiResponse.success({ ok: true }))
+        return apiOk({ ok: true })
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Error al anular orden'
-        return NextResponse.json(apiResponse.error(message), { status: 500 })
+        return apiError(message, 500)
     }
 }

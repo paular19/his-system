@@ -17,8 +17,9 @@ function formatMonto(n: number) {
 
 function formatPeriodo(periodo: string) {
     const [anio, mes] = periodo.split('-')
+    if (!anio || !mes) return periodo
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-    return `${meses[parseInt(mes) - 1]} ${anio}`
+    return `${meses[parseInt(mes, 10) - 1]} ${anio}`
 }
 
 interface Props {

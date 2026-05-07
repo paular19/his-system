@@ -390,7 +390,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         return diffA - diffB
                     })
                     const mejor = ordenadas[0]
-                    practicaIdAsociada = mejor?.id
+                    practicaIdAsociada = mejor?.id ?? null
 
                     if (mejor) {
                         practicasPendientesPorClave.set(
@@ -1084,8 +1084,7 @@ const LOTE_SELECT = {
     plan: { select: { id: true, descripcion: true } },
 } satisfies Prisma.LoteFacturacionSelect
 
-function mapLoteRow(row: Awaited<ReturnType<typeof prisma.loteFacturacion.findFirst>>): LoteFacturacionListItem {
-    if (!row) throw new Error('Lote no encontrado')
+function mapLoteRow(row: Prisma.LoteFacturacionGetPayload<{ select: typeof LOTE_SELECT }>): LoteFacturacionListItem {
     return {
         ...row,
         tipo: row.tipo as LoteFacturacionListItem['tipo'],

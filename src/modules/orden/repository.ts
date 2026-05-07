@@ -452,6 +452,7 @@ export async function obtenerContextoAdmisionParaOrden(
           cantidad: true,
           fecha: true,
           numeroAutorizacion: true,
+          importeTotal: true,
           nomencladorPractica: { select: { descripcion: true } },
         },
       },
@@ -483,6 +484,7 @@ export async function obtenerContextoAdmisionParaOrden(
       cantidad: Number(p.cantidad),
       fecha: p.fecha,
       numeroAutorizacion: p.numeroAutorizacion,
+      importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
     })),
   } as AdmisionOrdenContexto
 }
@@ -531,9 +533,9 @@ async function enriquecerPracticasConValor(
   const codigos = Array.from(new Set(practicas.map((p) => p.codigo.trim()).filter(Boolean)))
   const prestaciones = codigos.length
     ? await prisma.nomencladorPrestacion.findMany({
-        where: { codigo: { in: codigos } },
-        select: { codigo: true, valor: true },
-      })
+      where: { codigo: { in: codigos } },
+      select: { codigo: true, valor: true },
+    })
     : []
 
   const valorPorCodigo = new Map(

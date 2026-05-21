@@ -7,7 +7,7 @@ import { prisma } from '@/lib/db'
 import { apiOk, apiError, apiForbidden, manejarErrorApi } from '@/lib/utils/response'
 
 export const runtime = 'nodejs'
-export const maxDuration = 900
+export const maxDuration = 300
 const IMPORT_BATCH_SIZE = 100
 
 type ParsedRow = {
@@ -265,7 +265,7 @@ export async function POST(req: NextRequest) {
         const usuarioCod = (usuario.codigoUsuario || 'IMPORTXLS').slice(0, 10)
 
         let upsertsPrestacion = 0
-            console.log(`[POST /nomenclador/import] Iniciando upserts de NomencladorPrestacion`)
+        console.log(`[POST /nomenclador/import] Iniciando upserts de NomencladorPrestacion`)
         for (const batch of chunk(rows, IMPORT_BATCH_SIZE)) {
             // Limitar concurrencia a 4 (tamaño de la pool) para evitar "Timed out fetching connection"
             for (const row of batch) {
@@ -294,7 +294,7 @@ export async function POST(req: NextRequest) {
         }
 
         let upsertsPractica = 0
-            console.log(`[POST /nomenclador/import] Completados ${upsertsPrestacion} upserts de NomencladorPrestacion, iniciando NomencladorPractica`)
+        console.log(`[POST /nomenclador/import] Completados ${upsertsPrestacion} upserts de NomencladorPrestacion, iniciando NomencladorPractica`)
         let skippedByCodeLength = 0
 
         for (const batch of chunk(rows, IMPORT_BATCH_SIZE)) {

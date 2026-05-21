@@ -1,0 +1,6 @@
+ALTER TABLE "Practica"
+  ADD COLUMN "PraMatEsp" INTEGER,
+  ADD COLUMN "PraMatAne" INTEGER;
+
+ALTER TABLE "OrdenPrac"
+  ADD COLUMN "OprMatric" INTEGER;

@@ -12,6 +12,14 @@ interface FichaAdmisionPrintProps {
 export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
     const edad = ingreso.fechaNacimiento ? calcularEdad(ingreso.fechaNacimiento) : null
     const observacionesLimpias = limpiarObservacionesAdmision(ingreso.observaciones)
+    const profesionalTratanteNombre = ingreso.profesionalTratante?.nombre
+        ?? ingreso.evoluciones?.[0]?.profesional?.nombre
+        ?? ingreso.profesionalTratanteFallback?.nombre
+        ?? null
+    const profesionalTratanteMatricula = ingreso.profesionalTratante?.matricula
+        ?? ingreso.evoluciones?.[0]?.profesional?.matricula
+        ?? ingreso.profesionalTratanteFallback?.matricula
+        ?? null
 
     useEffect(() => {
         const originalTitle = document.title
@@ -115,11 +123,10 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
             <div className="print-ficha">
                 <div className="print-header">
                     <div className="print-header-row">
-                        <div className="print-header-clinica">
-                            <div className="print-header-clinica-nombre">CLINICA SAN RAFAEL</div>
-                            <div className="print-header-sub">Sistema HIS</div>
-                            <div className="print-header-sub">Av. Siempre Viva 1234 · CABA</div>
-                            <div className="print-header-sub">Tel: (011) 1234-5678</div>
+                        <div className="print-header-clinica" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <img src="/logo-clinica.png" alt="Logo Clínica" style={{ maxWidth: 120, marginBottom: 6 }} />
+                            <div className="print-header-sub">Av. Sarmiento 566, Salta Capital, Argentina</div>
+                            <div className="print-header-sub">Tel: 3872537289</div>
                         </div>
                         <div className="print-header-info">
                             <table className="print-header-table">
@@ -226,7 +233,15 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                             </div>
                             <div className="flex justify-between">
                                 <dt className="text-gray-600">Profesional Tratante:</dt>
-                                <dd className="font-medium">{ingreso.profesionalTratante?.nombre ?? '—'}</dd>
+                                <dd className="font-medium">{profesionalTratanteNombre ?? '—'}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                                <dt className="text-gray-600">Matrícula Tratante:</dt>
+                                <dd className="font-medium">{profesionalTratanteMatricula ?? '—'}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                                <dt className="text-gray-600">Profesional Interviniente:</dt>
+                                <dd className="font-medium">{ingreso.profesionalInterviniente?.nombre ?? '—'}</dd>
                             </div>
                         </dl>
                     </div>
@@ -284,9 +299,9 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                 INDICACIÓN MÉDICA
                             </h3>
                             <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                                {sub.profesionalIndicadorNombre && <div className="flex justify-between">
-                                    <dt className="text-gray-600">Profesional Indicador:</dt>
-                                    <dd className="font-medium">{sub.profesionalIndicadorNombre}</dd>
+                                {(ingreso.profesionalInterviniente?.nombre || sub.profesionalIndicadorNombre) && <div className="flex justify-between">
+                                    <dt className="text-gray-600">Profesional Interviniente:</dt>
+                                    <dd className="font-medium">{ingreso.profesionalInterviniente?.nombre ?? sub.profesionalIndicadorNombre}</dd>
                                 </div>}
                                 {sub.tipoIndicacion && <div className="flex justify-between">
                                     <dt className="text-gray-600">Tipo de Indicación:</dt>

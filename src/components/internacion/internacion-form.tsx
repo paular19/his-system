@@ -7,6 +7,7 @@ import type { PacienteResumen } from '@/modules/admision/types'
 import type { CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
 import { BedDouble } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface ProfesionalOption {
   id: number
@@ -60,9 +61,17 @@ export function InternacionForm({
   const [descripcionPatologia, setDescripcionPatologia] = useState('')
   const [observaciones, setObservaciones] = useState('')
 
-  const planesDisponibles = obraSocialId
-    ? planes.filter((p) => String(p.obraSocialId ?? '') === obraSocialId)
-    : planes
+  const planesDisponibles = (() => {
+    const filtered = obraSocialId
+      ? planes.filter((p) => String(p.obraSocialId ?? '') === obraSocialId)
+      : planes
+    const seen = new Set<number>()
+    return filtered.filter((p) => {
+      if (seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+  })()
 
   const camaSeleccionada = camasDisponibles.find((c) => c.id.toString() === camaId)
 
@@ -132,12 +141,25 @@ export function InternacionForm({
         })
       }
 
-      router.push(`/dashboard/admision/${ingreso.id}`)
+      router.push(`/dashboard/internacion/${ingreso.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido')
     } finally {
       setGuardando(false)
     }
+  }
+
+  if (guardando) {
+    return (
+      <div className="p-8">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <Skeleton className="h-8 w-1/2 mb-4" />
+          <Skeleton className="h-6 w-full mb-2" />
+          <Skeleton className="h-6 w-full mb-2" />
+          <Skeleton className="h-6 w-2/3" />
+        </div>
+      </div>
+    )
   }
 
   return (

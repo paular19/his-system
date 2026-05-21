@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Plus, Pill, CheckCircle, XCircle, Clock } from 'lucide-react'
 import type { MedicacionItem } from '@/modules/internacion/types'
 import { ESTADO_MEDICACION_LABEL } from '@/modules/internacion/types'
@@ -46,11 +46,39 @@ export function MedicacionSection({
     const [fechaFin, setFechaFin] = useState('')
     const [observaciones, setObservaciones] = useState('')
     const [profesionalId, setProfesionalId] = useState('')
+    const [buscandoCatalogo, setBuscandoCatalogo] = useState(false)
+    const [sugerencias, setSugerencias] = useState<Array<{ id: number; nombre: string }>>([])
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const buscarCatalogo = (value: string) => {
+        setNombre(value)
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+
+        const query = value.trim()
+        if (query.length < 2) {
+            setSugerencias([])
+            return
+        }
+
+        debounceRef.current = setTimeout(async () => {
+            setBuscandoCatalogo(true)
+            try {
+                const res = await fetch(`/api/catalogos/medicamentos-uti?q=${encodeURIComponent(query)}&limit=12`)
+                const json = await res.json()
+                setSugerencias(Array.isArray(json.data) ? json.data : [])
+            } catch {
+                setSugerencias([])
+            } finally {
+                setBuscandoCatalogo(false)
+            }
+        }, 300)
+    }
 
     const limpiar = () => {
         setNombre(''); setDosis(''); setVia(''); setFrecuencia('')
         setFechaInicio(new Date().toISOString().split('T')[0])
         setFechaFin(''); setObservaciones(''); setProfesionalId('')
+        setSugerencias([])
         setMostrarFormulario(false)
         setError(null)
     }
@@ -135,16 +163,37 @@ export function MedicacionSection({
                         <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</p>
                     )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="sm:col-span-2">
+                        <div className="sm:col-span-2 relative">
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                                 Medicamento <span className="text-red-500">*</span>
                             </label>
                             <input
                                 required type="text" value={nombre}
-                                onChange={(e) => setNombre(e.target.value)}
+                                onChange={(e) => buscarCatalogo(e.target.value)}
                                 placeholder="Nombre del medicamento"
                                 className="w-full border rounded-lg px-3 py-2 text-sm"
                             />
+                            {sugerencias.length > 0 && (
+                                <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
+                                    {sugerencias.map((s) => (
+                                        <button
+                                            key={s.id}
+                                            type="button"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                                setNombre(s.nombre)
+                                                setSugerencias([])
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
+                                        >
+                                            {s.nombre}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            {buscandoCatalogo && (
+                                <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Dosis</label>
@@ -222,7 +271,7 @@ export function MedicacionSection({
                 </form>
             )}
 
-            <div className="divide-y max-h-[400px] overflow-y-auto">
+            <div className="divide-y max-h-100 overflow-y-auto">
                 {medicaciones.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-8">Sin medicaciones registradas</p>
                 ) : (

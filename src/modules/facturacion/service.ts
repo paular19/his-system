@@ -8,6 +8,7 @@ import type {
     BusquedaLotesInput,
     CargarOrdenesFacturacionInput,
     CrearLoteFacturacionInput,
+    CrearDescartableFacturacionInput,
     CrearMedicacionFacturacionInput,
     CrearPracticaFacturacionInput,
 } from './schemas'
@@ -57,6 +58,25 @@ export async function crearMedicacionFacturacion(
     })
 
     return medicacion
+}
+
+export async function crearDescartableFacturacion(
+    data: CrearDescartableFacturacionInput,
+    usuario: string,
+    ip?: string
+) {
+    const descartable = await repo.crearDescartableFacturacion(data, usuario)
+
+    await registrarAudit({
+        usuario,
+        accion: 'CREAR',
+        entidad: 'DescartableIngreso',
+        registroId: descartable.id,
+        detalle: `Alta de descartable en facturacion para ingreso ${data.ingresoId}`,
+        direccionIp: ip,
+    })
+
+    return descartable
 }
 
 export async function actualizarContextoFacturacion(
@@ -154,8 +174,8 @@ export async function buscarLotes(params: BusquedaLotesInput) {
     return repo.buscarLotes(params)
 }
 
-export async function obtenerLote(id: number) {
-    return repo.obtenerLote(id)
+export async function obtenerLote(id: number, filtros?: { medico?: string; matricula?: number }) {
+    return repo.obtenerLote(id, filtros)
 }
 
 export async function crearLote(data: CrearLoteFacturacionInput, usuario: string, ip?: string) {
@@ -221,6 +241,47 @@ export async function toggleItemLote(loteId: number, itemId: number, incluido: b
     return repo.toggleItemLote(loteId, itemId, incluido)
 }
 
-export async function obtenerOrdenesAutorizadasIngreso(ingresoId: number) {
-    return repo.obtenerOrdenesAutorizadasIngreso(ingresoId)
+export async function obtenerOrdenesAutorizadasIngreso(
+    ingresoId: number,
+    filtros?: { medico?: string; matricula?: number; periodo?: string }
+) {
+    return repo.obtenerOrdenesAutorizadasIngreso(ingresoId, filtros)
+}
+
+export async function crearLoteIPSTxt(
+    data: import('./schemas').CrearLoteIPSTxtInput,
+    usuario: string,
+    ip?: string
+) {
+    const lote = await repo.crearLoteIPSTxt(data, usuario)
+
+    await registrarAudit({
+        usuario,
+        accion: 'CREAR',
+        entidad: 'LoteFacturacion',
+        registroId: lote.id,
+        detalle: `Lote IPS TXT creado desde planilla - periodo ${data.periodo}`,
+        direccionIp: ip,
+    })
+
+    return lote
+}
+
+export async function aplicarPromediLote(id: number, usuario: string, ip?: string) {
+    const resultado = await repo.aplicarPromediLote(id, usuario)
+
+    await registrarAudit({
+        usuario,
+        accion: 'MODIFICAR',
+        entidad: 'LoteFacturacion',
+        registroId: id,
+        detalle: `PROMEDI aplicado - importe total: ${resultado.importeTotal}`,
+        direccionIp: ip,
+    })
+
+    return resultado
+}
+
+export async function obtenerItemsIPSTxt(loteId: number) {
+    return repo.obtenerItemsIPSTxt(loteId)
 }

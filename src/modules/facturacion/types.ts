@@ -2,6 +2,7 @@ export type TipoPrestacionFacturable =
     | 'ORDEN_ITEM'
     | 'PRACTICA'
     | 'MEDICACION'
+    | 'DESCARTABLE'
     | 'DIA_INTERNACION'
 
 export interface AdmisionFacturacionListItem {
@@ -31,6 +32,8 @@ export interface PrestacionFacturableItem {
     importeTotal: number | null
     facturada: boolean
     matriculaProfesional: number | null
+    matriculaEspecialista: number | null
+    matriculaAnestesista: number | null
     ordenPuestoNumero: number | null
     ordenNumero: number | null
     convenioId: number | null
@@ -43,6 +46,23 @@ export interface PrestacionFacturableItem {
         ordenNumero?: number
         ordenItem?: number
         medicacionId?: number
+        descartableId?: number
+        cirugiaProgramadaId?: number
+    }
+    esPracticaCirugia?: boolean
+    diferenciales?: {
+        esFeriado: boolean
+        esNocturna: boolean
+        mismaViaPatologia: boolean
+        diferentesViasPatologia: boolean
+        diferentesViasDiferentesPatologia: boolean
+    } | null
+    desglose?: {
+        valorEspecialista: number | null
+        valorAyudante: number | null
+        valorAnestesista: number | null
+        valorGastos: number | null
+        valorTotal: number | null
     }
 }
 
@@ -81,11 +101,16 @@ export interface FacturacionContexto {
         porcentajeFacturacion: number
         porcentajeCargoPaciente: number
     }
+    profesionales: Array<{
+        id: number
+        nombre: string
+        matricula: number | null
+    }>
     prestaciones: PrestacionFacturableItem[]
 }
 
 export interface OrdenFacturacionResultado {
-    modo: 'MASIVA' | 'INDIVIDUAL'
+    modo: 'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'
     ordenes: Array<{ puestoNumero: number; numero: number }>
 }
 
@@ -103,6 +128,7 @@ export interface LoteFacturacionListItem {
     periodo: string
     tipo: TipoLote
     estado: EstadoLote
+    origen: string | null
     obraSocial: { id: number; nombre: string } | null
     plan: { id: number; descripcion: string } | null
     sedeId: number | null
@@ -116,6 +142,7 @@ export interface LoteFacturacionListItem {
 
 export interface LoteFacturacionDetalle extends LoteFacturacionListItem {
     items: LoteFacturacionItemDetalle[]
+    itemsIPSTxt: LoteIPSTxtItemDetalle[]
 }
 
 export interface LoteFacturacionItemDetalle {
@@ -157,4 +184,44 @@ export interface OrdenAutorizadaLote {
         numeroAutorizacion: string | null
         importeTotal: number
     }>
+}
+
+// ============================================
+// IPS TXT — PLANILLA DE PRESTACIONES
+// ============================================
+
+export interface LoteIPSTxtItemDetalle {
+    id: number
+    loteId: number
+    afiliadoDoc: string
+    afiliadoNom: string
+    nroOrden: string
+    fechaRealiz: Date | null
+    servicioCodigo: string
+    servicioNombre: string
+    cantidad: number
+    impEsp: number
+    impAyu: number
+    impAne: number
+    impGto: number
+    impTotal: number
+    importePromedi: number | null
+}
+
+// ============================================
+// NOMENCLADOR — DESGLOSE DE COMPONENTES
+// ============================================
+
+export interface NomencladorDesglose {
+    valorEspecialista: number | null
+    valorAyudante: number | null
+    valorAnestesista: number | null
+    valorGastos: number | null
+}
+
+export interface ComponenteSeleccion {
+    especialista: boolean
+    ayudante: boolean
+    anestesista: boolean
+    gastos: boolean
 }

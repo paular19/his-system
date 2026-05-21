@@ -10,6 +10,29 @@ type ObraSocialCsvRow = {
     fechaEstado: Date
 }
 
+const OBRAS_SOCIALES_REGLAS: readonly ObraSocialCsvRow[] = [
+    { id: 1, nombre: 'IPSS - Cod.1', requiereCoseguro: 'S', estado: 'A', fechaEstado: new Date() },
+    { id: 41, nombre: 'OSPSA - SALTA - Cod.41', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 202, nombre: 'OSPERHYRA - Cod.202', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 213, nombre: 'RED ARGENTINA SALUD - Cod.213', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 346, nombre: 'ACIDSAL - Cod.346', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 511, nombre: 'OSECAC CONV DIRECT - Cod.511', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1520, nombre: 'OSUTHGRA - Cod.1520', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1526, nombre: 'OSUNSA - Cod.1526', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1501, nombre: 'INTEGRAL', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1502, nombre: 'TOTAL A', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1504, nombre: 'TOTAL B', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1505, nombre: 'UTM', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1506, nombre: 'UPCN', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1507, nombre: 'ATSA', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1508, nombre: 'ADP', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1510, nombre: 'NOVAMED', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1511, nombre: 'SOEM', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1512, nombre: 'PREVISER', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1513, nombre: 'SOEME', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 1514, nombre: 'EMPRENDER', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+] as const
+
 type PlanCsvRow = {
     obraSocialId: number
     id: number
@@ -197,6 +220,34 @@ function parsePlanes(headers: string[], rows: string[][]): { data: PlanCsvRow[];
     return { data, invalidRows }
 }
 
+async function upsertObraSocial(row: ObraSocialCsvRow): Promise<'insertada' | 'actualizada'> {
+    const updated = await prisma.obraSocial.updateMany({
+        where: { id: row.id },
+        data: {
+            nombre: row.nombre,
+            requiereCoseguro: row.requiereCoseguro,
+            estado: row.estado,
+            fechaEstado: row.fechaEstado,
+        },
+    })
+
+    if (updated.count > 0) {
+        return 'actualizada'
+    }
+
+    await prisma.obraSocial.create({
+        data: {
+            id: row.id,
+            nombre: row.nombre,
+            requiereCoseguro: row.requiereCoseguro,
+            estado: row.estado,
+            fechaEstado: row.fechaEstado,
+        },
+    })
+
+    return 'insertada'
+}
+
 async function main() {
     const obraSocialFileArg = getOptionValue('obrasocial') ?? 'obrasocial(Hoja1).csv'
     const planFileArg = getOptionValue('plan') ?? 'planobrasocial(Hoja1).csv'
@@ -233,31 +284,28 @@ async function main() {
     let obrasActualizadas = 0
 
     for (const row of obrasParsed.data) {
-        const updated = await prisma.obraSocial.updateMany({
-            where: { id: row.id },
-            data: {
-                nombre: row.nombre,
-                requiereCoseguro: row.requiereCoseguro,
-                estado: row.estado,
-                fechaEstado: row.fechaEstado,
-            },
-        })
-
-        if (updated.count > 0) {
-            obrasActualizadas += updated.count
-            continue
+        const resultado = await upsertObraSocial(row)
+        if (resultado === 'actualizada') {
+            obrasActualizadas += 1
+        } else {
+            obrasInsertadas += 1
         }
+    }
 
-        await prisma.obraSocial.create({
-            data: {
-                id: row.id,
-                nombre: row.nombre,
-                requiereCoseguro: row.requiereCoseguro,
-                estado: row.estado,
-                fechaEstado: row.fechaEstado,
-            },
+    let obrasReglasInsertadas = 0
+    let obrasReglasActualizadas = 0
+
+    for (const row of OBRAS_SOCIALES_REGLAS) {
+        const resultado = await upsertObraSocial({
+            ...row,
+            fechaEstado: new Date(),
         })
-        obrasInsertadas += 1
+
+        if (resultado === 'actualizada') {
+            obrasReglasActualizadas += 1
+        } else {
+            obrasReglasInsertadas += 1
+        }
     }
 
     let planesInsertados = 0
@@ -304,6 +352,8 @@ async function main() {
     console.log('\nImportacion finalizada:')
     console.log(`Obras sociales insertadas: ${obrasInsertadas}`)
     console.log(`Obras sociales actualizadas: ${obrasActualizadas}`)
+    console.log(`Obras sociales reglas insertadas: ${obrasReglasInsertadas}`)
+    console.log(`Obras sociales reglas actualizadas: ${obrasReglasActualizadas}`)
     console.log(`Planes insertados: ${planesInsertados}`)
     console.log(`Planes actualizados: ${planesActualizados}`)
 

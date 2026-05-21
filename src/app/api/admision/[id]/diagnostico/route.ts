@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server'
 import { getUsuarioSesion } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { extraerIP } from '@/lib/security/audit'
+import { revalidatePath } from 'next/cache'
 import {
   apiCreado,
   apiForbidden,
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       usuario.codigoUsuario,
       extraerIP(request)
     )
+
+    revalidatePath(`/dashboard/admision/${ingresoId}`)
+    revalidatePath(`/dashboard/internacion/${ingresoId}`)
 
     return apiCreado(diagnostico)
   } catch (error) {

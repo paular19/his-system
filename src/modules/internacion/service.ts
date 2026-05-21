@@ -3,11 +3,17 @@ import * as repo from './repository'
 import type {
   ActualizarCamaInput,
   BusquedaInternacionInput,
+  ActualizarTratanteInternacionInput,
   CrearEvolucionInput,
   CrearMedicacionInput,
   ActualizarMedicacionInput,
+  CrearDescartableInput,
+  ActualizarDescartableInput,
   TransferirCamaInput,
   CrearPracticaInput,
+  RegistrarAltaInternacionInput,
+  ActualizarDiagnosticoInternacionInput,
+  CrearCirugiaUrgenciaInput,
 } from './schemas'
 import type {
   CamaConOcupante,
@@ -16,8 +22,10 @@ import type {
   InternacionDetalle,
   EvolucionItem,
   MedicacionItem,
+  DescartableItem,
   TransferenciaItem,
   PracticaItem,
+  CirugiaUrgenciaItem,
 } from './types'
 import type { Cama } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
@@ -27,8 +35,8 @@ import type { ResultadoPaginado } from '@/types'
 // Lógica de negocio + auditoría
 // ============================================
 
-export async function obtenerMapaCamas(): Promise<MapaCamas> {
-  return repo.obtenerMapaCamas()
+export async function obtenerMapaCamas(fechaReferencia?: Date): Promise<MapaCamas> {
+  return repo.obtenerMapaCamas(fechaReferencia)
 }
 
 export async function obtenerCamasDisponibles(sector?: string): Promise<CamaConOcupante[]> {
@@ -106,6 +114,31 @@ export async function obtenerInternacionDetalle(
   return detalle
 }
 
+export async function actualizarTratanteInternacion(
+  data: ActualizarTratanteInternacionInput,
+  usuario: string,
+  ip?: string
+) {
+  const resultado = await repo.actualizarProfesionalTratanteInternacion(
+    data.ingresoId,
+    data.profesionalTratanteId,
+    usuario
+  )
+
+  if (resultado.actualizado) {
+    await registrarAudit({
+      usuario,
+      accion: 'MODIFICAR',
+      entidad: 'Ingreso',
+      registroId: data.ingresoId,
+      detalle: `Médico tratante actualizado: ${resultado.anterior?.nombre ?? 'Sin tratante'} (${resultado.anterior?.id ?? 'N/A'}) → ${resultado.nuevo.nombre} (ID ${resultado.nuevo.id})`,
+      direccionIp: ip,
+    })
+  }
+
+  return resultado
+}
+
 // ============================================
 // EVOLUCIÓN CLÍNICA
 // ============================================
@@ -172,6 +205,45 @@ export async function actualizarMedicacion(
   return med
 }
 
+export async function crearDescartable(
+  data: CrearDescartableInput,
+  usuario: string,
+  ip?: string
+): Promise<DescartableItem> {
+  const descartable = await repo.crearDescartable(data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'CREAR',
+    entidad: 'DescartableIngreso',
+    registroId: descartable.id,
+    detalle: `Descartable "${data.nombre}" registrado en internación ${data.ingresoId}`,
+    direccionIp: ip,
+  })
+
+  return descartable
+}
+
+export async function actualizarDescartable(
+  id: number,
+  data: ActualizarDescartableInput,
+  usuario: string,
+  ip?: string
+): Promise<DescartableItem> {
+  const descartable = await repo.actualizarDescartable(id, data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'DescartableIngreso',
+    registroId: id,
+    detalle: `Descartable ${id} → estado ${data.estado}`,
+    direccionIp: ip,
+  })
+
+  return descartable
+}
+
 // ============================================
 // TRANSFERENCIA DE CAMA
 // ============================================
@@ -216,5 +288,70 @@ export async function crearPractica(
   })
 
   return practica
+}
+
+export async function crearCirugiaUrgencia(
+  data: CrearCirugiaUrgenciaInput,
+  usuario: string,
+  ip?: string
+): Promise<CirugiaUrgenciaItem> {
+  const cirugia = await repo.crearCirugiaUrgencia(data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'CREAR',
+    entidad: 'CirugiaProgramada',
+    registroId: cirugia.id,
+    detalle: `Cirugía de urgencia registrada en internación ${data.ingresoId}`,
+    direccionIp: ip,
+  })
+
+  return cirugia
+}
+
+// ============================================
+// DIAGNÓSTICOS
+// ============================================
+
+export async function actualizarDiagnosticoInternacion(
+  data: ActualizarDiagnosticoInternacionInput,
+  usuario: string,
+  ip?: string
+) {
+  const diagnostico = await repo.actualizarDiagnosticoInternacion(data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'IngresoPatologia',
+    registroId: diagnostico.id,
+    detalle: `Diagnóstico ${diagnostico.id} actualizado en internación ${data.ingresoId}`,
+    direccionIp: ip,
+  })
+
+  return diagnostico
+}
+
+// ============================================
+// ALTA DE INTERNACIÓN
+// ============================================
+
+export async function registrarAltaInternacion(
+  data: RegistrarAltaInternacionInput,
+  usuario: string,
+  ip?: string
+) {
+  const alta = await repo.registrarAltaInternacion(data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'Ingreso',
+    registroId: data.ingresoId,
+    detalle: `Alta registrada para internación ${data.ingresoId}`,
+    direccionIp: ip,
+  })
+
+  return alta
 }
 

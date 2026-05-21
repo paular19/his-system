@@ -43,12 +43,21 @@ const CrearIngresoBaseSchema = z.object({
     codigo: z.string().min(1).max(50),
     descripcion: z.string().max(500),
     cantidad: z.number().int().min(1).default(1),
+    matriculaEspecialista: z.number().int().positive().optional().nullable(),
+    matriculaAnestesista: z.number().int().positive().optional().nullable(),
+    grupoOrden: z.number().int().min(1).optional().nullable(),
+    importeTotal: z.number().min(0).optional().nullable(),
   })).optional(),
   medicaciones: z.array(z.object({
     nombre: z.string().min(1).max(200),
     dosis: z.string().max(100).optional().nullable(),
     viaAdministracion: z.string().max(100).optional().nullable(),
     frecuencia: z.string().max(100).optional().nullable(),
+    observaciones: z.string().max(500).optional().nullable(),
+  })).optional(),
+  descartables: z.array(z.object({
+    nombre: z.string().min(1).max(200),
+    cantidad: z.number().int().min(1).default(1),
     observaciones: z.string().max(500).optional().nullable(),
   })).optional(),
 })
@@ -85,6 +94,10 @@ export const ActualizarIngresoSchema = CrearIngresoBaseSchema.omit({
     codigo: z.string().min(1).max(50),
     descripcion: z.string().max(500),
     cantidad: z.number().int().min(1).default(1),
+    matriculaEspecialista: z.number().int().positive().optional().nullable(),
+    matriculaAnestesista: z.number().int().positive().optional().nullable(),
+    grupoOrden: z.number().int().min(1).optional().nullable(),
+    importeTotal: z.number().min(0).optional().nullable(),
   })).optional(),
 }).refine(
   (data) => {

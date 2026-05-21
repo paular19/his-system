@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
             estado: searchParams.get('estado') ?? undefined,
             obraSocialId: searchParams.get('obraSocialId') ?? undefined,
             tipo: searchParams.get('tipo') ?? undefined,
+            medico: searchParams.get('medico') ?? undefined,
+            matricula: searchParams.get('matricula') ?? undefined,
             pagina: searchParams.get('pagina') ?? 1,
             porPagina: searchParams.get('porPagina') ?? 20,
         })

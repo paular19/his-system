@@ -18,6 +18,7 @@ export const CrearPracticaFacturacionSchema = z.object({
     cantidad: z.coerce.number().positive().default(1),
     fecha: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
     numeroAutorizacion: z.string().trim().max(50).optional().nullable(),
+    importeBaseUnitario: z.coerce.number().positive().optional().nullable(),
 })
 
 export type CrearPracticaFacturacionInput = z.infer<typeof CrearPracticaFacturacionSchema>
@@ -35,6 +36,16 @@ export const CrearMedicacionFacturacionSchema = z.object({
 })
 
 export type CrearMedicacionFacturacionInput = z.infer<typeof CrearMedicacionFacturacionSchema>
+
+export const CrearDescartableFacturacionSchema = z.object({
+    ingresoId: z.number().int().positive(),
+    nombre: z.string().trim().min(1).max(200),
+    cantidad: z.coerce.number().int().min(1).default(1),
+    observaciones: z.string().trim().max(500).optional().nullable(),
+    profesionalId: z.number().int().positive().optional().nullable(),
+})
+
+export type CrearDescartableFacturacionInput = z.infer<typeof CrearDescartableFacturacionSchema>
 
 export const ActualizarContextoFacturacionSchema = z.object({
     ingreso: z
@@ -63,17 +74,23 @@ export const ActualizarContextoFacturacionSchema = z.object({
 export type ActualizarContextoFacturacionInput = z.infer<typeof ActualizarContextoFacturacionSchema>
 
 export const PrestacionOrdenInputSchema = z.object({
+    practicaId: z.number().int().positive().optional().nullable(),
     convenioId: z.number().int().min(0),
     codigoPractica: z.string().trim().min(1).max(8),
     descripcionPractica: z.string().trim().min(1).max(500),
     cantidad: z.coerce.number().positive(),
     numeroAutorizacion: z.string().trim().max(50).optional().nullable(),
+    importeTotal: z.coerce.number().min(0).optional().nullable(),
+    matriculaEspecialista: z.number().int().positive().optional().nullable(),
+    matriculaAnestesista: z.number().int().positive().optional().nullable(),
+    grupoOrden: z.number().int().min(1).optional().nullable(),
 })
 
 export const CargarOrdenesFacturacionSchema = z.object({
     ingresoId: z.number().int().positive(),
     profesionalId: z.number().int().positive().optional().nullable(),
-    modo: z.enum(['MASIVA', 'INDIVIDUAL']).default('MASIVA'),
+    modo: z.enum(['MASIVA', 'INDIVIDUAL', 'AGRUPADA']).default('MASIVA'),
+    titularModular: z.string().trim().max(100).optional().nullable(),
     facturarTodo: z.boolean().default(true),
     prestaciones: z.array(PrestacionOrdenInputSchema).default([]),
 })
@@ -108,6 +125,8 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
         numeroAutorizacion: z.string().trim().max(50).optional().nullable(),
         importeTotal: z.coerce.number().min(0),
         matriculaProfesional: z.number().int().positive().optional().nullable(),
+        matriculaEspecialista: z.number().int().positive().optional().nullable(),
+        matriculaAnestesista: z.number().int().positive().optional().nullable(),
     }),
     z.object({
         tipo: z.literal('ORDEN_ITEM'),
@@ -121,6 +140,8 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
         numeroAutorizacion: z.string().trim().max(15).optional().nullable(),
         importeTotal: z.coerce.number().min(0),
         matriculaProfesional: z.number().int().positive().optional().nullable(),
+        matriculaEspecialista: z.number().int().positive().optional().nullable(),
+        matriculaAnestesista: z.number().int().positive().optional().nullable(),
     }),
 ])
 
@@ -168,8 +189,42 @@ export const BusquedaLotesSchema = z.object({
     estado: z.enum(['PEN', 'CON', 'ANU']).optional(),
     obraSocialId: z.coerce.number().int().positive().optional(),
     tipo: z.enum(['PRACTICAS', 'MEDICAMENTOS']).optional(),
+    medico: z.string().trim().min(2).max(200).optional(),
+    matricula: z.coerce.number().int().positive().optional(),
     pagina: z.coerce.number().int().min(1).default(1),
     porPagina: z.coerce.number().int().min(1).max(100).default(20),
 })
 
 export type BusquedaLotesInput = z.infer<typeof BusquedaLotesSchema>
+
+// ============================================
+// IPS TXT — PLANILLA DE PRESTACIONES
+// ============================================
+
+const IPSTxtItemSchema = z.object({
+    afiliadoDoc: z.string().trim().max(20),
+    afiliadoNom: z.string().trim().max(200),
+    nroOrden: z.string().trim().max(20),
+    fechaRealiz: z.string().nullable().optional(),
+    servicioCodigo: z.string().trim().max(20),
+    servicioNombre: z.string().trim().max(500),
+    cantidad: z.number().int().min(1),
+    impEsp: z.number().min(0),
+    impAyu: z.number().min(0),
+    impAne: z.number().min(0),
+    impGto: z.number().min(0),
+    impTotal: z.number().min(0),
+})
+
+export const CrearLoteIPSTxtSchema = z.object({
+    fecha: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
+    periodo: z
+        .string()
+        .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato: YYYY-MM'),
+    obraSocialId: z.number().int().positive(),
+    planId: z.number().int().positive().optional().nullable(),
+    descripcion: z.string().trim().max(500).optional().nullable(),
+    items: z.array(IPSTxtItemSchema).min(1),
+})
+
+export type CrearLoteIPSTxtInput = z.infer<typeof CrearLoteIPSTxtSchema>

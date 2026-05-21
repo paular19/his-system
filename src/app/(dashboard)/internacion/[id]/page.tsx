@@ -6,11 +6,16 @@ import { prisma } from '@/lib/db'
 import { obtenerInternacionDetalle } from '@/modules/internacion/service'
 import { EvolucionSection } from '@/components/internacion/evolucion-section'
 import { MedicacionSection } from '@/components/internacion/medicacion-section'
+import { DescartableSection } from '@/components/internacion/descartable-section'
 import { TransferenciaCama } from '@/components/internacion/transferencia-cama'
 import { PracticaSection } from '@/components/internacion/practica-section'
+import { DiagnosticosSection } from '@/components/internacion/diagnosticos-section'
+import { TratanteSection } from '@/components/internacion/tratante-section'
+import { CirugiaUrgenciaSection } from '@/components/internacion/cirugia-urgencia-section'
 import { SECTOR_LABEL, ESTADO_CAMA_LABEL } from '@/modules/internacion/types'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { asegurarCosegurosIPSS } from '@/lib/utils/coseguros'
 import {
     ChevronRight,
     User,
@@ -52,10 +57,10 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const puedeCambiarCama = puedeModificar || tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
 
     // Load profesionales y camas disponibles para los formularios
-    const [profesionales, camasDisponibles] = await Promise.all([
+    const [profesionales, camasDisponibles, obrasSocialesRows, planesRows, coseguros] = await Promise.all([
         prisma.profesional.findMany({
             where: { estado: 'A' },
-            select: { id: true, nombre: true },
+            select: { id: true, nombre: true, matricula: true },
             orderBy: { nombre: 'asc' },
         }),
         prisma.cama.findMany({
@@ -63,7 +68,37 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             select: { id: true, identificador: true, habitacion: true, sector: true, estado: true, observaciones: true, sedeId: true, usuario: true, fechaEstado: true },
             orderBy: [{ sector: 'asc' }, { identificador: 'asc' }],
         }),
+        prisma.obraSocial.findMany({
+            where: { estado: 'A' },
+            select: { id: true, nombre: true, requiereCoseguro: true },
+            orderBy: { nombre: 'asc' },
+        }),
+        prisma.planObraSocial.findMany({
+            where: { estado: 'A' },
+            select: { id: true, descripcion: true, obraSocialId: true },
+            orderBy: { descripcion: 'asc' },
+        }),
+        asegurarCosegurosIPSS(),
     ])
+
+    const obraSociales = obrasSocialesRows.map((os) => ({
+        id: os.id,
+        nombre: os.nombre,
+        requiereCoseguro: os.requiereCoseguro === 'S',
+    }))
+
+    const planes = planesRows.map((p) => ({
+        id: p.id,
+        nombre: p.descripcion,
+        obraSocialId: p.obraSocialId,
+    }))
+
+    const camasDisponiblesSimple = camasDisponibles.map((c) => ({
+        id: c.id,
+        identificador: c.identificador,
+        sector: c.sector,
+        habitacion: c.habitacion,
+    }))
 
     const fmtDate = (d: Date | null | undefined) =>
         d ? new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'
@@ -74,7 +109,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const diasEstancia = () => {
         if (!detalle.fechaIngreso) return '—'
         const fin = detalle.fechaEgreso ?? new Date()
-        return `${Math.floor((fin.getTime() - new Date(detalle.fechaIngreso).getTime()) / 86_400_000)} días`
+        const dias = Math.floor((fin.getTime() - new Date(detalle.fechaIngreso).getTime()) / 86_400_000)
+        return `${Math.max(0, dias)} días`
     }
 
     const estadoLabel = (e: string | null) => {
@@ -96,6 +132,12 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         ...c,
         ocupante: null as null,
     }))
+
+    const matriculaTratanteDefault =
+        detalle.profesionalTratante?.matricula ??
+        (detalle.profesionalTratante?.id
+            ? profesionales.find((p) => p.id === detalle.profesionalTratante?.id)?.matricula ?? null
+            : null)
 
     return (
         <>
@@ -170,9 +212,17 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                 <DataItem label="Estancia" value={diasEstancia()} />
                                 {detalle.fechaEgreso && <DataItem label="Alta real" value={fmtDate(detalle.fechaEgreso)} />}
                                 <DataItem label="Médico guardia" value={detalle.profesionalGuardia?.nombre ?? null} />
-                                <DataItem label="Médico tratante" value={detalle.profesionalTratante?.nombre ?? null} />
                             </dl>
                         </div>
+
+                        <TratanteSection
+                            ingresoId={ingresoId}
+                            tratanteActualId={detalle.profesionalTratante?.id ?? null}
+                            tratanteActualNombre={detalle.profesionalTratante?.nombre ?? null}
+                            profesionales={profesionales}
+                            historialTratantes={detalle.historialTratantes}
+                            puedeModificar={puedeModificar}
+                        />
 
                         {/* O. Social */}
                         <div className="his-card p-4">
@@ -187,35 +237,12 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             </dl>
                         </div>
 
-                        {/* Diagnósticos */}
-                        <div className="his-card p-4">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-semibold text-gray-900">Diagnósticos</h3>
-                                {puedeModificar && (
-                                    <Link
-                                        href={`/dashboard/admision/${ingresoId}/diagnostico`}
-                                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                                    >
-                                        + Agregar
-                                    </Link>
-                                )}
-                            </div>
-                            {detalle.descripcionPatologia && (
-                                <p className="text-xs text-gray-600 italic mb-2">{detalle.descripcionPatologia}</p>
-                            )}
-                            {detalle.ingresoPatologias.length === 0 ? (
-                                <p className="text-xs text-gray-400">Sin diagnósticos registrados</p>
-                            ) : (
-                                <ul className="space-y-2">
-                                    {detalle.ingresoPatologias.map((p) => (
-                                        <li key={p.id} className="flex items-start gap-2">
-                                            <span className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${p.estado === 'A' ? 'bg-blue-500' : 'bg-gray-300'}`} />
-                                            <span className="text-xs text-gray-700">{p.descripcion ?? `Patología ${p.patologiaId}`}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
+                        <DiagnosticosSection
+                            ingresoId={ingresoId}
+                            descripcionPatologia={detalle.descripcionPatologia}
+                            diagnosticos={detalle.ingresoPatologias}
+                            puedeModificar={puedeModificar}
+                        />
 
                         {/* Cama + Transferencias */}
                         <TransferenciaCama
@@ -225,6 +252,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             camasDisponibles={camasDisponiblesConOcupante}
                             profesionales={profesionales}
                             puedeModificar={puedeCambiarCama}
+                            estadoInternacion={detalle.estado}
                         />
 
                         {/* Órdenes / Autorizaciones */}
@@ -253,7 +281,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                     </div>
 
                     {/* Columna central + derecha: evolución + medicaciones */}
-                    <div className="lg:col-span-2 space-y-4">
+                    <div className="lg:col-span-2 min-w-0 space-y-4">
                         <EvolucionSection
                             ingresoId={ingresoId}
                             evoluciones={detalle.evoluciones}
@@ -269,12 +297,39 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             puedeModificar={puedeModificar}
                         />
 
+                        <DescartableSection
+                            ingresoId={ingresoId}
+                            descartables={detalle.descartables}
+                            profesionales={profesionales}
+                            puedeCrear={puedeCrear}
+                            puedeModificar={puedeModificar}
+                        />
+
                         <PracticaSection
                             ingresoId={ingresoId}
                             convenioId={detalle.obraSocial?.id ?? null}
                             practicas={detalle.practicas}
                             puedeCrear={puedeCrear}
+                            matriculaTratanteDefault={matriculaTratanteDefault}
                         />
+
+                        {detalle.paciente && (
+                            <CirugiaUrgenciaSection
+                                ingresoId={ingresoId}
+                                pacienteId={detalle.paciente.id}
+                                obraSocialIdInicial={detalle.obraSocial?.id ?? null}
+                                planIdInicial={detalle.plan?.id ?? null}
+                                obraSocialCoseguroIdInicial={detalle.obraSocialCoseguroId ?? null}
+                                numeroAfiliadoInicial={detalle.numeroAfiliado}
+                                puedeCrear={puedeCrear}
+                                obraSociales={obraSociales}
+                                planes={planes}
+                                coseguros={coseguros}
+                                camasDisponibles={camasDisponiblesSimple}
+                                cirugias={detalle.cirugiasUrgencia}
+                                matriculaTratanteDefault={matriculaTratanteDefault}
+                            />
+                        )}
                     </div>
                 </div>
             </div>

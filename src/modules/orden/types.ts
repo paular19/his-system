@@ -11,6 +11,11 @@ export type OrdenPracticaItem = {
   descripcionPractica: string
   cantidad: number
   tipoFacturacion: string
+  incluyeCodigo: string | null // Puede ser GA, HE, HA, A1-A3, o combinaciones como GA+HE
+  titularModular: string | null
+  imprimirPorDuplicado: boolean
+  efectorMatricula: number | null
+  efectorProfesional: { nombre: string; matricula: number } | null
   numeroAutorizacion: string | null
   importeTotal: number | null
   porcentajeCargoPac: number | null
@@ -34,6 +39,8 @@ export type OrdenConItems = {
   tipoOrdenCodigo: string
   descripcion: string | null
   descripcionPatologia: string | null
+  titularModular: string | null
+  imprimirPorDuplicado: boolean
   fechaEmision: Date
   fechaPedido: Date
   importeTotal: number | null
@@ -42,6 +49,7 @@ export type OrdenConItems = {
   items: OrdenPracticaItem[]
   obraSocial: { id: number; nombre: string } | null
   plan: { id: number; descripcion: string } | null
+  obraSocialCoseguro: { id: number; nombre: string } | null
   profesional: { id: number; nombre: string; matricula: number | null } | null
   tipoOrden: { codigo: string; descripcion: string } | null
 }
@@ -52,7 +60,7 @@ export type OrdenListItem = {
   ingresoId: number | null
   nombrePaciente: string
   obraSocialNombre: string
-  planDescripcion: string
+  coseguroNombre: string
   fechaEmision: Date
   estado: string
   cantidadItems: number
@@ -64,6 +72,10 @@ export type NomencladorPracticaItem = {
   codigo: string
   descripcion: string
   valor: number | null
+  valorEspecialista: number | null
+  valorAyudante: number | null
+  valorAnestesista: number | null
+  valorGastos: number | null
 }
 
 export type AdmisionActivaItem = {
@@ -90,6 +102,11 @@ export type AdmisionOrdenContexto = {
   numeroIngreso: number
   fechaIngreso: Date | null
   descripcionPatologia: string | null
+  profesionalTratante: {
+    id: number
+    nombre: string
+    matricula: number | null
+  } | null
   paciente: {
     id: number
     apellido: string
@@ -117,10 +134,23 @@ export type AdmisionOrdenContexto = {
     convenioId: number
     codigoPractica: string
     descripcionPractica: string
+    grupoOrden: number | null
     cantidad: number
     fecha: Date
     numeroAutorizacion: string | null
     importeTotal: number | null
+    valorEspecialista: number | null
+    valorAyudante: number | null
+    valorAnestesista: number | null
+    valorGastos: number | null
+    matriculaEspecialista: number | null
+    matriculaAnestesista: number | null
+    ordenPractica: Array<{
+      puestoNumero: number
+      ordenNumero: number
+      item: number
+      numeroAutorizacion: string | null
+    }>
   }>
   medicaciones: Array<{
     id: number

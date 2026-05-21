@@ -9,7 +9,11 @@ import {
   CrearEvolucionSchema,
   CrearMedicacionSchema,
   ActualizarMedicacionSchema,
+  CrearDescartableSchema,
+  ActualizarDescartableSchema,
   TransferirCamaSchema,
+  RegistrarAltaInternacionSchema,
+  ActualizarDiagnosticoInternacionSchema,
 } from '../schemas'
 import type {
   ActualizarCamaInput,
@@ -17,6 +21,8 @@ import type {
   CrearEvolucionInput,
   CrearMedicacionInput,
   ActualizarMedicacionInput,
+  CrearDescartableInput,
+  ActualizarDescartableInput,
   TransferirCamaInput,
 } from '../schemas'
 import type {
@@ -26,6 +32,7 @@ import type {
   InternacionDetalle,
   EvolucionItem,
   MedicacionItem,
+  DescartableItem,
   TransferenciaItem,
 } from '../types'
 import type { Cama } from '@prisma/client'
@@ -120,6 +127,27 @@ export async function actualizarMedicacionAction(
   return service.actualizarMedicacion(id, validado, usuario.codigoUsuario)
 }
 
+export async function crearDescartableAction(data: CrearDescartableInput): Promise<DescartableItem> {
+  const usuario = await getUsuarioSesion()
+  if (!tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')) {
+    throw new Error('Sin permisos para registrar descartables')
+  }
+  const validado = CrearDescartableSchema.parse(data)
+  return service.crearDescartable(validado, usuario.codigoUsuario)
+}
+
+export async function actualizarDescartableAction(
+  id: number,
+  data: ActualizarDescartableInput
+): Promise<DescartableItem> {
+  const usuario = await getUsuarioSesion()
+  if (!tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')) {
+    throw new Error('Sin permisos para modificar descartables')
+  }
+  const validado = ActualizarDescartableSchema.parse(data)
+  return service.actualizarDescartable(id, validado, usuario.codigoUsuario)
+}
+
 // ============================================
 // TRANSFERENCIA DE CAMA
 // ============================================
@@ -134,5 +162,27 @@ export async function transferirCamaAction(data: TransferirCamaInput): Promise<T
   }
   const validado = TransferirCamaSchema.parse(data)
   return service.transferirCama(validado, usuario.codigoUsuario)
+}
+
+export async function actualizarDiagnosticoInternacionAction(
+  data: import('../schemas').ActualizarDiagnosticoInternacionInput
+) {
+  const usuario = await getUsuarioSesion()
+  if (!tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')) {
+    throw new Error('Sin permisos para modificar diagnósticos')
+  }
+  const validado = ActualizarDiagnosticoInternacionSchema.parse(data)
+  return service.actualizarDiagnosticoInternacion(validado, usuario.codigoUsuario)
+}
+
+export async function registrarAltaInternacionAction(
+  data: import('../schemas').RegistrarAltaInternacionInput
+) {
+  const usuario = await getUsuarioSesion()
+  if (!tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')) {
+    throw new Error('Sin permisos para registrar altas')
+  }
+  const validado = RegistrarAltaInternacionSchema.parse(data)
+  return service.registrarAltaInternacion(validado, usuario.codigoUsuario)
 }
 

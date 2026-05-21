@@ -120,9 +120,9 @@ export async function crearIngreso(
     // Calcular importeTotal para cada práctica
     const obraSocial = data.obraSocialId
       ? await prisma.obraSocial.findUnique({
-          where: { id: data.obraSocialId },
-          select: { nombre: true },
-        })
+        where: { id: data.obraSocialId },
+        select: { nombre: true },
+      })
       : null
     const regla = resolverReglaFacturacion(obraSocial?.nombre, Boolean(data.obraSocialCoseguroId))
 
@@ -131,9 +131,9 @@ export async function crearIngreso(
     )
     const prestaciones = codigos.length
       ? await prisma.nomencladorPrestacion.findMany({
-          where: { codigo: { in: codigos } },
-          select: { codigo: true, valor: true },
-        })
+        where: { codigo: { in: codigos } },
+        select: { codigo: true, valor: true },
+      })
       : []
     const valorNomenclador = new Map(
       prestaciones.map((pre) => [pre.codigo.trim().toUpperCase(), Number(pre.valor ?? 0)])
@@ -176,11 +176,16 @@ export async function crearIngreso(
           fecha: ahora,
           cantidad: p.cantidad,
           numeroAutorizacion: null,
+          matriculaEspecialista: p.matriculaEspecialista ?? null,
+          matriculaAnestesista: p.matriculaAnestesista ?? null,
           obraSocialId: data.obraSocialId ?? null,
           planId: data.planId ?? null,
           facturable: true,
           estado: 'A',
-          importeTotal: cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null,
+          ordenItem: p.grupoOrden ?? null,
+          importeTotal: p.importeTotal != null && p.importeTotal > 0
+            ? p.importeTotal
+            : (cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null),
           usuarioRegistro: usuario.slice(0, 10),
           fechaUsuario: ahora,
         }
@@ -198,6 +203,21 @@ export async function crearIngreso(
         viaAdministracion: m.viaAdministracion ?? null,
         frecuencia: m.frecuencia ?? null,
         observaciones: m.observaciones ?? null,
+        fechaInicio: new Date(),
+        estado: 'A',
+        usuario: usuario.slice(0, 10),
+        fechaEstado: new Date(),
+      })),
+    })
+  }
+
+  if (data.descartables && data.descartables.length > 0) {
+    await prisma.descartableIngreso.createMany({
+      data: data.descartables.map((d) => ({
+        ingresoId: ingreso.id,
+        nombre: d.nombre,
+        cantidad: d.cantidad,
+        observaciones: d.observaciones ?? null,
         fechaInicio: new Date(),
         estado: 'A',
         usuario: usuario.slice(0, 10),
@@ -228,7 +248,170 @@ export async function obtenerIngreso(
     direccionIp: ip,
   })
 
-  return ingreso
+  let profesionalTratanteFallback: { nombre: string; matricula: number | null } | null = null
+  if (!ingreso.profesionalTratante && !(ingreso.evoluciones?.[0]?.profesional)) {
+    const ultimoTratanteAudit = await prisma.auditLog.findFirst({
+      where: {
+        entidad: 'Ingreso',
+        registroId: String(id),
+        detalle: { startsWith: 'Médico tratante actualizado:' },
+      },
+      orderBy: { fecha: 'desc' },
+      select: { detalle: true },
+    })
+
+    const matchId = ultimoTratanteAudit?.detalle ? ultimoTratanteAudit.detalle.match(/\(ID\s+(\d+)\)/) : null
+    const tratanteId = matchId ? Number.parseInt(matchId[1] ?? "", 10) : NaN
+
+    if (Number.isFinite(tratanteId)) {
+      const profesional = await prisma.profesional.findUnique({
+        where: { id: tratanteId },
+        select: { nombre: true, matricula: true },
+      })
+      if (profesional) {
+        profesionalTratanteFallback = {
+          nombre: profesional.nombre,
+          matricula: profesional.matricula ?? null,
+        }
+      }
+    }
+  }
+
+  let profesionalInterviniente: { nombre: string; matricula: number | null } | null = null
+  const subtipo = ingreso.ingresoSubtipo
+  if (subtipo) {
+    const codigo = subtipo.subtipoAdmisionCodigo
+    const intervinienteId =
+      codigo === 'IND'
+        ? subtipo.profesionalIndicadorId
+        : (codigo === 'TUR' || codigo === 'RAY' || codigo === 'PAM')
+          ? (subtipo.profesionalIdTurno ?? subtipo.profesionalId)
+          : subtipo.profesionalId
+
+    if (codigo === 'IND' && subtipo.profesionalIndicadorNombre?.trim()) {
+      profesionalInterviniente = {
+        nombre: subtipo.profesionalIndicadorNombre,
+        matricula: null,
+      }
+    } else if (intervinienteId) {
+      const profesional = await prisma.profesional.findUnique({
+        where: { id: intervinienteId },
+        select: { nombre: true, matricula: true },
+      })
+
+      if (profesional) {
+        profesionalInterviniente = {
+          nombre: profesional.nombre,
+          matricula: profesional.matricula ?? null,
+        }
+      }
+    }
+  }
+
+  const practicasSinVinculo = ingreso.practicas.filter(
+    (p) =>
+      (p.ordenPractica?.length ?? 0) === 0 &&
+      !(p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0)
+  )
+
+  const ordenesPorPractica =
+    practicasSinVinculo.length > 0
+      ? await prisma.ordenPractica.findMany({
+        where: {
+          orden: { ingresoId: id },
+          practicaId: null,
+          OR: practicasSinVinculo.map((p) => ({
+            convenioId: p.convenioId,
+            codigoPractica: p.codigoPractica,
+          })),
+        },
+        select: {
+          convenioId: true,
+          codigoPractica: true,
+          puestoNumero: true,
+          ordenNumero: true,
+          item: true,
+          numeroAutorizacion: true,
+        },
+      })
+      : []
+
+  const ordenesPendientesPorClave = new Map<
+    string,
+    Array<{
+      puestoNumero: number
+      ordenNumero: number
+      item: number
+      numeroAutorizacion: string | null
+    }>
+  >()
+
+  for (const op of ordenesPorPractica) {
+    const key = `${op.convenioId}:${op.codigoPractica.trim()}`
+    const cola = ordenesPendientesPorClave.get(key) ?? []
+    cola.push({
+      puestoNumero: op.puestoNumero,
+      ordenNumero: op.ordenNumero,
+      item: op.item,
+      numeroAutorizacion: op.numeroAutorizacion,
+    })
+    ordenesPendientesPorClave.set(key, cola)
+  }
+
+  const ordenAsignadaPorPracticaId = new Map<
+    number,
+    {
+      puestoNumero: number
+      ordenNumero: number
+      item: number
+      numeroAutorizacion: string | null
+    }
+  >()
+
+  const practicasSinVinculoOrdenadas = [...practicasSinVinculo].sort((a, b) => a.id - b.id)
+  for (const p of practicasSinVinculoOrdenadas) {
+    const key = `${p.convenioId}:${p.codigoPractica.trim()}`
+    const cola = ordenesPendientesPorClave.get(key)
+    if (!cola || cola.length === 0) continue
+    const asignada = cola.shift()
+    if (!asignada) continue
+    ordenAsignadaPorPracticaId.set(p.id, asignada)
+  }
+
+  return {
+    ...ingreso,
+    profesionalTratanteFallback,
+    profesionalInterviniente,
+    practicas: ingreso.practicas.map((p) => {
+      const tieneOrdenRelacion = (p.ordenPractica?.length ?? 0) > 0
+      if (tieneOrdenRelacion) return p
+
+      const ordenPorIngreso = ordenAsignadaPorPracticaId.get(p.id)
+      if (ordenPorIngreso) {
+        return {
+          ...p,
+          ordenPractica: [ordenPorIngreso],
+        }
+      }
+
+      const tieneOrdenDirecta =
+        p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0
+
+      if (!tieneOrdenDirecta) return p
+
+      return {
+        ...p,
+        ordenPractica: [
+          {
+            puestoNumero: Number(p.puestoNumero),
+            ordenNumero: Number(p.ordenNumero),
+            item: p.ordenItem != null ? Number(p.ordenItem) : 1,
+            numeroAutorizacion: p.numeroAutorizacion ?? null,
+          },
+        ],
+      }
+    }),
+  }
 }
 
 export async function actualizarIngreso(
@@ -268,9 +451,9 @@ export async function actualizarIngreso(
     const codigosEdit = Array.from(new Set(data.practicasAgregar.map((p) => p.codigo.trim().toUpperCase())))
     const prestacionesEdit = codigosEdit.length
       ? await prisma.nomencladorPrestacion.findMany({
-          where: { codigo: { in: codigosEdit } },
-          select: { codigo: true, valor: true },
-        })
+        where: { codigo: { in: codigosEdit } },
+        select: { codigo: true, valor: true },
+      })
       : []
     const valorNomencladorEdit = new Map(
       prestacionesEdit.map((pre) => [pre.codigo.trim().toUpperCase(), Number(pre.valor ?? 0)])
@@ -312,11 +495,16 @@ export async function actualizarIngreso(
           fecha: ahoraEdit,
           cantidad: p.cantidad,
           numeroAutorizacion: null,
+          matriculaEspecialista: p.matriculaEspecialista ?? null,
+          matriculaAnestesista: p.matriculaAnestesista ?? null,
           obraSocialId,
           planId,
           facturable: true,
           estado: 'A',
-          importeTotal: cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null,
+          ordenItem: p.grupoOrden ?? null,
+          importeTotal: p.importeTotal != null && p.importeTotal > 0
+            ? p.importeTotal
+            : (cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null),
           usuarioRegistro: usuario.slice(0, 10),
           fechaUsuario: ahoraEdit,
         }

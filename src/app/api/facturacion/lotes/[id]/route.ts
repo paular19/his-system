@@ -13,7 +13,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
         if (!tienePermiso(usuario.rol, 'FACTURACION', 'LEER')) return apiForbidden()
 
         const { id } = await params
-        const lote = await obtenerLote(Number(id))
+        const searchParams = _req.nextUrl.searchParams
+        const medico = searchParams.get('medico')?.trim() || undefined
+        const matriculaParam = searchParams.get('matricula')
+        const matricula = matriculaParam ? Number(matriculaParam) : undefined
+        const lote = await obtenerLote(Number(id), {
+            medico,
+            matricula: matricula && Number.isFinite(matricula) && matricula > 0 ? matricula : undefined,
+        })
         if (!lote) return apiError('Lote no encontrado', 404)
 
         return apiOk(lote)

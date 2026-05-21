@@ -13,7 +13,6 @@ interface PageProps {
   searchParams: Promise<{
     pagina?: string
     q?: string
-    estado?: string
   }>
 }
 
@@ -26,18 +25,17 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
   const porPagina = 20
   const skip = (pagina - 1) * porPagina
   const q = params.q?.trim() ?? ''
-  const estado = params.estado ?? ''
 
   const where = {
-    tipoIngresoCodigo: 'I',
-    ...(estado ? { estado } : {}),
+    tipoIngresoCodigo: 'INT',
+    estado: 'E',
     ...(q
       ? {
-          OR: [
-            { nombre: { contains: q, mode: 'insensitive' as const } },
-            { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' as const } } },
-          ],
-        }
+        OR: [
+          { nombre: { contains: q, mode: 'insensitive' as const } },
+          { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' as const } } },
+        ],
+      }
       : {}),
   }
 
@@ -46,7 +44,6 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
       where,
       include: {
         paciente: { select: { nombreCompleto: true, historiaClinica: true } },
-        tipoInternacion: { select: { descripcion: true } },
         profesionalTratante: { select: { nombre: true } },
         cama: { select: { identificador: true, habitacion: true, sector: true } },
         motivoEgreso: { select: { descripcion: true } },
@@ -60,24 +57,15 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
 
   const totalPaginas = Math.ceil(total / porPagina)
 
-  const estadoLabel = (e: string | null) => {
-    switch (e) {
-      case 'A': return { text: 'Activo',   cls: 'his-badge-activo' }
-      case 'C': return { text: 'Cerrado',  cls: 'his-badge-inactivo' }
-      case 'I': return { text: 'Inactivo', cls: 'his-badge-inactivo' }
-      default:  return { text: e ?? '—',   cls: 'his-badge-inactivo' }
-    }
-  }
-
   const diasEstancia = (desde: Date | null, hasta: Date | null) => {
     if (!desde) return '—'
     const fin = hasta ?? new Date()
     const dias = Math.floor((fin.getTime() - desde.getTime()) / 86_400_000)
-    return `${dias} d`
+    return `${Math.max(0, dias)} d`
   }
 
   const buildQs = (overrides: Record<string, string>) => {
-    const base = { ...(q ? { q } : {}), ...(estado ? { estado } : {}), pagina: String(pagina) }
+    const base = { ...(q ? { q } : {}), pagina: String(pagina) }
     return new URLSearchParams({ ...base, ...overrides }).toString()
   }
 
@@ -103,26 +91,13 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">Estado</label>
-            <select
-              name="estado"
-              defaultValue={estado}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos</option>
-              <option value="A">Activo</option>
-              <option value="C">Cerrado</option>
-              <option value="I">Inactivo</option>
-            </select>
-          </div>
           <button
             type="submit"
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             Filtrar
           </button>
-          {(q || estado) && (
+          {q && (
             <Link
               href="/dashboard/internacion/historial"
               className="rounded-md border px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
@@ -148,19 +123,16 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
                 <tr>
                   <th className="px-4 py-3 text-left">Código</th>
                   <th className="px-4 py-3 text-left">Paciente</th>
-                  <th className="px-4 py-3 text-left">Tipo</th>
                   <th className="px-4 py-3 text-left">Cama</th>
                   <th className="px-4 py-3 text-left">Ingreso</th>
                   <th className="px-4 py-3 text-left">Egreso</th>
                   <th className="px-4 py-3 text-center">Días</th>
                   <th className="px-4 py-3 text-left">Médico Tratante</th>
-                  <th className="px-4 py-3 text-center">Estado</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {ingresos.map((ing) => {
-                  const { text, cls } = estadoLabel(ing.estado)
                   return (
                     <tr key={ing.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono text-xs text-gray-600 whitespace-nowrap">
@@ -173,9 +145,6 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
                         {ing.paciente?.historiaClinica && (
                           <p className="text-xs text-gray-400">HC {ing.paciente.historiaClinica}</p>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
-                        {ing.tipoInternacion?.descripcion ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                         {ing.cama
@@ -198,12 +167,9 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
                       <td className="px-4 py-3 text-xs text-gray-600">
                         {ing.profesionalTratante?.nombre ?? '—'}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={cls}>{text}</span>
-                      </td>
                       <td className="px-4 py-3 text-right">
                         <Link
-                          href={`/dashboard/admision/${ing.id}`}
+                          href={`/dashboard/internacion/${ing.id}`}
                           className="text-blue-600 hover:underline text-xs font-medium"
                         >
                           Ver

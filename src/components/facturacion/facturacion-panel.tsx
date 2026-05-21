@@ -1,9 +1,29 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, Loader2, Pencil, Plus, Search, XCircle } from 'lucide-react'
+import { ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, Loader2, Pencil, Plus, Search, Upload, X, XCircle } from 'lucide-react'
 import type { AdmisionFacturacionListItem, FacturacionContexto, PrestacionFacturableItem } from '@/modules/facturacion/types'
+import {
+    ComponenteSelector,
+    type ComponenteValores,
+    type ComponenteSeleccion,
+    calcularTotalSeleccionado,
+    seleccionPorDefecto,
+    descripcionComponentes,
+} from '@/components/ui/componente-selector'
+import { resumenDiferenciales } from '@/modules/facturacion/diferenciales'
+
+interface NomencladorItem {
+    convenioId: number
+    codigo: string
+    descripcion: string
+    valor: number | null
+    valorEspecialista: number | null
+    valorAyudante: number | null
+    valorAnestesista: number | null
+    valorGastos: number | null
+}
 
 type ApiResponse<T> = {
     ok: boolean
@@ -12,11 +32,16 @@ type ApiResponse<T> = {
 }
 
 type PrestacionOrdenInput = {
+    practicaId?: number
     convenioId: number
     codigoPractica: string
     descripcionPractica: string
     cantidad: number
     numeroAutorizacion?: string | null
+    importeTotal?: number
+    matriculaEspecialista?: number | null
+    matriculaAnestesista?: number | null
+    grupoOrden?: number | null
 }
 
 function toDateInput(value: Date | string | null | undefined): string {
@@ -43,6 +68,30 @@ function tieneNumeroAutorizacionValido(numeroAutorizacion: string | null | undef
     return typeof numeroAutorizacion === 'string' && numeroAutorizacion.trim().length > 0
 }
 
+function tieneDesglose(d: { valorEspecialista: number | null, valorAyudante: number | null, valorAnestesista: number | null, valorGastos: number | null }): boolean {
+    return d.valorEspecialista !== null || d.valorAyudante !== null || d.valorAnestesista !== null || d.valorGastos !== null
+}
+
+function normalizarCodigoPractica(value: string | null | undefined): string {
+    return (value ?? '').trim().slice(0, 8).toUpperCase()
+}
+
+function esCodigoHeConOpcionHa(codigoPractica: string | null | undefined): boolean {
+    return normalizarCodigoPractica(codigoPractica) === '420303'
+}
+
+function obtenerDesgloseSelector(p: PrestacionFacturableItem): ComponenteValores | null {
+    if (!p.desglose) return null
+    if (!esCodigoHeConOpcionHa(p.codigoPractica)) return p.desglose
+    if (p.desglose.valorAnestesista != null) return p.desglose
+    if (p.desglose.valorEspecialista == null) return p.desglose
+
+    return {
+        ...p.desglose,
+        valorAnestesista: p.desglose.valorEspecialista,
+    }
+}
+
 type EditState = {
     fecha: string
     codigoPractica: string
@@ -50,7 +99,9 @@ type EditState = {
     cantidad: string
     numeroAutorizacion: string
     importeTotal: string
-    matricula: string
+    matriculaMedico: string
+    matriculaEspecialista: string
+    matriculaAnestesista: string
 }
 
 function buildEditState(p: PrestacionFacturableItem): EditState {
@@ -61,7 +112,9 @@ function buildEditState(p: PrestacionFacturableItem): EditState {
         cantidad: String(p.cantidad ?? 1),
         numeroAutorizacion: p.numeroAutorizacion ?? '',
         importeTotal: String(p.importeTotal ?? 0),
-        matricula: p.matriculaProfesional ? String(p.matriculaProfesional) : '',
+        matriculaMedico: p.matriculaProfesional ? String(p.matriculaProfesional) : '',
+        matriculaEspecialista: p.matriculaEspecialista ? String(p.matriculaEspecialista) : '',
+        matriculaAnestesista: p.matriculaAnestesista ? String(p.matriculaAnestesista) : '',
     }
 }
 
@@ -83,6 +136,7 @@ export function FacturacionPanel() {
 
     const [guardandoPractica, setGuardandoPractica] = useState(false)
     const [guardandoMedicacion, setGuardandoMedicacion] = useState(false)
+    const [guardandoDescartable, setGuardandoDescartable] = useState(false)
     const [cargandoOrdenes, setCargandoOrdenes] = useState(false)
 
     const [mensaje, setMensaje] = useState<string | null>(null)
@@ -101,23 +155,48 @@ export function FacturacionPanel() {
 
     const [expandNuevaPractica, setExpandNuevaPractica] = useState(false)
     const [expandNuevaMedicacion, setExpandNuevaMedicacion] = useState(false)
+    const [expandNuevoDescartable, setExpandNuevoDescartable] = useState(false)
 
-    const [nuevaPracticaCodigo, setNuevaPracticaCodigo] = useState('')
-    const [nuevaPracticaDescripcion, setNuevaPracticaDescripcion] = useState('')
+    // Nueva práctica — búsqueda nomenclador + componentes
+    const [npBusqueda, setNpBusqueda] = useState('')
+    const [npResultados, setNpResultados] = useState<NomencladorItem[]>([])
+    const [npBuscando, setNpBuscando] = useState(false)
+    const [npSeleccionada, setNpSeleccionada] = useState<NomencladorItem | null>(null)
+    const [npComponentes, setNpComponentes] = useState<ComponenteSeleccion>({
+        especialista: 0, ayudante: 0, anestesista: 0, gastos: 0,
+    })
     const [nuevaPracticaCantidad, setNuevaPracticaCantidad] = useState('1')
     const [nuevaPracticaFecha, setNuevaPracticaFecha] = useState(() => toDateInput(new Date()))
     const [nuevaPracticaAutorizacion, setNuevaPracticaAutorizacion] = useState('')
+    const npDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const [nuevaMedicacionNombre, setNuevaMedicacionNombre] = useState('')
     const [nuevaMedicacionDosis, setNuevaMedicacionDosis] = useState('')
     const [nuevaMedicacionVia, setNuevaMedicacionVia] = useState('')
     const [nuevaMedicacionFrecuencia, setNuevaMedicacionFrecuencia] = useState('')
     const [nuevaMedicacionFecha, setNuevaMedicacionFecha] = useState(() => toDateInput(new Date()))
+    const [nuevaMedicacionObservaciones, setNuevaMedicacionObservaciones] = useState('')
+    const [buscandoMedicamentoCatalogo, setBuscandoMedicamentoCatalogo] = useState(false)
+    const [resultadosMedicamentoCatalogo, setResultadosMedicamentoCatalogo] = useState<Array<{ id: number; nombre: string }>>([])
+    const medicamentoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const [nuevoDescartableNombre, setNuevoDescartableNombre] = useState('')
+    const [nuevoDescartableCantidad, setNuevoDescartableCantidad] = useState('1')
+    const [nuevoDescartableObservaciones, setNuevoDescartableObservaciones] = useState('')
+    const [buscandoDescartableCatalogo, setBuscandoDescartableCatalogo] = useState(false)
+    const [resultadosDescartableCatalogo, setResultadosDescartableCatalogo] = useState<Array<{ id: number; nombre: string }>>([])
+    const descartableDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const [editRows, setEditRows] = useState<Record<string, EditState>>({})
     const [guardandoRowUid, setGuardandoRowUid] = useState<string | null>(null)
     const [ordenesExpand, setOrdenesExpand] = useState<Record<string, boolean>>({})
     const [anulando, setAnulando] = useState<string | null>(null)
+    const [mostrarImportadorNomenclador, setMostrarImportadorNomenclador] = useState(false)
+    const [modoFacturacion, setModoFacturacion] = useState<'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'>('MASIVA')
+    const [ordenGrupoByUid, setOrdenGrupoByUid] = useState<Record<string, string>>({})
+
+    // Component selection per practice uid
+    const [compSeleccion, setCompSeleccion] = useState<Record<string, ComponenteSeleccion>>({})
 
     // Auto-dismiss success toast after 3.5 s
     useEffect(() => {
@@ -125,6 +204,54 @@ export function FacturacionPanel() {
         const t = setTimeout(() => setMensaje(null), 3500)
         return () => clearTimeout(t)
     }, [mensaje])
+
+    const buscarMedicamentoCatalogo = (value: string) => {
+        setNuevaMedicacionNombre(value)
+        if (medicamentoDebounceRef.current) clearTimeout(medicamentoDebounceRef.current)
+
+        const query = value.trim()
+        if (query.length < 2) {
+            setResultadosMedicamentoCatalogo([])
+            return
+        }
+
+        medicamentoDebounceRef.current = setTimeout(async () => {
+            setBuscandoMedicamentoCatalogo(true)
+            try {
+                const res = await fetch(`/api/catalogos/medicamentos-uti?q=${encodeURIComponent(query)}&limit=12`)
+                const json = await res.json()
+                setResultadosMedicamentoCatalogo(Array.isArray(json.data) ? json.data : [])
+            } catch {
+                setResultadosMedicamentoCatalogo([])
+            } finally {
+                setBuscandoMedicamentoCatalogo(false)
+            }
+        }, 300)
+    }
+
+    const buscarDescartableCatalogo = (value: string) => {
+        setNuevoDescartableNombre(value)
+        if (descartableDebounceRef.current) clearTimeout(descartableDebounceRef.current)
+
+        const query = value.trim()
+        if (query.length < 2) {
+            setResultadosDescartableCatalogo([])
+            return
+        }
+
+        descartableDebounceRef.current = setTimeout(async () => {
+            setBuscandoDescartableCatalogo(true)
+            try {
+                const res = await fetch(`/api/catalogos/descartables-uti?q=${encodeURIComponent(query)}&limit=12`)
+                const json = await res.json()
+                setResultadosDescartableCatalogo(Array.isArray(json.data) ? json.data : [])
+            } catch {
+                setResultadosDescartableCatalogo([])
+            } finally {
+                setBuscandoDescartableCatalogo(false)
+            }
+        }, 300)
+    }
 
     const prestacionesSeleccionables = useMemo(() => {
         if (!contexto) return []
@@ -175,7 +302,9 @@ export function FacturacionPanel() {
                 key,
                 puesto,
                 numero,
-                matricula: items[0]?.matriculaProfesional ?? null,
+                matriculaMedico: items[0]?.matriculaProfesional ?? null,
+                matriculaEspecialista: items[0]?.matriculaEspecialista ?? null,
+                matriculaAnestesista: items[0]?.matriculaAnestesista ?? null,
                 total,
                 items: items.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()),
             }
@@ -191,6 +320,55 @@ export function FacturacionPanel() {
         })
     }, [contexto])
 
+    const profesionalesConMatricula = useMemo(() => {
+        return (contexto?.profesionales ?? []).filter(
+            (profesional): profesional is { id: number; nombre: string; matricula: number } =>
+                typeof profesional.matricula === 'number' && profesional.matricula > 0
+        )
+    }, [contexto])
+
+    const matriculaPorProfesionalId = useMemo(() => {
+        const map = new Map<number, number>()
+        for (const profesional of profesionalesConMatricula) {
+            map.set(profesional.id, profesional.matricula)
+        }
+        return map
+    }, [profesionalesConMatricula])
+
+    const profesionalIdPorMatricula = useMemo(() => {
+        const map = new Map<number, number>()
+        for (const profesional of profesionalesConMatricula) {
+            if (!map.has(profesional.matricula)) {
+                map.set(profesional.matricula, profesional.id)
+            }
+        }
+        return map
+    }, [profesionalesConMatricula])
+
+    const resolveSelectedProfesionalId = (matriculaValue: string): string => {
+        const matricula = Number.parseInt(matriculaValue, 10)
+        if (!Number.isFinite(matricula) || matricula <= 0) return ''
+        const profesionalId = profesionalIdPorMatricula.get(matricula)
+        return profesionalId ? String(profesionalId) : ''
+    }
+
+    const applyProfesionalSelection = (
+        uid: string,
+        draft: EditState,
+        field: 'matriculaMedico' | 'matriculaEspecialista' | 'matriculaAnestesista',
+        profesionalIdRaw: string
+    ) => {
+        const profesionalId = Number.parseInt(profesionalIdRaw, 10)
+        const matricula = Number.isFinite(profesionalId) ? matriculaPorProfesionalId.get(profesionalId) : null
+        setEditRows((prev) => ({
+            ...prev,
+            [uid]: {
+                ...draft,
+                [field]: matricula ? String(matricula) : '',
+            },
+        }))
+    }
+
     function cargarFormDesdeContexto(data: FacturacionContexto) {
         setFormIngresoNombre(data.ingreso.nombre ?? '')
         setFormDescripcionPatologia(data.ingreso.descripcionPatologia ?? '')
@@ -204,8 +382,21 @@ export function FacturacionPanel() {
 
     function initEditRows(data: FacturacionContexto) {
         const state: Record<string, EditState> = {}
-        for (const p of data.prestaciones) state[p.uid] = buildEditState(p)
+        const selMap: Record<string, ComponenteSeleccion> = {}
+        const ordenGrupoMap: Record<string, string> = {}
+        for (const p of data.prestaciones) {
+            state[p.uid] = buildEditState(p)
+            if (p.tipo === 'PRACTICA' && p.desglose && tieneDesglose(p.desglose)) {
+                selMap[p.uid] = seleccionPorDefecto(p.desglose)
+            }
+            if (p.tipo === 'PRACTICA') {
+                const grupo = p.origen.ordenItem && p.origen.ordenItem > 0 ? p.origen.ordenItem : 1
+                ordenGrupoMap[p.uid] = String(grupo)
+            }
+        }
         setEditRows(state)
+        setCompSeleccion(selMap)
+        setOrdenGrupoByUid(ordenGrupoMap)
     }
 
     async function buscarAdmisiones() {
@@ -304,28 +495,49 @@ export function FacturacionPanel() {
 
     async function crearPractica() {
         if (!contexto) return
+        if (!npSeleccionada && !npBusqueda.trim()) return
+
         setGuardandoPractica(true)
         setError(null)
         setMensaje(null)
         try {
+            const codigoPractica = npSeleccionada?.codigo ?? npBusqueda.trim().slice(0, 8).toUpperCase()
+            const descripcionPractica = npSeleccionada?.descripcion ?? npBusqueda.trim()
+
+            let importeBaseUnitario: number | null = null
+            if (npSeleccionada) {
+                const vals: ComponenteValores = {
+                    valorEspecialista: npSeleccionada.valorEspecialista,
+                    valorAyudante: npSeleccionada.valorAyudante,
+                    valorAnestesista: npSeleccionada.valorAnestesista,
+                    valorGastos: npSeleccionada.valorGastos,
+                    valorTotal: npSeleccionada.valor,
+                }
+                const t = calcularTotalSeleccionado(vals, npComponentes)
+                importeBaseUnitario = t > 0 ? t : null
+            }
+
             const res = await fetch('/api/facturacion/prestaciones/practicas', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ingresoId: contexto.ingreso.id,
                     convenioId: contexto.ingreso.obraSocialId ?? 0,
-                    codigoPractica: nuevaPracticaCodigo.trim().toUpperCase(),
-                    descripcionPractica: nuevaPracticaDescripcion.trim() || null,
+                    codigoPractica,
+                    descripcionPractica,
                     cantidad: Number(nuevaPracticaCantidad || 1),
                     fecha: new Date(nuevaPracticaFecha).toISOString(),
                     numeroAutorizacion: nuevaPracticaAutorizacion.trim() || null,
+                    importeBaseUnitario,
                 }),
             })
             const json = (await res.json()) as ApiResponse<{ id: number }>
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo crear la practica')
 
-            setNuevaPracticaCodigo('')
-            setNuevaPracticaDescripcion('')
+            setNpBusqueda('')
+            setNpResultados([])
+            setNpSeleccionada(null)
+            setNpComponentes({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
             setNuevaPracticaCantidad('1')
             setNuevaPracticaAutorizacion('')
             setExpandNuevaPractica(false)
@@ -336,6 +548,38 @@ export function FacturacionPanel() {
         } finally {
             setGuardandoPractica(false)
         }
+    }
+
+    function buscarNomenclador(q: string) {
+        setNpBusqueda(q)
+        setNpSeleccionada(null)
+        if (npDebounceRef.current) clearTimeout(npDebounceRef.current)
+        if (q.trim().length < 2) { setNpResultados([]); return }
+        npDebounceRef.current = setTimeout(async () => {
+            setNpBuscando(true)
+            try {
+                const qs = new URLSearchParams({ q: q.trim() })
+                if (contexto?.ingreso.obraSocialId) qs.set('convenioId', String(contexto.ingreso.obraSocialId))
+                const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
+                const json = await res.json()
+                setNpResultados(Array.isArray(json.data) ? json.data : [])
+            } catch { setNpResultados([]) }
+            finally { setNpBuscando(false) }
+        }, 350)
+    }
+
+    function seleccionarDesdeBusqueda(p: NomencladorItem) {
+        setNpSeleccionada(p)
+        setNpBusqueda(p.descripcion)
+        setNpResultados([])
+        const vals: ComponenteValores = {
+            valorEspecialista: p.valorEspecialista,
+            valorAyudante: p.valorAyudante,
+            valorAnestesista: p.valorAnestesista,
+            valorGastos: p.valorGastos,
+            valorTotal: p.valor,
+        }
+        setNpComponentes(seleccionPorDefecto(vals))
     }
 
     async function crearMedicacion() {
@@ -354,6 +598,7 @@ export function FacturacionPanel() {
                     viaAdministracion: nuevaMedicacionVia.trim() || null,
                     frecuencia: nuevaMedicacionFrecuencia.trim() || null,
                     fechaInicio: new Date(nuevaMedicacionFecha).toISOString(),
+                    observaciones: nuevaMedicacionObservaciones.trim() || null,
                 }),
             })
 
@@ -364,6 +609,8 @@ export function FacturacionPanel() {
             setNuevaMedicacionDosis('')
             setNuevaMedicacionVia('')
             setNuevaMedicacionFrecuencia('')
+            setNuevaMedicacionObservaciones('')
+            setResultadosMedicamentoCatalogo([])
             setExpandNuevaMedicacion(false)
             setMensaje('Medicación agregada')
             await cargarContexto(contexto.ingreso.id)
@@ -374,13 +621,53 @@ export function FacturacionPanel() {
         }
     }
 
+    async function crearDescartable() {
+        if (!contexto) return
+        setGuardandoDescartable(true)
+        setError(null)
+        setMensaje(null)
+        try {
+            const res = await fetch('/api/facturacion/prestaciones/descartables', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ingresoId: contexto.ingreso.id,
+                    nombre: nuevoDescartableNombre.trim(),
+                    cantidad: Math.max(1, Number.parseInt(nuevoDescartableCantidad, 10) || 1),
+                    observaciones: nuevoDescartableObservaciones.trim() || null,
+                }),
+            })
+
+            const json = (await res.json()) as ApiResponse<{ id: number }>
+            if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo crear el descartable')
+
+            setNuevoDescartableNombre('')
+            setNuevoDescartableCantidad('1')
+            setNuevoDescartableObservaciones('')
+            setResultadosDescartableCatalogo([])
+            setExpandNuevoDescartable(false)
+            setMensaje('Descartable agregado')
+            await cargarContexto(contexto.ingreso.id)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al crear descartable')
+        } finally {
+            setGuardandoDescartable(false)
+        }
+    }
+
     async function facturarPaciente() {
         if (!contexto) return
         setCargandoOrdenes(true)
         setError(null)
         setMensaje(null)
         try {
-            const prestaciones: PrestacionOrdenInput[] = prestacionesSeleccionadas
+            // Si el usuario tildó filas explícitamente, usar solo esas.
+            // Si no tildó ninguna, usar todas las seleccionables (facturar todo).
+            const source = prestacionesSeleccionadas.length > 0
+                ? prestacionesSeleccionadas
+                : prestacionesSeleccionables
+
+            const prestaciones: PrestacionOrdenInput[] = source
                 .filter(
                     (p) =>
                         p.tipo === 'PRACTICA' &&
@@ -389,27 +676,48 @@ export function FacturacionPanel() {
                         !p.facturada &&
                         tieneNumeroAutorizacionValido(p.numeroAutorizacion)
                 )
-                .map((p) => ({
-                    convenioId: p.convenioId as number,
-                    codigoPractica: (p.codigoPractica as string).trim(),
-                    descripcionPractica: p.descripcion,
-                    cantidad: p.cantidad,
-                    numeroAutorizacion: p.numeroAutorizacion?.trim() ?? null,
-                }))
+                .map((p) => {
+                    const draft = editRows[p.uid]
+                    const importeTotal = draft ? Number(draft.importeTotal) : (p.importeTotal ?? undefined)
+                    const sel = compSeleccion[p.uid]
+                    const baseDesc = draft?.descripcion ?? p.descripcion
+                    const descripcionPractica = sel ? baseDesc + descripcionComponentes(sel) : baseDesc
+                    return {
+                        practicaId: p.origen.practicaId,
+                        convenioId: p.convenioId as number,
+                        codigoPractica: (p.codigoPractica as string).trim(),
+                        descripcionPractica,
+                        cantidad: draft ? Number(draft.cantidad) : p.cantidad,
+                        numeroAutorizacion: draft?.numeroAutorizacion?.trim() ?? p.numeroAutorizacion?.trim() ?? null,
+                        importeTotal: importeTotal && importeTotal > 0 ? importeTotal : undefined,
+                        grupoOrden: Number.parseInt(ordenGrupoByUid[p.uid] ?? '1', 10) || 1,
+                        matriculaEspecialista: draft
+                            ? (draft.matriculaEspecialista ? Number(draft.matriculaEspecialista) : null)
+                            : (p.matriculaEspecialista ?? null),
+                        matriculaAnestesista: draft
+                            ? (draft.matriculaAnestesista ? Number(draft.matriculaAnestesista) : null)
+                            : (p.matriculaAnestesista ?? null),
+                    }
+                })
+
+            if (prestaciones.length === 0) throw new Error('No hay prácticas pendientes con autorización para facturar')
 
             const res = await fetch('/api/facturacion/ordenes/cargar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ingresoId: contexto.ingreso.id,
-                    facturarTodo: prestaciones.length === 0,
+                    modo: modoFacturacion,
+                    facturarTodo: false,
                     prestaciones,
                 }),
             })
             const json = (await res.json()) as ApiResponse<{ ordenes: Array<{ puestoNumero: number; numero: number }> }>
             if (!res.ok || !json.ok || !json.data) throw new Error(json.error ?? 'No se pudieron generar ordenes')
 
-            setMensaje(`Facturación registrada para paciente. Órdenes generadas: ${json.data.ordenes.length}`)
+            setMensaje(
+                `Facturación registrada para paciente (${modoFacturacion === 'MASIVA' ? 'orden única' : modoFacturacion === 'INDIVIDUAL' ? 'orden por práctica' : 'orden agrupada'}). Órdenes generadas: ${json.data.ordenes.length}`
+            )
             setSeleccion({})
             await cargarContexto(contexto.ingreso.id)
         } catch (err) {
@@ -441,7 +749,9 @@ export function FacturacionPanel() {
                 cantidad: Number(draft.cantidad || 1),
                 numeroAutorizacion: draft.numeroAutorizacion || null,
                 importeTotal: Number(draft.importeTotal || 0),
-                matriculaProfesional: draft.matricula ? Number(draft.matricula) : null,
+                matriculaProfesional: draft.matriculaMedico ? Number(draft.matriculaMedico) : null,
+                matriculaEspecialista: draft.matriculaEspecialista ? Number(draft.matriculaEspecialista) : null,
+                matriculaAnestesista: draft.matriculaAnestesista ? Number(draft.matriculaAnestesista) : null,
             }
 
             if (!common.codigoPractica) throw new Error('Código de práctica requerido')
@@ -528,12 +838,27 @@ export function FacturacionPanel() {
                         </div>
                         <p className="mt-2 text-sm text-gray-600">Buscá admisiones por paciente, documento, tipo de ingreso o código de práctica.</p>
                     </div>
-                    <Link
-                        href="/facturacion/lotes"
-                        className="inline-flex h-10 items-center justify-center rounded-md bg-indigo-600 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
-                    >
-                        Generar lote
-                    </Link>
+                    <div className="flex gap-2 flex-wrap">
+                        <Link
+                            href="/facturacion/lotes"
+                            className="inline-flex h-10 items-center justify-center rounded-md bg-indigo-600 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
+                        >
+                            Generar lote
+                        </Link>
+                        <Link
+                            href="/facturacion/lotes?nuevo=ips"
+                            className="inline-flex h-10 items-center justify-center rounded-md border border-green-600 bg-green-50 px-4 text-sm font-medium text-green-700 shadow-sm transition-colors hover:bg-green-100"
+                        >
+                            📄 Importar Planilla IPS
+                        </Link>
+                        <button
+                            type="button"
+                            onClick={() => setMostrarImportadorNomenclador(true)}
+                            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-blue-600 bg-blue-50 px-4 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-100"
+                        >
+                            <Upload className="h-4 w-4" /> Actualizar Nomenclador
+                        </button>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12">
@@ -601,7 +926,7 @@ export function FacturacionPanel() {
                 <div className="xl:col-span-3">
                     <div className="his-card overflow-hidden">
                         <div className="px-4 py-3 border-b bg-gray-50 text-sm font-semibold text-gray-700">Pacientes / Admisiones</div>
-                        <div className="max-h-[700px] overflow-y-auto divide-y">
+                        <div className="max-h-175 overflow-y-auto divide-y">
                             {admisiones.length === 0 && <div className="p-4 text-sm text-gray-500">Sin resultados</div>}
                             {admisiones.map((a) => (
                                 <button key={a.id} onClick={() => setSelectedIngresoId(a.id)} className={`w-full text-left p-3 hover:bg-gray-50 ${selectedIngresoId === a.id ? 'bg-blue-50' : ''}`}>
@@ -621,6 +946,20 @@ export function FacturacionPanel() {
                         <div className="his-card p-10 text-center text-gray-500">
                             <FileSpreadsheet className="h-8 w-8 mx-auto mb-2 text-gray-300" />
                             Selecciona una admisión para comenzar
+                            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                                <Link
+                                    href="/dashboard/cirugia/nuevo"
+                                    className="inline-flex h-10 items-center justify-center rounded-md bg-amber-600 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-amber-700"
+                                >
+                                    Cargar cirugía desde cero
+                                </Link>
+                                <Link
+                                    href="/dashboard/cirugia"
+                                    className="inline-flex h-10 items-center justify-center rounded-md border border-amber-300 bg-amber-50 px-4 text-sm font-medium text-amber-700 shadow-sm transition-colors hover:bg-amber-100"
+                                >
+                                    Ir a cirugías
+                                </Link>
+                            </div>
                         </div>
                     )}
 
@@ -657,19 +996,63 @@ export function FacturacionPanel() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                 <div className="his-card p-4 space-y-3">
                                     <button onClick={() => setExpandNuevaPractica((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50"><span className="inline-flex items-center gap-2"><Plus className="h-4 w-4" /> Agregar nueva práctica</span>{expandNuevaPractica ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>
                                     {expandNuevaPractica && (
                                         <>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <input value={nuevaPracticaCodigo} onChange={(e) => setNuevaPracticaCodigo(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Código" />
-                                                <input value={nuevaPracticaCantidad} onChange={(e) => setNuevaPracticaCantidad(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Cantidad" />
-                                                <input value={nuevaPracticaDescripcion} onChange={(e) => setNuevaPracticaDescripcion(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm col-span-2" placeholder="Descripción" />
-                                                <input type="datetime-local" value={nuevaPracticaFecha} onChange={(e) => setNuevaPracticaFecha(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" />
-                                                <input value={nuevaPracticaAutorizacion} onChange={(e) => setNuevaPracticaAutorizacion(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Nro autorización" />
+                                            {/* Búsqueda nomenclador */}
+                                            <div className="relative">
+                                                <div className="relative">
+                                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                                                    <input
+                                                        value={npBusqueda}
+                                                        onChange={(e) => buscarNomenclador(e.target.value)}
+                                                        placeholder="Buscar por código o descripción..."
+                                                        className="rounded-md border border-gray-300 pl-8 pr-8 px-2 py-2 text-sm w-full"
+                                                    />
+                                                    {npBuscando && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 animate-spin" />}
+                                                    {npSeleccionada && (
+                                                        <button onClick={() => { setNpSeleccionada(null); setNpBusqueda(''); setNpComponentes({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }) }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="h-3.5 w-3.5" /></button>
+                                                    )}
+                                                </div>
+                                                {npResultados.length > 0 && (
+                                                    <ul className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto text-sm">
+                                                        {npResultados.map((r) => (
+                                                            <li key={`${r.convenioId}-${r.codigo}`}>
+                                                                <button type="button" onClick={() => seleccionarDesdeBusqueda(r)} className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-start gap-2">
+                                                                    <span className="font-mono text-xs text-gray-400 shrink-0 pt-0.5">{r.codigo.trim()}</span>
+                                                                    <span className="min-w-0 flex-1 text-gray-800">{r.descripcion}</span>
+                                                                    <span className="shrink-0 text-xs font-medium text-gray-500">{r.valor != null ? formatCurrency(r.valor) : ''}</span>
+                                                                </button>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
                                             </div>
-                                            <button onClick={crearPractica} disabled={guardandoPractica} className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoPractica ? 'Guardando...' : 'Guardar práctica'}</button>
+
+                                            {/* Selector de componentes */}
+                                            {npSeleccionada && (
+                                                <ComponenteSelector
+                                                    valores={{
+                                                        valorEspecialista: npSeleccionada.valorEspecialista,
+                                                        valorAyudante: npSeleccionada.valorAyudante,
+                                                        valorAnestesista: npSeleccionada.valorAnestesista,
+                                                        valorGastos: npSeleccionada.valorGastos,
+                                                        valorTotal: npSeleccionada.valor,
+                                                    }}
+                                                    seleccion={npComponentes}
+                                                    onChange={setNpComponentes}
+                                                    disabled={guardandoPractica}
+                                                />
+                                            )}
+
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input value={nuevaPracticaCantidad} onChange={(e) => setNuevaPracticaCantidad(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Cantidad" type="number" min="0.25" step="0.25" />
+                                                <input value={nuevaPracticaAutorizacion} onChange={(e) => setNuevaPracticaAutorizacion(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Nro autorización" />
+                                                <input type="datetime-local" value={nuevaPracticaFecha} onChange={(e) => setNuevaPracticaFecha(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm col-span-2" />
+                                            </div>
+                                            <button onClick={crearPractica} disabled={guardandoPractica || (!npSeleccionada && !npBusqueda.trim())} className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoPractica ? 'Guardando...' : 'Guardar práctica'}</button>
                                         </>
                                     )}
                                 </div>
@@ -679,13 +1062,74 @@ export function FacturacionPanel() {
                                     {expandNuevaMedicacion && (
                                         <>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <input value={nuevaMedicacionNombre} onChange={(e) => setNuevaMedicacionNombre(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm col-span-2" placeholder="Nombre" />
+                                                <div className="col-span-2 relative">
+                                                    <input value={nuevaMedicacionNombre} onChange={(e) => buscarMedicamentoCatalogo(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm w-full" placeholder="Medicamento" />
+                                                    {resultadosMedicamentoCatalogo.length > 0 && (
+                                                        <div className="absolute z-20 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
+                                                            {resultadosMedicamentoCatalogo.map((m) => (
+                                                                <button
+                                                                    key={m.id}
+                                                                    type="button"
+                                                                    onMouseDown={(e) => e.preventDefault()}
+                                                                    onClick={() => {
+                                                                        setNuevaMedicacionNombre(m.nombre)
+                                                                        setResultadosMedicamentoCatalogo([])
+                                                                    }}
+                                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
+                                                                >
+                                                                    {m.nombre}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {buscandoMedicamentoCatalogo && (
+                                                        <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
+                                                    )}
+                                                </div>
                                                 <input value={nuevaMedicacionDosis} onChange={(e) => setNuevaMedicacionDosis(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Dosis" />
                                                 <input value={nuevaMedicacionVia} onChange={(e) => setNuevaMedicacionVia(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Vía" />
                                                 <input value={nuevaMedicacionFrecuencia} onChange={(e) => setNuevaMedicacionFrecuencia(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Frecuencia" />
                                                 <input type="datetime-local" value={nuevaMedicacionFecha} onChange={(e) => setNuevaMedicacionFecha(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" />
+                                                <input value={nuevaMedicacionObservaciones} onChange={(e) => setNuevaMedicacionObservaciones(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm col-span-2" placeholder="Observaciones" />
                                             </div>
                                             <button onClick={crearMedicacion} disabled={guardandoMedicacion} className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoMedicacion ? 'Guardando...' : 'Guardar medicación'}</button>
+                                        </>
+                                    )}
+                                </div>
+
+                                <div className="his-card p-4 space-y-3">
+                                    <button onClick={() => setExpandNuevoDescartable((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50"><span className="inline-flex items-center gap-2"><Plus className="h-4 w-4" /> Agregar descartable</span>{expandNuevoDescartable ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>
+                                    {expandNuevoDescartable && (
+                                        <>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="col-span-2 relative">
+                                                    <input value={nuevoDescartableNombre} onChange={(e) => buscarDescartableCatalogo(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm w-full" placeholder="Descartable" />
+                                                    {resultadosDescartableCatalogo.length > 0 && (
+                                                        <div className="absolute z-20 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
+                                                            {resultadosDescartableCatalogo.map((d) => (
+                                                                <button
+                                                                    key={d.id}
+                                                                    type="button"
+                                                                    onMouseDown={(e) => e.preventDefault()}
+                                                                    onClick={() => {
+                                                                        setNuevoDescartableNombre(d.nombre)
+                                                                        setResultadosDescartableCatalogo([])
+                                                                    }}
+                                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
+                                                                >
+                                                                    {d.nombre}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {buscandoDescartableCatalogo && (
+                                                        <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
+                                                    )}
+                                                </div>
+                                                <input type="number" min={1} value={nuevoDescartableCantidad} onChange={(e) => setNuevoDescartableCantidad(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Cantidad" />
+                                                <input value={nuevoDescartableObservaciones} onChange={(e) => setNuevoDescartableObservaciones(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Observaciones" />
+                                            </div>
+                                            <button onClick={crearDescartable} disabled={guardandoDescartable} className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoDescartable ? 'Guardando...' : 'Guardar descartable'}</button>
                                         </>
                                     )}
                                 </div>
@@ -697,7 +1141,19 @@ export function FacturacionPanel() {
                                         <h4 className="text-sm font-semibold text-gray-900">Prestaciones</h4>
                                         <p className="text-xs text-gray-500">Editar y validar antes del armado de lotes.</p>
                                     </div>
-                                    <button onClick={facturarPaciente} disabled={cargandoOrdenes} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60">{cargandoOrdenes ? 'Facturando...' : 'Facturar paciente'}</button>
+                                    <div className="flex items-center gap-2">
+                                        <select
+                                            value={modoFacturacion}
+                                            onChange={(e) => setModoFacturacion(e.target.value as 'MASIVA' | 'INDIVIDUAL')}
+                                            className="rounded-md border border-gray-300 bg-white px-2 py-2 text-xs text-gray-700"
+                                            title="Modo de generación de órdenes"
+                                        >
+                                            <option value="MASIVA">Una sola orden (seleccionadas)</option>
+                                            <option value="AGRUPADA">Una orden por N° de orden</option>
+                                            <option value="INDIVIDUAL">Una orden por práctica</option>
+                                        </select>
+                                        <button onClick={facturarPaciente} disabled={cargandoOrdenes} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60">{cargandoOrdenes ? 'Facturando...' : 'Facturar paciente'}</button>
+                                    </div>
                                 </div>
 
                                 <div className="overflow-x-auto">
@@ -712,7 +1168,7 @@ export function FacturacionPanel() {
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Nro orden</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Nro autorización</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Monto</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Matrícula médico</th>
+                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Matrículas</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Importe total</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Acción</th>
                                             </tr>
@@ -720,34 +1176,155 @@ export function FacturacionPanel() {
                                         <tbody className="divide-y">
                                             {prestacionesNoOrdenadas.map((p) => {
                                                 const draft = editRows[p.uid] ?? buildEditState(p)
+                                                const desgloseSelector = obtenerDesgloseSelector(p)
                                                 const seleccionable =
                                                     p.tipo === 'PRACTICA' &&
                                                     !p.facturada &&
                                                     Boolean(p.codigoPractica && p.convenioId !== null) &&
                                                     tieneNumeroAutorizacionValido(p.numeroAutorizacion)
                                                 const yaFacturada = p.tipo === 'PRACTICA' && p.facturada
+                                                // Mostrar selector de componentes si: es práctica, no está facturada y tiene desglose
+                                                const tieneComponentes = p.tipo === 'PRACTICA' && !p.facturada && desgloseSelector != null && tieneDesglose(desgloseSelector)
+                                                // NUEVO: Siempre permitir seleccionar componentes para prácticas pendientes (incluso sin desglose del nomenclador)
+                                                const mostrarSelectorComponentes = p.tipo === 'PRACTICA' && !p.facturada
+                                                const selComp = tieneComponentes
+                                                    ? (compSeleccion[p.uid] ?? seleccionPorDefecto(desgloseSelector!))
+                                                    : (mostrarSelectorComponentes ? (compSeleccion[p.uid] ?? { especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }) : null)
+                                                const diferencialesActivos = resumenDiferenciales(p.diferenciales)
                                                 return (
-                                                    <tr key={p.uid} className={yaFacturada ? 'bg-green-50' : 'hover:bg-gray-50'}>
-                                                        <td className="px-3 py-2">
-                                                            {yaFacturada ? (
-                                                                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700" title={`Ord. ${p.ordenPuestoNumero}-${p.ordenNumero}`}>✓ Facturada</span>
-                                                            ) : seleccionable ? (
-                                                                <input type="checkbox" checked={Boolean(seleccion[p.uid])} onChange={(e) => setSeleccion((prev) => ({ ...prev, [p.uid]: e.target.checked }))} />
-                                                            ) : (
-                                                                <span className="text-[11px] font-medium text-amber-700">Sin autorización</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-3 py-2"><input type="datetime-local" value={draft.fecha} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-44" /></td>
-                                                        <td className="px-3 py-2"><input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
-                                                        <td className="px-3 py-2"><input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-72" /></td>
-                                                        <td className="px-3 py-2"><input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-16" /></td>
-                                                        <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{formatOrderNumber(p.ordenPuestoNumero, p.ordenNumero)}</td>
-                                                        <td className="px-3 py-2"><input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} placeholder="Nro autorización" className="rounded border border-gray-300 px-2 py-1 text-xs w-32" /></td>
-                                                        <td className="px-3 py-2 text-xs text-gray-600">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</td>
-                                                        <td className="px-3 py-2"><input value={draft.matricula} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, matricula: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
-                                                        <td className="px-3 py-2"><input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
-                                                        <td className="px-3 py-2">{p.tipo === 'PRACTICA' || p.tipo === 'ORDEN_ITEM' ? (<button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button>) : (<span className="text-xs text-gray-400">No aplica</span>)}</td>
-                                                    </tr>
+                                                    <Fragment key={p.uid}>
+                                                        <tr className={yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
+                                                            <td className="px-3 py-2">
+                                                                {yaFacturada ? (
+                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700" title={`Ord. ${p.ordenPuestoNumero}-${p.ordenNumero}`}>✓ Facturada</span>
+                                                                ) : seleccionable ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        {p.esPracticaCirugia && (
+                                                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800" title={diferencialesActivos.join(' · ') || 'Práctica vinculada a cirugía'}>
+                                                                                Cirugía
+                                                                            </span>
+                                                                        )}
+                                                                        <input type="checkbox" checked={Boolean(seleccion[p.uid])} onChange={(e) => setSeleccion((prev) => ({ ...prev, [p.uid]: e.target.checked }))} />
+                                                                        <input
+                                                                            type="number"
+                                                                            min={1}
+                                                                            value={ordenGrupoByUid[p.uid] ?? '1'}
+                                                                            onChange={(e) => {
+                                                                                const raw = e.target.value
+                                                                                const parsed = Number.parseInt(raw, 10)
+                                                                                const normalized = Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '1'
+                                                                                setOrdenGrupoByUid((prev) => ({ ...prev, [p.uid]: normalized }))
+                                                                            }}
+                                                                            className="w-14 rounded border border-gray-300 px-1.5 py-0.5 text-[11px]"
+                                                                            title="N° de orden para agrupar"
+                                                                        />
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2">
+                                                                        {p.esPracticaCirugia && (
+                                                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800" title={diferencialesActivos.join(' · ') || 'Práctica vinculada a cirugía'}>
+                                                                                Cirugía
+                                                                            </span>
+                                                                        )}
+                                                                        <span className="text-[11px] font-medium text-amber-700">Sin autorización</span>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2"><input type="datetime-local" value={draft.fecha} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-44" /></td>
+                                                            <td className="px-3 py-2"><input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
+                                                            <td className="px-3 py-2"><input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-72" /></td>
+                                                            <td className="px-3 py-2"><input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-16" /></td>
+                                                            <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{formatOrderNumber(p.ordenPuestoNumero, p.ordenNumero)}</td>
+                                                            <td className="px-3 py-2"><input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} placeholder="Nro autorización" className="rounded border border-gray-300 px-2 py-1 text-xs w-32" /></td>
+                                                            <td className="px-3 py-2 text-xs text-gray-600">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</td>
+                                                            <td className="px-3 py-2">
+                                                                <div className="grid gap-1">
+                                                                    <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                                                        <span className="w-20">Médico</span>
+                                                                        <select
+                                                                            value={resolveSelectedProfesionalId(draft.matriculaMedico)}
+                                                                            onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaMedico', e.target.value)}
+                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                        >
+                                                                            <option value="">-- Seleccionar --</option>
+                                                                            {profesionalesConMatricula.map((profesional) => (
+                                                                                <option key={profesional.id} value={String(profesional.id)}>
+                                                                                    {profesional.nombre} · MP {profesional.matricula}
+                                                                                </option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </label>
+                                                                    <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                                                        <span className="w-20">Especialista</span>
+                                                                        <select
+                                                                            value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
+                                                                            onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaEspecialista', e.target.value)}
+                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                        >
+                                                                            <option value="">-- Seleccionar --</option>
+                                                                            {profesionalesConMatricula.map((profesional) => (
+                                                                                <option key={profesional.id} value={String(profesional.id)}>
+                                                                                    {profesional.nombre} · MP {profesional.matricula}
+                                                                                </option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </label>
+                                                                    <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                                                        <span className="w-20">Anestesista</span>
+                                                                        <select
+                                                                            value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
+                                                                            onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', e.target.value)}
+                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                        >
+                                                                            <option value="">-- Seleccionar --</option>
+                                                                            {profesionalesConMatricula.map((profesional) => (
+                                                                                <option key={profesional.id} value={String(profesional.id)}>
+                                                                                    {profesional.nombre} · MP {profesional.matricula}
+                                                                                </option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </label>
+                                                                    {diferencialesActivos.length > 0 && (
+                                                                        <div className="flex flex-wrap gap-1 pt-0.5">
+                                                                            {diferencialesActivos.map((texto) => (
+                                                                                <span key={texto} className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                                                                                    {texto}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-3 py-2"><input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
+                                                            <td className="px-3 py-2">{p.tipo === 'PRACTICA' || p.tipo === 'ORDEN_ITEM' ? (<button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button>) : (<span className="text-xs text-gray-400">No aplica</span>)}</td>
+                                                        </tr>
+                                                        {(tieneComponentes || mostrarSelectorComponentes) && selComp && (
+                                                            <tr className="bg-blue-50">
+                                                                <td colSpan={11} className="px-4 py-2">
+                                                                    <ComponenteSelector
+                                                                        valores={desgloseSelector ?? {
+                                                                            valorEspecialista: null,
+                                                                            valorAyudante: null,
+                                                                            valorAnestesista: null,
+                                                                            valorGastos: null,
+                                                                            valorTotal: null,
+                                                                        }}
+                                                                        seleccion={selComp}
+                                                                        onChange={(nuevaSeleccion) => {
+                                                                            setCompSeleccion((prev) => ({ ...prev, [p.uid]: nuevaSeleccion }))
+                                                                            if (tieneComponentes) {
+                                                                                const totalBase = calcularTotalSeleccionado(desgloseSelector!, nuevaSeleccion)
+                                                                                const cant = Number(draft.cantidad || 1)
+                                                                                const pct = contexto?.reglaFacturacion.porcentajeFacturacion ?? 100
+                                                                                const nuevoImporte = Math.round((totalBase * cant * pct / 100) * 100) / 100
+                                                                                setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: String(nuevoImporte) } }))
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </Fragment>
                                                 )
                                             })}
 
@@ -758,7 +1335,13 @@ export function FacturacionPanel() {
                                                         <tr key={`head-${orden.key}`} className="bg-green-50">
                                                             <td className="px-3 py-2" colSpan={7}><button onClick={() => setOrdenesExpand((prev) => ({ ...prev, [orden.key]: !expand }))} className="inline-flex items-center gap-2 text-xs font-semibold text-green-800">{expand ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}<span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>Orden {orden.puesto.toString().padStart(4, '0')}-{orden.numero.toString().padStart(8, '0')} ({orden.items.length} prácticas)</button></td>
                                                             <td className="px-3 py-2 text-xs">—</td>
-                                                            <td className="px-3 py-2 text-xs">{orden.matricula ?? '—'}</td>
+                                                            <td className="px-3 py-2 text-xs">
+                                                                <div className="leading-tight">
+                                                                    <div>Médico: {orden.matriculaMedico ?? '—'}</div>
+                                                                    <div>Especialista: {orden.matriculaEspecialista ?? '—'}</div>
+                                                                    <div>Anestesista: {orden.matriculaAnestesista ?? '—'}</div>
+                                                                </div>
+                                                            </td>
                                                             <td className="px-3 py-2 text-xs font-semibold">{formatCurrency(orden.total)}</td>
                                                             <td className="px-3 py-2"><button onClick={() => anularOrden(orden.puesto, orden.numero)} disabled={anulando === orden.key} className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"><XCircle className="h-3.5 w-3.5" />{anulando === orden.key ? 'Anulando...' : 'Anular'}</button></td>
                                                         </tr>
@@ -771,10 +1354,60 @@ export function FacturacionPanel() {
                                                                     <td className="px-3 py-2"><input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
                                                                     <td className="px-3 py-2"><input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-72" /></td>
                                                                     <td className="px-3 py-2"><input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-16" /></td>
-                                                                    <td className="px-3 py-2 text-xs text-gray-400">ítem {p.origen.ordenItem}</td>
+                                                                    <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                                                                        {formatOrderNumber(p.ordenPuestoNumero, p.ordenNumero)} · ítem {p.origen.ordenItem}
+                                                                    </td>
                                                                     <td className="px-3 py-2"><input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} placeholder="Nro autorización" className="rounded border border-gray-300 px-2 py-1 text-xs w-32" /></td>
                                                                     <td className="px-3 py-2 text-xs text-gray-600">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</td>
-                                                                    <td className="px-3 py-2"><input value={draft.matricula} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, matricula: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
+                                                                    <td className="px-3 py-2">
+                                                                        <div className="grid gap-1">
+                                                                            <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                                                                <span className="w-20">Médico</span>
+                                                                                <select
+                                                                                    value={resolveSelectedProfesionalId(draft.matriculaMedico)}
+                                                                                    onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaMedico', e.target.value)}
+                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                                >
+                                                                                    <option value="">-- Seleccionar --</option>
+                                                                                    {profesionalesConMatricula.map((profesional) => (
+                                                                                        <option key={profesional.id} value={String(profesional.id)}>
+                                                                                            {profesional.nombre} · MP {profesional.matricula}
+                                                                                        </option>
+                                                                                    ))}
+                                                                                </select>
+                                                                            </label>
+                                                                            <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                                                                <span className="w-20">Especialista</span>
+                                                                                <select
+                                                                                    value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
+                                                                                    onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaEspecialista', e.target.value)}
+                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                                >
+                                                                                    <option value="">-- Seleccionar --</option>
+                                                                                    {profesionalesConMatricula.map((profesional) => (
+                                                                                        <option key={profesional.id} value={String(profesional.id)}>
+                                                                                            {profesional.nombre} · MP {profesional.matricula}
+                                                                                        </option>
+                                                                                    ))}
+                                                                                </select>
+                                                                            </label>
+                                                                            <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                                                                                <span className="w-20">Anestesista</span>
+                                                                                <select
+                                                                                    value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
+                                                                                    onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', e.target.value)}
+                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                                >
+                                                                                    <option value="">-- Seleccionar --</option>
+                                                                                    {profesionalesConMatricula.map((profesional) => (
+                                                                                        <option key={profesional.id} value={String(profesional.id)}>
+                                                                                            {profesional.nombre} · MP {profesional.matricula}
+                                                                                        </option>
+                                                                                    ))}
+                                                                                </select>
+                                                                            </label>
+                                                                        </div>
+                                                                    </td>
                                                                     <td className="px-3 py-2"><input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
                                                                     <td className="px-3 py-2"><button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button></td>
                                                                 </tr>
@@ -793,6 +1426,227 @@ export function FacturacionPanel() {
                             </div>
                         </>
                     )}
+                </div>
+            </div>
+
+            {mostrarImportadorNomenclador && (
+                <ImportarNomencladorModal
+                    onClose={() => setMostrarImportadorNomenclador(false)}
+                    onExito={(msg) => {
+                        setMensaje(msg)
+                        setMostrarImportadorNomenclador(false)
+                    }}
+                    onError={(msg) => setError(msg)}
+                />
+            )}
+        </div>
+    )
+}
+
+type ImportarNomencladorModalProps = {
+    onClose: () => void
+    onExito: (mensaje: string) => void
+    onError: (mensaje: string) => void
+}
+
+function ImportarNomencladorModal({ onClose, onExito, onError }: ImportarNomencladorModalProps) {
+    const IMPORT_TIMEOUT_MS = 840000
+    const [archivo, setArchivo] = useState<File | null>(null)
+    const [loading, setLoading] = useState(false)
+    const [errorLocal, setErrorLocal] = useState<string | null>(null)
+    const [vigenteNombre, setVigenteNombre] = useState<string | null>(null)
+    const [loadingVigente, setLoadingVigente] = useState(true)
+    const abortRef = useRef<AbortController | null>(null)
+
+    function cerrarModal() {
+        if (loading && abortRef.current) {
+            abortRef.current.abort()
+            abortRef.current = null
+        }
+        setLoading(false)
+        onClose()
+    }
+
+    useEffect(() => {
+        let cancelled = false
+
+        async function cargarVigente() {
+            setLoadingVigente(true)
+            try {
+                const res = await fetch('/api/facturacion/nomenclador/import')
+                const json = (await res.json()) as ApiResponse<{ vigente: { nombre: string } | null }>
+                if (!cancelled) {
+                    setVigenteNombre(json.ok ? (json.data?.vigente?.nombre ?? null) : null)
+                }
+            } catch {
+                if (!cancelled) setVigenteNombre(null)
+            } finally {
+                if (!cancelled) setLoadingVigente(false)
+            }
+        }
+
+        cargarVigente()
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
+    async function importar() {
+        setErrorLocal(null)
+        if (!archivo) {
+            setErrorLocal('Seleccioná un archivo XLS/XLSX para continuar.')
+            return
+        }
+
+        console.log(`[ImportarNomencladorModal] Iniciando importación de archivo: ${archivo.name}`)
+        setLoading(true)
+        const controller = new AbortController()
+        abortRef.current = controller
+        let timeoutId: NodeJS.Timeout | null = null
+
+        try {
+            const fd = new FormData()
+            fd.append('file', archivo)
+
+            console.log(`[ImportarNomencladorModal] FormData preparado, tamaño archivo: ${archivo.size} bytes`)
+
+            timeoutId = setTimeout(() => {
+                console.warn(`[ImportarNomencladorModal] Timeout de ${IMPORT_TIMEOUT_MS}ms alcanzado, abortando...`)
+                controller.abort()
+            }, IMPORT_TIMEOUT_MS)
+
+            console.log(`[ImportarNomencladorModal] Enviando POST a /api/facturacion/nomenclador/import`)
+            const res = await fetch('/api/facturacion/nomenclador/import', {
+                method: 'POST',
+                body: fd,
+                signal: controller.signal,
+            })
+
+            if (timeoutId) clearTimeout(timeoutId)
+
+            console.log(`[ImportarNomencladorModal] POST completado, status: ${res.status}`)
+
+            let json: any = null
+
+            try {
+                json = await res.json()
+            } catch (parseErr) {
+                console.error(`[ImportarNomencladorModal] Error al parsear JSON:`, parseErr)
+                throw new Error(`Error al procesar respuesta: ${parseErr instanceof Error ? parseErr.message : 'desconocido'}`)
+            }
+
+            console.log(`[ImportarNomencladorModal] JSON parseado:`, json)
+
+            if (res.status === 409) {
+                const msg = json?.error ?? `El nomenclador "${archivo.name}" ya está vigente.`
+                setVigenteNombre(archivo.name)
+                onExito(`Sin cambios: ${msg}`)
+                return
+            }
+
+            if (!res.ok) {
+                throw new Error(json?.error ?? `Error HTTP ${res.status}`)
+            }
+
+            if (!json?.ok || !json?.data) {
+                throw new Error(json?.error ?? 'No se pudo actualizar el nomenclador')
+            }
+
+            console.log(`[ImportarNomencladorModal] Importación exitosa`)
+            onExito(
+                `Nomenclador actualizado: ${json.data.nomencladorPrestacionActualizados} prestaciones y ${json.data.nomencladorPracticaActualizados} prácticas (${json.data.totalLeidos} códigos leídos).`
+            )
+        } catch (err) {
+            console.error(`[ImportarNomencladorModal] Error:`, err)
+            const msg = err instanceof Error && err.name === 'AbortError'
+                ? 'La actualización superó los 14 minutos. El archivo puede ser muy grande o haber un problema de formato.'
+                : (err instanceof Error ? err.message : 'Error desconocido al importar nomenclador')
+            setErrorLocal(msg)
+            onError(msg)
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId)
+            abortRef.current = null
+            setLoading(false)
+            console.log(`[ImportarNomencladorModal] Importación finalizada`)
+        }
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+            <div className="w-full max-w-xl rounded-xl bg-white shadow-xl border border-gray-200">
+                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="text-base font-semibold text-gray-900">Actualizar Nomenclador</h3>
+                    <button type="button" onClick={cerrarModal} className="rounded p-1 text-gray-500 hover:bg-gray-100">
+                        <XCircle className="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div className="px-5 py-4 space-y-3">
+                    <p className="text-sm text-gray-600">
+                        Cargá el archivo oficial de nomenclador del mes para actualizar precios y descripciones de prácticas.
+                    </p>
+
+                    <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                        <span className="font-medium">Nomenclador vigente:</span>{' '}
+                        {loadingVigente ? 'Cargando...' : (vigenteNombre ?? 'Sin registro de importación previa')}
+                    </div>
+
+                    <label className="block space-y-1">
+                        <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Archivo XLS/XLSX</span>
+                        <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4">
+                            <input
+                                id="archivo-nomenclador"
+                                type="file"
+                                accept=".xls,.xlsx"
+                                onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+                                className="hidden"
+                            />
+                            <label
+                                htmlFor="archivo-nomenclador"
+                                className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-blue-600 bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                            >
+                                <Upload className="h-4 w-4" /> Seleccionar archivo de nomenclador
+                            </label>
+                            <p className="mt-2 text-xs text-gray-600">
+                                {archivo ? `Archivo seleccionado: ${archivo.name}` : 'No hay archivo seleccionado.'}
+                            </p>
+                        </div>
+                    </label>
+
+                    <p className="text-xs text-gray-500">
+                        Nota: el sistema usa automáticamente el convenio y la hoja vigentes para evitar errores operativos.
+                    </p>
+
+                    {loading && (
+                        <p className="text-xs text-amber-700">
+                            Importando archivo grande. Este proceso puede tardar varios minutos.
+                        </p>
+                    )}
+
+                    {errorLocal && (
+                        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                            {errorLocal}
+                        </div>
+                    )}
+                </div>
+
+                <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+                    <button
+                        type="button"
+                        onClick={cerrarModal}
+                        className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        {loading ? 'Cancelar importación' : 'Cancelar'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={importar}
+                        disabled={loading}
+                        className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                        {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                        {loading ? 'Actualizando...' : 'Actualizar nomenclador'}
+                    </button>
                 </div>
             </div>
         </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Save, Loader2, CheckCircle2, AlertCircle, Search, Plus, X } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 import { updateIngresoAction, getProfesionalesAction, getMotivosEgresoAction } from '@/modules/admision/actions'
 import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
 import type { ActualizarIngresoInput } from '@/modules/admision/schemas'
@@ -19,6 +20,8 @@ interface PracticaBusquedaItem {
     convenioId: number
     codigo: string
     descripcion: string
+    valorEspecialista?: number | null
+    valorAnestesista?: number | null
 }
 
 interface PracticaEditable {
@@ -26,6 +29,10 @@ interface PracticaEditable {
     codigo: string
     descripcion: string
     cantidad: number
+    requiereMatriculaEspecialista?: boolean
+    requiereMatriculaAnestesista?: boolean
+    matriculaEspecialista?: number | null
+    matriculaAnestesista?: number | null
 }
 
 export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) {
@@ -86,11 +93,15 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         loadData()
     }, [])
 
-    const buscarPractica = async () => {
-        if (busquedaPractica.trim().length < 2) return
+    const buscarPractica = async (termino: string) => {
+        if (termino.trim().length < 2) {
+            setResultadosPractica([])
+            return
+        }
 
         const convenioId = ingreso.obraSocialId ?? undefined
         if (!convenioId) {
+            setResultadosPractica([])
             setErrorMsg('La admisión no tiene obra social asignada para buscar prácticas')
             return
         }
@@ -100,7 +111,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         setResultadosPractica([])
         try {
             const params = new URLSearchParams({
-                q: busquedaPractica.trim(),
+                q: termino.trim(),
                 convenioId: String(convenioId),
             })
             const res = await fetch(`/api/practicas-nomenclador?${params.toString()}`)
@@ -116,6 +127,25 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         }
     }
 
+    useEffect(() => {
+        if (!ingreso.obraSocialId) {
+            setResultadosPractica([])
+            return
+        }
+
+        const termino = busquedaPractica.trim()
+        if (termino.length < 2) {
+            setResultadosPractica([])
+            return
+        }
+
+        const timer = setTimeout(() => {
+            void buscarPractica(termino)
+        }, 350)
+
+        return () => clearTimeout(timer)
+    }, [busquedaPractica, ingreso.obraSocialId])
+
     const agregarPractica = (practica: PracticaBusquedaItem) => {
         setPracticasAgregar((prev) => {
             const idx = prev.findIndex((p) => p.codigo === practica.codigo)
@@ -130,6 +160,10 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                     codigo: practica.codigo,
                     descripcion: practica.descripcion,
                     cantidad: 1,
+                    requiereMatriculaEspecialista: practica.valorEspecialista != null,
+                    requiereMatriculaAnestesista: practica.valorAnestesista != null,
+                    matriculaEspecialista: null,
+                    matriculaAnestesista: null,
                 },
             ]
         })
@@ -152,6 +186,8 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                 codigo: busquedaPractica.trim().slice(0, 8).toUpperCase(),
                 descripcion: busquedaPractica.trim(),
                 cantidad: 1,
+                matriculaEspecialista: null,
+                matriculaAnestesista: null,
             },
         ])
         setBusquedaPractica('')
@@ -170,6 +206,15 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
     const onSubmit = (data: ActualizarIngresoInput) => {
         setSuccessMsg(null)
         setErrorMsg(null)
+
+        const practicaSinMatricula = practicasAgregar.find((p) =>
+            (p.requiereMatriculaEspecialista && !p.matriculaEspecialista) ||
+            (p.requiereMatriculaAnestesista && !p.matriculaAnestesista)
+        )
+        if (practicaSinMatricula) {
+            setErrorMsg('Complete matrícula en prácticas con HE/HA antes de guardar')
+            return
+        }
 
         // Sanear selects numéricos: la opción vacía con valueAsNumber devuelve NaN.
         // Si el campo tenía valor y ahora es NaN → el usuario lo limpió → null.
@@ -208,7 +253,16 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
     }
 
     if (isLoadingData) {
-        return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+        return (
+            <div className="p-8">
+                <div className="max-w-2xl mx-auto space-y-6">
+                    <Skeleton className="h-8 w-1/2 mb-4" />
+                    <Skeleton className="h-6 w-full mb-2" />
+                    <Skeleton className="h-6 w-full mb-2" />
+                    <Skeleton className="h-6 w-2/3" />
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -444,7 +498,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault()
-                                    void buscarPractica()
+                                    void buscarPractica(busquedaPractica)
                                 }
                             }}
                             placeholder="Buscar práctica por código o descripción..."
@@ -453,7 +507,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                     </div>
                     <button
                         type="button"
-                        onClick={() => void buscarPractica()}
+                        onClick={() => void buscarPractica(busquedaPractica)}
                         disabled={buscandoPractica || busquedaPractica.trim().length < 2}
                         className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
                     >
@@ -494,6 +548,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                     <th className="px-3 py-2 text-left">Código</th>
                                     <th className="px-3 py-2 text-left">Nueva práctica</th>
                                     <th className="px-3 py-2 text-center w-20">Cant.</th>
+                                    <th className="px-3 py-2 text-left">Matrículas</th>
                                     <th className="px-3 py-2 w-10"></th>
                                 </tr>
                             </thead>
@@ -511,6 +566,44 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                                 onChange={(e) => actualizarCantidadPractica(p.codigo, parseInt(e.target.value, 10) || 1)}
                                                 className="w-full text-center rounded border border-gray-200 px-1 py-0.5 text-sm"
                                             />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <div className="flex flex-col gap-1">
+                                                {p.requiereMatriculaEspecialista && (
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        value={p.matriculaEspecialista ?? ''}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.trim()
+                                                            setPracticasAgregar((prev) => prev.map((x) =>
+                                                                x.codigo === p.codigo
+                                                                    ? { ...x, matriculaEspecialista: value ? parseInt(value, 10) || null : null }
+                                                                    : x
+                                                            ))
+                                                        }}
+                                                        className="w-28 rounded border border-gray-200 px-1 py-0.5 text-xs"
+                                                        placeholder="Mat. HE"
+                                                    />
+                                                )}
+                                                {p.requiereMatriculaAnestesista && (
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        value={p.matriculaAnestesista ?? ''}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.trim()
+                                                            setPracticasAgregar((prev) => prev.map((x) =>
+                                                                x.codigo === p.codigo
+                                                                    ? { ...x, matriculaAnestesista: value ? parseInt(value, 10) || null : null }
+                                                                    : x
+                                                            ))
+                                                        }}
+                                                        className="w-28 rounded border border-gray-200 px-1 py-0.5 text-xs"
+                                                        placeholder="Mat. HA"
+                                                    />
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-3 py-2">
                                             <button

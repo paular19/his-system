@@ -350,17 +350,6 @@ export function PacienteForm({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Teléfono laboral
-            </label>
-            <input
-              {...register('telefonoLaboral')}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="03514789012"
-            />
-          </div>
-
-          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
             <input
               {...register('email')}

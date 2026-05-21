@@ -34,6 +34,11 @@ export function LoteResumenPrint({ lote, totalIncluido }: Props) {
         <div className="font-sans text-sm text-gray-900 p-8">
             {/* Encabezado */}
             <div className="flex justify-between items-start border-b-2 border-gray-800 pb-4 mb-6">
+                <div className="flex flex-col items-start gap-1">
+                    <img src="/logo-clinica.png" alt="Logo Clínica" style={{ maxWidth: 110, marginBottom: 4 }} />
+                    <p className="text-xs text-gray-500">Av. Sarmiento 566, Salta Capital, Argentina</p>
+                    <p className="text-xs text-gray-500">Tel: 3872537289</p>
+                </div>
                 <div>
                     <h1 className="text-2xl font-bold">Lote de Facturación #{lote.numero}</h1>
                     <p className="text-gray-600 mt-1">{TIPO_LABEL[lote.tipo]} — {ESTADO_LABEL[lote.estado]}</p>

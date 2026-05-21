@@ -11,7 +11,7 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = { title: 'Autorizaciones' }
 
 interface PageProps {
-  searchParams: Promise<{ tab?: string; pagina?: string }>
+  searchParams: Promise<{ tab?: string; pagina?: string; porPagina?: string; q?: string }>
 }
 
 export default async function AmbulatorioPage({ searchParams }: PageProps) {
@@ -19,27 +19,46 @@ export default async function AmbulatorioPage({ searchParams }: PageProps) {
   if (!tienePermiso(usuario.rol, 'AMBULATORIO', 'LEER')) redirect('/dashboard')
 
   const params = await searchParams
-  const tabActual = params.tab === 'confirmadas' ? 'confirmadas' : 'pendientes'
+  const tabActual =
+    params.tab === 'confirmadas'
+      ? 'confirmadas'
+      : params.tab === 'anuladas'
+        ? 'anuladas'
+        : 'pendientes'
   const pagina = params.pagina ? Math.max(1, parseInt(params.pagina, 10)) : 1
-  const porPagina = 20
+  const porPaginaParsed = params.porPagina ? parseInt(params.porPagina, 10) : 20
+  const porPagina = [10, 20, 50, 100].includes(porPaginaParsed) ? porPaginaParsed : 20
+  const q = params.q?.trim() ?? ''
   const skip = (pagina - 1) * porPagina
 
-  const [resPendientes, resConfirmadas] = await Promise.all([
+  const [resPendientes, resConfirmadas, resAnuladas] = await Promise.all([
     listarOrdenes({
-      pendiente: true,
+      estadoTab: 'pendientes',
+      q,
       skip: tabActual === 'pendientes' ? skip : 0,
       take: tabActual === 'pendientes' ? porPagina : 0,
     }),
     listarOrdenes({
-      pendiente: false,
+      estadoTab: 'confirmadas',
+      q,
       skip: tabActual === 'confirmadas' ? skip : 0,
       take: tabActual === 'confirmadas' ? porPagina : 0,
     }),
+    listarOrdenes({
+      estadoTab: 'anuladas',
+      q,
+      skip: tabActual === 'anuladas' ? skip : 0,
+      take: tabActual === 'anuladas' ? porPagina : 0,
+    }),
   ])
 
-  const totalPaginas = Math.ceil(
-    (tabActual === 'pendientes' ? resPendientes.total : resConfirmadas.total) / porPagina
-  )
+  const totalActual =
+    tabActual === 'pendientes'
+      ? resPendientes.total
+      : tabActual === 'confirmadas'
+        ? resConfirmadas.total
+        : resAnuladas.total
+  const totalPaginas = Math.max(1, Math.ceil(totalActual / porPagina))
 
   const puedeCrear = tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
   const puedeModificar = tienePermiso(usuario.rol, 'AMBULATORIO', 'MODIFICAR')
@@ -53,7 +72,8 @@ export default async function AmbulatorioPage({ searchParams }: PageProps) {
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-500">
             {resPendientes.total} pendiente{resPendientes.total !== 1 ? 's' : ''} ·{' '}
-            {resConfirmadas.total} confirmada{resConfirmadas.total !== 1 ? 's' : ''}
+            {resConfirmadas.total} confirmada{resConfirmadas.total !== 1 ? 's' : ''} ·{' '}
+            {resAnuladas.total} anulada{resAnuladas.total !== 1 ? 's' : ''}
           </p>
           {puedeCrear && (
             <Link
@@ -66,14 +86,34 @@ export default async function AmbulatorioPage({ searchParams }: PageProps) {
           )}
         </div>
 
+        <form method="GET" className="flex gap-2">
+          <input type="hidden" name="tab" value={tabActual} />
+          <input type="hidden" name="porPagina" value={String(porPagina)} />
+          <input
+            name="q"
+            defaultValue={q}
+            placeholder="Buscar por paciente, afiliado, N° de orden o N° de autorización"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            type="submit"
+            className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+          >
+            Buscar
+          </button>
+        </form>
+
         <OrdenesTabs
           pendientes={resPendientes.ordenes}
           confirmadas={resConfirmadas.ordenes}
+          anuladas={resAnuladas.ordenes}
           totalPendientes={resPendientes.total}
           totalConfirmadas={resConfirmadas.total}
+          totalAnuladas={resAnuladas.total}
           puedeModificar={puedeCargarAutorizacion}
           tabActual={tabActual}
           pagina={pagina}
+          porPagina={porPagina}
           totalPaginas={totalPaginas}
         />
       </div>

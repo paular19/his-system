@@ -9,6 +9,8 @@ import type {
     BusquedaLotesInput,
     CargarOrdenesFacturacionInput,
     CrearLoteFacturacionInput,
+    CrearLoteIPSTxtInput,
+    CrearDescartableFacturacionInput,
     CrearMedicacionFacturacionInput,
     CrearPracticaFacturacionInput,
 } from './schemas'
@@ -19,6 +21,7 @@ import type {
     LoteFacturacionDetalle,
     LoteFacturacionItemDetalle,
     LoteFacturacionListItem,
+    LoteIPSTxtItemDetalle,
     OrdenAutorizadaLote,
     OrdenFacturacionResultado,
     PrestacionFacturableItem,
@@ -26,11 +29,116 @@ import type {
 import { crearOrdenAmbulatorio, crearOrdenesAmbulatoriasPorPractica } from '@/modules/orden/service'
 import type { CrearOrdenInput } from '@/modules/orden/schemas'
 import { calcularImporteFacturable, resolverReglaFacturacion } from './cobertura'
+import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './diferenciales'
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000
+const MATRICULA_AMBULATORIO_DEFAULT = 9110
+const MATRICULA_ANESTESISTA_INT_DEFAULT = 6
+const MATRICULA_AYUDANTE_INT_DEFAULT = 995
+const CODIGOS_HA_OBLIGATORIO = new Set(['169006'])
+const CODIGOS_HE_CON_OPCION_HA = new Set(['420303'])
 
 function normalizarCodigoPractica(codigoPractica: string): string {
     return codigoPractica.trim().slice(0, 8).toUpperCase()
+}
+
+function normalizarTextoComparacion(value: string | null | undefined): string {
+    return (value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+}
+
+function normalizarTextoSoloAlfanumerico(value: string | null | undefined): string {
+    return normalizarTextoComparacion(value).replace(/[^A-Z0-9]/g, '')
+}
+
+function esObraSocialOsecac(nombre: string | null | undefined): boolean {
+    const limpio = normalizarTextoSoloAlfanumerico(nombre)
+    return limpio.includes('OSECAC') || limpio.includes('OBRASOCIALEMPLEADOSDECOMERCIO')
+}
+
+function descripcionEsAnestesista(descripcion: string | null | undefined): boolean {
+    const text = normalizarTextoComparacion(descripcion)
+    return text.includes('ANEST') || text.includes('[ANE')
+}
+
+function descripcionEsAyudante(descripcion: string | null | undefined): boolean {
+    const text = normalizarTextoComparacion(descripcion)
+    return text.includes('AYUD') || text.includes('×AYU') || text.includes(' AYU')
+}
+
+function descripcionEsGasto(descripcion: string | null | undefined): boolean {
+    const text = normalizarTextoComparacion(descripcion)
+    return text.includes('GTO') || text.includes('GASTO') || text.includes('GASTOS')
+}
+
+function esCodigoHaObligatorio(codigoPractica: string | null | undefined): boolean {
+    if (!codigoPractica) return false
+    return CODIGOS_HA_OBLIGATORIO.has(normalizarCodigoPractica(codigoPractica))
+}
+
+function esCodigoHeConOpcionHa(codigoPractica: string | null | undefined): boolean {
+    if (!codigoPractica) return false
+    return CODIGOS_HE_CON_OPCION_HA.has(normalizarCodigoPractica(codigoPractica))
+}
+
+type DesgloseValores = {
+    valorEspecialista: number | null
+    valorAyudante: number | null
+    valorAnestesista: number | null
+    valorGastos: number | null
+}
+
+function aplicarOverrideEspecialAnestesistaPorCodigo(
+    codigoPractica: string | null | undefined,
+    desglose: DesgloseValores
+): DesgloseValores {
+    if (esCodigoHaObligatorio(codigoPractica)) {
+        return {
+            ...desglose,
+            valorEspecialista: null,
+            valorAnestesista: desglose.valorAnestesista ?? desglose.valorEspecialista,
+        }
+    }
+
+    if (esCodigoHeConOpcionHa(codigoPractica)) {
+        return {
+            ...desglose,
+            valorAnestesista: desglose.valorAnestesista ?? desglose.valorEspecialista,
+        }
+    }
+
+    return desglose
+}
+
+function resolverMatriculaEfectorFacturacion(params: {
+    tipoIngresoCodigo: string | null
+    codigoPractica: string | null | undefined
+    descripcionPractica: string | null | undefined
+    matriculaEspecialista: number | null | undefined
+    matriculaAnestesista: number | null | undefined
+}): number {
+    const esInternacion = (params.tipoIngresoCodigo ?? '').trim().toUpperCase() === 'INT'
+    const esCodigoAnestesista = esCodigoHaObligatorio(params.codigoPractica)
+    const esGasto = descripcionEsGasto(params.descripcionPractica)
+    const esAnestesista =
+        esCodigoAnestesista ||
+        descripcionEsAnestesista(params.descripcionPractica) ||
+        (typeof params.matriculaAnestesista === 'number' && params.matriculaAnestesista > 0)
+    const esAyudante = descripcionEsAyudante(params.descripcionPractica)
+
+    // Regla transversal: gastos siempre con matricula 9110.
+    if (esGasto) return MATRICULA_AMBULATORIO_DEFAULT
+
+    // Regla pedida: toda practica ambulatoria sale con 9110 por default.
+    if (!esInternacion) return MATRICULA_AMBULATORIO_DEFAULT
+
+    if (esInternacion && esAnestesista) return MATRICULA_ANESTESISTA_INT_DEFAULT
+    if (esInternacion && esAyudante) return MATRICULA_AYUDANTE_INT_DEFAULT
+    if (params.matriculaAnestesista) return params.matriculaAnestesista
+    if (params.matriculaEspecialista) return params.matriculaEspecialista
+    return MATRICULA_AYUDANTE_INT_DEFAULT
 }
 
 async function obtenerValoresPracticas(codigosPractica: string[]): Promise<Map<string, number>> {
@@ -87,6 +195,11 @@ function precioFicticioMedicacion(nombre: string): number {
     return 3500 + (base % 15) * 180
 }
 
+function precioFicticioDescartable(nombre: string): number {
+    const base = nombre.trim().length || 1
+    return 1200 + (base % 12) * 90
+}
+
 function tieneNumeroAutorizacionValido(numeroAutorizacion: string | null | undefined): boolean {
     return typeof numeroAutorizacion === 'string' && numeroAutorizacion.trim().length > 0
 }
@@ -123,6 +236,60 @@ function resolverNumeroAutorizacionOrdenItem(
     return resolverNumeroAutorizacion(authItem, authOrden)
 }
 
+function buildEspecialistaOrdenWhere(params: {
+    medico?: string
+    matricula?: number
+}): Prisma.OrdenWhereInput {
+    const andFilters: Prisma.OrdenWhereInput[] = []
+
+    if (params.matricula) {
+        andFilters.push({
+            OR: [
+                { profesional: { matricula: params.matricula } },
+                { items: { some: { efectorMatricula: params.matricula } } },
+            ],
+        })
+    }
+
+    const medico = params.medico?.trim()
+    if (medico) {
+        andFilters.push({
+            profesional: {
+                nombre: {
+                    contains: medico,
+                    mode: 'insensitive',
+                },
+            },
+        })
+    }
+
+    if (andFilters.length === 0) return {}
+    return { AND: andFilters }
+}
+
+function buildOrdenAutorizadaWhere(): Prisma.OrdenWhereInput {
+    return {
+        OR: [
+            {
+                AND: [
+                    { numeroAutorizacion: { not: null } },
+                    { numeroAutorizacion: { not: '' } },
+                ],
+            },
+            {
+                items: {
+                    some: {
+                        AND: [
+                            { numeroAutorizacion: { not: null } },
+                            { numeroAutorizacion: { not: '' } },
+                        ],
+                    },
+                },
+            },
+        ],
+    }
+}
+
 function periodoToDateRange(periodo: string): { desde: Date; hasta: Date } {
     const [yearStr, monthStr] = periodo.split('-')
     const year = Number(yearStr)
@@ -130,6 +297,14 @@ function periodoToDateRange(periodo: string): { desde: Date; hasta: Date } {
     const desde = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0))
     const hasta = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0))
     return { desde, hasta }
+}
+
+function fechaClave(value: Date): string {
+    return value.toISOString().slice(0, 10)
+}
+
+function normalizarCodigoPracticaFacturacion(codigo: string): string {
+    return codigo.trim().slice(0, 8).toUpperCase()
 }
 
 export async function buscarAdmisionesFacturacion(
@@ -178,7 +353,7 @@ export async function buscarAdmisionesFacturacion(
         ]
     }
 
-    const [total, items] = await prisma.$transaction([
+    const [total, items] = await Promise.all([
         prisma.ingreso.count({ where }),
         prisma.ingreso.findMany({
             where,
@@ -250,11 +425,13 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     cantidad: true,
                     convenioId: true,
                     numeroAutorizacion: true,
+                    matriculaEspecialista: true,
+                    matriculaAnestesista: true,
                     importeTotal: true,
                     puestoNumero: true,
                     ordenNumero: true,
                     ordenItem: true,
-                    nomencladorPractica: { select: { descripcion: true } },
+                    nomencladorPractica: { select: { descripcion: true, valorEspecialista: true, valorAyudante: true, valorAnestesista: true, valorGastos: true } },
                 },
             },
             medicaciones: {
@@ -266,6 +443,16 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     dosis: true,
                     viaAdministracion: true,
                     frecuencia: true,
+                },
+            },
+            descartables: {
+                orderBy: [{ fechaInicio: 'desc' }, { id: 'desc' }],
+                select: {
+                    id: true,
+                    fechaInicio: true,
+                    nombre: true,
+                    cantidad: true,
+                    observaciones: true,
                 },
             },
             ordenes: {
@@ -282,13 +469,45 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         select: {
                             item: true,
                             practicaId: true,
+                            efectorMatricula: true,
                             fecha: true,
                             convenioId: true,
                             codigoPractica: true,
                             cantidad: true,
                             numeroAutorizacion: true,
                             importeTotal: true,
-                            nomencladorPractica: { select: { descripcion: true } },
+                            practica: { select: { matriculaEspecialista: true, matriculaAnestesista: true } },
+                            nomencladorPractica: {
+                                select: {
+                                    descripcion: true,
+                                    valorEspecialista: true,
+                                    valorAyudante: true,
+                                    valorAnestesista: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            cirugiasProgramadas: {
+                orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
+                select: {
+                    id: true,
+                    fechaCirugia: true,
+                    diferenciales: {
+                        select: {
+                            esFeriado: true,
+                            esNocturna: true,
+                            mismaViaPatologia: true,
+                            diferentesViasPatologia: true,
+                            diferentesViasDiferentesPatologia: true,
+                        },
+                    },
+                    practicas: {
+                        select: {
+                            id: true,
+                            codigo: true,
+                            cantidad: true,
                         },
                     },
                 },
@@ -298,9 +517,15 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     if (!ingreso) return null
 
+    const profesionales = await prisma.profesional.findMany({
+        where: { estado: 'A' },
+        select: { id: true, nombre: true, matricula: true },
+        orderBy: { nombre: 'asc' },
+    })
+
     const reglaFacturacion = resolverReglaFacturacion(
-        ingreso.obraSocial?.nombre,
-        Boolean(ingreso.obraSocialCoseguroId)
+        ingreso?.obraSocial?.nombre ?? '',
+        Boolean(ingreso?.obraSocialCoseguroId)
     )
 
     const obraSocialCoseguro = ingreso.obraSocialCoseguroId
@@ -323,6 +548,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             item: number
             numeroAutorizacion: string | null
             estado: string | null
+            matriculaEspecialista: number | null
+            matriculaAnestesista: number | null
         }
     >()
     const practicasPendientesPorClave = new Map<
@@ -332,6 +559,28 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     const valoresPractica = await obtenerValoresPracticas(
         ingreso.practicas.map((p) => p.codigoPractica)
     )
+    const cirugiaPracticas = new Map<string, { cirugiaId: number; diferenciales: NonNullable<PrestacionFacturableItem['diferenciales']> }>()
+
+    for (const cirugia of ingreso.cirugiasProgramadas) {
+        const diferenciales = cirugia.diferenciales.length > 0
+            ? {
+                esFeriado: cirugia.diferenciales.some((d) => d.esFeriado),
+                esNocturna: cirugia.diferenciales.some((d) => d.esNocturna),
+                mismaViaPatologia: cirugia.diferenciales.some((d) => d.mismaViaPatologia),
+                diferentesViasPatologia: cirugia.diferenciales.some((d) => d.diferentesViasPatologia),
+                diferentesViasDiferentesPatologia: cirugia.diferenciales.some((d) => d.diferentesViasDiferentesPatologia),
+            }
+            : null
+        if (!diferenciales || !tieneDiferencialesActivos(diferenciales)) continue
+
+        for (const practica of cirugia.practicas) {
+            const clave = `${normalizarCodigoPracticaFacturacion(practica.codigo)}:${Number(practica.cantidad)}:${fechaClave(cirugia.fechaCirugia)}`
+            cirugiaPracticas.set(clave, {
+                cirugiaId: cirugia.id,
+                diferenciales: diferenciales as NonNullable<PrestacionFacturableItem['diferenciales']>,
+            })
+        }
+    }
 
     for (const p of ingreso.practicas) {
         if (p.ordenNumero) continue
@@ -419,6 +668,19 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     it.item
                 ),
                 estado: o.estado,
+                matriculaEspecialista:
+                    it.practica?.matriculaEspecialista ??
+                    (it.efectorMatricula && (
+                        it.nomencladorPractica?.valorEspecialista != null ||
+                        it.nomencladorPractica?.valorAyudante != null
+                    )
+                        ? it.efectorMatricula
+                        : null),
+                matriculaAnestesista:
+                    it.practica?.matriculaAnestesista ??
+                    (it.efectorMatricula && it.nomencladorPractica?.valorAnestesista != null
+                        ? it.efectorMatricula
+                        : null),
             })
         }
     }
@@ -426,35 +688,77 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     for (const p of ingreso.practicas) {
         const vinculoPorItem = ordenVinculadaPorPractica.get(p.id)
         const tieneVinculoExplicitoEnDB = Boolean(p.ordenNumero || p.puestoNumero)
+        // Importante: una orden autorizada no implica "facturada".
+        // Solo tomamos vínculo de orden cuando está persistido explícitamente en Practica.
         const ordenPuestoNumero =
             p.puestoNumero ??
-            vinculoPorItem?.puestoNumero ??
             (p.ordenNumero ? (puestoPorNumeroOrden.get(p.ordenNumero) ?? null) : null)
-        const ordenNumero = p.ordenNumero ?? vinculoPorItem?.numero ?? null
-        const ordenItem = p.ordenItem ?? vinculoPorItem?.item ?? null
+        const ordenNumero = p.ordenNumero ?? null
+        const ordenItem = p.ordenItem ?? null
         const claveOrden =
             ordenPuestoNumero && ordenNumero ? `${ordenPuestoNumero}:${ordenNumero}` : null
         const claveOrdenItem =
             ordenPuestoNumero && ordenNumero && ordenItem
                 ? `${ordenPuestoNumero}:${ordenNumero}:${ordenItem}`
                 : null
-        const ordenVinculadaActiva = vinculoPorItem ? vinculoPorItem.estado !== 'X' : false
         const matriculaProfesional =
             ordenPuestoNumero && ordenNumero
                 ? (matriculaPorOrden.get(`${ordenPuestoNumero}:${ordenNumero}`) ?? null)
                 : null
+        const esInternacion = ingreso.tipoIngresoCodigo === 'INT'
+
+        // Buscar si esta práctica pertenece a una cirugía programada
+        const clavePractica = `${normalizarCodigoPracticaFacturacion(p.codigoPractica)}:${Number(p.cantidad)}:${fechaClave(p.fecha)}`
+        const diferencialCirugia = cirugiaPracticas.get(clavePractica) ?? null
+        const esCodigoAnestesista = esCodigoHaObligatorio(p.codigoPractica)
+        const matriculaEspecialista =
+            esCodigoAnestesista
+                ? null
+                : (p.matriculaEspecialista ??
+                    vinculoPorItem?.matriculaEspecialista ??
+                    (esInternacion && p.nomencladorPractica?.valorAyudante != null
+                        ? MATRICULA_AYUDANTE_INT_DEFAULT
+                        : null))
+        const matriculaAnestesista =
+            p.matriculaAnestesista ??
+            vinculoPorItem?.matriculaAnestesista ??
+            (esInternacion && (p.nomencladorPractica?.valorAnestesista != null || esCodigoAnestesista)
+                ? MATRICULA_ANESTESISTA_INT_DEFAULT
+                : null)
 
         const precioNomenclador = valoresPractica.get(normalizarCodigoPractica(p.codigoPractica)) ?? 0
-        const cobertura = calcularImporteFacturable(
+        const coberturaBase = calcularImporteFacturable(
             precioNomenclador,
             Number(p.cantidad),
             reglaFacturacion
         )
+        const desgloseBase = p.nomencladorPractica
+            ? aplicarOverrideEspecialAnestesistaPorCodigo(p.codigoPractica, {
+                valorEspecialista: p.nomencladorPractica.valorEspecialista != null ? Number(p.nomencladorPractica.valorEspecialista) : null,
+                valorAyudante: p.nomencladorPractica.valorAyudante != null ? Number(p.nomencladorPractica.valorAyudante) : null,
+                valorAnestesista: p.nomencladorPractica.valorAnestesista != null ? Number(p.nomencladorPractica.valorAnestesista) : null,
+                valorGastos: p.nomencladorPractica.valorGastos != null ? Number(p.nomencladorPractica.valorGastos) : null,
+            })
+            : null
+        const desgloseConDiferencial = desgloseBase
+            ? aplicarDiferencialesAValores(desgloseBase, diferencialCirugia?.diferenciales ?? null)
+            : null
+        const totalUnitarioDesglose = desgloseConDiferencial
+            ? (desgloseConDiferencial.valorEspecialista ?? 0) +
+            (desgloseConDiferencial.valorAyudante ?? 0) +
+            (desgloseConDiferencial.valorAnestesista ?? 0) +
+            (desgloseConDiferencial.valorGastos ?? 0)
+            : null
         const importeFromDb = p.importeTotal != null ? Number(String(p.importeTotal)) : null
         const cant = Number(p.cantidad)
-        const precioUnitario = cobertura.precioUnitarioFacturable > 0
-            ? cobertura.precioUnitarioFacturable
-            : (importeFromDb !== null && cant > 0 ? importeFromDb / cant : cobertura.precioUnitarioFacturable)
+        const precioUnitario = totalUnitarioDesglose !== null
+            ? totalUnitarioDesglose
+            : (coberturaBase.precioUnitarioFacturable > 0
+                ? coberturaBase.precioUnitarioFacturable
+                : (importeFromDb !== null && cant > 0 ? importeFromDb / cant : coberturaBase.precioUnitarioFacturable))
+        const importeTotalCalculado = totalUnitarioDesglose !== null
+            ? Number((totalUnitarioDesglose * cant).toFixed(2))
+            : coberturaBase.importeTotalFacturable
         prestaciones.push({
             uid: `PRACTICA:${p.id}`,
             tipo: 'PRACTICA',
@@ -463,13 +767,18 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             descripcion: p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim(),
             cantidad: cant,
             precioUnitario,
-            importeTotal: importeFromDb ?? cobertura.importeTotalFacturable,
-            facturada: Boolean(p.ordenNumero) || (Boolean(vinculoPorItem) && ordenVinculadaActiva),
-            matriculaProfesional,
+            importeTotal: diferencialCirugia ? importeTotalCalculado : (importeFromDb ?? coberturaBase.importeTotalFacturable),
+            // Una práctica queda facturada solo con vínculo explícito a orden en la propia tabla.
+            facturada: Boolean(p.ordenNumero),
+            matriculaProfesional: matriculaProfesional ?? matriculaEspecialista ?? matriculaAnestesista,
+            matriculaEspecialista,
+            matriculaAnestesista,
             ordenPuestoNumero,
             ordenNumero,
             convenioId: p.convenioId,
             codigoPractica: p.codigoPractica.trim(),
+            esPracticaCirugia: Boolean(diferencialCirugia),
+            diferenciales: diferencialCirugia?.diferenciales ?? null,
             numeroAutorizacion: tieneVinculoExplicitoEnDB
                 ? resolverNumeroAutorizacion(
                     p.numeroAutorizacion,
@@ -488,13 +797,42 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 ordenPuestoNumero: ordenPuestoNumero ?? undefined,
                 ordenNumero: ordenNumero ?? undefined,
                 ordenItem: ordenItem ?? undefined,
+                cirugiaProgramadaId: diferencialCirugia?.cirugiaId,
             },
+            desglose: desgloseConDiferencial ? {
+                valorEspecialista: desgloseConDiferencial.valorEspecialista,
+                valorAyudante: desgloseConDiferencial.valorAyudante,
+                valorAnestesista: desgloseConDiferencial.valorAnestesista,
+                valorGastos: desgloseConDiferencial.valorGastos,
+                valorTotal: null,
+            } : p.nomencladorPractica ? {
+                ...aplicarOverrideEspecialAnestesistaPorCodigo(p.codigoPractica, {
+                    valorEspecialista: p.nomencladorPractica.valorEspecialista != null ? Number(p.nomencladorPractica.valorEspecialista) : null,
+                    valorAyudante: p.nomencladorPractica.valorAyudante != null ? Number(p.nomencladorPractica.valorAyudante) : null,
+                    valorAnestesista: p.nomencladorPractica.valorAnestesista != null ? Number(p.nomencladorPractica.valorAnestesista) : null,
+                    valorGastos: p.nomencladorPractica.valorGastos != null ? Number(p.nomencladorPractica.valorGastos) : null,
+                }),
+                valorTotal: null,
+            } : undefined,
         })
+    }
+
+    // Solo considerar como "ítem facturado" lo que esté enlazado explícitamente
+    // desde Practica (evita duplicar con órdenes solo autorizadas).
+    const itemsOrdenFacturados = new Set<string>()
+    for (const p of ingreso.practicas) {
+        if (!p.ordenNumero || !p.ordenItem) continue
+        const puesto = p.puestoNumero ?? (puestoPorNumeroOrden.get(p.ordenNumero) ?? null)
+        if (!puesto) continue
+        itemsOrdenFacturados.add(`${puesto}:${p.ordenNumero}:${p.ordenItem}`)
     }
 
     for (const o of ingreso.ordenes) {
         if (o.estado === 'X') continue
         for (const it of o.items) {
+            const claveItem = `${o.puestoNumero}:${o.numero}:${it.item}`
+            if (!itemsOrdenFacturados.has(claveItem)) continue
+
             const numeroAutorizacion = resolverNumeroAutorizacionOrdenItem(
                 it.numeroAutorizacion,
                 o.numeroAutorizacion,
@@ -503,6 +841,24 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 it.item
             )
             if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
+
+            const matriculaEspecialistaItem =
+                it.practica?.matriculaEspecialista ??
+                (it.efectorMatricula && (
+                    it.nomencladorPractica?.valorEspecialista != null ||
+                    it.nomencladorPractica?.valorAyudante != null
+                )
+                    ? it.efectorMatricula
+                    : (ingreso.tipoIngresoCodigo === 'INT' && it.nomencladorPractica?.valorAyudante != null
+                        ? MATRICULA_AYUDANTE_INT_DEFAULT
+                        : null))
+            const matriculaAnestesistaItem =
+                it.practica?.matriculaAnestesista ??
+                (it.efectorMatricula && it.nomencladorPractica?.valorAnestesista != null
+                    ? it.efectorMatricula
+                    : (ingreso.tipoIngresoCodigo === 'INT' && it.nomencladorPractica?.valorAnestesista != null
+                        ? MATRICULA_ANESTESISTA_INT_DEFAULT
+                        : null))
 
             prestaciones.push({
                 uid: `ORDEN_ITEM:${o.puestoNumero}:${o.numero}:${it.item}`,
@@ -518,6 +874,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 importeTotal: Number(String(it.importeTotal ?? 0)),
                 facturada: true,
                 matriculaProfesional: o.profesional?.matricula ?? null,
+                matriculaEspecialista: matriculaEspecialistaItem,
+                matriculaAnestesista: matriculaAnestesistaItem,
                 ordenPuestoNumero: o.puestoNumero,
                 ordenNumero: o.numero,
                 convenioId: it.convenioId,
@@ -546,12 +904,40 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             importeTotal: precioFicticioMedicacion(m.nombre),
             facturada: false,
             matriculaProfesional: null,
+            matriculaEspecialista: null,
+            matriculaAnestesista: null,
             ordenPuestoNumero: null,
             ordenNumero: null,
             convenioId: null,
             codigoPractica: null,
             numeroAutorizacion: null,
             origen: { ingresoId: ingreso.id, medicacionId: m.id },
+        })
+    }
+
+    for (const d of ingreso.descartables) {
+        const detalle = d.observaciones ? `${d.nombre} (${d.observaciones})` : d.nombre
+        const precioUnitario = precioFicticioDescartable(d.nombre)
+        const cantidad = Number(d.cantidad)
+        prestaciones.push({
+            uid: `DESCARTABLE:${d.id}`,
+            tipo: 'DESCARTABLE',
+            referencia: `DES-${d.id}`,
+            fecha: d.fechaInicio,
+            descripcion: detalle,
+            cantidad,
+            precioUnitario,
+            importeTotal: Number((precioUnitario * cantidad).toFixed(2)),
+            facturada: false,
+            matriculaProfesional: null,
+            matriculaEspecialista: null,
+            matriculaAnestesista: null,
+            ordenPuestoNumero: null,
+            ordenNumero: null,
+            convenioId: null,
+            codigoPractica: null,
+            numeroAutorizacion: null,
+            origen: { ingresoId: ingreso.id, descartableId: d.id },
         })
     }
 
@@ -571,6 +957,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             importeTotal: null,
             facturada: false,
             matriculaProfesional: null,
+            matriculaEspecialista: null,
+            matriculaAnestesista: null,
             ordenPuestoNumero: null,
             ordenNumero: null,
             convenioId: null,
@@ -603,6 +991,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         obraSocialCoseguro,
         plan: ingreso.plan,
         reglaFacturacion,
+        profesionales,
         prestaciones,
     }
 }
@@ -629,15 +1018,22 @@ export async function crearPracticaFacturacion(
         ingreso.obraSocial?.nombre,
         Boolean(ingreso.obraSocialCoseguroId)
     )
-    const valorPractica = await obtenerValorPractica(codigo)
-    const cobertura = calcularImporteFacturable(valorPractica, cantidad, regla)
-    const importeTotal = cobertura.importeTotalFacturable
+
+    let importeTotal: number
+    if (data.importeBaseUnitario != null && data.importeBaseUnitario > 0) {
+        const cobertura = calcularImporteFacturable(data.importeBaseUnitario, cantidad, regla)
+        importeTotal = cobertura.importeTotalFacturable
+    } else {
+        const valorPractica = await obtenerValorPractica(codigo)
+        const cobertura = calcularImporteFacturable(valorPractica, cantidad, regla)
+        importeTotal = cobertura.importeTotalFacturable
+    }
 
     const practica = await prisma.practica.create({
         data: {
             ingresoId: data.ingresoId,
             convenioId: data.convenioId,
-            codigoPractica: codigo.padEnd(8, ' '),
+            codigoPractica: codigo.toUpperCase().padEnd(8, ' '),
             convenioValorId: 0,
             fecha: data.fecha,
             cantidad,
@@ -677,6 +1073,28 @@ export async function crearMedicacionFacturacion(
     })
 
     return medicacion
+}
+
+export async function crearDescartableFacturacion(
+    data: CrearDescartableFacturacionInput,
+    usuario: string
+): Promise<{ id: number }> {
+    const descartable = await prisma.descartableIngreso.create({
+        data: {
+            ingresoId: data.ingresoId,
+            nombre: data.nombre,
+            cantidad: data.cantidad,
+            observaciones: data.observaciones ?? null,
+            fechaInicio: new Date(),
+            profesionalId: data.profesionalId ?? null,
+            estado: 'A',
+            usuario: usuario.trim().slice(0, 10) || 'SISTEMA',
+            fechaEstado: new Date(),
+        },
+        select: { id: true },
+    })
+
+    return descartable
 }
 
 export async function actualizarContextoFacturacion(
@@ -735,6 +1153,7 @@ export async function cargarOrdenesDesdePrestaciones(
         select: {
             id: true,
             pacienteId: true,
+            tipoIngresoCodigo: true,
             nombre: true,
             numeroAfiliado: true,
             obraSocialId: true,
@@ -758,8 +1177,6 @@ export async function cargarOrdenesDesdePrestaciones(
     if (!profesionalId) throw new Error('Debe indicar un profesional para generar la orden')
 
     let prestacionesOrigen = data.prestaciones
-    // Track IDs of pending Practica records so we can back-link them after order creation
-    let practicaIdsOrdenados: number[] = []
 
     if (data.facturarTodo || prestacionesOrigen.length === 0) {
         const practicasPendientes = await prisma.practica.findMany({
@@ -778,36 +1195,47 @@ export async function cargarOrdenesDesdePrestaciones(
                 convenioId: true,
                 codigoPractica: true,
                 cantidad: true,
+                ordenItem: true,
                 numeroAutorizacion: true,
+                matriculaEspecialista: true,
+                matriculaAnestesista: true,
                 nomencladorPractica: { select: { descripcion: true } },
             },
         })
 
-        practicaIdsOrdenados = practicasPendientes.map((p) => p.id)
-
         prestacionesOrigen = practicasPendientes.map((p) => ({
+            practicaId: p.id,
             convenioId: p.convenioId,
             codigoPractica: p.codigoPractica.trim(),
             descripcionPractica: p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim(),
             cantidad: Number(p.cantidad),
             numeroAutorizacion: p.numeroAutorizacion,
+            matriculaEspecialista: p.matriculaEspecialista,
+            matriculaAnestesista: p.matriculaAnestesista,
+            grupoOrden: p.ordenItem && p.ordenItem > 0 ? p.ordenItem : 1,
+            titularModular: data.titularModular ?? null,
         }))
     }
 
-    prestacionesOrigen = prestacionesOrigen.map((p) => ({
+    const prestacionesPreparadas = prestacionesOrigen.map((p, idx) => ({
         ...p,
+        practicaId: p.practicaId ?? null,
+        grupoOrden: Number.isFinite(Number(p.grupoOrden)) && Number(p.grupoOrden) > 0
+            ? Math.floor(Number(p.grupoOrden))
+            : 1,
+        ordenIndice: idx,
         numeroAutorizacion:
             typeof p.numeroAutorizacion === 'string' ? p.numeroAutorizacion.trim() : p.numeroAutorizacion,
     }))
 
-    const prestacionesSinAutorizacion = prestacionesOrigen.filter(
+    const prestacionesSinAutorizacion = prestacionesPreparadas.filter(
         (p) => !tieneNumeroAutorizacionValido(p.numeroAutorizacion)
     )
     if (prestacionesSinAutorizacion.length > 0) {
         throw new Error('No se puede facturar sin número de autorización. Confirmá la orden primero.')
     }
 
-    if (prestacionesOrigen.length === 0) {
+    if (prestacionesPreparadas.length === 0) {
         throw new Error('No hay practicas pendientes para facturar en este ingreso')
     }
 
@@ -816,23 +1244,44 @@ export async function cargarOrdenesDesdePrestaciones(
         Boolean(ingreso.obraSocialCoseguroId)
     )
 
-    const ordenInput: CrearOrdenInput = {
+    const ordenInputBase: Omit<CrearOrdenInput, 'items'> = {
         ingresoId: ingreso.id,
         pacienteId: ingreso.pacienteId ?? undefined,
         nombrePaciente: (ingreso.nombre ?? '').slice(0, 50) || 'SIN NOMBRE',
         numeroAfiliado: ingreso.numeroAfiliado ?? '',
         obraSocialId: ingreso.obraSocialId,
-        planId: ingreso.planId,
+        // planId: ingreso.planId, // No se incluye en CrearOrdenInput
         obraSocialCoseguroId: ingreso.obraSocialCoseguroId ?? undefined,
-        planCoseguroId: ingreso.planCoseguroId ?? undefined,
+        // planCoseguroId: ingreso.planCoseguroId, // No se incluye en CrearOrdenInput
         profesionalId,
         tipoOrdenCodigo: 'PRA',
         descripcionPatologia: ingreso.descripcionPatologia ?? undefined,
-        items: await Promise.all(prestacionesOrigen.map(async (p) => {
+    }
+
+    async function construirItemsOrden(prestaciones: typeof prestacionesPreparadas) {
+        return Promise.all(prestaciones.map(async (p: any) => {
             const codigo = p.codigoPractica.trim().slice(0, 8)
             const cantidad = Number(p.cantidad)
-            const unitario = await obtenerValorPractica(codigo)
-            const cobertura = calcularImporteFacturable(unitario, cantidad, reglaFacturacion)
+
+            let importeTotalFinal: number
+            if (p.importeTotal != null && p.importeTotal > 0) {
+                // Use client-provided importe (already accounts for component selection)
+                importeTotalFinal = p.importeTotal
+            } else {
+                const unitario = await obtenerValorPractica(codigo)
+                const cobertura = calcularImporteFacturable(unitario, cantidad, reglaFacturacion)
+                importeTotalFinal = cobertura.importeTotalFacturable
+            }
+
+            const unitarioParaCargo = await obtenerValorPractica(codigo)
+            const coberturaParaCargo = calcularImporteFacturable(unitarioParaCargo, cantidad, reglaFacturacion)
+            const matriculaEfector = resolverMatriculaEfectorFacturacion({
+                tipoIngresoCodigo: ingreso?.tipoIngresoCodigo ?? '',
+                codigoPractica: p.codigoPractica,
+                descripcionPractica: p.descripcionPractica,
+                matriculaEspecialista: p.matriculaEspecialista ?? null,
+                matriculaAnestesista: p.matriculaAnestesista ?? null,
+            })
 
             return {
                 convenioId: p.convenioId,
@@ -841,53 +1290,94 @@ export async function cargarOrdenesDesdePrestaciones(
                 cantidad,
                 numeroAutorizacion: p.numeroAutorizacion?.trim() ?? null,
                 tipoFacturacion: 'H',
-                importeTotal: cobertura.importeTotalFacturable,
+                efectorMatricula: matriculaEfector,
+                titularModular: (typeof p.titularModular === 'string' ? p.titularModular : (data.titularModular ?? undefined)),
+                importeTotal: importeTotalFinal,
                 porcentajeCargoPac:
-                    cobertura.porcentajeCargoPaciente > 0
-                        ? cobertura.porcentajeCargoPaciente
+                    coberturaParaCargo.porcentajeCargoPaciente > 0
+                        ? coberturaParaCargo.porcentajeCargoPaciente
                         : undefined,
             }
-        })),
+        }))
     }
 
     if (data.modo === 'INDIVIDUAL') {
+        const ordenInput: CrearOrdenInput = {
+            ...ordenInputBase,
+            items: await construirItemsOrden(prestacionesPreparadas),
+        }
         const ordenes = await crearOrdenesAmbulatoriasPorPractica(ordenInput, usuario)
-        // Back-link each Practica to its corresponding individual order (item 1 each)
-        if (practicaIdsOrdenados.length > 0) {
+        await Promise.all(
+            prestacionesPreparadas.map((prestacion, idx) => {
+                const ref = ordenes[idx]
+                if (!ref || !prestacion.practicaId) return Promise.resolve()
+                return prisma.practica.update({
+                    where: { id: prestacion.practicaId },
+                    data: {
+                        puestoNumero: ref.puestoNumero,
+                        ordenNumero: ref.numero,
+                        ordenItem: 1,
+                    },
+                })
+            })
+        )
+        return { modo: 'INDIVIDUAL', ordenes }
+    }
+
+    if (data.modo === 'AGRUPADA') {
+        const grupos = new Map<number, typeof prestacionesPreparadas>()
+        for (const prestacion of prestacionesPreparadas) {
+            const key = prestacion.grupoOrden
+            const arr = grupos.get(key) ?? []
+            arr.push(prestacion)
+            grupos.set(key, arr)
+        }
+
+        const ordenes: Array<{ puestoNumero: number; numero: number }> = []
+        const gruposOrdenados = Array.from(grupos.entries()).sort((a, b) => a[0] - b[0])
+
+        for (const [, prestacionesGrupo] of gruposOrdenados) {
+            const items = await construirItemsOrden(
+                [...prestacionesGrupo].sort((a, b) => a.ordenIndice - b.ordenIndice)
+            )
+            const orden = await crearOrdenAmbulatorio({ ...ordenInputBase, items }, usuario)
+            ordenes.push({ puestoNumero: orden.puestoNumero, numero: orden.numero })
+
             await Promise.all(
-                practicaIdsOrdenados.map((practicaId, idx) => {
-                    const ref = ordenes[idx]
-                    if (!ref) return Promise.resolve()
+                prestacionesGrupo.map((prestacion, idx) => {
+                    if (!prestacion.practicaId) return Promise.resolve()
                     return prisma.practica.update({
-                        where: { id: practicaId },
+                        where: { id: prestacion.practicaId },
                         data: {
-                            puestoNumero: ref.puestoNumero,
-                            ordenNumero: ref.numero,
-                            ordenItem: 1,
+                            puestoNumero: orden.puestoNumero,
+                            ordenNumero: orden.numero,
+                            ordenItem: idx + 1,
                         },
                     })
                 })
             )
         }
-        return { modo: 'INDIVIDUAL', ordenes }
+
+        return { modo: 'AGRUPADA', ordenes }
     }
 
-    const orden = await crearOrdenAmbulatorio(ordenInput, usuario)
-    // Back-link each Practica to the MASIVA order, preserving item order
-    if (practicaIdsOrdenados.length > 0) {
-        await Promise.all(
-            practicaIdsOrdenados.map((practicaId, idx) =>
-                prisma.practica.update({
-                    where: { id: practicaId },
-                    data: {
-                        puestoNumero: orden.puestoNumero,
-                        ordenNumero: orden.numero,
-                        ordenItem: idx + 1,
-                    },
-                })
-            )
-        )
-    }
+    const orden = await crearOrdenAmbulatorio({
+        ...ordenInputBase,
+        items: await construirItemsOrden(prestacionesPreparadas),
+    }, usuario)
+    await Promise.all(
+        prestacionesPreparadas.map((prestacion, idx) => {
+            if (!prestacion.practicaId) return Promise.resolve()
+            return prisma.practica.update({
+                where: { id: prestacion.practicaId },
+                data: {
+                    puestoNumero: orden.puestoNumero,
+                    ordenNumero: orden.numero,
+                    ordenItem: idx + 1,
+                },
+            })
+        })
+    )
     return {
         modo: 'MASIVA',
         ordenes: [{ puestoNumero: orden.puestoNumero, numero: orden.numero }],
@@ -967,10 +1457,12 @@ export async function actualizarPrestacionFacturacion(
             data: {
                 fecha: data.fecha,
                 convenioId: resolved.convenioId,
-                codigoPractica: resolved.codigoPractica.padEnd(8, ' '),
+                codigoPractica: resolved.codigoPractica.trim(),
                 cantidad: data.cantidad,
                 numeroAutorizacion: data.numeroAutorizacion ?? null,
                 importeTotal: data.importeTotal,
+                matriculaEspecialista: data.matriculaEspecialista ?? null,
+                matriculaAnestesista: data.matriculaAnestesista ?? null,
                 // Unlink from any existing order so it's treated as pending again
                 puestoNumero: null,
                 ordenNumero: null,
@@ -1009,7 +1501,7 @@ export async function actualizarPrestacionFacturacion(
         data: {
             fecha: data.fecha,
             convenioId: resolved.convenioId,
-            codigoPractica: resolved.codigoPractica.padEnd(8, ' '),
+            codigoPractica: resolved.codigoPractica.trim(),
             cantidad: data.cantidad,
             numeroAutorizacion: data.numeroAutorizacion ?? null,
             importeTotal: data.importeTotal,
@@ -1073,6 +1565,7 @@ const LOTE_SELECT = {
     periodo: true,
     tipo: true,
     estado: true,
+    origen: true,
     sedeId: true,
     descripcion: true,
     concepto: true,
@@ -1096,7 +1589,7 @@ function mapLoteRow(row: Prisma.LoteFacturacionGetPayload<{ select: typeof LOTE_
 export async function buscarLotes(
     params: BusquedaLotesInput
 ): Promise<{ items: LoteFacturacionListItem[]; total: number }> {
-    const { periodo, estado, obraSocialId, tipo, pagina, porPagina } = params
+    const { periodo, estado, obraSocialId, tipo, medico, matricula, pagina, porPagina } = params
     const skip = (pagina - 1) * porPagina
 
     const where: Prisma.LoteFacturacionWhereInput = {}
@@ -1104,8 +1597,28 @@ export async function buscarLotes(
     if (estado) where.estado = estado
     if (obraSocialId) where.obraSocialId = obraSocialId
     if (tipo) where.tipo = tipo
+    if (medico || matricula) {
+        const especialistaWhere = buildEspecialistaOrdenWhere({ medico, matricula })
+        const periodoOrdenWhere: Prisma.OrdenWhereInput = periodo
+            ? (() => {
+                const { desde, hasta } = periodoToDateRange(periodo)
+                return { fechaEmision: { gte: desde, lt: hasta } }
+            })()
+            : {}
+        where.items = {
+            some: {
+                ingreso: {
+                    ordenes: {
+                        some: {
+                            AND: [buildOrdenAutorizadaWhere(), especialistaWhere, periodoOrdenWhere],
+                        },
+                    },
+                },
+            },
+        }
+    }
 
-    const [total, rows] = await prisma.$transaction([
+    const [total, rows] = await Promise.all([
         prisma.loteFacturacion.count({ where }),
         prisma.loteFacturacion.findMany({
             where,
@@ -1119,47 +1632,89 @@ export async function buscarLotes(
     return { items: rows.map(mapLoteRow), total }
 }
 
-export async function obtenerLote(id: number): Promise<LoteFacturacionDetalle | null> {
+export async function obtenerLote(
+    id: number,
+    filtros?: { medico?: string; matricula?: number }
+): Promise<LoteFacturacionDetalle | null> {
     const lote = await prisma.loteFacturacion.findUnique({
         where: { id },
         select: {
             ...LOTE_SELECT,
-            items: {
-                orderBy: [{ ingreso: { fechaIngreso: 'asc' } }, { id: 'asc' }],
-                select: {
-                    id: true,
-                    loteId: true,
-                    ingresoId: true,
-                    incluido: true,
-                    importeTotal: true,
-                    ingreso: {
-                        select: {
-                            id: true,
-                            tipoIngresoCodigo: true,
-                            numeroIngreso: true,
-                            estado: true,
-                            fechaIngreso: true,
-                            fechaEgreso: true,
-                            nombre: true,
-                            numeroAfiliado: true,
-                            descripcionPatologia: true,
-                            paciente: { select: { id: true, nombreCompleto: true, numeroDocumento: true } },
-                        },
-                    },
-                },
+            itemsIPSTxt: {
+                orderBy: [{ afiliadoNom: 'asc' }, { id: 'asc' }],
             },
         },
     })
 
     if (!lote) return null
 
+    const especialistaWhere = buildEspecialistaOrdenWhere({
+        medico: filtros?.medico,
+        matricula: filtros?.matricula,
+    })
+
+    const [desde, hasta] = [periodoToDateRange(lote.periodo).desde, periodoToDateRange(lote.periodo).hasta]
+    const whereIngresoFiltro: Prisma.IngresoWhereInput =
+        filtros?.medico || filtros?.matricula
+            ? {
+                ordenes: {
+                    some: {
+                        AND: [
+                            { estado: { not: 'X' } },
+                            { fechaEmision: { gte: desde, lt: hasta } },
+                            buildOrdenAutorizadaWhere(),
+                            especialistaWhere,
+                        ],
+                    },
+                },
+            }
+            : {}
+
+    const itemsLote = await prisma.loteFacturacionItem.findMany({
+        where: {
+            loteId: id,
+            ...(filtros?.medico || filtros?.matricula ? { ingreso: whereIngresoFiltro } : {}),
+        },
+        orderBy: [{ ingreso: { fechaIngreso: 'asc' } }, { id: 'asc' }],
+        select: {
+            id: true,
+            loteId: true,
+            ingresoId: true,
+            incluido: true,
+            importeTotal: true,
+            ingreso: {
+                select: {
+                    id: true,
+                    tipoIngresoCodigo: true,
+                    numeroIngreso: true,
+                    estado: true,
+                    fechaIngreso: true,
+                    fechaEgreso: true,
+                    nombre: true,
+                    numeroAfiliado: true,
+                    descripcionPatologia: true,
+                    paciente: { select: { id: true, nombreCompleto: true, numeroDocumento: true } },
+                },
+            },
+        },
+    })
+
     return {
         ...mapLoteRow(lote),
-        items: lote.items.map((item) => ({
+        items: itemsLote.map((item) => ({
             ...item,
             importeTotal: Number(item.importeTotal),
             paciente: item.ingreso.paciente,
         })) as LoteFacturacionItemDetalle[],
+        itemsIPSTxt: lote.itemsIPSTxt.map((it) => ({
+            ...it,
+            impEsp: Number(it.impEsp),
+            impAyu: Number(it.impAyu),
+            impAne: Number(it.impAne),
+            impGto: Number(it.impGto),
+            impTotal: Number(it.impTotal),
+            importePromedi: it.importePromedi !== null ? Number(it.importePromedi) : null,
+        })) as LoteIPSTxtItemDetalle[],
     }
 }
 
@@ -1378,28 +1933,30 @@ export async function toggleItemLote(
     await prisma.loteFacturacion.update({ where: { id: loteId }, data: { importeTotal: total } })
 }
 
-export async function obtenerOrdenesAutorizadasIngreso(ingresoId: number): Promise<OrdenAutorizadaLote[]> {
+export async function obtenerOrdenesAutorizadasIngreso(
+    ingresoId: number,
+    filtros?: { medico?: string; matricula?: number; periodo?: string }
+): Promise<OrdenAutorizadaLote[]> {
+    const especialistaWhere = buildEspecialistaOrdenWhere({
+        medico: filtros?.medico,
+        matricula: filtros?.matricula,
+    })
+
+    const periodoWhere: Prisma.OrdenWhereInput = filtros?.periodo
+        ? (() => {
+            const { desde, hasta } = periodoToDateRange(filtros.periodo)
+            return { fechaEmision: { gte: desde, lt: hasta } }
+        })()
+        : {}
+
     const ordenes = await prisma.orden.findMany({
         where: {
             ingresoId,
             estado: { not: 'X' },
-            OR: [
-                {
-                    AND: [
-                        { numeroAutorizacion: { not: null } },
-                        { numeroAutorizacion: { not: '' } },
-                    ],
-                },
-                {
-                    items: {
-                        some: {
-                            AND: [
-                                { numeroAutorizacion: { not: null } },
-                                { numeroAutorizacion: { not: '' } },
-                            ],
-                        },
-                    },
-                },
+            AND: [
+                buildOrdenAutorizadaWhere(),
+                especialistaWhere,
+                periodoWhere,
             ],
         },
         orderBy: { fechaEmision: 'asc' },
@@ -1445,5 +2002,289 @@ export async function obtenerOrdenesAutorizadasIngreso(ingresoId: number): Promi
                 numeroAutorizacion: resolverNumeroAutorizacion(it.numeroAutorizacion, o.numeroAutorizacion),
                 importeTotal: Number(it.importeTotal ?? 0),
             })),
+    }))
+}
+
+// ============================================
+// IPS TXT — PLANILLA DE PRESTACIONES
+// ============================================
+
+function redondear2Repo(valor: number): number {
+    return Math.round((valor + Number.EPSILON) * 100) / 100
+}
+
+export async function crearLoteIPSTxt(
+    data: CrearLoteIPSTxtInput,
+    usuario: string
+): Promise<{ id: number; numero: number }> {
+    const now = new Date()
+    const usuarioCod = usuario.trim().slice(0, 10) || 'SISTEMA'
+
+    const ultimo = await prisma.loteFacturacion.findFirst({
+        orderBy: { numero: 'desc' },
+        select: { numero: true },
+    })
+    const numero = (ultimo?.numero ?? 0) + 1
+
+    const totalBruto = data.items.reduce((s, it) => s + it.impTotal, 0)
+
+    const lote = await prisma.loteFacturacion.create({
+        data: {
+            numero,
+            fecha: data.fecha,
+            periodo: data.periodo,
+            tipo: 'PRACTICAS',
+            origen: 'IPS_TXT',
+            obraSocialId: data.obraSocialId,
+            planId: data.planId ?? null,
+            descripcion: data.descripcion ?? `Planilla IPS - ${data.periodo}`,
+            concepto: 'PROMEDI IPS',
+            importeTotal: totalBruto,
+            estado: 'PEN',
+            fechaEstado: now,
+            usuario: usuarioCod,
+            itemsIPSTxt: {
+                create: data.items.map((it) => ({
+                    afiliadoDoc: it.afiliadoDoc,
+                    afiliadoNom: it.afiliadoNom,
+                    nroOrden: it.nroOrden,
+                    fechaRealiz: it.fechaRealiz ? new Date(it.fechaRealiz) : null,
+                    servicioCodigo: it.servicioCodigo,
+                    servicioNombre: it.servicioNombre,
+                    cantidad: it.cantidad,
+                    impEsp: it.impEsp,
+                    impAyu: it.impAyu,
+                    impAne: it.impAne,
+                    impGto: it.impGto,
+                    impTotal: it.impTotal,
+                })),
+            },
+        },
+        select: { id: true, numero: true },
+    })
+
+    return lote
+}
+
+const CODIGOS_PROMEDI_BASE = new Set([430101, 431001, 400101, 431002, 431103, 430130])
+const CODIGOS_EXCLUIDOS_PROMEDI_OSECAC = new Set([70116, 70607])
+
+function parseCodigoPromedi(codigo: string | null | undefined): number | null {
+    const parsed = parseInt((codigo ?? '').trim(), 10)
+    if (isNaN(parsed)) return null
+    return parsed
+}
+
+function codigoEnRangoBasePromedi(codigo: number): boolean {
+    if (codigo >= 10101 && codigo <= 130304) return true
+    if (codigo >= 720201 && codigo <= 722238) return true
+    return false
+}
+
+function aplicaPromediIPS(codigoPractica: string | null | undefined): boolean {
+    const codigo = parseCodigoPromedi(codigoPractica)
+    if (codigo === null) return false
+    return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoBasePromedi(codigo)
+}
+
+function aplicaPromediOsecac(codigoPractica: string | null | undefined): boolean {
+    const codigo = parseCodigoPromedi(codigoPractica)
+    if (codigo === null) return false
+    if (CODIGOS_EXCLUIDOS_PROMEDI_OSECAC.has(codigo)) return false
+    return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoBasePromedi(codigo)
+}
+
+export async function aplicarPromediLote(
+    loteId: number,
+    usuario: string
+): Promise<{ importeTotal: number; cantidadItems: number }> {
+    const lote = await prisma.loteFacturacion.findUnique({
+        where: { id: loteId },
+        select: {
+            id: true,
+            estado: true,
+            origen: true,
+            tipo: true,
+            periodo: true,
+            obraSocial: { select: { nombre: true } },
+        },
+    })
+
+    if (!lote) throw new Error('Lote no encontrado')
+    if (lote.estado !== 'PEN') throw new Error('Solo se puede aplicar PROMEDI a un lote pendiente')
+
+    const usuarioCod = usuario.trim().slice(0, 10) || 'SISTEMA'
+
+    if (lote.origen === 'IPS_TXT') {
+        const items = await prisma.loteIPSTxtItem.findMany({
+            where: { loteId },
+            select: { id: true, impTotal: true, servicioCodigo: true },
+        })
+
+        const PORCENTAJE_PROMEDI_IPS = 0.40
+
+        await prisma.$transaction(
+            items.map((item) => {
+                const importePromedi = aplicaPromediIPS(item.servicioCodigo)
+                    ? redondear2Repo(Number(item.impTotal) * PORCENTAJE_PROMEDI_IPS)
+                    : redondear2Repo(Number(item.impTotal))
+                return prisma.loteIPSTxtItem.update({
+                    where: { id: item.id },
+                    data: { importePromedi },
+                })
+            })
+        )
+
+        const totalPromedi = redondear2Repo(
+            items.reduce((s, it) => {
+                const importe = aplicaPromediIPS(it.servicioCodigo)
+                    ? redondear2Repo(Number(it.impTotal) * PORCENTAJE_PROMEDI_IPS)
+                    : redondear2Repo(Number(it.impTotal))
+                return s + importe
+            }, 0)
+        )
+
+        await prisma.loteFacturacion.update({
+            where: { id: loteId },
+            data: {
+                importeTotal: totalPromedi,
+                estado: 'CON',
+                fechaEstado: new Date(),
+                usuario: usuarioCod,
+            },
+        })
+
+        return { importeTotal: totalPromedi, cantidadItems: items.length }
+    }
+
+    const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)
+    if (!esOsecac || lote.tipo !== 'PRACTICAS') {
+        throw new Error('PROMEDI solo aplica a lotes IPS TXT o lotes de practicas OSECAC')
+    }
+
+    const { desde, hasta } = periodoToDateRange(lote.periodo)
+
+    const loteItems = await prisma.loteFacturacionItem.findMany({
+        where: { loteId },
+        select: { id: true, ingresoId: true, incluido: true },
+    })
+
+    if (loteItems.length === 0) {
+        await prisma.loteFacturacion.update({
+            where: { id: loteId },
+            data: { importeTotal: 0, estado: 'CON', fechaEstado: new Date(), usuario: usuarioCod },
+        })
+        return { importeTotal: 0, cantidadItems: 0 }
+    }
+
+    const ingresoIds = Array.from(new Set(loteItems.map((it) => it.ingresoId)))
+    const ordenes = await prisma.orden.findMany({
+        where: {
+            ingresoId: { in: ingresoIds },
+            estado: { not: 'X' },
+            fechaEmision: { gte: desde, lt: hasta },
+            OR: [
+                {
+                    AND: [
+                        { numeroAutorizacion: { not: null } },
+                        { numeroAutorizacion: { not: '' } },
+                    ],
+                },
+                {
+                    items: {
+                        some: {
+                            AND: [
+                                { numeroAutorizacion: { not: null } },
+                                { numeroAutorizacion: { not: '' } },
+                            ],
+                        },
+                    },
+                },
+            ],
+        },
+        select: {
+            ingresoId: true,
+            numeroAutorizacion: true,
+            items: {
+                select: {
+                    codigoPractica: true,
+                    importeTotal: true,
+                    numeroAutorizacion: true,
+                },
+            },
+        },
+    })
+
+    const importePorIngreso = new Map<number, number>()
+    const PORCENTAJE_PROMEDI_OSECAC = 0.20
+
+    for (const orden of ordenes) {
+        const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
+        for (const item of orden.items) {
+            if (!ordenConAutorizacion && !tieneNumeroAutorizacionValido(item.numeroAutorizacion)) continue
+            if (!orden.ingresoId) continue
+
+            const importeItem = Number(item.importeTotal ?? 0)
+            const importeFacturable = aplicaPromediOsecac(item.codigoPractica)
+                ? redondear2Repo(importeItem * PORCENTAJE_PROMEDI_OSECAC)
+                : redondear2Repo(importeItem)
+
+            const actual = importePorIngreso.get(orden.ingresoId) ?? 0
+            importePorIngreso.set(orden.ingresoId, redondear2Repo(actual + importeFacturable))
+        }
+    }
+
+    const updatesItems = loteItems.map((it) =>
+        prisma.loteFacturacionItem.update({
+            where: { id: it.id },
+            data: { importeTotal: redondear2Repo(importePorIngreso.get(it.ingresoId) ?? 0) },
+        })
+    )
+
+    const totalPromedi = redondear2Repo(
+        loteItems.reduce((s, it) => {
+            const importe = redondear2Repo(importePorIngreso.get(it.ingresoId) ?? 0)
+            return it.incluido ? s + importe : s
+        }, 0)
+    )
+
+    await prisma.$transaction([
+        ...updatesItems,
+        prisma.loteFacturacion.update({
+            where: { id: loteId },
+            data: {
+                importeTotal: totalPromedi,
+                estado: 'CON',
+                fechaEstado: new Date(),
+                usuario: usuarioCod,
+            },
+        }),
+    ])
+
+    return { importeTotal: totalPromedi, cantidadItems: loteItems.length }
+}
+
+export async function obtenerItemsIPSTxt(loteId: number): Promise<LoteIPSTxtItemDetalle[]> {
+    const items = await prisma.loteIPSTxtItem.findMany({
+        where: { loteId },
+        orderBy: [{ afiliadoNom: 'asc' }, { id: 'asc' }],
+    })
+
+    return items.map((it) => ({
+        id: it.id,
+        loteId: it.loteId,
+        afiliadoDoc: it.afiliadoDoc,
+        afiliadoNom: it.afiliadoNom,
+        nroOrden: it.nroOrden,
+        fechaRealiz: it.fechaRealiz,
+        servicioCodigo: it.servicioCodigo,
+        servicioNombre: it.servicioNombre,
+        cantidad: it.cantidad,
+        impEsp: Number(it.impEsp),
+        impAyu: Number(it.impAyu),
+        impAne: Number(it.impAne),
+        impGto: Number(it.impGto),
+        impTotal: Number(it.impTotal),
+        importePromedi: it.importePromedi !== null ? Number(it.importePromedi) : null,
     }))
 }

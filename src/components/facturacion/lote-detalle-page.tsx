@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
+import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItemDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
 import { LoteResumenPrint } from './lote-resumen-print'
 
 const ESTADO_LABEL: Record<string, { label: string; cls: string }> = {
@@ -25,6 +25,22 @@ function formatPeriodo(periodo: string) {
     if (!anio || !mes) return periodo
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
     return `${meses[parseInt(mes, 10) - 1]} ${anio}`
+}
+
+function normalizarTexto(value: string | null | undefined): string {
+    return (value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+}
+
+function normalizarTextoSoloAlfanumerico(value: string | null | undefined): string {
+    return normalizarTexto(value).replace(/[^A-Z0-9]/g, '')
+}
+
+function esObraSocialOsecac(nombre: string | null | undefined): boolean {
+    const limpio = normalizarTextoSoloAlfanumerico(nombre)
+    return limpio.includes('OSECAC') || limpio.includes('OBRASOCIALEMPLEADOSDECOMERCIO')
 }
 
 interface Props { loteId: number }
@@ -50,12 +66,19 @@ export function LoteDetallePage({ loteId }: Props) {
         rangoHasta: '',
     })
     const [mostrarImpresion, setMostrarImpresion] = useState(false)
+    const [mostrarConfirmPromedi, setMostrarConfirmPromedi] = useState(false)
+    const [errorPromedi, setErrorPromedi] = useState('')
+    const [filtroMedico, setFiltroMedico] = useState('')
+    const [filtroMatricula, setFiltroMatricula] = useState('')
     const printRef = useRef<HTMLDivElement>(null)
 
     const cargar = useCallback(async () => {
         setLoading(true)
         try {
-            const res = await fetch(`/api/facturacion/lotes/${loteId}`)
+            const sp = new URLSearchParams()
+            if (filtroMedico.trim()) sp.set('medico', filtroMedico.trim())
+            if (filtroMatricula.trim()) sp.set('matricula', filtroMatricula.trim())
+            const res = await fetch(`/api/facturacion/lotes/${loteId}${sp.toString() ? `?${sp}` : ''}`)
             const json = await res.json()
             if (!res.ok || !json.ok) { setError(json.error ?? 'Error'); return }
             setLote(json.data)
@@ -74,7 +97,7 @@ export function LoteDetallePage({ loteId }: Props) {
         } finally {
             setLoading(false)
         }
-    }, [loteId])
+    }, [loteId, filtroMedico, filtroMatricula])
 
     useEffect(() => { cargar() }, [cargar])
 
@@ -82,7 +105,11 @@ export function LoteDetallePage({ loteId }: Props) {
         setSelectedIngresoId(ingresoId)
         setLoadingOrdenes(true)
         try {
-            const res = await fetch(`/api/facturacion/lotes/ingreso/${ingresoId}/ordenes`)
+            const sp = new URLSearchParams()
+            if (filtroMedico.trim()) sp.set('medico', filtroMedico.trim())
+            if (filtroMatricula.trim()) sp.set('matricula', filtroMatricula.trim())
+            if (lote?.periodo) sp.set('periodo', lote.periodo)
+            const res = await fetch(`/api/facturacion/lotes/ingreso/${ingresoId}/ordenes?${sp.toString()}`)
             const json = await res.json()
             setOrdenes(json.data ?? [])
         } catch {
@@ -91,6 +118,13 @@ export function LoteDetallePage({ loteId }: Props) {
             setLoadingOrdenes(false)
         }
     }
+
+    useEffect(() => {
+        if (selectedIngresoId !== null) {
+            cargarOrdenes(selectedIngresoId)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filtroMedico, filtroMatricula, lote?.periodo])
 
     async function toggleItem(item: LoteFacturacionItemDetalle) {
         const res = await fetch(`/api/facturacion/lotes/${loteId}/items/${item.id}`, {
@@ -140,6 +174,23 @@ export function LoteDetallePage({ loteId }: Props) {
         }
     }
 
+    async function aplicarPromedi() {
+        setErrorPromedi('')
+        setProcesando(true)
+        try {
+            const res = await fetch(`/api/facturacion/lotes/${loteId}/promedi`, { method: 'POST' })
+            const json = await res.json()
+            if (!res.ok || !json.ok) {
+                setErrorPromedi(json.error ?? 'Error al aplicar PROMEDI')
+                return
+            }
+            setMostrarConfirmPromedi(false)
+            cargar()
+        } finally {
+            setProcesando(false)
+        }
+    }
+
     function imprimir() {
         window.print()
     }
@@ -162,13 +213,22 @@ export function LoteDetallePage({ loteId }: Props) {
 
     const est = ESTADO_LABEL[lote.estado] ?? { label: lote.estado, cls: 'bg-gray-100 text-gray-700' }
     const esPendiente = lote.estado === 'PEN'
+    const esIPSTxt = lote.origen === 'IPS_TXT'
+    const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)
+    const puedeAplicarPromedi = esPendiente && (esIPSTxt || (lote.tipo === 'PRACTICAS' && esOsecac))
+    const porcentajePromedi = esIPSTxt ? 40 : 20
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
-    const totalIncluido = itemsIncluidos.reduce((s, it) => s + it.importeTotal, 0)
+    const totalNetoSinPromedi = esIPSTxt
+        ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + it.impTotal, 0)
+        : 0
+    const totalIncluido = esIPSTxt
+        ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + (it.importePromedi ?? it.impTotal), 0)
+        : itemsIncluidos.reduce((s, it) => s + it.importeTotal, 0)
 
     return (
         <div className="p-6 space-y-5 print:p-0">
             {/* Encabezado */}
-            <div className="bg-white rounded-lg border border-gray-200 p-5 print:border-0 print:shadow-none">
+            <div className={`bg-white rounded-lg border border-gray-200 p-5 print:border-0 print:shadow-none ${esIPSTxt ? 'print:hidden' : ''}`}>
                 <div className="flex items-start justify-between flex-wrap gap-4">
                     <div className="space-y-1">
                         <div className="flex items-center gap-3">
@@ -206,7 +266,19 @@ export function LoteDetallePage({ loteId }: Props) {
                         >
                             🖨 Imprimir
                         </button>
-                        {esPendiente && (
+                        {puedeAplicarPromedi && (
+                            <button
+                                onClick={() => {
+                                    setErrorPromedi('')
+                                    setMostrarConfirmPromedi(true)
+                                }}
+                                disabled={procesando}
+                                className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50 font-medium"
+                            >
+                                Aplicar PROMEDI ({porcentajePromedi}%)
+                            </button>
+                        )}
+                        {esPendiente && !esIPSTxt && (
                             <>
                                 <button
                                     onClick={() => setEditando(!editando)}
@@ -229,6 +301,15 @@ export function LoteDetallePage({ loteId }: Props) {
                                     Confirmar
                                 </button>
                             </>
+                        )}
+                        {esPendiente && esIPSTxt && (
+                            <button
+                                onClick={() => cambiarEstado('ANU')}
+                                disabled={procesando}
+                                className="border border-red-300 text-red-600 px-3 py-1.5 rounded text-sm hover:bg-red-50 disabled:opacity-50"
+                            >
+                                Anular
+                            </button>
                         )}
                         <button
                             onClick={() => router.back()}
@@ -347,161 +428,385 @@ export function LoteDetallePage({ loteId }: Props) {
                 {/* Resumen numérico */}
                 <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4 text-sm">
                     <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-700">{lote.items.length}</div>
-                        <div className="text-gray-500">Pacientes en lote</div>
-                    </div>
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-green-700">{itemsIncluidos.length}</div>
-                        <div className="text-gray-500">A facturar</div>
-                    </div>
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-gray-800">{formatMonto(totalIncluido)}</div>
-                        <div className="text-gray-500">Total a facturar</div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Tabla de pacientes */}
-            <div className="grid grid-cols-12 gap-4">
-                <div className={`${selectedIngresoId ? 'col-span-5' : 'col-span-12'} space-y-2`}>
-                    <h3 className="text-sm font-semibold text-gray-700">Pacientes del Lote</h3>
-                    <div className="overflow-x-auto rounded-lg border border-gray-200">
-                        <table className="w-full text-sm">
-                            <thead className="bg-gray-50 text-gray-600">
-                                <tr>
-                                    {esPendiente && <th className="px-3 py-2.5 text-center">✓</th>}
-                                    <th className="px-3 py-2.5 text-left font-medium">Nro</th>
-                                    <th className="px-3 py-2.5 text-left font-medium">Paciente</th>
-                                    <th className="px-3 py-2.5 text-left font-medium">Afiliado</th>
-                                    <th className="px-3 py-2.5 text-right font-medium">Importe</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {lote.items.map((item) => (
-                                    <tr
-                                        key={item.id}
-                                        className={`cursor-pointer hover:bg-blue-50 ${selectedIngresoId === item.ingresoId ? 'bg-blue-50' : ''} ${!item.incluido ? 'opacity-40' : ''}`}
-                                        onClick={() => cargarOrdenes(item.ingresoId)}
-                                    >
-                                        {esPendiente && (
-                                            <td className="px-3 py-2 text-center" onClick={(e) => { e.stopPropagation(); toggleItem(item) }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={item.incluido}
-                                                    readOnly
-                                                    className="cursor-pointer"
-                                                />
-                                            </td>
-                                        )}
-                                        <td className="px-3 py-2 font-mono text-xs">{item.ingreso.numeroIngreso}</td>
-                                        <td className="px-3 py-2">
-                                            <div className="font-medium text-gray-800">
-                                                {item.paciente?.nombreCompleto ?? item.ingreso.nombre ?? '-'}
-                                            </div>
-                                            {item.paciente?.numeroDocumento && (
-                                                <div className="text-xs text-gray-500">
-                                                    DNI {item.paciente.numeroDocumento.toLocaleString('es-AR')}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-3 py-2 text-xs text-gray-500">
-                                            {item.ingreso.numeroAfiliado ?? '-'}
-                                        </td>
-                                        <td className="px-3 py-2 text-right font-semibold">
-                                            {formatMonto(item.importeTotal)}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {lote.items.length === 0 && (
-                                    <tr>
-                                        <td colSpan={esPendiente ? 5 : 4} className="px-3 py-6 text-center text-gray-400">
-                                            Sin pacientes en este lote
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {/* Panel de órdenes del paciente seleccionado */}
-                {selectedIngresoId && (
-                    <div className="col-span-7 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-semibold text-gray-700">
-                                Órdenes Autorizadas —{' '}
-                                {lote.items.find((i) => i.ingresoId === selectedIngresoId)?.paciente?.nombreCompleto ?? 'Paciente'}
-                            </h3>
-                            <button
-                                onClick={() => { setSelectedIngresoId(null); setOrdenes([]) }}
-                                className="text-xs text-gray-400 hover:text-gray-600"
-                            >
-                                ✕ Cerrar
-                            </button>
+                        <div className="text-2xl font-bold text-blue-700">
+                            {esIPSTxt ? (lote.itemsIPSTxt?.length ?? 0) : lote.items.length}
                         </div>
-
-                        {loadingOrdenes ? (
-                            <div className="p-4 text-center text-gray-400 text-sm">Cargando órdenes...</div>
-                        ) : ordenes.length === 0 ? (
-                            <div className="p-4 text-center text-gray-400 text-sm rounded border bg-gray-50">
-                                Sin órdenes autorizadas para este ingreso
-                            </div>
+                        <div className="text-gray-500">{esIPSTxt ? 'Registros IPS' : 'Pacientes en lote'}</div>
+                    </div>
+                    <div className="text-center">
+                        {esIPSTxt ? (
+                            <>
+                                <div className="text-2xl font-bold text-gray-800">{formatMonto(totalNetoSinPromedi)}</div>
+                                <div className="text-gray-500">Neto sin PROMEDI</div>
+                            </>
                         ) : (
-                            <div className="space-y-3">
-                                {ordenes.map((orden) => (
-                                    <div key={`${orden.puestoNumero}-${orden.numero}`} className="border rounded-lg bg-white">
-                                        <div className="px-4 py-2.5 bg-gray-50 border-b flex items-center justify-between rounded-t-lg">
-                                            <div className="text-sm font-medium">
-                                                Orden #{orden.numero}
-                                                {orden.descripcion && <span className="text-gray-500 ml-2">— {orden.descripcion}</span>}
-                                            </div>
-                                            <div className="text-right text-sm">
-                                                <div className="text-xs text-gray-400">
-                                                    {new Date(orden.fechaEmision).toLocaleDateString('es-AR')}
-                                                </div>
-                                                <div className="font-semibold text-gray-700">
-                                                    {formatMonto(orden.importeTotal)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {orden.numeroAutorizacion && (
-                                            <div className="px-4 py-1 text-xs text-blue-600 bg-blue-50 border-b">
-                                                Aut. Orden: {orden.numeroAutorizacion}
-                                            </div>
-                                        )}
-                                        <table className="w-full text-xs">
-                                            <thead className="text-gray-500">
-                                                <tr>
-                                                    <th className="px-4 py-1.5 text-left">Práctica</th>
-                                                    <th className="px-4 py-1.5 text-left">Descripción</th>
-                                                    <th className="px-4 py-1.5 text-center">Cant.</th>
-                                                    <th className="px-4 py-1.5 text-left">Nro. Aut.</th>
-                                                    <th className="px-4 py-1.5 text-right">Importe</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-50">
-                                                {orden.items.map((it) => (
-                                                    <tr key={it.item}>
-                                                        <td className="px-4 py-1.5 font-mono">{it.codigoPractica}</td>
-                                                        <td className="px-4 py-1.5 text-gray-600">{it.descripcion ?? '-'}</td>
-                                                        <td className="px-4 py-1.5 text-center">{it.cantidad}</td>
-                                                        <td className="px-4 py-1.5 text-blue-600">{it.numeroAutorizacion ?? '—'}</td>
-                                                        <td className="px-4 py-1.5 text-right">{formatMonto(it.importeTotal)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ))}
-                            </div>
+                            <>
+                                <div className="text-2xl font-bold text-green-700">{itemsIncluidos.length}</div>
+                                <div className="text-gray-500">A facturar</div>
+                            </>
                         )}
                     </div>
-                )}
+                    <div className="text-center">
+                        <div className={`text-2xl font-bold ${esIPSTxt ? 'text-green-700' : 'text-gray-800'}`}>{formatMonto(totalIncluido)}</div>
+                        <div className="text-gray-500">{esIPSTxt ? 'Total a facturar con PROMEDI' : 'Total a facturar'}</div>
+                    </div>
+                </div>
             </div>
 
+            {/* IPS TXT items table */}
+            {esIPSTxt && (
+                <div className="ips-print-sheet">
+                    <div className="hidden print:block border-b-2 border-gray-300 pb-3 mb-3">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h1 className="text-lg font-bold text-gray-900">Informe de Planilla IPS</h1>
+                                <p className="text-[11px] text-gray-600 mt-0.5">
+                                    Obra Social: {lote.obraSocial?.nombre ?? 'Particular'}
+                                    {lote.plan?.descripcion ? ` - ${lote.plan.descripcion}` : ''}
+                                </p>
+                                <p className="text-[11px] text-gray-600">Período: {formatPeriodo(lote.periodo)}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xl font-mono font-bold text-blue-700">Lote #{lote.numero}</p>
+                                <p className="text-[11px] text-gray-600">Fecha: {new Date(lote.fecha).toLocaleDateString('es-AR')}</p>
+                                <p className="text-[11px] text-gray-600">Emitido: {new Date().toLocaleString('es-AR')}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <TablaIPSTxtItems
+                        items={lote.itemsIPSTxt ?? []}
+                        esPendiente={esPendiente}
+                    />
+
+                    <div className="hidden print:block border-t border-gray-300 mt-3 pt-2 text-[10px] text-gray-500 text-center">
+                        Sistema HIS - Resumen de facturacion por planilla IPS
+                    </div>
+                </div>
+            )}
+
+            {/* Tabla de pacientes (solo lotes normales) */}
+            {!esIPSTxt && (
+                <div className="grid grid-cols-12 gap-4">
+                    <div className={`${selectedIngresoId ? 'col-span-5' : 'col-span-12'} space-y-2`}>
+                        <div className="flex flex-wrap items-end gap-2">
+                            <h3 className="text-sm font-semibold text-gray-700 mr-2">Pacientes del Lote</h3>
+                            <div>
+                                <label className="block text-[11px] text-gray-500 mb-1">Médico</label>
+                                <input
+                                    type="text"
+                                    value={filtroMedico}
+                                    onChange={(e) => setFiltroMedico(e.target.value)}
+                                    placeholder="Nombre"
+                                    className="border rounded px-2 py-1 text-xs"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] text-gray-500 mb-1">Matrícula</label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={filtroMatricula}
+                                    onChange={(e) => setFiltroMatricula(e.target.value)}
+                                    placeholder="9110"
+                                    className="border rounded px-2 py-1 text-xs w-24"
+                                />
+                            </div>
+                            {(filtroMedico || filtroMatricula) && (
+                                <button
+                                    onClick={() => {
+                                        setFiltroMedico('')
+                                        setFiltroMatricula('')
+                                    }}
+                                    className="text-xs border border-gray-300 rounded px-2 py-1 hover:bg-gray-50"
+                                >
+                                    Limpiar filtros
+                                </button>
+                            )}
+                        </div>
+                        <div className="overflow-x-auto rounded-lg border border-gray-200">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50 text-gray-600">
+                                    <tr>
+                                        {esPendiente && <th className="px-3 py-2.5 text-center">✓</th>}
+                                        <th className="px-3 py-2.5 text-left font-medium">Nro</th>
+                                        <th className="px-3 py-2.5 text-left font-medium">Paciente</th>
+                                        <th className="px-3 py-2.5 text-left font-medium">Afiliado</th>
+                                        <th className="px-3 py-2.5 text-right font-medium">Importe</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {lote.items.map((item) => (
+                                        <tr
+                                            key={item.id}
+                                            className={`cursor-pointer hover:bg-blue-50 ${selectedIngresoId === item.ingresoId ? 'bg-blue-50' : ''} ${!item.incluido ? 'opacity-40' : ''}`}
+                                            onClick={() => cargarOrdenes(item.ingresoId)}
+                                        >
+                                            {esPendiente && (
+                                                <td className="px-3 py-2 text-center" onClick={(e) => { e.stopPropagation(); toggleItem(item) }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={item.incluido}
+                                                        readOnly
+                                                        className="cursor-pointer"
+                                                    />
+                                                </td>
+                                            )}
+                                            <td className="px-3 py-2 font-mono text-xs">{item.ingreso.numeroIngreso}</td>
+                                            <td className="px-3 py-2">
+                                                <div className="font-medium text-gray-800">
+                                                    {item.paciente?.nombreCompleto ?? item.ingreso.nombre ?? '-'}
+                                                </div>
+                                                {item.paciente?.numeroDocumento && (
+                                                    <div className="text-xs text-gray-500">
+                                                        DNI {item.paciente.numeroDocumento.toLocaleString('es-AR')}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 text-xs text-gray-500">
+                                                {item.ingreso.numeroAfiliado ?? '-'}
+                                            </td>
+                                            <td className="px-3 py-2 text-right font-semibold">
+                                                {formatMonto(item.importeTotal)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {lote.items.length === 0 && (
+                                        <tr>
+                                            <td colSpan={esPendiente ? 5 : 4} className="px-3 py-6 text-center text-gray-400">
+                                                Sin pacientes en este lote
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Panel de órdenes del paciente seleccionado */}
+                    {selectedIngresoId && (
+                        <div className="col-span-7 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-semibold text-gray-700">
+                                    Órdenes Autorizadas —{' '}
+                                    {lote.items.find((i) => i.ingresoId === selectedIngresoId)?.paciente?.nombreCompleto ?? 'Paciente'}
+                                </h3>
+                                <button
+                                    onClick={() => { setSelectedIngresoId(null); setOrdenes([]) }}
+                                    className="text-xs text-gray-400 hover:text-gray-600"
+                                >
+                                    ✕ Cerrar
+                                </button>
+                            </div>
+
+                            {loadingOrdenes ? (
+                                <div className="p-4 text-center text-gray-400 text-sm">Cargando órdenes...</div>
+                            ) : ordenes.length === 0 ? (
+                                <div className="p-4 text-center text-gray-400 text-sm rounded border bg-gray-50">
+                                    Sin órdenes autorizadas para este ingreso
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {ordenes.map((orden) => (
+                                        <div key={`${orden.puestoNumero}-${orden.numero}`} className="border rounded-lg bg-white">
+                                            <div className="px-4 py-2.5 bg-gray-50 border-b flex items-center justify-between rounded-t-lg">
+                                                <div className="text-sm font-medium">
+                                                    Orden #{orden.numero}
+                                                    {orden.descripcion && <span className="text-gray-500 ml-2">— {orden.descripcion}</span>}
+                                                </div>
+                                                <div className="text-right text-sm">
+                                                    <div className="text-xs text-gray-400">
+                                                        {new Date(orden.fechaEmision).toLocaleDateString('es-AR')}
+                                                    </div>
+                                                    <div className="font-semibold text-gray-700">
+                                                        {formatMonto(orden.importeTotal)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {orden.numeroAutorizacion && (
+                                                <div className="px-4 py-1 text-xs text-blue-600 bg-blue-50 border-b">
+                                                    Aut. Orden: {orden.numeroAutorizacion}
+                                                </div>
+                                            )}
+                                            <table className="w-full text-xs">
+                                                <thead className="text-gray-500">
+                                                    <tr>
+                                                        <th className="px-4 py-1.5 text-left">Práctica</th>
+                                                        <th className="px-4 py-1.5 text-left">Descripción</th>
+                                                        <th className="px-4 py-1.5 text-center">Cant.</th>
+                                                        <th className="px-4 py-1.5 text-left">Nro. Aut.</th>
+                                                        <th className="px-4 py-1.5 text-right">Importe</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {orden.items.map((it) => (
+                                                        <tr key={it.item}>
+                                                            <td className="px-4 py-1.5 font-mono">{it.codigoPractica}</td>
+                                                            <td className="px-4 py-1.5 text-gray-600">{it.descripcion ?? '-'}</td>
+                                                            <td className="px-4 py-1.5 text-center">{it.cantidad}</td>
+                                                            <td className="px-4 py-1.5 text-blue-600">{it.numeroAutorizacion ?? '—'}</td>
+                                                            <td className="px-4 py-1.5 text-right">{formatMonto(it.importeTotal)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Vista de impresión oculta */}
-            <div ref={printRef} className="hidden print:block">
-                <LoteResumenPrint lote={lote} totalIncluido={totalIncluido} />
+            {!esIPSTxt && (
+                <div ref={printRef} className="hidden print:block">
+                    <LoteResumenPrint lote={lote} totalIncluido={totalIncluido} />
+                </div>
+            )}
+
+            {mostrarConfirmPromedi && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 print:hidden">
+                    <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-gray-200">
+                        <div className="px-5 py-4 border-b border-gray-100">
+                            <h3 className="text-base font-semibold text-gray-900">Confirmar aplicación de PROMEDI</h3>
+                        </div>
+                        <div className="px-5 py-4 space-y-3">
+                            <p className="text-sm text-gray-700">
+                                ¿Aplicar PROMEDI ({porcentajePromedi}%) a los códigos configurados? Esta acción confirmará el lote.
+                            </p>
+                            {errorPromedi && (
+                                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                    {errorPromedi}
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+                            <button
+                                onClick={() => {
+                                    if (!procesando) {
+                                        setMostrarConfirmPromedi(false)
+                                        setErrorPromedi('')
+                                    }
+                                }}
+                                disabled={procesando}
+                                className="border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={aplicarPromedi}
+                                disabled={procesando}
+                                className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                            >
+                                {procesando ? 'Aplicando...' : 'Aplicar y Confirmar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ============================================================
+// Tabla items IPS TXT
+// ============================================================
+
+function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle[]; esPendiente: boolean }) {
+    const totalBruto = items.reduce((s, it) => s + it.impTotal, 0)
+    const totalPromedi = items.reduce((s, it) => s + (it.importePromedi ?? 0), 0)
+
+    return (
+        <div className="space-y-2 print:space-y-0">
+            <div className="flex items-center gap-3 print:hidden">
+                <h3 className="text-sm font-semibold text-gray-700">Registros de Planilla IPS</h3>
+                {esPendiente && (
+                    <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                        Pendiente de PROMEDI
+                    </span>
+                )}
+            </div>
+            <div className="ips-print-table overflow-x-auto rounded-lg border border-gray-200 print:rounded-none print:border-0">
+                <table className="w-full text-xs print:text-[9px]">
+                    <colgroup>
+                        <col style={{ width: '14%' }} />
+                        <col style={{ width: '6%' }} />
+                        <col style={{ width: '7%' }} />
+                        <col style={{ width: '18%' }} />
+                        <col style={{ width: '4%' }} />
+                        <col style={{ width: '8.5%' }} />
+                        <col style={{ width: '8.5%' }} />
+                        <col style={{ width: '8.5%' }} />
+                        <col style={{ width: '8.5%' }} />
+                        <col style={{ width: '8.5%' }} />
+                        <col style={{ width: '8.5%' }} />
+                    </colgroup>
+                    <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                            <th className="px-3 py-2.5 text-left font-medium">Afiliado</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Orden</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Fecha</th>
+                            <th className="px-3 py-2.5 text-left font-medium">Servicio</th>
+                            <th className="px-3 py-2.5 text-center font-medium">Cant</th>
+                            <th className="px-3 py-2.5 text-right font-medium">Esp.</th>
+                            <th className="px-3 py-2.5 text-right font-medium">Ayu.</th>
+                            <th className="px-3 py-2.5 text-right font-medium">Ane.</th>
+                            <th className="px-3 py-2.5 text-right font-medium">Gto.</th>
+                            <th className="px-3 py-2.5 text-right font-medium">Total</th>
+                            <th className="px-3 py-2.5 text-right font-medium">PROMEDI (40%)</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {items.map((it) => (
+                            <tr key={it.id} className="hover:bg-gray-50 print:hover:bg-transparent">
+                                <td className="px-3 py-2">
+                                    <div className="font-medium text-gray-800 leading-tight wrap-break-word">{it.afiliadoNom}</div>
+                                    <div className="text-gray-400">{it.afiliadoDoc}</div>
+                                </td>
+                                <td className="px-3 py-2 font-mono text-gray-600">{it.nroOrden}</td>
+                                <td className="px-3 py-2 text-gray-500">
+                                    {it.fechaRealiz ? new Date(it.fechaRealiz).toLocaleDateString('es-AR') : '-'}
+                                </td>
+                                <td className="px-3 py-2">
+                                    <div className="text-gray-800 leading-tight wrap-break-word">{it.servicioNombre}</div>
+                                    <div className="text-gray-400 font-mono break-all">{it.servicioCodigo}</div>
+                                </td>
+                                <td className="px-3 py-2 text-center">{it.cantidad}</td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap print:text-[8px]">{formatMonto(it.impEsp)}</td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap print:text-[8px]">{formatMonto(it.impAyu)}</td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap print:text-[8px]">{formatMonto(it.impAne)}</td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap print:text-[8px]">{formatMonto(it.impGto)}</td>
+                                <td className="px-3 py-2 text-right font-semibold whitespace-nowrap print:text-[8px]">{formatMonto(it.impTotal)}</td>
+                                <td className="px-3 py-2 text-right font-semibold text-green-700 whitespace-nowrap print:text-[8px]">
+                                    {it.importePromedi !== null ? formatMonto(it.importePromedi) : (
+                                        <span className="text-gray-300">—</span>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                        {items.length === 0 && (
+                            <tr>
+                                <td colSpan={11} className="px-3 py-6 text-center text-gray-400">
+                                    Sin registros
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                    <tfoot className="bg-gray-50 border-t font-semibold text-sm print:text-[8px]">
+                        <tr>
+                            <td colSpan={10} className="px-3 py-2 text-right text-gray-600">Total bruto:</td>
+                            <td className="px-3 py-2 text-right whitespace-nowrap">{formatMonto(totalBruto)}</td>
+                        </tr>
+                        <tr>
+                            <td colSpan={10} className="px-3 py-2 text-right text-gray-600">Total con PROMEDI:</td>
+                            <td className="px-3 py-2 text-right text-green-700 whitespace-nowrap">
+                                {totalPromedi > 0 ? formatMonto(totalPromedi) : '—'}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
             </div>
         </div>
     )

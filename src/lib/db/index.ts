@@ -36,11 +36,12 @@ const datasourceUrl =
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    datasourceUrl,
-    log:
-      process.env.NODE_ENV === 'development'
-        ? ['error', 'warn']
-        : ['error'],
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    datasources: {
+      db: {
+        url: datasourceUrl, // Configuración de conexión en la URL
+      },
+    },
   })
 
 if (process.env.NODE_ENV !== 'production') {

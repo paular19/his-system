@@ -24,7 +24,7 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
 
   const profesionales = await prisma.profesional.findMany({
     where: { estado: 'A' },
-    select: { id: true, nombre: true },
+    select: { id: true, nombre: true, matricula: true },
     orderBy: { nombre: 'asc' },
   })
 

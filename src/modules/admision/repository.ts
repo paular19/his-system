@@ -46,6 +46,14 @@ const incluirRelacionesDetalle = {
     include: { tipoMovimiento: true },
     orderBy: { fecha: 'desc' as const },
   },
+  evoluciones: {
+    orderBy: { fecha: 'desc' as const },
+    take: 1,
+    select: {
+      fecha: true,
+      profesional: { select: { nombre: true, matricula: true } },
+    },
+  },
   practicas: {
     where: { OR: [{ estado: 'A' }, { estado: null }] },
     orderBy: [{ fecha: 'desc' as const }, { id: 'desc' as const }],
@@ -56,6 +64,19 @@ const incluirRelacionesDetalle = {
       cantidad: true,
       fecha: true,
       numeroAutorizacion: true,
+      matriculaEspecialista: true,
+      matriculaAnestesista: true,
+      puestoNumero: true,
+      ordenNumero: true,
+      ordenItem: true,
+      ordenPractica: {
+        select: {
+          puestoNumero: true,
+          ordenNumero: true,
+          item: true,
+          numeroAutorizacion: true,
+        },
+      },
       nomencladorPractica: { select: { descripcion: true } },
     },
   },
@@ -154,13 +175,14 @@ export async function actualizarIngreso(
   usuarioModificacion: string
 ): Promise<IngresoConRelaciones> {
   const ahora = new Date()
+  const usuarioNormalizado = usuarioModificacion.slice(0, 10)
 
   // Registrar en historial antes de actualizar
   await prisma.ingresoHistorial.create({
     data: {
       ingresoId: id,
       tipoCambio: 'M',
-      usuarioCambio: usuarioModificacion,
+      usuarioCambio: usuarioNormalizado,
       fechaCambio: ahora,
     },
   })
@@ -224,7 +246,7 @@ export async function buscarIngresos(
     }
   }
 
-  const [total, items] = await prisma.$transaction([
+  const [total, items] = await Promise.all([
     prisma.ingreso.count({ where }),
     prisma.ingreso.findMany({
       where,

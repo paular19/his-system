@@ -104,10 +104,13 @@ export default async function PacientesPage({ searchParams }: PageProps) {
     porPagina: params.limit,
   })
 
-  if (resultado.paginacion.totalPaginas > 0 && params.page > resultado.paginacion.totalPaginas) {
+  const totalPaginas = resultado?.paginacion?.totalPaginas ?? 1
+  const paginaActual = resultado?.paginacion?.pagina ?? 1
+
+  if (totalPaginas > 0 && params.page > totalPaginas) {
     const qs = buildQueryString({
       ...params,
-      page: resultado.paginacion.totalPaginas,
+      page: totalPaginas,
     })
     redirect(`/dashboard/pacientes?${qs}`)
   }
@@ -286,10 +289,10 @@ export default async function PacientesPage({ searchParams }: PageProps) {
 
           <PaginationControls
             className="border-t"
-            currentPage={resultado.paginacion.pagina}
-            totalPages={Math.max(1, resultado.paginacion.totalPaginas)}
-            totalItems={resultado.paginacion.total}
-            pageSize={resultado.paginacion.porPagina}
+            currentPage={paginaActual}
+            totalPages={Math.max(1, totalPaginas)}
+            totalItems={resultado?.paginacion?.total ?? 0}
+            pageSize={resultado?.paginacion?.porPagina ?? 10}
             allowedPageSizes={LIMIT_OPTIONS as unknown as number[]}
             pageParam="page"
             pageSizeParam="limit"

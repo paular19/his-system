@@ -16,7 +16,7 @@ import {
 export const metadata: Metadata = { title: 'Nueva Autorización' }
 
 interface PageProps {
-  searchParams: Promise<{ pacienteId?: string; q?: string; ingresoId?: string }>
+  searchParams: Promise<{ pacienteId?: string; q?: string; ingresoId?: string; modo?: string }>
 }
 
 export default async function NuevaAutorizacionPage({ searchParams }: PageProps) {
@@ -25,18 +25,13 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
     redirect('/dashboard/ambulatorio')
   }
 
-  const [obraSocialesRows, planes, profesionales] = await Promise.all([
+  const [obraSocialesRows, profesionales] = await Promise.all([
     prisma.$queryRaw<Array<{ id: number; nombre: string }>>`
       SELECT "OSID"::int AS id, BTRIM("OSNom") AS nombre
       FROM "ObraSocial"
       WHERE BTRIM("OSEstad") = 'A'
       ORDER BY "OSNom" ASC
     `,
-    prisma.planObraSocial.findMany({
-      where: { estado: 'A' },
-      select: { id: true, descripcion: true, obraSocialId: true },
-      orderBy: { descripcion: 'asc' },
-    }),
     prisma.profesional.findMany({
       where: { estado: 'A' },
       select: { id: true, nombre: true, matricula: true },
@@ -49,6 +44,7 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
   let pacienteInicial: PacienteResumen | null = null
   const q = params.q?.trim() ?? ''
   const ingresoId = params.ingresoId ? parseInt(params.ingresoId, 10) : NaN
+  const modoInicial = params.modo === 'AGRUPADA' ? 'AGRUPADA' : params.modo === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'MASIVA'
 
   const [admisiones, admisionSeleccionada] = await Promise.all([
     q.length >= 2 ? buscarAdmisionesActivasPorPaciente(q) : Promise.resolve([]),
@@ -163,18 +159,20 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
           )}
         </section>
 
-        <ConsultaForm
-          obraSociales={obraSocialesRows}
-          planes={planes.map((p) => ({
-            id: p.id,
-            descripcion: p.descripcion,
-            obraSocialId: p.obraSocialId,
-          }))}
-          profesionales={profesionales}
-          pacienteInicial={pacienteInicial}
-          admisionInicial={admisionSeleccionada}
-          usuario={usuario.codigoUsuario}
-        />
+        {!admisionSeleccionada ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Buscá y seleccioná una admisión para cargar la autorización.
+          </div>
+        ) : (
+          <ConsultaForm
+            obraSociales={obraSocialesRows}
+            profesionales={profesionales}
+            pacienteInicial={pacienteInicial}
+            admisionInicial={admisionSeleccionada}
+            usuario={usuario.codigoUsuario}
+            modoInicial={modoInicial}
+          />
+        )}
       </div>
     </>
   )

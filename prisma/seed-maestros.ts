@@ -7,44 +7,15 @@
  */
 
 import { PrismaClient } from '@prisma/client'
+import { seedAdmisionMaestros } from './seed-admision-maestros'
 
 const prisma = new PrismaClient()
 
 async function main() {
   console.log('Seeding tablas maestras...\n')
 
-  // ── TipoIngreso ──────────────────────────────────────────
-  const tiposIngreso = [
-    { codigo: 'AMB', descripcion: 'Ambulatorio', proximoNumero: 1 },
-    { codigo: 'INT', descripcion: 'Internacion', proximoNumero: 1 },
-  ]
-
-  for (const tipo of tiposIngreso) {
-    await prisma.tipoIngreso.upsert({
-      where: { codigo: tipo.codigo },
-      update: { descripcion: tipo.descripcion },
-      create: tipo,
-    })
-    console.log(`  ✓ TipoIngreso: ${tipo.codigo} — ${tipo.descripcion}`)
-  }
-
-  // ── TipoInternacion ──────────────────────────────────────
-  const tiposInternacion = [
-    { codigo: 'GEN', descripcion: 'General', esAmbulatorio: false },
-    { codigo: 'UTI', descripcion: 'Terapia Intensiva', esAmbulatorio: false },
-    { codigo: 'CIR', descripcion: 'Cirugía Programada', esAmbulatorio: false },
-    { codigo: 'OBS', descripcion: 'Observación', esAmbulatorio: true },
-    { codigo: 'CON', descripcion: 'Consulta / Indicación', esAmbulatorio: true },
-  ]
-
-  for (const tipo of tiposInternacion) {
-    await prisma.tipoInternacion.upsert({
-      where: { codigo: tipo.codigo },
-      update: { descripcion: tipo.descripcion, esAmbulatorio: tipo.esAmbulatorio },
-      create: tipo,
-    })
-    console.log(`  ✓ TipoInternacion: ${tipo.codigo} — ${tipo.descripcion}`)
-  }
+  // ── Maestros de admision ─────────────────────────────────
+  await seedAdmisionMaestros(prisma)
 
   // ── MotivoEgreso ─────────────────────────────────────────
   const motivosEgreso = [

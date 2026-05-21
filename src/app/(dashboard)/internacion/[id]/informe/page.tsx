@@ -4,8 +4,9 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
-import { ChevronRight, Printer, FileText } from 'lucide-react'
+import { ChevronRight, FileText } from 'lucide-react'
 import type { Metadata } from 'next'
+import { PrintButton } from '@/components/ui/print-button'
 
 export const metadata: Metadata = { title: 'Informe de Hospitalización' }
 
@@ -51,6 +52,14 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
         orderBy: { fecha: 'desc' },
         take: 20,
       },
+      cirugiasProgramadas: {
+        orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
+        include: {
+          practicas: {
+            orderBy: { id: 'asc' },
+          },
+        },
+      },
       informes: {
         orderBy: { fecha: 'desc' },
         take: 1,
@@ -65,17 +74,19 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
   if (!ingreso || ingreso.tipoIngresoCodigo !== 'INT') notFound()
 
   const informe = ingreso.informes[0] ?? null
+  const cirugia = ingreso.cirugiasProgramadas[0] ?? null
 
   const fmt = (d: Date | null | undefined) =>
     d ? new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
   const fmtDate = (d: Date | null | undefined) =>
     d ? new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: 'numeric' }) : '—'
+  const fmtHora = (h: string | null | undefined) => (h && h.trim() ? h : '—')
 
   const diasEstancia = () => {
     if (!ingreso.fechaIngreso) return '—'
     const fin = ingreso.fechaEgreso ?? new Date()
     const dias = Math.floor((fin.getTime() - ingreso.fechaIngreso.getTime()) / 86_400_000)
-    return `${dias} días`
+    return `${Math.max(0, dias)} días`
   }
 
   const edad = () => {
@@ -120,19 +131,19 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
             <FileText className="h-4 w-4" />
             Detalle
           </Link>
-          <button
-            onClick={() => window.print()}
+          <PrintButton
+            label="Imprimir"
             className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            <Printer className="h-4 w-4" />
-            Imprimir
-          </button>
+          />
         </div>
 
         {/* Cabecera del informe */}
         <div className="border-b-2 pb-4 print:pb-3">
           <div className="flex items-start justify-between">
-            <div>
+            <div className="flex flex-col gap-1">
+              {/* Logo visible solo en impresión */}
+              <img src="/logo-clinica.png" alt="Logo Clínica" className="hidden print:block" style={{ maxWidth: 110, marginBottom: 4 }} />
+              <p className="hidden print:block text-xs text-gray-500">Av. Sarmiento 566, Salta Capital, Argentina · Tel: 3872537289</p>
               <h1 className="text-2xl font-bold text-gray-900 print:text-xl">Informe de Hospitalización</h1>
               {informe && (
                 <p className="text-xs text-gray-500 mt-1">
@@ -181,7 +192,6 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Cobertura</h2>
             <dl className="space-y-1.5 print:space-y-1">
               <DataRow label="Obra Social" value={ingreso.obraSocial?.nombre ?? '—'} />
-              <DataRow label="Plan" value={ingreso.plan?.descripcion ?? '—'} />
               <DataRow label="Afiliado" value={ingreso.numeroAfiliado ?? '—'} />
             </dl>
           </div>
@@ -197,6 +207,52 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
             </dl>
           </div>
         </div>
+
+        {/* Cirugía programada (resumen) */}
+        {cirugia && (
+          <div className="border-t pt-4 print:pt-2">
+            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Cirugía</h2>
+            <div className="his-card p-4 print:p-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <DataRow label="Fecha" value={fmtDate(cirugia.fechaCirugia)} />
+                <DataRow label="Hora" value={fmtHora(cirugia.horaCirugia)} />
+                <DataRow
+                  label="Especialista a cargo"
+                  value={ingreso.profesionalTratante?.nombre ?? informe?.profesionalEfector?.nombre ?? '—'}
+                />
+                <DataRow
+                  label="N° autorización"
+                  value={cirugia.numeroAutorizacion ?? '—'}
+                />
+              </div>
+
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Prácticas</p>
+                {cirugia.practicas.length > 0 ? (
+                  <ul className="space-y-1 print:space-y-0.5 text-xs">
+                    {cirugia.practicas.map((p) => (
+                      <li key={p.id} className="text-gray-700">
+                        • Cód. {p.codigo} - {p.descripcion} · Cant. {String(p.cantidad)}
+                        {p.numeroAutorizacion && (
+                          <span className="text-gray-500"> (Auth: {p.numeroAutorizacion})</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-gray-500">Sin prácticas registradas.</p>
+                )}
+              </div>
+
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Observaciones</p>
+                <p className="text-xs text-gray-700 whitespace-pre-wrap">
+                  {cirugia.observaciones?.trim() || 'Sin observaciones.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Diagnósticos */}
         {(ingreso.descripcionPatologia || ingreso.ingresoPatologias.length > 0) && (

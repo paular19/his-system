@@ -11,6 +11,7 @@ const incluirRelaciones = {
   provincia: true,
   localidad: true,
   profesion: true,
+  obraSocial: true,
 } as const
 
 // ============================================
@@ -146,49 +147,46 @@ export async function buscarPacientes(
   const { pagina, porPagina, q, numeroDocumento, apellido, nombre, historiaClinica } = params
   const skip = (pagina - 1) * porPagina
 
-  // Construir filtros de búsqueda
-  type WhereClause = Prisma.PacienteWhereInput
-  const where: WhereClause = {}
+  const where: Prisma.PacienteWhereInput = {}
 
   if (q) {
-    // Búsqueda general: intenta por DNI si es numérico, sino por nombre/apellido
     const esNumerico = /^\d+$/.test(q)
     if (esNumerico) {
       const num = parseInt(q, 10)
       where.OR = [
         { numeroDocumento: num },
         { historiaClinica: num },
-        { apellido: { contains: q, mode: 'insensitive' } },
       ]
     } else {
       where.OR = [
         { apellido: { contains: q, mode: 'insensitive' } },
         { nombre: { contains: q, mode: 'insensitive' } },
-        { nombreCompleto: { contains: q, mode: 'insensitive' } },
       ]
     }
   }
 
   if (numeroDocumento) where.numeroDocumento = numeroDocumento
-  if (historiaClinica) where.historiaClinica = historiaClinica
   if (apellido) where.apellido = { contains: apellido, mode: 'insensitive' }
   if (nombre) where.nombre = { contains: nombre, mode: 'insensitive' }
+  if (historiaClinica) where.historiaClinica = historiaClinica
 
   const [total, items] = await prisma.$transaction([
     prisma.paciente.count({ where }),
     prisma.paciente.findMany({
       where,
+      skip,
+      take: porPagina,
       select: {
         id: true,
         historiaClinica: true,
         apellido: true,
         nombre: true,
         nombreCompleto: true,
+        domicilio: true,
         tipoDocumento: true,
         numeroDocumento: true,
-        sexo: true,
         fechaNacimiento: true,
-        domicilio: true,
+        sexo: true,
         telefonoFijo: true,
         celular1: true,
         email: true,
@@ -208,35 +206,35 @@ export async function buscarPacientes(
           },
         },
       },
-      orderBy: [{ apellido: 'asc' }, { nombre: 'asc' }],
-      skip,
-      take: porPagina,
+      orderBy: [
+        { apellido: 'asc' },
+        { nombre: 'asc' },
+      ],
     }),
   ])
 
   return {
-    items: items.map((p) => ({
-      id: p.id,
-      historiaClinica: p.historiaClinica,
-      nombreCompleto: p.nombreCompleto,
-      domicilio: p.domicilio,
-      tipoDocumento: p.tipoDocumento,
-      numeroDocumento: p.numeroDocumento,
-      fechaNacimiento: p.fechaNacimiento,
-      sexo: p.sexo,
-      telefonoFijo: p.telefonoFijo,
-      celular1: p.celular1,
-      email: p.email,
-      apellido: p.apellido,
-      nombre: p.nombre,
-      obraSocialId: p.obraSocialId,
-      planId: p.planId,
-      obraSocialCoseguroId: p.obraSocialCoseguroId,
-      obraSocialNombre: p.obraSocial?.nombre ?? null,
-      planDescripcion: p.plan?.descripcion ?? null,
-      numeroAfiliado: p.numeroAfiliado,
-      fechaAlta: p.fechaAlta,
-      estado: 'activo' as const,
+    items: items.map((item) => ({
+      id: item.id,
+      historiaClinica: item.historiaClinica,
+      apellido: item.apellido,
+      nombre: item.nombre,
+      nombreCompleto: item.nombreCompleto,
+      domicilio: item.domicilio,
+      tipoDocumento: item.tipoDocumento,
+      numeroDocumento: item.numeroDocumento,
+      fechaNacimiento: item.fechaNacimiento,
+      sexo: item.sexo,
+      telefonoFijo: item.telefonoFijo,
+      celular1: item.celular1,
+      email: item.email,
+      obraSocialId: item.obraSocialId,
+      planId: item.planId,
+      obraSocialCoseguroId: item.obraSocialCoseguroId,
+      obraSocialNombre: item.obraSocial?.nombre ?? null,
+      planDescripcion: item.plan?.descripcion ?? null,
+      numeroAfiliado: item.numeroAfiliado,
+      fechaAlta: item.fechaAlta,
     })),
     paginacion: {
       pagina,
@@ -246,3 +244,4 @@ export async function buscarPacientes(
     },
   }
 }
+

@@ -1,7 +1,6 @@
 export type ReglaFacturacionCodigo =
     | 'DEFAULT_100'
-    | 'IPSS_SIN_COSEGURO_80'
-    | 'IPSS_CON_COSEGURO_80'
+    | 'IPS_100'
     | 'OS_100'
     | 'OS_120'
 
@@ -43,21 +42,11 @@ export function resolverReglaFacturacion(
     const nombre = normalizarNombre(obraSocialNombre ?? '')
 
     if (esIPSSoIPS(nombre)) {
-        if (tieneCoseguro) {
-            return {
-                codigo: 'IPSS_CON_COSEGURO_80',
-                descripcion: 'IPSS con coseguro: 80% del nomenclador a cargo de la OS, 20% a cargo del coseguro.',
-                porcentajeFacturacion: 80,
-                porcentajeCargoPaciente: 0,
-                porcentajeCargoCoseguro: 20,
-            }
-        }
-
         return {
-            codigo: 'IPSS_SIN_COSEGURO_80',
-            descripcion: 'IPSS sin coseguro: 80% del nomenclador (20% a cargo del paciente).',
-            porcentajeFacturacion: 80,
-            porcentajeCargoPaciente: 20,
+            codigo: 'IPS_100',
+            descripcion: 'IPS: 100% del valor del nomenclador.',
+            porcentajeFacturacion: 100,
+            porcentajeCargoPaciente: 0,
             porcentajeCargoCoseguro: 0,
         }
     }

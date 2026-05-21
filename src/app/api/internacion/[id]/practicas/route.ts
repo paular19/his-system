@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUsuarioSesion } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
+import { revalidatePath } from 'next/cache'
 import * as service from '@/modules/internacion/service'
 import { CrearPracticaSchema } from '@/modules/internacion/schemas'
 import { manejarErrorApi } from '@/lib/utils/response'
@@ -28,6 +29,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
         const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? undefined
         const practica = await service.crearPractica(validado, usuario.codigoUsuario, ip ?? undefined)
+
+        revalidatePath(`/dashboard/admision/${ingresoId}`)
+        revalidatePath(`/dashboard/internacion/${ingresoId}`)
 
         return NextResponse.json({ data: practica }, { status: 201 })
     } catch (err) {

@@ -17,7 +17,6 @@ const LIMIT_OPTIONS = [10, 20, 50, 100] as const
 interface SearchParamsInput {
   q?: string
   tipoIngresoCodigo?: string
-  estado?: string
   page?: string
   limit?: string
   pagina?: string
@@ -26,20 +25,6 @@ interface SearchParamsInput {
 
 interface PageProps {
   searchParams: Promise<SearchParamsInput>
-}
-
-const BADGE_ESTADO: Record<string, string> = {
-  A: 'his-badge-activo',
-  E: 'his-badge-inactivo',
-  P: 'his-badge-urgente',
-  X: 'his-badge-inactivo',
-}
-
-const LABEL_ESTADO: Record<string, string> = {
-  A: 'Activo',
-  E: 'Egresado',
-  P: 'Pendiente',
-  X: 'Anulado',
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number) {
@@ -62,7 +47,6 @@ function normalizarSearchParams(params: SearchParamsInput) {
   return {
     q: params.q?.trim() || undefined,
     tipoIngresoCodigo: params.tipoIngresoCodigo || undefined,
-    estado: params.estado || undefined,
     page,
     limit,
   }
@@ -71,14 +55,12 @@ function normalizarSearchParams(params: SearchParamsInput) {
 function buildQueryString(params: {
   q?: string
   tipoIngresoCodigo?: string
-  estado?: string
   page: number
   limit: number
 }) {
   const sp = new URLSearchParams()
   if (params.q) sp.set('q', params.q)
   if (params.tipoIngresoCodigo) sp.set('tipoIngresoCodigo', params.tipoIngresoCodigo)
-  if (params.estado) sp.set('estado', params.estado)
   sp.set('page', String(params.page))
   sp.set('limit', String(params.limit))
   return sp.toString()
@@ -112,7 +94,6 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
   const hasNonCanonicalQuery = buildQueryString({
     q: rawParams.q?.trim() || undefined,
     tipoIngresoCodigo: rawParams.tipoIngresoCodigo || undefined,
-    estado: rawParams.estado || undefined,
     page: parsePositiveInt(rawParams.page ?? rawParams.pagina, DEFAULT_PAGE),
     limit: LIMIT_OPTIONS.includes(parsePositiveInt(rawParams.limit ?? rawParams.porPagina, DEFAULT_LIMIT) as (typeof LIMIT_OPTIONS)[number])
       ? parsePositiveInt(rawParams.limit ?? rawParams.porPagina, DEFAULT_LIMIT)
@@ -129,7 +110,6 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
     resultado = await buscarIngresosCached({
       q: params.q,
       tipoIngresoCodigo: params.tipoIngresoCodigo,
-      estado: params.estado,
       pagina: params.page,
       porPagina: params.limit,
     })
@@ -165,17 +145,6 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
                 className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <select
-              name="estado"
-              defaultValue={params.estado ?? ''}
-              className="rounded-md border border-gray-300 px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos los estados</option>
-              <option value="A">Activo</option>
-              <option value="E">Egresado</option>
-              <option value="P">Pendiente</option>
-              <option value="X">Anulado</option>
-            </select>
             <button
               type="submit"
               className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
@@ -215,16 +184,13 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
                   <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider">
                     Fecha Ingreso
                   </th>
-                  <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider">
-                    Estado
-                  </th>
                   <th className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {resultado.items.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
+                    <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
                       <ClipboardList className="h-8 w-8 mx-auto mb-2 opacity-30" />
                       <p>No se encontraron ingresos</p>
                       {params.q && (
@@ -258,19 +224,6 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
                       </td>
                       <td className="px-4 py-3 text-gray-600">
                         {formatearFecha(ingreso.fechaIngreso)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {ingreso.estado ? (
-                          <span
-                            className={
-                              BADGE_ESTADO[ingreso.estado] ?? 'his-badge-inactivo'
-                            }
-                          >
-                            {LABEL_ESTADO[ingreso.estado] ?? ingreso.estado}
-                          </span>
-                        ) : (
-                          '-'
-                        )}
                       </td>
                       <td className="px-4 py-3">
                         <Link

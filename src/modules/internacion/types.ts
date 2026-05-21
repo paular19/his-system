@@ -84,6 +84,7 @@ export interface InternacionListItem {
     identificador: string
     sector: string
     habitacion: string | null
+    estado: string
   } | null
   paciente: {
     id: number
@@ -91,6 +92,10 @@ export interface InternacionListItem {
     numeroDocumento: number | null
   } | null
   profesionalTratante: {
+    id: number
+    nombre: string
+  } | null
+  obraSocial: {
     id: number
     nombre: string
   } | null
@@ -131,32 +136,74 @@ export interface InternacionDetalle {
     identificador: string
     sector: string
     habitacion: string | null
+    estado: string
   } | null
 
   profesionalGuardia: { id: number; nombre: string } | null
-  profesionalTratante: { id: number; nombre: string } | null
+  profesionalTratante: { id: number; nombre: string; matricula: number | null } | null
+  historialTratantes: Array<{
+    id: number
+    profesionalId: number
+    profesionalNombre: string
+    usuario: string
+    fecha: Date
+  }>
   obraSocial: { id: number; nombre: string } | null
   plan: { id: number; descripcion: string } | null
+  obraSocialCoseguroId: number | null
   numeroAfiliado: string | null
 
   ingresoPatologias: Array<{
     id: number
     patologiaId: number | null
     descripcion: string | null
+    observaciones: string | null
     estado: string
     fecha: Date
+    fechaEstado: Date
+    usuario: string
   }>
 
   evoluciones: EvolucionItem[]
   medicaciones: MedicacionItem[]
+  descartables: DescartableItem[]
   transferencias: TransferenciaItem[]
   practicas: PracticaItem[]
+  cirugiasUrgencia: CirugiaUrgenciaItem[]
   ordenes: Array<{
     puestoNumero: number
     numero: number
     fechaEmision: Date
     estado: string
     items: Array<{ item: number; codigoPractica: string; cantidad: number; numeroAutorizacion: string | null }>
+  }>
+}
+
+export interface CirugiaUrgenciaItem {
+  id: number
+  fechaCirugia: Date
+  horaCirugia: string | null
+  numeroAutorizacion: string | null
+  observaciones: string | null
+  cama: {
+    id: number
+    identificador: string
+    sector: string
+    habitacion: string | null
+  } | null
+  practicas: Array<{
+    id: number
+    codigo: string
+    descripcion: string
+    cantidad: number
+    numeroAutorizacion: string | null
+  }>
+  diferenciales: Array<{
+    esFeriado: boolean
+    esNocturna: boolean
+    mismaViaPatologia: boolean
+    diferentesViasPatologia: boolean
+    diferentesViasDiferentesPatologia: boolean
   }>
 }
 
@@ -173,9 +220,34 @@ export interface PracticaItem {
   fecha: Date
   cantidad: number
   numeroAutorizacion: string | null
+  matriculaEspecialista?: number | null
+  matriculaAnestesista?: number | null
+  ordenPractica: Array<{
+    puestoNumero: number
+    ordenNumero: number
+    item: number
+    numeroAutorizacion: string | null
+  }>
   facturable: boolean
   estado: string | null
   usuario: string
+}
+
+export interface AltaInternacionInput {
+  ingresoId: number
+  fechaEgreso?: Date | null
+  motivoEgresoCodigo?: string | null
+  descripcionPatologiaDefinitiva?: string | null
+}
+
+export interface DiagnosticoInternacionUpdateInput {
+  id: number
+  ingresoId: number
+  patologiaId?: number | null
+  descripcion: string
+  observaciones?: string | null
+  fecha?: Date | null
+  estado: 'A' | 'I'
 }
 
 // ============================================
@@ -250,6 +322,25 @@ export interface MedicacionItem {
   usuario: string
 }
 
+export const ESTADO_DESCARTABLE_LABEL: Record<string, string> = {
+  A: 'Activo',
+  S: 'Suspendido',
+  F: 'Finalizado',
+}
+
+export interface DescartableItem {
+  id: number
+  ingresoId: number
+  nombre: string
+  cantidad: number
+  observaciones: string | null
+  fechaInicio: Date
+  fechaFin: Date | null
+  estado: string
+  profesional: { id: number; nombre: string } | null
+  usuario: string
+}
+
 // ============================================
 // TRANSFERENCIA DE CAMA
 // ============================================
@@ -260,7 +351,7 @@ export interface TransferenciaItem {
   fecha: Date
   motivo: string | null
   camaOrigen: { id: number; identificador: string; sector: string } | null
-  camaDestino: { id: number; identificador: string; sector: string }
+  camaDestino: { id: number; identificador: string; sector: string; estado: string }
   profesional: { id: number; nombre: string } | null
   usuario: string
 }

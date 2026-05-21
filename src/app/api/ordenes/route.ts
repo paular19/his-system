@@ -19,8 +19,13 @@ export async function GET(request: NextRequest) {
     const take = parseInt(searchParams.get('take') ?? '20', 10)
     const pendienteParam = searchParams.get('pendiente')
     const pendiente = pendienteParam === 'true' ? true : pendienteParam === 'false' ? false : undefined
+    const tabParam = searchParams.get('tab')
+    const estadoTab =
+      tabParam === 'pendientes' || tabParam === 'confirmadas' || tabParam === 'anuladas'
+        ? tabParam
+        : undefined
 
-    const resultado = await listarOrdenes({ skip, take, pendiente })
+    const resultado = await listarOrdenes({ skip, take, pendiente, estadoTab })
     return apiOk(resultado)
   } catch (err) {
     return manejarErrorApi(err)

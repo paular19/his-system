@@ -42,26 +42,33 @@ const OBRAS_SOCIALES = [
 async function main() {
     console.log('Iniciando seed de obras sociales para reglas de facturación...\n')
 
-    for (const os of OBRAS_SOCIALES) {
-        const result = await prisma.obraSocial.upsert({
-            where: { id: os.id },
-            update: {
-                nombre: os.nombre,
-                estado: 'A',
-                requiereCoseguro: os.requiereCoseguro,
-            },
-            create: {
-                id: os.id,
-                nombre: os.nombre,
-                requiereCoseguro: os.requiereCoseguro,
-                estado: 'A',
-                fechaEstado: new Date(),
-            },
-        })
-        console.log(`  [${result.id.toString().padStart(4, ' ')}] ${result.nombre}`)
+    const batchSize = 10; // Procesar en lotes de 10
+    for (let i = 0; i < OBRAS_SOCIALES.length; i += batchSize) {
+        const batch = OBRAS_SOCIALES.slice(i, i + batchSize);
+        await Promise.all(
+            batch.map(async (os) => {
+                const result = await prisma.obraSocial.upsert({
+                    where: { id: os.id },
+                    update: {
+                        nombre: os.nombre,
+                        estado: 'A',
+                        requiereCoseguro: os.requiereCoseguro,
+                    },
+                    create: {
+                        id: os.id,
+                        nombre: os.nombre,
+                        requiereCoseguro: os.requiereCoseguro,
+                        estado: 'A',
+                        fechaEstado: new Date(),
+                    },
+                });
+                console.log(`  [${result.id.toString().padStart(4, ' ')}] ${result.nombre}`)
+            })
+        );
     }
 
     console.log(`\nSeed completado. ${OBRAS_SOCIALES.length} registros procesados.`)
+    await prisma.$disconnect();
 }
 
 main()

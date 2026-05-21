@@ -4,6 +4,8 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
 import { obtenerMapaCamas, obtenerInternacionesActivas } from '@/modules/internacion/service'
 import { SeccionSector } from '@/components/internacion/seccion-sector'
+import { PrintButton } from '@/components/ui/print-button'
+import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import {
   BedDouble,
@@ -16,23 +18,99 @@ import {
   Calendar,
   History,
 } from 'lucide-react'
+import { InternacionFiltros } from '@/components/internacion/internacion-filtros'
+import { InternacionFechaSelector } from '@/components/internacion/internacion-fecha-selector'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Internación — Mapa de Camas' }
 
-export default async function InternacionPage() {
+interface PageProps {
+  searchParams: Promise<{
+    q?: string
+    obraSocialId?: string
+    fecha?: string
+  }>
+}
+
+const ARG_TIME_ZONE = 'America/Argentina/Buenos_Aires'
+
+function claveDiaArgentina(fecha: Date): string {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ARG_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(fecha)
+
+  const year = partes.find((p) => p.type === 'year')?.value ?? '0000'
+  const month = partes.find((p) => p.type === 'month')?.value ?? '01'
+  const day = partes.find((p) => p.type === 'day')?.value ?? '01'
+  return `${year}-${month}-${day}`
+}
+
+function fechaDesdeClaveArgentina(clave: string): Date {
+  return new Date(`${clave}T12:00:00-03:00`)
+}
+
+export default async function InternacionPage({ searchParams }: PageProps) {
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'INTERNACION', 'LEER')) redirect('/dashboard')
 
-  const [mapa, internaciones] = await Promise.all([
-    obtenerMapaCamas(),
+  const params = await searchParams
+  const q = params.q?.trim() ?? ''
+  const obraSocialId = params.obraSocialId ? Number(params.obraSocialId) : undefined
+  const obraSocialIdFiltro = obraSocialId && Number.isFinite(obraSocialId) ? obraSocialId : undefined
+  const fechaHoyKey = claveDiaArgentina(new Date())
+  const fechasDisponibles = Array.from({ length: 5 }, (_, idx) => {
+    const fecha = new Date(Date.now() + idx * 86_400_000)
+    const key = claveDiaArgentina(fecha)
+    return {
+      key,
+      labelCorta: fecha.toLocaleDateString('es-AR', {
+        timeZone: ARG_TIME_ZONE,
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+      }),
+      labelLarga: fecha.toLocaleDateString('es-AR', {
+        timeZone: ARG_TIME_ZONE,
+        weekday: 'long',
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      }),
+    }
+  })
+
+  const fechaSeleccionada =
+    params.fecha && fechasDisponibles.some((f) => f.key === params.fecha)
+      ? params.fecha
+      : fechaHoyKey
+  const fechaReferencia = fechaDesdeClaveArgentina(fechaSeleccionada)
+  const fechaLabel =
+    fechasDisponibles.find((f) => f.key === fechaSeleccionada)?.labelLarga ??
+    fechaReferencia.toLocaleDateString('es-AR', { timeZone: ARG_TIME_ZONE })
+
+  const [mapa, internaciones, obrasSociales] = await Promise.all([
+    obtenerMapaCamas(fechaReferencia),
     obtenerInternacionesActivas(
-      { pagina: 1, porPagina: 10 },
+      {
+        pagina: 1,
+        porPagina: 100,
+        q: q || undefined,
+        obraSocialId: obraSocialIdFiltro,
+        fechaReferencia,
+      },
       usuario.codigoUsuario
     ),
+    prisma.obraSocial.findMany({
+      select: { id: true, nombre: true },
+      orderBy: { nombre: 'asc' },
+    }),
   ])
 
   const puedeCrear = tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+  const hayFiltros = Boolean(q || obraSocialIdFiltro)
 
   return (
     <>
@@ -40,7 +118,7 @@ export default async function InternacionPage() {
       <div className="p-6 space-y-6">
 
         {/* Acciones */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between print:hidden">
           <h2 className="text-lg font-semibold text-gray-900">Mapa de camas</h2>
           <div className="flex items-center gap-2">
             <Link
@@ -62,8 +140,16 @@ export default async function InternacionPage() {
           </div>
         </div>
 
+        <InternacionFechaSelector
+          fechas={fechasDisponibles.map((f) => ({ key: f.key, labelCorta: f.labelCorta }))}
+          fechaSeleccionada={fechaSeleccionada}
+          q={q}
+          obraSocialIdFiltro={obraSocialIdFiltro}
+        />
+        <p className="-mt-4 text-xs text-gray-500 print:hidden">Fecha seleccionada: {fechaLabel}</p>
+
         {/* Tarjetas resumen totales */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 print:hidden">
           <div className="his-card p-4">
             <div className="flex items-center gap-3">
               <CheckCircle className="h-8 w-8 text-green-500" />
@@ -103,7 +189,7 @@ export default async function InternacionPage() {
         </div>
 
         {/* Resumen por sector */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
           {mapa.sectores.map((sector) => (
             <div key={sector.sector} className="his-card p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -140,14 +226,14 @@ export default async function InternacionPage() {
         </div>
 
         {/* Mapa visual por sector */}
-        <div className="space-y-4">
+        <div className="space-y-4 print:hidden">
           {mapa.sectores.map((sector) => (
             <SeccionSector key={sector.sector} sector={sector} />
           ))}
         </div>
 
         {/* Lista de internaciones activas */}
-        <div>
+        <div className="ips-print-sheet">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-semibold text-gray-900">
               Internaciones activas
@@ -155,7 +241,30 @@ export default async function InternacionPage() {
                 ({internaciones.paginacion.total})
               </span>
             </h2>
+            <PrintButton
+              label="Imprimir resultado"
+              className="print:hidden flex items-center gap-2 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2"
+            />
           </div>
+
+          <InternacionFiltros
+            q={q}
+            obraSocialIdFiltro={obraSocialIdFiltro}
+            obrasSociales={obrasSociales}
+            hayFiltros={hayFiltros}
+            fechaReferencia={fechaSeleccionada}
+          />
+
+          {hayFiltros && (
+            <p className="hidden print:block text-xs text-gray-700 mb-2">
+              Filtros aplicados:
+              {` Fecha: ${fechaLabel}.`}
+              {q ? ` Persona: ${q}.` : ''}
+              {obraSocialIdFiltro
+                ? ` Obra social: ${obrasSociales.find((o) => o.id === obraSocialIdFiltro)?.nombre ?? 'N/A'}.`
+                : ''}
+            </p>
+          )}
 
           {internaciones.items.length === 0 ? (
             <div className="his-card p-8 text-center">
@@ -163,7 +272,7 @@ export default async function InternacionPage() {
               <p className="text-sm text-gray-500">No hay internaciones activas</p>
             </div>
           ) : (
-            <div className="his-card overflow-hidden">
+            <div className="his-card overflow-hidden ips-print-table">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -175,6 +284,9 @@ export default async function InternacionPage() {
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
                       Médico tratante
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                      Obra social
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
                       Ingreso
@@ -192,7 +304,7 @@ export default async function InternacionPage() {
                           href={`/dashboard/internacion/${item.id}`}
                           className="flex items-center gap-2 hover:text-blue-600"
                         >
-                          <User className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          <User className="h-4 w-4 text-gray-400 shrink-0" />
                           <div>
                             <p className="font-medium text-gray-900 leading-tight">
                               {item.paciente?.nombreCompleto ?? item.nombre ?? '—'}
@@ -221,6 +333,9 @@ export default async function InternacionPage() {
                         {item.profesionalTratante?.nombre ?? (
                           <span className="text-gray-400">—</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell text-gray-700">
+                        {item.obraSocial?.nombre ?? <span className="text-gray-400">—</span>}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         {item.fechaIngreso ? (

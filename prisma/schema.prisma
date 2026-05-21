@@ -69,17 +69,18 @@ model Paciente {
   gravidadId        Int?     @map("GraID")
 
   // Relaciones
-  pais              Pais?               @relation(fields: [paisId], references: [id])
-  provincia         Provincia?          @relation("PacienteProvincia", fields: [provinciaId], references: [id])
-  localidad         Localidad?          @relation("PacienteLocalidad", fields: [provinciaId, localidadId], references: [provinciaId, id])
-  barrio            Barrio?             @relation("PacienteBarrio", fields: [provinciaId, localidadId, barrioId], references: [provinciaId, localidadId, id])
-  profesion         Profesion?          @relation(fields: [profesionId], references: [id])
-  obraSocial        ObraSocial?         @relation(fields: [obraSocialId], references: [id])
-  plan              PlanObraSocial?     @relation(fields: [obraSocialId, planId], references: [obraSocialId, id])
-  turnos            Turno[]
-  ingresos          Ingreso[]
-  movimientos       MovimientoIngreso[]
-  pacienteHistorial PacienteHistorial[]
+  pais                Pais?               @relation(fields: [paisId], references: [id])
+  provincia           Provincia?          @relation("PacienteProvincia", fields: [provinciaId], references: [id])
+  localidad           Localidad?          @relation("PacienteLocalidad", fields: [provinciaId, localidadId], references: [provinciaId, id])
+  barrio              Barrio?             @relation("PacienteBarrio", fields: [provinciaId, localidadId, barrioId], references: [provinciaId, localidadId, id])
+  profesion           Profesion?          @relation(fields: [profesionId], references: [id])
+  obraSocial          ObraSocial?         @relation(fields: [obraSocialId], references: [id])
+  plan                PlanObraSocial?     @relation(fields: [obraSocialId, planId], references: [obraSocialId, id])
+  turnos              Turno[]
+  ingresos            Ingreso[]
+  movimientos         MovimientoIngreso[]
+  pacienteHistorial   PacienteHistorial[]
+  cirugiasProgramadas CirugiaProgramada[]
 
   @@index([numeroDocumento])
   @@index([apellido, nombre])
@@ -269,11 +270,13 @@ model Ingreso {
   ordenes             Orden[]
   practicas           Practica[]
   informes            InformeHospitalizacion[]
+  cirugiasProgramadas CirugiaProgramada[]      @relation("CirugiaProgramadaToIngreso")
   ingresoSubtipo      IngresoSubtipo?
   informeAmbulatorio  InformeAmbulatorio?
   evoluciones         EvolucionIngreso[]
   transferencias      TransferenciaIngreso[]
   medicaciones        MedicacionIngreso[]
+  descartables        DescartableIngreso[]
   lotesItems          LoteFacturacionItem[]    @relation("IngresoLotes")
 
   @@unique([tipoIngresoCodigo, numeroIngreso])
@@ -365,6 +368,7 @@ model Profesional {
   evoluciones             EvolucionIngreso[]       @relation("EvolucionProfesional")
   transferencias          TransferenciaIngreso[]   @relation("TransferenciaProfesional")
   medicaciones            MedicacionIngreso[]      @relation("MedicacionProfesional")
+  descartables            DescartableIngreso[]     @relation("DescartableProfesional")
 
   @@map("Profesional")
 }
@@ -387,6 +391,7 @@ model Cama {
   fechaEstado   DateTime @map("CamFchEstado") @db.Timestamp(6)
 
   ingresos              Ingreso[]
+  cirugiasProgramadas   CirugiaProgramada[]
   transferenciasOrigen  TransferenciaIngreso[] @relation("TransferenciaOrigen")
   transferenciasDestino TransferenciaIngreso[] @relation("TransferenciaDestino")
 
@@ -481,6 +486,49 @@ model MedicacionIngreso {
 
   @@index([ingresoId])
   @@map("MedicacionIngreso")
+}
+
+model DescartableIngreso {
+  id            Int       @id @default(autoincrement()) @map("DesID")
+  ingresoId     Int       @map("IngID")
+  nombre        String    @map("DesNombre") @db.VarChar(200)
+  cantidad      Int       @default(1) @map("DesCantidad")
+  observaciones String?   @map("DesObs") @db.VarChar(500)
+  fechaInicio   DateTime  @map("DesFchIni") @db.Timestamp(6)
+  fechaFin      DateTime? @map("DesFchFin") @db.Timestamp(6)
+  profesionalId Int?      @map("PrfID")
+  // Estado: A=Activo, S=Suspendido, F=Finalizado
+  estado        String    @map("DesEstado") @db.Char(1)
+  usuario       String    @map("UsuCodig") @db.Char(10)
+  fechaEstado   DateTime  @map("DesFchEstado") @db.Timestamp(6)
+
+  ingreso     Ingreso      @relation(fields: [ingresoId], references: [id])
+  profesional Profesional? @relation("DescartableProfesional", fields: [profesionalId], references: [id])
+
+  @@index([ingresoId])
+  @@map("DescartableIngreso")
+}
+
+model CatalogoMedicamentoUti {
+  id          Int      @id @default(autoincrement()) @map("CMUId")
+  nombre      String   @unique @map("CMUNombre") @db.VarChar(200)
+  estado      String   @default("A") @map("CMUEstado") @db.Char(1)
+  fechaEstado DateTime @map("CMUFchEstado") @db.Timestamp(6)
+  usuario     String   @map("UsuCodig") @db.Char(10)
+
+  @@index([estado])
+  @@map("CatalogoMedicamentoUti")
+}
+
+model CatalogoDescartableUti {
+  id          Int      @id @default(autoincrement()) @map("CDUId")
+  nombre      String   @unique @map("CDUNombre") @db.VarChar(200)
+  estado      String   @default("A") @map("CDUEstado") @db.Char(1)
+  fechaEstado DateTime @map("CDUFchEstado") @db.Timestamp(6)
+  usuario     String   @map("UsuCodig") @db.Char(10)
+
+  @@index([estado])
+  @@map("CatalogoDescartableUti")
 }
 
 // ============================================
@@ -627,6 +675,62 @@ model NomencladorPrestacion {
   @@index([categoria])
   @@index([codigo])
   @@map("NomPrestacion")
+}
+
+// ============================================
+// CIRUGÍA PROGRAMADA
+// ============================================
+
+model CirugiaProgramada {
+  id                 Int                  @id @default(autoincrement())
+  pacienteId         Int
+  numeroAutorizacion String?              @db.VarChar(50)
+  fechaCirugia       DateTime
+  horaCirugia        String?              @db.VarChar(5)
+  camaId             Int?
+  observaciones      String?              @db.VarChar(500)
+  internacionId      Int?
+  diferenciales      CirugiaDiferencial[]
+  practicas          CirugiaPractica[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  paciente    Paciente @relation(fields: [pacienteId], references: [id])
+  cama        Cama?    @relation(fields: [camaId], references: [id])
+  internacion Ingreso? @relation("CirugiaProgramadaToIngreso", fields: [internacionId], references: [id])
+
+  @@index([pacienteId])
+  @@index([camaId])
+  @@index([internacionId])
+}
+
+model CirugiaPractica {
+  id                 Int     @id @default(autoincrement())
+  cirugiaId          Int
+  codigo             String  @db.VarChar(20)
+  descripcion        String  @db.VarChar(500)
+  cantidad           Int
+  numeroAutorizacion String? @db.VarChar(50)
+
+  cirugia CirugiaProgramada @relation(fields: [cirugiaId], references: [id], onDelete: Cascade)
+
+  @@index([cirugiaId])
+}
+
+model CirugiaDiferencial {
+  id                                Int     @id @default(autoincrement())
+  cirugiaId                         Int
+  tipo                              String  @db.VarChar(50)
+  descripcion                       String  @db.VarChar(500)
+  esFeriado                         Boolean @default(false)
+  esNocturna                        Boolean @default(false)
+  mismaViaPatologia                 Boolean @default(false)
+  diferentesViasPatologia           Boolean @default(false)
+  diferentesViasDiferentesPatologia Boolean @default(false)
+
+  cirugia CirugiaProgramada @relation(fields: [cirugiaId], references: [id], onDelete: Cascade)
+
+  @@index([cirugiaId])
 }
 
 // ============================================
@@ -968,6 +1072,10 @@ model Orden {
   importeTotal    Decimal? @map("OrdImpTotal") @db.Decimal(12, 2)
   importeCargoPac Decimal? @map("OprImpCargoPac") @db.Decimal(12, 2)
 
+  // Modo modular (opcional)
+  titularModular       String? @map("OrdTitularModular") @db.VarChar(100)
+  imprimirPorDuplicado Boolean @default(false) @map("OrdImprimirDuplicado")
+
   // Administrativo
   estado          String   @map("OrdEstad") @db.Char(1)
   fechaEstado     DateTime @map("OrdFchEst") @db.Timestamp(6)
@@ -1013,8 +1121,11 @@ model OrdenPractica {
   porcentajeCargoPac   Decimal? @map("OprPorcenCargoPac") @db.Decimal(5, 2)
 
   // Facturación
-  tipoFacturacion String  @map("OprTipFact") @db.Char(1)
-  modulo          String? @map("OprModulo") @db.Char(8)
+  tipoFacturacion      String  @map("OprTipFact") @db.Char(1)
+  modulo               String? @map("OprModulo") @db.Char(8)
+  titularModular       String? @map("OprTitularModular") @db.VarChar(100)
+  imprimirPorDuplicado Boolean @default(false) @map("OprImprimirDuplicado")
+  efectorMatricula     Int?    @map("OprMatric")
 
   // Vinculación con práctica ejecutada
   practicaId Int? @map("PraID")
@@ -1035,7 +1146,7 @@ model Practica {
 
   // Práctica
   convenioId      Int    @map("NConCodig")
-  codigoPractica  String @map("NPrCodig") @db.Char(8)
+  codigoPractica  String @map("NPrCodig") @db.VarChar(8)
   convenioValorId Int    @map("NConCodigValor")
 
   // Fechas y cantidades
@@ -1043,7 +1154,9 @@ model Practica {
   cantidad Decimal  @map("PraCant") @db.Decimal(8, 2)
 
   // ⭐ NÚMERO DE AUTORIZACIÓN (copiado desde OrdenPractica)
-  numeroAutorizacion String? @map("PraNumAut") @db.VarChar(50)
+  numeroAutorizacion    String? @map("PraNumAut") @db.VarChar(50)
+  matriculaEspecialista Int?    @map("PraMatEsp")
+  matriculaAnestesista  Int?    @map("PraMatAne")
 
   // Obra Social
   obraSocialId Int? @map("OSID")
@@ -1092,6 +1205,12 @@ model NomencladorPractica {
   descripcion String  @map("NPrDescrip") @db.VarChar(500)
   categoriaId String? @map("NcpCodig") @db.Char(5)
 
+  // Desglose de valores por componente (opcional)
+  valorEspecialista Decimal? @map("NPrValEsp") @db.Decimal(18, 2)
+  valorAyudante     Decimal? @map("NPrValAyu") @db.Decimal(18, 2)
+  valorAnestesista  Decimal? @map("NPrValAne") @db.Decimal(18, 2)
+  valorGastos       Decimal? @map("NPrValGto") @db.Decimal(18, 2)
+
   // Relaciones
   ordenPracticas OrdenPractica[]
   practicas      Practica[]
@@ -1132,14 +1251,18 @@ model LoteFacturacion {
   concepto     String? @map("LotConcepto") @db.VarChar(200)
   importeTotal Decimal @default(0) @map("LotImpTotal") @db.Decimal(18, 2)
 
+  // Origen del lote: null=normal, IPS_TXT=importado desde planilla IPS
+  origen String? @map("LotOrigen") @db.VarChar(20)
+
   // Estado: PEN=Pendiente, CON=Confirmado, ANU=Anulado
   estado      String   @map("LotEstado") @db.Char(3)
   fechaEstado DateTime @map("LotFchEstado") @db.Timestamp(6)
   usuario     String   @map("UsuCodig") @db.Char(10)
 
-  obraSocial ObraSocial?           @relation("LoteObraSocial", fields: [obraSocialId], references: [id])
-  plan       PlanObraSocial?       @relation("LotePlan", fields: [obraSocialId, planId], references: [obraSocialId, id])
-  items      LoteFacturacionItem[]
+  obraSocial  ObraSocial?           @relation("LoteObraSocial", fields: [obraSocialId], references: [id])
+  plan        PlanObraSocial?       @relation("LotePlan", fields: [obraSocialId, planId], references: [obraSocialId, id])
+  items       LoteFacturacionItem[]
+  itemsIPSTxt LoteIPSTxtItem[]
 
   @@index([estado])
   @@index([periodo])
@@ -1161,4 +1284,39 @@ model LoteFacturacionItem {
   @@unique([loteId, ingresoId])
   @@index([loteId])
   @@map("LoteFacturacionItem")
+}
+
+// ============================================
+// FACTURACIÓN — LOTE IPS DESDE PLANILLA TXT
+// ============================================
+
+model LoteIPSTxtItem {
+  id     Int @id @default(autoincrement()) @map("LipID")
+  loteId Int @map("LotID")
+
+  // Datos del afiliado
+  afiliadoDoc String @map("LipAfilDoc") @db.VarChar(20)
+  afiliadoNom String @map("LipAfilNom") @db.VarChar(200)
+
+  // Datos de la prestación
+  nroOrden       String    @map("LipNroOrden") @db.VarChar(20)
+  fechaRealiz    DateTime? @map("LipFchRealiz") @db.Timestamp(6)
+  servicioCodigo String    @map("LipServCod") @db.VarChar(20)
+  servicioNombre String    @map("LipServNom") @db.VarChar(500)
+  cantidad       Int       @map("LipCantidad")
+
+  // Importes del TXT
+  impEsp   Decimal @default(0) @map("LipImpEsp") @db.Decimal(18, 2)
+  impAyu   Decimal @default(0) @map("LipImpAyu") @db.Decimal(18, 2)
+  impAne   Decimal @default(0) @map("LipImpAne") @db.Decimal(18, 2)
+  impGto   Decimal @default(0) @map("LipImpGto") @db.Decimal(18, 2)
+  impTotal Decimal @default(0) @map("LipImpTotal") @db.Decimal(18, 2)
+
+  // Importe tras aplicar PROMEDI (40%)
+  importePromedi Decimal? @map("LipImpPromedi") @db.Decimal(18, 2)
+
+  lote LoteFacturacion @relation(fields: [loteId], references: [id], onDelete: Cascade)
+
+  @@index([loteId])
+  @@map("LoteIPSTxtItem")
 }

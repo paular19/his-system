@@ -30,6 +30,18 @@ export type IngresoDetalle = IngresoConRelaciones & {
   obraSocial?: Pick<ObraSocial, 'id' | 'nombre'> | null
   plan?: Pick<PlanObraSocial, 'obraSocialId' | 'id' | 'descripcion'> | null
   cama?: (Pick<Cama, 'id' | 'identificador' | 'sector' | 'habitacion'>) | null
+  profesionalTratanteFallback?: {
+    nombre: string
+    matricula: number | null
+  } | null
+  profesionalInterviniente?: {
+    nombre: string
+    matricula: number | null
+  } | null
+  evoluciones?: Array<{
+    fecha: Date
+    profesional: { nombre: string; matricula: number | null } | null
+  }>
   practicas: Array<{
     id: number
     convenioId: number
@@ -37,6 +49,17 @@ export type IngresoDetalle = IngresoConRelaciones & {
     cantidad: number
     fecha: Date
     numeroAutorizacion: string | null
+    matriculaEspecialista?: number | null
+    matriculaAnestesista?: number | null
+    puestoNumero?: number | null
+    ordenNumero?: number | null
+    ordenItem?: number | null
+    ordenPractica: Array<{
+      puestoNumero: number
+      ordenNumero: number
+      item: number
+      numeroAutorizacion: string | null
+    }>
     nomencladorPractica: { descripcion: string } | null
   }>
   ingresoPatologias: IngresoPatologia[]

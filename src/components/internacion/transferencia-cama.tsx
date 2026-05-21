@@ -1,17 +1,27 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ArrowRightLeft } from 'lucide-react'
 import type { TransferenciaItem, CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
 
+const MOTIVOS_EGRESO = [
+    { codigo: 'AL', descripcion: 'Alta medica' },
+    { codigo: 'TR', descripcion: 'Traslado' },
+    { codigo: 'FA', descripcion: 'Fallecimiento' },
+    { codigo: 'AV', descripcion: 'Alta voluntaria' },
+    { codigo: 'FU', descripcion: 'Fuga' },
+]
+
 interface TransferenciaCamaProps {
     ingresoId: number
-    camaActual: { id: number; identificador: string; sector: string } | null
+    camaActual: { id: number; identificador: string; sector: string; estado: string } | null
     transferencias: TransferenciaItem[]
     camasDisponibles: CamaConOcupante[]
     profesionales: Array<{ id: number; nombre: string }>
     puedeModificar: boolean
+    estadoInternacion: string | null
 }
 
 export function TransferenciaCama({
@@ -21,18 +31,28 @@ export function TransferenciaCama({
     camasDisponibles,
     profesionales,
     puedeModificar,
+    estadoInternacion,
 }: TransferenciaCamaProps) {
+    const router = useRouter()
     const [transferencias, setTransferencias] = useState(transferenciasIniciales)
     const [cama, setCama] = useState(camaActual)
     const [mostrarFormulario, setMostrarFormulario] = useState(
         () => puedeModificar && camasDisponibles.some((c) => c.id !== camaActual?.id)
     )
     const [guardando, setGuardando] = useState(false)
+    const [concretandoReserva, setConcretandoReserva] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [reservaMsg, setReservaMsg] = useState<string | null>(null)
 
     const [camaDestinoId, setCamaDestinoId] = useState('')
     const [motivo, setMotivo] = useState('')
     const [profesionalId, setProfesionalId] = useState('')
+    const [mostrarAlta, setMostrarAlta] = useState(false)
+    const [fechaEgreso, setFechaEgreso] = useState(() => new Date().toISOString().slice(0, 16))
+    const [motivoEgresoCodigo, setMotivoEgresoCodigo] = useState('')
+    const [descripcionPatologiaDefinitiva, setDescripcionPatologiaDefinitiva] = useState('')
+    const [altaGuardando, setAltaGuardando] = useState(false)
+    const [altaError, setAltaError] = useState<string | null>(null)
 
     // Refresh camas disponibles (excluir la cama actual del listado)
     const camasParaTransferir = camasDisponibles.filter((c) => c.id !== cama?.id)
@@ -71,6 +91,72 @@ export function TransferenciaCama({
             hour: '2-digit', minute: '2-digit',
         })
 
+    const registrarAlta = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault()
+        setAltaGuardando(true)
+        setAltaError(null)
+
+        const motivoCodigo = motivoEgresoCodigo.trim().toUpperCase()
+        if (motivoCodigo.length > 2) {
+            setAltaError('El motivo de egreso debe ser un codigo de hasta 2 caracteres (por ejemplo: AM, TR).')
+            setAltaGuardando(false)
+            return
+        }
+
+        try {
+            const res = await fetch(`/api/internacion/${ingresoId}/alta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ingresoId,
+                    fechaEgreso: new Date(fechaEgreso).toISOString(),
+                    motivoEgresoCodigo: motivoCodigo || null,
+                    descripcionPatologiaDefinitiva: descripcionPatologiaDefinitiva.trim() || null,
+                }),
+            })
+
+            const json = await res.json()
+            if (!res.ok || !json.ok) {
+                throw new Error(json.error ?? 'Error al registrar el alta')
+            }
+
+            router.refresh()
+        } catch (err) {
+            setAltaError(err instanceof Error ? err.message : 'Error inesperado')
+        } finally {
+            setAltaGuardando(false)
+        }
+    }
+
+    const concretarReserva = async () => {
+        if (!cama || cama.estado === 'OCUPADA') return
+
+        setConcretandoReserva(true)
+        setError(null)
+        setReservaMsg(null)
+
+        try {
+            const res = await fetch(`/api/internacion/camas/${cama.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado: 'OCUPADA' }),
+            })
+
+            const json = await res.json()
+            if (!res.ok) {
+                throw new Error(json?.error ?? 'No se pudo concretar la reserva')
+            }
+
+            setCama((prev) => (prev ? { ...prev, estado: 'OCUPADA' } : prev))
+            setReservaMsg('Reserva concretada: la cama quedó ocupada.')
+            router.refresh()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'No se pudo concretar la reserva')
+        } finally {
+            setConcretandoReserva(false)
+        }
+    }
+
     return (
         <div className="his-card">
             <div className="flex items-center justify-between p-4 border-b">
@@ -94,14 +180,38 @@ export function TransferenciaCama({
             {/* Cama actual */}
             <div className="p-4 border-b">
                 {cama ? (
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-700 font-bold text-sm">
-                            {cama.identificador}
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-700 font-bold text-sm">
+                                {cama.identificador}
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-gray-900">Cama {cama.identificador}</p>
+                                <p className="text-xs text-gray-500">{SECTOR_LABEL[cama.sector] ?? cama.sector}</p>
+                                <p className="text-xs text-gray-500">Estado: {cama.estado}</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-900">Cama {cama.identificador}</p>
-                            <p className="text-xs text-gray-500">{SECTOR_LABEL[cama.sector] ?? cama.sector}</p>
-                        </div>
+
+                        {puedeModificar && estadoInternacion === 'A' && cama.estado !== 'OCUPADA' && (
+                            <button
+                                type="button"
+                                onClick={() => void concretarReserva()}
+                                disabled={concretandoReserva}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                                {concretandoReserva
+                                    ? 'Concretando...'
+                                    : cama.estado === 'RESERVADA'
+                                        ? 'Marcar reserva concretada'
+                                        : 'Marcar cama ocupada'}
+                            </button>
+                        )}
+
+                        {reservaMsg && (
+                            <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">
+                                {reservaMsg}
+                            </p>
+                        )}
                     </div>
                 ) : (
                     <p className="text-sm text-gray-500">Sin cama asignada</p>
@@ -196,6 +306,90 @@ export function TransferenciaCama({
                             </div>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {puedeModificar && (
+                <div className="border-t border-gray-100 p-4 bg-rose-50/40">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                        <div>
+                            <p className="text-xs font-semibold text-rose-700 uppercase tracking-wide">Alta</p>
+                            <p className="text-xs text-rose-600 mt-1">
+                                {estadoInternacion === 'A'
+                                    ? 'Registrar el egreso del paciente y liberar la cama.'
+                                    : 'La internación ya fue dada de alta.'}
+                            </p>
+                        </div>
+                        {estadoInternacion === 'A' && (
+                            <button
+                                type="button"
+                                onClick={() => setMostrarAlta((v) => !v)}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 transition-colors"
+                            >
+                                {mostrarAlta ? 'Ocultar alta' : 'Dar alta'}
+                            </button>
+                        )}
+                    </div>
+
+                    {estadoInternacion === 'A' && mostrarAlta && (
+                        <form onSubmit={registrarAlta} className="space-y-3 rounded-xl border border-rose-200 bg-white p-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Fecha de egreso</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={fechaEgreso}
+                                        onChange={(e) => setFechaEgreso(e.target.value)}
+                                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Motivo de egreso</label>
+                                    <select
+                                        value={motivoEgresoCodigo}
+                                        onChange={(e) => setMotivoEgresoCodigo(e.target.value.toUpperCase())}
+                                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                                    >
+                                        <option value="">Sin motivo</option>
+                                        {MOTIVOS_EGRESO.map((motivo) => (
+                                            <option key={motivo.codigo} value={motivo.codigo}>
+                                                {motivo.codigo} - {motivo.descripcion}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Diagnóstico definitivo</label>
+                                    <textarea
+                                        rows={2}
+                                        value={descripcionPatologiaDefinitiva}
+                                        onChange={(e) => setDescripcionPatologiaDefinitiva(e.target.value)}
+                                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm resize-none"
+                                        placeholder="Completar si corresponde"
+                                    />
+                                </div>
+                            </div>
+
+                            {altaError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">{altaError}</p>}
+
+                            <div className="flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setMostrarAlta(false)}
+                                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={altaGuardando}
+                                    className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-60"
+                                >
+                                    {altaGuardando ? 'Registrando…' : 'Confirmar alta'}
+                                </button>
+                            </div>
+                        </form>
+                    )}
                 </div>
             )}
         </div>

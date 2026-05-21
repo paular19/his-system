@@ -9,7 +9,7 @@ interface HeaderProps {
 
 export function Header({ titulo }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-white px-6 shadow-sm">
+    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-white px-6 shadow-sm print:hidden">
       <h1 className="text-base font-semibold text-gray-900 truncate">{titulo}</h1>
 
       <div className="flex items-center gap-3">

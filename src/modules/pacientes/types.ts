@@ -1,4 +1,4 @@
-import type { Paciente, Profesion, Pais, Provincia, Localidad } from '@prisma/client'
+import type { Paciente, Profesion, Pais, Provincia, Localidad, ObraSocial } from '@prisma/client'
 
 // Tipo completo con relaciones para listados y ficha
 export type PacienteConRelaciones = Paciente & {
@@ -6,6 +6,7 @@ export type PacienteConRelaciones = Paciente & {
   pais?: Pais | null
   provincia?: Provincia | null
   localidad?: Localidad | null
+  obraSocial?: ObraSocial | null
 }
 
 // DTO para listado (campos mínimos necesarios en tablas)

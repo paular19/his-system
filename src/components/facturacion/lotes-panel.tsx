@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { LoteFacturacionListItem } from '@/modules/facturacion/types'
 import { PaginationControls } from '@/components/ui/pagination-controls'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
 
@@ -37,6 +38,21 @@ export function LotesPanel() {
     const [total, setTotal] = useState(0)
     const [loading, setLoading] = useState(false)
     const [mostrarForm, setMostrarForm] = useState(false)
+    const [modoInicial, setModoInicial] = useState<'NORMAL' | 'IPS_TXT' | null>(null)
+
+    // Abrir modal IPS directamente si viene con ?nuevo=ips
+    useEffect(() => {
+        if (searchParams.get('nuevo') === 'ips') {
+            setModoInicial('IPS_TXT')
+            setMostrarForm(true)
+            // Limpiar el query param sin recargar
+            const sp = new URLSearchParams(searchParams.toString())
+            sp.delete('nuevo')
+            router.replace(`${pathname}?${sp.toString()}`, { scroll: false })
+        }
+        // Solo correr al montar
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     const pagina = Math.max(1, Number(searchParams.get('page') ?? searchParams.get('pagina') ?? 1))
     const porPaginaRaw = Math.max(1, Number(searchParams.get('limit') ?? searchParams.get('porPagina') ?? 20))
@@ -46,6 +62,8 @@ export function LotesPanel() {
     const filtroEstado = searchParams.get('estado') ?? ''
     const filtroPeriodo = searchParams.get('periodo') ?? ''
     const filtroTipo = searchParams.get('tipo') ?? ''
+    const filtroMedico = searchParams.get('medico') ?? ''
+    const filtroMatricula = searchParams.get('matricula') ?? ''
 
     const updateSearch = useCallback((mutator: (sp: URLSearchParams) => void) => {
         const sp = new URLSearchParams(searchParams.toString())
@@ -66,6 +84,8 @@ export function LotesPanel() {
             if (filtroEstado) sp.set('estado', filtroEstado)
             if (filtroPeriodo) sp.set('periodo', filtroPeriodo)
             if (filtroTipo) sp.set('tipo', filtroTipo)
+            if (filtroMedico) sp.set('medico', filtroMedico)
+            if (filtroMatricula) sp.set('matricula', filtroMatricula)
 
             const res = await fetch(`/api/facturacion/lotes?${sp}`)
             if (!res.ok) throw new Error('Error al cargar lotes')
@@ -77,7 +97,7 @@ export function LotesPanel() {
         } finally {
             setLoading(false)
         }
-    }, [filtroEstado, filtroPeriodo, filtroTipo, pagina, porPagina])
+    }, [filtroEstado, filtroPeriodo, filtroTipo, filtroMedico, filtroMatricula, pagina, porPagina])
 
     useEffect(() => { cargarLotes() }, [cargarLotes])
 
@@ -143,6 +163,41 @@ export function LotesPanel() {
                             <option value="MEDICAMENTOS">Medicamentos</option>
                         </select>
                     </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Médico</label>
+                        <input
+                            type="text"
+                            value={filtroMedico}
+                            onChange={(e) => {
+                                const value = e.target.value
+                                updateSearch((sp) => {
+                                    if (value.trim()) sp.set('medico', value)
+                                    else sp.delete('medico')
+                                    sp.set('page', '1')
+                                })
+                            }}
+                            placeholder="Nombre del profesional"
+                            className="border rounded px-3 py-1.5 text-sm"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Matrícula</label>
+                        <input
+                            type="number"
+                            min={1}
+                            value={filtroMatricula}
+                            onChange={(e) => {
+                                const value = e.target.value
+                                updateSearch((sp) => {
+                                    if (value.trim()) sp.set('matricula', value)
+                                    else sp.delete('matricula')
+                                    sp.set('page', '1')
+                                })
+                            }}
+                            placeholder="Ej: 9110"
+                            className="border rounded px-3 py-1.5 text-sm w-32"
+                        />
+                    </div>
                 </div>
                 <button
                     onClick={() => setMostrarForm(true)}
@@ -172,8 +227,10 @@ export function LotesPanel() {
                     <tbody className="divide-y divide-gray-100">
                         {loading && (
                             <tr>
-                                <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
-                                    Cargando...
+                                <td colSpan={10} className="px-4 py-8">
+                                    <Skeleton className="h-8 w-1/2 mx-auto mb-2" />
+                                    <Skeleton className="h-6 w-full mb-2" />
+                                    <Skeleton className="h-6 w-2/3 mx-auto" />
                                 </td>
                             </tr>
                         )}
@@ -236,10 +293,12 @@ export function LotesPanel() {
 
             {/* Modal crear lote */}
             {mostrarForm && (
-                <CrearLoteModal
-                    onClose={() => setMostrarForm(false)}
+                <SeleccionTipoLoteModal
+                    modoInicial={modoInicial}
+                    onClose={() => { setMostrarForm(false); setModoInicial(null) }}
                     onCreado={(id) => {
                         setMostrarForm(false)
+                        setModoInicial(null)
                         router.push(`/facturacion/lotes/${id}`)
                     }}
                 />
@@ -490,6 +549,260 @@ function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
                             className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                         >
                             {loading ? 'Creando...' : 'Crear Lote'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================
+// Selección de tipo de lote (Normal vs IPS TXT)
+// ============================================================
+
+interface SeleccionTipoLoteModalProps {
+    modoInicial?: 'NORMAL' | 'IPS_TXT' | null
+    onClose: () => void
+    onCreado: (id: number) => void
+}
+
+function SeleccionTipoLoteModal({ modoInicial, onClose, onCreado }: SeleccionTipoLoteModalProps) {
+    const [modo, setModo] = useState<'NORMAL' | 'IPS_TXT' | null>(modoInicial ?? null)
+
+    if (modo === 'NORMAL') return <CrearLoteModal onClose={onClose} onCreado={onCreado} />
+    if (modo === 'IPS_TXT') return <CrearLoteIPSTxtModal onClose={onClose} onCreado={onCreado} />
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl space-y-4">
+                <h2 className="text-lg font-semibold text-gray-800">Nuevo Lote</h2>
+                <p className="text-sm text-gray-600">¿Qué tipo de lote querés crear?</p>
+                <div className="grid grid-cols-2 gap-3">
+                    <button
+                        onClick={() => setModo('NORMAL')}
+                        className="flex flex-col items-center gap-2 rounded-lg border-2 border-gray-200 p-4 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                    >
+                        <span className="text-2xl">📋</span>
+                        <span className="text-sm font-medium text-gray-800">Lote Normal</span>
+                        <span className="text-xs text-gray-500 text-center">Prácticas / Medicamentos del sistema</span>
+                    </button>
+                    <button
+                        onClick={() => setModo('IPS_TXT')}
+                        className="flex flex-col items-center gap-2 rounded-lg border-2 border-gray-200 p-4 hover:border-green-400 hover:bg-green-50 transition-colors"
+                    >
+                        <span className="text-2xl">📄</span>
+                        <span className="text-sm font-medium text-gray-800">Planilla IPS</span>
+                        <span className="text-xs text-gray-500 text-center">Importar TXT exportado desde IPS</span>
+                    </button>
+                </div>
+                <div className="flex justify-end">
+                    <button onClick={onClose} className="px-4 py-2 border rounded text-sm">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================
+// Modal IPS TXT
+// ============================================================
+
+interface CrearLoteIPSTxtModalProps {
+    onClose: () => void
+    onCreado: (id: number) => void
+}
+
+interface IPSTxtItem {
+    afiliadoDoc: string
+    afiliadoNom: string
+    nroOrden: string
+    fechaRealiz: string | null
+    servicioCodigo: string
+    servicioNombre: string
+    cantidad: number
+    impEsp: number
+    impAyu: number
+    impAne: number
+    impGto: number
+    impTotal: number
+}
+
+function parsearTxtIPS(contenido: string): IPSTxtItem[] {
+    const lineas = contenido.split(/\r?\n/).filter((l) => l.trim())
+    // Saltar header
+    const dataLineas = lineas.length > 0 && (lineas[0] ?? '').startsWith('NroPlanilla') ? lineas.slice(1) : lineas
+
+    return dataLineas
+        .map((linea) => {
+            const cols = linea.split(';')
+            // Indices según formato IPS TXT (0-indexed):
+            // 8=NroOrden 10=FechaRealiz 14=AfiliadoDoc 15=AfiliadoNom
+            // 16=ServicioCodigo 17=ServicioNombre 18=Cantidad
+            // 19=ImpEsp 20=ImpAyu 21=ImpAne 22=ImpGto 23=ImpTotal
+            const parseMoney = (v: string | undefined) => parseFloat((v ?? '0').replace(',', '.')) || 0
+            const parseCant = (v: string | undefined) => (v ? (Number(v.trim()) || 1) : 1)
+            const parseDate = (v: string | undefined) => {
+                if (!v || !v.trim()) return null
+                const trimmed = v.trim()
+                // Formato: DD/MM/YYYY HH:MM:SS a.m./p.m.  o  DD/MM/YYYY
+                if (trimmed.includes('/')) {
+                    const parts = trimmed.split('/')
+                    if (parts.length >= 3) {
+                        const d = (parts[0] ?? '').padStart(2, '0')
+                        const m = (parts[1] ?? '').padStart(2, '0')
+                        const y = (parts[2] ?? '').split(' ')[0] // recortar parte de hora
+                        if (d && m && y && y.length === 4) {
+                            const iso = `${y}-${m}-${d}`
+                            if (!isNaN(new Date(iso).getTime())) return iso
+                        }
+                    }
+                }
+                // Formato YYYY-MM-DD
+                if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10)
+                return null
+            }
+            return {
+                nroOrden: cols[8]?.trim() ?? '',
+                fechaRealiz: parseDate(cols[10]?.trim()),
+                afiliadoDoc: cols[14]?.trim() ?? '',
+                afiliadoNom: cols[15]?.trim() ?? '',
+                servicioCodigo: cols[16]?.trim() ?? '',
+                servicioNombre: cols[17]?.trim() ?? '',
+                cantidad: parseCant(cols[18]),
+                impEsp: parseMoney(cols[19]),
+                impAyu: parseMoney(cols[20]),
+                impAne: parseMoney(cols[21]),
+                impGto: parseMoney(cols[22]),
+                impTotal: parseMoney(cols[23]),
+            } satisfies IPSTxtItem
+        })
+        .filter((it) => it.afiliadoDoc || it.servicioCodigo)
+}
+
+function CrearLoteIPSTxtModal({ onClose, onCreado }: CrearLoteIPSTxtModalProps) {
+    const hoy = new Date().toISOString().slice(0, 10)
+    const periodoActual = new Date().toISOString().slice(0, 7)
+
+    const [form, setForm] = useState({ fecha: hoy, periodo: periodoActual, obraSocialId: '', descripcion: '' })
+    const [items, setItems] = useState<IPSTxtItem[]>([])
+    const [fileName, setFileName] = useState('')
+    const [obrasSociales, setObrasSociales] = useState<Array<{ id: number; nombre: string }>>([])
+    const [error, setError] = useState('')
+    const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+        fetch('/api/facturacion/obras-sociales?porPagina=300')
+            .then((r) => r.json())
+            .then((j) => setObrasSociales(j.data?.items ?? j.data ?? []))
+            .catch(() => { })
+    }, [])
+
+    const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
+
+    function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setFileName(file.name)
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+            const text = ev.target?.result as string
+            const parsed = parsearTxtIPS(text)
+            setItems(parsed)
+            if (parsed.length === 0) setError('No se encontraron registros en el archivo.')
+            else setError('')
+        }
+        reader.readAsText(file, 'latin1')
+    }
+
+    async function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        setError('')
+        if (!form.obraSocialId) { setError('Seleccioná la obra social'); return }
+        if (items.length === 0) { setError('Primero cargá el archivo TXT'); return }
+
+        setLoading(true)
+        try {
+            const body = {
+                fecha: new Date(form.fecha).toISOString(),
+                periodo: form.periodo,
+                obraSocialId: Number(form.obraSocialId),
+                descripcion: form.descripcion || null,
+                items,
+            }
+            const res = await fetch('/api/facturacion/lotes/ips-txt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            })
+            const json = await res.json()
+            if (!res.ok || !json.ok) { setError(json.error ?? 'Error al crear el lote'); return }
+            onCreado(json.data.id)
+        } catch {
+            setError('Error de conexión')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const totalBruto = items.reduce((s, it) => s + it.impTotal, 0)
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-6">
+            <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-gray-800">Importar Planilla IPS (TXT)</h2>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">IPS</span>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
+                            <input type="date" value={form.fecha} onChange={(e) => set('fecha', e.target.value)} required className="w-full border rounded px-3 py-1.5 text-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Período</label>
+                            <input type="month" value={form.periodo} onChange={(e) => set('periodo', e.target.value)} required className="w-full border rounded px-3 py-1.5 text-sm" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Obra Social</label>
+                        <select value={form.obraSocialId} onChange={(e) => set('obraSocialId', e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm">
+                            <option value="">Seleccionar obra social</option>
+                            {obrasSociales.map((os) => (
+                                <option key={os.id} value={os.id}>{os.nombre}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Descripción (opcional)</label>
+                        <input type="text" maxLength={200} value={form.descripcion} onChange={(e) => set('descripcion', e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm" />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Archivo TXT (planilla IPS)</label>
+                        <input type="file" accept=".txt,.csv" onChange={handleFile} className="w-full border rounded px-3 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:border-0 file:bg-blue-50 file:text-blue-700 file:text-xs file:rounded" />
+                        {fileName && <p className="text-xs text-gray-500 mt-1">Archivo: {fileName}</p>}
+                    </div>
+
+                    {items.length > 0 && (
+                        <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm space-y-1">
+                            <p className="font-medium text-blue-800">Vista previa</p>
+                            <p className="text-blue-700">{items.length} registros cargados</p>
+                            <p className="text-blue-700">Importe total bruto: <span className="font-semibold">{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(totalBruto)}</span></p>
+                            <p className="text-xs text-blue-600">Al aplicar PROMEDI se calculará el 40% de cada importe.</p>
+                        </div>
+                    )}
+
+                    {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</p>}
+
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded text-sm">Cancelar</button>
+                        <button type="submit" disabled={loading || items.length === 0} className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                            {loading ? 'Creando...' : 'Crear Lote Pendiente'}
                         </button>
                     </div>
                 </form>

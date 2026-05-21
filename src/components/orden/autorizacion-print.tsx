@@ -9,20 +9,157 @@ interface AutorizacionPrintProps {
   orden: OrdenConItems
   nombreClinica?: string
   usuario: string
+  mostrarAcciones?: boolean
 }
 
 export function AutorizacionPrint({
   orden,
   nombreClinica = 'SISTEMA HIS',
   usuario,
+  mostrarAcciones = true,
 }: AutorizacionPrintProps) {
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([])
+  const limpiarEspecialidadEntreParentesis = (nombre: string): string => {
+    return nombre.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
+  }
+
+  const esItemModularAgrupado = (incluye: string | null): boolean => {
+    if (!incluye) return false
+    return incluye.includes('+')
+  }
+
+  const esItemModular = (item: OrdenConItems['items'][number]): boolean => {
+    return Boolean(item.titularModular) || item.imprimirPorDuplicado || esItemModularAgrupado(item.incluyeCodigo)
+  }
+
+  const esTituloPatologia = (item: OrdenConItems['items'][number]): boolean => {
+    return (item.titularModular ?? '').toUpperCase().includes('PATOLOG')
+  }
+
+  const tituloPorIncluye = (item: OrdenConItems['items'][number]): string => {
+    const incluye = item.incluyeCodigo
+
+    if (item.titularModular) {
+      return item.titularModular
+    }
+
+    if (!incluye) return 'HONORARIOS'
+    // Manejar múltiples códigos: GA+HE, HE+GA, etc.
+    if (incluye.includes('GA') && incluye.includes('HE')) return 'DERECHOS + HONORARIO ESPECIALISTA'
+    if (incluye.includes('GA') && incluye.includes('HA')) return 'DERECHOS + HONORARIO ANESTESISTA'
+    if (incluye.includes('HE') && incluye.includes('HA')) return 'HONORARIO ESPECIALISTA + ANESTESISTA'
+    // Códigos individuales
+    if (incluye === 'GA') return 'DERECHOS'
+    if (incluye === 'HE') return 'HONORARIO ESPECIALISTA'
+    if (incluye === 'HA') return 'HONORARIO ANESTESISTA'
+    if (incluye.startsWith('A')) return 'HONORARIOS AYUDANTE'
+    return 'HONORARIOS'
+  }
+
+  const profesionalTexto = (item: OrdenConItems['items'][number]): string => {
+    const nombreFallbackPorMatricula = (matricula: number): string => {
+      if (matricula === 6) return 'ASOSIACION ANESTESISTA'
+      if (matricula === 9110) return 'CLINICA SAN RAFAEL'
+      if (matricula === 995) return 'PROFESIONAL AYUDANTE'
+      return 'PROFESIONAL'
+    }
+
+    if (esTituloPatologia(item)) {
+      const nombrePatologia = (orden.descripcionPatologia ?? item.efectorProfesional?.nombre ?? 'PROFESIONAL').toUpperCase()
+      const matriculaPatologia = item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null
+      return `${nombrePatologia} · MP ${matriculaPatologia ?? '-'}`
+    }
+
+    // Verificar si es HE o HA (incluso en combinaciones como HE+GA)
+    const incluyeCodigo = item.incluyeCodigo || ''
+    if (incluyeCodigo.includes('HA')) {
+      return 'ASOSIACION ANESTESISTA · MP 6'
+    }
+    if (incluyeCodigo.includes('HE') || incluyeCodigo.includes('HA')) {
+      if (item.efectorProfesional) {
+        return `${item.efectorProfesional.nombre.toUpperCase()} · MP ${item.efectorProfesional.matricula}`
+      }
+      if (item.efectorMatricula) {
+        return `${nombreFallbackPorMatricula(item.efectorMatricula)} · MP ${item.efectorMatricula}`
+      }
+      return 'PROFESIONAL · MP -'
+    }
+    if (item.efectorProfesional) {
+      return `${item.efectorProfesional.nombre.toUpperCase()} · MP ${item.efectorProfesional.matricula}`
+    }
+    if (item.efectorMatricula) {
+      return `${nombreFallbackPorMatricula(item.efectorMatricula)} · MP ${item.efectorMatricula}`
+    }
+    return `${nombreClinica.toUpperCase()} · MP 9110`
+  }
+
+  const profesionalFirma = (item: OrdenConItems['items'][number]): { nombre: string; matricula: number | null } => {
+    const esInternacion = (orden.ingresoTipoCodigo ?? '').trim().toUpperCase() === 'INT'
+    const incluyeCodigo = item.incluyeCodigo || ''
+
+    if (esTituloPatologia(item)) {
+      return {
+        nombre: orden.descripcionPatologia ?? item.efectorProfesional?.nombre ?? 'PROFESIONAL',
+        matricula: item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null,
+      }
+    }
+
+    if (incluyeCodigo.includes('HA')) {
+      return { nombre: 'ASOSIACION ANESTESISTA', matricula: 6 }
+    }
+
+    if (!esInternacion && orden.profesional?.nombre) {
+      return {
+        nombre: orden.profesional.nombre,
+        matricula: orden.profesional.matricula ?? null,
+      }
+    }
+
+    if (item.efectorProfesional) {
+      return {
+        nombre: item.efectorProfesional.nombre,
+        matricula: item.efectorProfesional.matricula,
+      }
+    }
+
+    if (item.efectorMatricula) {
+      const nombre = item.efectorMatricula === 6
+        ? 'ASOSIACION ANESTESISTA'
+        : item.efectorMatricula === 9110
+          ? 'CLINICA SAN RAFAEL'
+          : 'PROFESIONAL'
+      return { nombre, matricula: item.efectorMatricula }
+    }
+
+    if (orden.profesional?.nombre) {
+      return {
+        nombre: orden.profesional.nombre,
+        matricula: orden.profesional.matricula ?? null,
+      }
+    }
+
+    return { nombre: 'Medico interviniente', matricula: null }
+  }
+
+  const tituloPagina = (items: OrdenConItems['items']): string => {
+    const itemConTitulo = items.find((it) => Boolean(it.titularModular?.trim()))
+    if (itemConTitulo?.titularModular) return itemConTitulo.titularModular
+    return items[0] ? tituloPorIncluye(items[0]) : 'HONORARIOS'
+  }
+
+  const paginas = (() => {
+    const copies = orden.items.some((it) => it.imprimirPorDuplicado) ? 2 : 1
+    const itemsOrdenados = [...orden.items].sort((a, b) => a.item - b.item)
+    return Array.from({ length: copies }, (_, copyIdx) => ({ items: itemsOrdenados, copyIdx }))
+  })()
 
   useEffect(() => {
-    orden.items.forEach((item, idx) => {
+    paginas.forEach(({ items }, idx) => {
       const svg = barcodeRefs.current[idx]
       if (!svg) return
-      const codigo = generarCodigoBarras(item.puestoNumero, item.ordenNumero, item.item)
+      const itemRef = items[0]
+      if (!itemRef) return
+      const codigo = generarCodigoBarras(itemRef.puestoNumero, itemRef.ordenNumero, itemRef.item)
       try {
         JsBarcode(svg, codigo, {
           format: 'CODE128',
@@ -36,7 +173,7 @@ export function AutorizacionPrint({
         // barcode generation failed silently
       }
     })
-  }, [orden.items])
+  }, [paginas])
 
   const fechaEmision = new Date(orden.fechaEmision)
   const fechaFormateada = fechaEmision.toLocaleDateString('es-AR', {
@@ -56,35 +193,46 @@ export function AutorizacionPrint({
   return (
     <>
       {/* Botón imprimir — oculto al imprimir */}
-      <div className="no-print mb-4 flex gap-3">
-        <button
-          onClick={() => window.print()}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          Imprimir Autorización
-        </button>
-        <button
-          onClick={() => window.history.back()}
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Volver
-        </button>
-      </div>
+      {mostrarAcciones && (
+        <div className="no-print mb-4 flex gap-3">
+          <button
+            onClick={() => window.print()}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Imprimir Autorización
+          </button>
+          <button
+            onClick={() => {
+              window.location.assign('/dashboard/admision')
+            }}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Volver
+          </button>
+        </div>
+      )}
 
       {/* Documento imprimible */}
       <div className="print-doc space-y-0">
-        {orden.items.map((item, idx) => {
-          const nroOrden = formatearNumeroOrden(item.puestoNumero, item.ordenNumero, item.item)
-          const codigoBarras = generarCodigoBarras(item.puestoNumero, item.ordenNumero, item.item)
+        {paginas.map(({ items, copyIdx }, idx) => {
+          const itemRef = items[0]
+          if (!itemRef) return null
+
+          const nroOrden = formatearNumeroOrden(itemRef.puestoNumero, itemRef.ordenNumero, itemRef.item)
+          const codigoBarras = generarCodigoBarras(itemRef.puestoNumero, itemRef.ordenNumero, itemRef.item)
+          const medicoInterviniente = profesionalFirma(itemRef)
+          const medicoIntervinienteNombre = limpiarEspecialidadEntreParentesis(medicoInterviniente.nombre)
 
           return (
-            <div key={`${item.puestoNumero}-${item.ordenNumero}-${item.item}`} className="autorizacion-pagina">
+            <div key={`${itemRef.puestoNumero}-${itemRef.ordenNumero}-${copyIdx}`} className="autorizacion-pagina">
               {/* ====== LADO FRONTAL ====== */}
               <div className="autorizacion-frente">
                 {/* Header */}
                 <div className="aut-header">
                   <div className="aut-clinica">
-                    <div className="aut-clinica-nombre">{nombreClinica}</div>
+                    <img src="/logo-clinica.png" alt="Logo" style={{ maxWidth: 90, marginBottom: 4 }} />
+                    <div className="aut-clinica-sub">Av. Sarmiento 566, Salta Capital, Argentina</div>
+                    <div className="aut-clinica-sub">Tel: 3872537289</div>
                   </div>
                   <div className="aut-info-orden">
                     <table className="aut-tabla-info">
@@ -108,16 +256,22 @@ export function AutorizacionPrint({
                           <td className="aut-valor"></td>
                         </tr>
                         <tr>
-                          <td className="aut-label">O.Soc./Plan:</td>
+                          <td className="aut-label">O.Soc:</td>
                           <td className="aut-valor" colSpan={3}>
-                            {orden.obraSocial?.nombre ?? ''} — {orden.plan?.descripcion ?? ''}
+                            {orden.obraSocial?.nombre ?? '—'}
                           </td>
                         </tr>
                         <tr>
                           <td className="aut-label">Coseguro:</td>
-                          <td className="aut-valor"></td>
+                          <td className="aut-valor" colSpan={3}>
+                            {orden.obraSocialCoseguro?.nombre ?? '—'}
+                          </td>
+                        </tr>
+                        <tr>
                           <td className="aut-label">N° Afil.:</td>
-                          <td className="aut-valor">{orden.numeroAfiliado}</td>
+                          <td className="aut-valor" colSpan={3}>
+                            {orden.numeroAfiliado}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
@@ -129,7 +283,7 @@ export function AutorizacionPrint({
                   <span className="aut-label">Orden por:</span>{' '}
                   <span className="aut-valor">PRACTICA</span>
                   <span className="aut-tipo-right">
-                    {item.tipoFacturacion === 'H' ? 'HONORARIOS' : item.tipoFacturacion}
+                    {tituloPagina(items)}
                   </span>
                 </div>
 
@@ -154,23 +308,21 @@ export function AutorizacionPrint({
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td>{item.codigoPractica.trim()}</td>
-                      <td className="text-center">{item.cantidad}</td>
-                      <td>{item.descripcionPractica.toUpperCase()}</td>
-                      <td className="text-center">
-                        {item.porcentajeCargoPac !== null
-                          ? `${item.porcentajeCargoPac}%`
-                          : '100.00%'}
-                      </td>
-                      <td className="text-center">HE</td>
-                      <td>
-                        {orden.profesional
-                          ? `${orden.profesional.matricula ?? ''} ${orden.profesional.nombre.slice(0, 12).toUpperCase()}`
-                          : ''}
-                      </td>
-                      <td>{fechaFormateada}</td>
-                    </tr>
+                    {items.map((item) => (
+                      <tr key={`${item.puestoNumero}-${item.ordenNumero}-${item.item}`}>
+                        <td>{item.codigoPractica.trim()}</td>
+                        <td className="text-center">{item.cantidad}</td>
+                        <td>{item.descripcionPractica.toUpperCase()}</td>
+                        <td className="text-center">
+                          {item.porcentajeCargoPac !== null
+                            ? `${item.porcentajeCargoPac}%`
+                            : '100.00%'}
+                        </td>
+                        <td className="text-center">{item.incluyeCodigo ?? '-'}</td>
+                        <td>{profesionalTexto(item)}</td>
+                        <td>{fechaFormateada}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -181,7 +333,7 @@ export function AutorizacionPrint({
                   ref={(el) => { barcodeRefs.current[idx] = el }}
                   className="aut-barcode"
                 />
-                <div className="aut-original">ORIGINAL</div>
+                <div className="aut-original">{copyIdx === 0 ? 'ORIGINAL' : 'DUPLICADO'}</div>
                 <div className="aut-emisor">
                   Emitido por {usuario.trim()} &mdash; {fechaFormateada} {horaFormateada}
                 </div>
@@ -191,9 +343,9 @@ export function AutorizacionPrint({
                   </div>
                   <div className="aut-firma-linea">
                     <div className="aut-firma-label">
-                      {orden.tipoOrden?.descripcion ?? ''}
+                      {medicoIntervinienteNombre}
                       <br />
-                      M.P.&nbsp;&nbsp;{orden.profesional?.matricula ?? ''}
+                      M.P.&nbsp;&nbsp;{medicoInterviniente.matricula ?? '-'}
                     </div>
                     <div className="aut-firma-fecha">
                       Fecha Pedido: {fechaFormateada}

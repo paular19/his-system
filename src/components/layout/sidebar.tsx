@@ -26,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Pacientes', href: '/dashboard/pacientes', icon: Users },
   { label: 'Admisión', href: '/dashboard/admision', icon: ClipboardList },
   { label: 'Internación', href: '/dashboard/internacion', icon: BedDouble },
+  { label: 'Cirugía', href: '/dashboard/cirugia', icon: Stethoscope },
   { label: 'Turnos', href: '/dashboard/turnos', icon: CalendarClock },
   { label: 'Autorizaciones', href: '/dashboard/ambulatorio', icon: FilePlus },
   { label: 'Facturación', href: '/dashboard/facturacion', icon: Receipt },
@@ -35,7 +36,7 @@ export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-60 bg-gray-900 text-white flex flex-col z-30">
+    <aside className="fixed left-0 top-0 h-full w-60 bg-gray-900 text-white flex flex-col z-30 print:hidden">
       {/* Logo / Cabecera */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-gray-700">
         <div className="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">

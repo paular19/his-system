@@ -43,7 +43,7 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
   const contenido = (
     <div
       className={`
-        relative border rounded-lg p-3 cursor-pointer transition-colors min-h-[100px]
+        relative border rounded-lg p-3 cursor-pointer transition-colors min-h-25
         flex flex-col gap-1 ${estiloCard}
       `}
     >
@@ -69,7 +69,7 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
       {cama.estado === 'OCUPADA' && cama.ocupante && (
         <div className="mt-auto space-y-0.5">
           <div className="flex items-start gap-1">
-            <User className={`h-3.5 w-3.5 mt-0.5 flex-shrink-0 ${estiloTexto}`} />
+            <User className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${estiloTexto}`} />
             <span className="text-xs font-medium text-gray-800 leading-tight line-clamp-2">
               {cama.ocupante.nombre}
             </span>
@@ -86,7 +86,25 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
         </div>
       )}
 
-      {cama.estado === 'RESERVADA' && (
+      {cama.estado === 'RESERVADA' && cama.ocupante && (
+        <div className="mt-auto space-y-0.5">
+          <div className="flex items-start gap-1">
+            <User className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${estiloTexto}`} />
+            <span className="text-xs font-medium text-gray-800 leading-tight line-clamp-2">
+              {cama.ocupante.nombre}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Clock className="h-3 w-3 text-gray-400" />
+            <span className="text-xs text-gray-500">Reserva</span>
+            <span className="text-xs text-gray-400 ml-auto">
+              #{cama.ocupante.numeroIngreso}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {cama.estado === 'RESERVADA' && !cama.ocupante && (
         <div className="flex items-center gap-1 mt-auto">
           <span className={`text-xs font-medium ${estiloTexto}`}>Reservada</span>
         </div>
@@ -101,8 +119,8 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
     </div>
   )
 
-  // Ocupada → link al ingreso
-  if (cama.estado === 'OCUPADA' && cama.ocupante) {
+  // Ocupada/Reservada con ingreso asociado → link al ingreso
+  if ((cama.estado === 'OCUPADA' || cama.estado === 'RESERVADA') && cama.ocupante) {
     return (
       <Link href={`/dashboard/internacion/${cama.ocupante.ingresoId}`}>
         {contenido}

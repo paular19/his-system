@@ -15,6 +15,7 @@ import {
 import type { PacienteResumen } from '@/modules/admision/types'
 
 interface ItemPractica {
+  tempId: string
   convenioId: number | null
   codigo: string
   descripcion: string
@@ -95,6 +96,18 @@ function esNombreIPSS(nombre: string): boolean {
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 
+function crearTempId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function hoyLocalInput(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export function AdmisionForm({
   profesionales,
   obraSociales,
@@ -114,7 +127,7 @@ export function AdmisionForm({
 
   // Estado general
   const [fechaIngreso, setFechaIngreso] = useState(
-    new Date().toISOString().split('T')[0]
+    hoyLocalInput()
   )
   const [fechaEgresoPrevista, setFechaEgresoPrevista] = useState('')
   const [subtipoAdmisionCodigo, setSubtipoAdmisionCodigo] = useState('')
@@ -310,13 +323,12 @@ export function AdmisionForm({
     valorAnestesista?: number | null
     valorGastos?: number | null
   }) => {
-    if (practicas.some((p) => p.codigo === practica.codigo)) return
-
     const matriculaAmbulatoria = obtenerMatriculaAmbulatoria()
 
     setPracticas((prev) => [
       ...prev,
       {
+        tempId: crearTempId(),
         convenioId: practica.convenioId,
         codigo: practica.codigo,
         descripcion: practica.descripcion,
@@ -345,8 +357,8 @@ export function AdmisionForm({
     setTerminoBusquedaPractica('')
   }
 
-  const quitarPractica = (codigo: string) => {
-    setPracticas((prev) => prev.filter((p) => p.codigo !== codigo))
+  const quitarPractica = (tempId: string) => {
+    setPracticas((prev) => prev.filter((p) => p.tempId !== tempId))
   }
 
   useEffect(() => {
@@ -943,7 +955,7 @@ export function AdmisionForm({
               <div className="space-y-2">
                 <div className="divide-y border rounded-md">
                   {practicas.map((p) => (
-                    <div key={p.codigo} className="px-3 py-3 space-y-3">
+                    <div key={p.tempId} className="px-3 py-3 space-y-3">
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
                         <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
@@ -956,7 +968,7 @@ export function AdmisionForm({
                             onChange={(e) =>
                               setPracticas((prev) =>
                                 prev.map((x) =>
-                                  x.codigo === p.codigo ? { ...x, cantidad: Math.max(1, parseInt(e.target.value) || 1) } : x
+                                  x.tempId === p.tempId ? { ...x, cantidad: Math.max(1, parseInt(e.target.value) || 1) } : x
                                 )
                               )
                             }
@@ -973,7 +985,7 @@ export function AdmisionForm({
                               onChange={(e) => {
                                 const value = e.target.value.trim()
                                 setPracticas((prev) => prev.map((x) =>
-                                  x.codigo === p.codigo
+                                  x.tempId === p.tempId
                                     ? { ...x, matriculaEspecialista: value ? parseInt(value, 10) || null : null }
                                     : x
                                 ))
@@ -993,7 +1005,7 @@ export function AdmisionForm({
                               onChange={(e) => {
                                 const value = e.target.value.trim()
                                 setPracticas((prev) => prev.map((x) =>
-                                  x.codigo === p.codigo
+                                  x.tempId === p.tempId
                                     ? { ...x, matriculaAnestesista: value ? parseInt(value, 10) || null : null }
                                     : x
                                 ))
@@ -1003,7 +1015,7 @@ export function AdmisionForm({
                             />
                           </div>
                         )}
-                        <button type="button" onClick={() => quitarPractica(p.codigo)} className="text-red-400 hover:text-red-600 transition-colors">
+                        <button type="button" onClick={() => quitarPractica(p.tempId)} className="text-red-400 hover:text-red-600 transition-colors">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
@@ -1012,7 +1024,7 @@ export function AdmisionForm({
                         seleccion={p.seleccionComponentes}
                         onChange={(nuevaSeleccion) => {
                           setPracticas((prev) => prev.map((x) =>
-                            x.codigo === p.codigo
+                            x.tempId === p.tempId
                               ? { ...x, seleccionComponentes: nuevaSeleccion }
                               : x
                           ))

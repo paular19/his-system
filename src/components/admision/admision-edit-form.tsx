@@ -25,6 +25,7 @@ interface PracticaBusquedaItem {
 }
 
 interface PracticaEditable {
+    tempId: string
     convenioId: number | null
     codigo: string
     descripcion: string
@@ -47,9 +48,17 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
     const [resultadosPractica, setResultadosPractica] = useState<PracticaBusquedaItem[]>([])
     const [practicasAgregar, setPracticasAgregar] = useState<PracticaEditable[]>([])
 
+    const crearTempId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+
     // Convierte un Date/string/null a YYYY-MM-DD para <input type="date">
-    const toDateStr = (d: Date | string | null | undefined) =>
-        d ? new Date(d).toISOString().split('T')[0] : ''
+    const toDateStr = (d: Date | string | null | undefined) => {
+        if (!d) return ''
+        const date = new Date(d)
+        const y = date.getFullYear()
+        const m = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+    }
 
     const form = useForm<ActualizarIngresoInput>({
         resolver: zodResolver(ActualizarIngresoSchema),
@@ -147,26 +156,20 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
     }, [busquedaPractica, ingreso.obraSocialId])
 
     const agregarPractica = (practica: PracticaBusquedaItem) => {
-        setPracticasAgregar((prev) => {
-            const idx = prev.findIndex((p) => p.codigo === practica.codigo)
-            if (idx >= 0) {
-                return prev.map((p, index) => index === idx ? { ...p, cantidad: p.cantidad + 1 } : p)
-            }
-
-            return [
-                ...prev,
-                {
-                    convenioId: practica.convenioId,
-                    codigo: practica.codigo,
-                    descripcion: practica.descripcion,
-                    cantidad: 1,
-                    requiereMatriculaEspecialista: practica.valorEspecialista != null,
-                    requiereMatriculaAnestesista: practica.valorAnestesista != null,
-                    matriculaEspecialista: null,
-                    matriculaAnestesista: null,
-                },
-            ]
-        })
+        setPracticasAgregar((prev) => [
+            ...prev,
+            {
+                tempId: crearTempId(),
+                convenioId: practica.convenioId,
+                codigo: practica.codigo,
+                descripcion: practica.descripcion,
+                cantidad: 1,
+                requiereMatriculaEspecialista: practica.valorEspecialista != null,
+                requiereMatriculaAnestesista: practica.valorAnestesista != null,
+                matriculaEspecialista: null,
+                matriculaAnestesista: null,
+            },
+        ])
         setBusquedaPractica('')
         setResultadosPractica([])
     }
@@ -182,6 +185,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         setPracticasAgregar((prev) => [
             ...prev,
             {
+                tempId: crearTempId(),
                 convenioId,
                 codigo: busquedaPractica.trim().slice(0, 8).toUpperCase(),
                 descripcion: busquedaPractica.trim(),
@@ -195,12 +199,12 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         setErrorMsg(null)
     }
 
-    const quitarPractica = (codigo: string) => {
-        setPracticasAgregar((prev) => prev.filter((p) => p.codigo !== codigo))
+    const quitarPractica = (tempId: string) => {
+        setPracticasAgregar((prev) => prev.filter((p) => p.tempId !== tempId))
     }
 
-    const actualizarCantidadPractica = (codigo: string, cantidad: number) => {
-        setPracticasAgregar((prev) => prev.map((p) => p.codigo === codigo ? { ...p, cantidad } : p))
+    const actualizarCantidadPractica = (tempId: string, cantidad: number) => {
+        setPracticasAgregar((prev) => prev.map((p) => p.tempId === tempId ? { ...p, cantidad } : p))
     }
 
     const onSubmit = (data: ActualizarIngresoInput) => {
@@ -554,7 +558,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                             </thead>
                             <tbody className="divide-y">
                                 {practicasAgregar.map((p) => (
-                                    <tr key={p.codigo} className="bg-white">
+                                    <tr key={p.tempId} className="bg-white">
                                         <td className="px-3 py-2 font-mono text-xs text-gray-600">{p.codigo.trim()}</td>
                                         <td className="px-3 py-2 text-gray-900">{p.descripcion}</td>
                                         <td className="px-3 py-2">
@@ -563,7 +567,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                                 min={1}
                                                 step={1}
                                                 value={p.cantidad}
-                                                onChange={(e) => actualizarCantidadPractica(p.codigo, parseInt(e.target.value, 10) || 1)}
+                                                onChange={(e) => actualizarCantidadPractica(p.tempId, parseInt(e.target.value, 10) || 1)}
                                                 className="w-full text-center rounded border border-gray-200 px-1 py-0.5 text-sm"
                                             />
                                         </td>
@@ -577,7 +581,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                                         onChange={(e) => {
                                                             const value = e.target.value.trim()
                                                             setPracticasAgregar((prev) => prev.map((x) =>
-                                                                x.codigo === p.codigo
+                                                                x.tempId === p.tempId
                                                                     ? { ...x, matriculaEspecialista: value ? parseInt(value, 10) || null : null }
                                                                     : x
                                                             ))
@@ -594,7 +598,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                                         onChange={(e) => {
                                                             const value = e.target.value.trim()
                                                             setPracticasAgregar((prev) => prev.map((x) =>
-                                                                x.codigo === p.codigo
+                                                                x.tempId === p.tempId
                                                                     ? { ...x, matriculaAnestesista: value ? parseInt(value, 10) || null : null }
                                                                     : x
                                                             ))
@@ -608,7 +612,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                         <td className="px-3 py-2">
                                             <button
                                                 type="button"
-                                                onClick={() => quitarPractica(p.codigo)}
+                                                onClick={() => quitarPractica(p.tempId)}
                                                 className="text-red-400 hover:text-red-600"
                                             >
                                                 <X className="h-4 w-4" />

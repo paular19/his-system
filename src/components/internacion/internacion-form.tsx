@@ -35,6 +35,14 @@ interface InternacionFormProps {
   camaInicial?: number | null
 }
 
+function hoyLocalInput(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export function InternacionForm({
   profesionales,
   obraSociales,
@@ -48,7 +56,7 @@ export function InternacionForm({
   const [error, setError] = useState<string | null>(null)
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
 
-  const [fechaIngreso, setFechaIngreso] = useState(new Date().toISOString().split('T')[0])
+  const [fechaIngreso, setFechaIngreso] = useState(hoyLocalInput())
   const [fechaEgresoPrevista, setFechaEgresoPrevista] = useState('')
   const [camaId, setCamaId] = useState(camaInicial?.toString() ?? '')
   const [profesionalGuardiaId, setProfesionalGuardiaId] = useState('')
@@ -103,10 +111,8 @@ export function InternacionForm({
         tipoIngresoCodigo: 'INT',
         subtipoAdmisionCodigo: null,
         pacienteId: paciente.id,
-        fechaIngreso: fechaIngreso ? new Date(fechaIngreso).toISOString() : undefined,
-        fechaEgresoPrevista: fechaEgresoPrevista
-          ? new Date(fechaEgresoPrevista).toISOString()
-          : undefined,
+        fechaIngreso: fechaIngreso || undefined,
+        fechaEgresoPrevista: fechaEgresoPrevista || undefined,
         camaId: camaId ? parseInt(camaId, 10) : undefined,
         profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : undefined,
         profesionalTratanteId: profesionalTratanteId

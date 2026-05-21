@@ -19,6 +19,7 @@ const SUBTIPOS_ADMISION_ACTIVOS = [
     { codigo: 'RAY', descripcion: 'Radiografias' },
     { codigo: 'CUR', descripcion: 'Curaciones' },
     { codigo: 'SUT', descripcion: 'Suturas' },
+    { codigo: 'PRG', descripcion: 'Cirugia Programada' },
     { codigo: 'ECG', descripcion: 'Electrocardiogramas' },
     { codigo: 'ECO', descripcion: 'Ecografias' },
     { codigo: 'DER', descripcion: 'Derivacion' },
@@ -27,7 +28,6 @@ const SUBTIPOS_ADMISION_ACTIVOS = [
 const SUBTIPOS_ADMISION_INACTIVOS = [
     { codigo: 'PAM', descripcion: 'Practica Ambulatoria' },
     { codigo: 'IND', descripcion: 'Indicacion Medica' },
-    { codigo: 'PRG', descripcion: 'Programada' },
     { codigo: 'URG', descripcion: 'Urgencia' },
     { codigo: 'EME', descripcion: 'Emergencia' },
     { codigo: 'TRA', descripcion: 'Traslado' },

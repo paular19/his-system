@@ -32,7 +32,7 @@ export async function crearCirugiaProgramadaAction(data: CrearCirugiaProgramadaI
     const ingreso = await createIngresoAction({
         pacienteId: validado.pacienteId,
         tipoIngresoCodigo: 'INT',
-        subtipoAdmisionCodigo: 'SUT',
+        subtipoAdmisionCodigo: 'PRG',
         obraSocialId: validado.obraSocialId ?? null,
         planId: validado.planId ?? null,
         obraSocialCoseguroId: validado.obraSocialCoseguroId ?? null,

@@ -1,5 +1,24 @@
 import { z } from 'zod'
 
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/
+
+function parseFechaArgentina(value: unknown): unknown {
+  if (value === undefined || value === null) return value
+
+  if (typeof value === 'string') {
+    const raw = value.trim()
+    if (!raw) return undefined
+
+    if (DATE_ONLY_REGEX.test(raw)) {
+      return new Date(`${raw}T12:00:00-03:00`)
+    }
+
+    return new Date(raw)
+  }
+
+  return value
+}
+
 // ============================================
 // SCHEMAS NUEVOS — módulo completo de admisión
 // ============================================
@@ -9,8 +28,8 @@ const CrearIngresoBaseSchema = z.object({
   pacienteId: z.number().int().positive('Paciente requerido'),
   tipoIngresoCodigo: z.string().min(1).max(3, 'Tipo de ingreso requerido'),
   subtipoAdmisionCodigo: z.string().max(3).optional().nullable(),
-  fechaIngreso: z.coerce.date().optional(),
-  fechaEgresoPrevista: z.coerce.date().optional().nullable(),
+  fechaIngreso: z.preprocess(parseFechaArgentina, z.date().optional()),
+  fechaEgresoPrevista: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
   tipoInternacionCodigo: z.string().max(3).optional().nullable(),
   profesionalGuardiaId: z.number().int().positive().optional().nullable(),
   profesionalTratanteId: z.number().int().positive().optional().nullable(),
@@ -26,7 +45,7 @@ const CrearIngresoBaseSchema = z.object({
   observaciones: z.string().max(2000).trim().optional().nullable(),
   // Campos específicos para turnos/práctica
   profesionalIdTurno: z.number().int().positive().optional().nullable(),
-  fechaTurno: z.coerce.date().optional().nullable(),
+  fechaTurno: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
   practicaCodigo: z.string().max(50).trim().optional().nullable(),
   // Campos específicos para derivación
   centroDerivante: z.string().max(200).trim().optional().nullable(),
@@ -87,7 +106,7 @@ export const ActualizarIngresoSchema = CrearIngresoBaseSchema.omit({
   subtipoAdmisionCodigo: z.string().max(3).optional(),
   estado: z.enum(['A', 'E', 'P', 'X']).optional(),
   motivoEgresoCodigo: z.string().max(2).optional().nullable(),
-  fechaEgreso: z.coerce.date().optional().nullable(),
+  fechaEgreso: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
   descripcionPatologiaDefinitiva: z.string().max(500).trim().optional().nullable(),
   practicasAgregar: z.array(z.object({
     convenioId: z.number().int().positive().optional().nullable(),

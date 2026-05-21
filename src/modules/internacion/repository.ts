@@ -38,7 +38,21 @@ import type { ResultadoPaginado } from '@/types'
 
 const ARG_TIME_ZONE = 'America/Argentina/Buenos_Aires'
 
+function esFechaSoloEnUtc(fecha: Date): boolean {
+  return (
+    fecha.getUTCHours() === 0 &&
+    fecha.getUTCMinutes() === 0 &&
+    fecha.getUTCSeconds() === 0 &&
+    fecha.getUTCMilliseconds() === 0
+  )
+}
+
 function claveDiaArgentina(fecha: Date): string {
+  // Evita corrimientos de día cuando el valor fue guardado como YYYY-MM-DD (00:00:00.000Z).
+  if (esFechaSoloEnUtc(fecha)) {
+    return fecha.toISOString().slice(0, 10)
+  }
+
   const partes = new Intl.DateTimeFormat('en-CA', {
     timeZone: ARG_TIME_ZONE,
     year: 'numeric',

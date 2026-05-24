@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { CrearPacienteSchema } from '@/modules/pacientes/schemas'
+import { ActualizarPacienteSchema, CrearPacienteSchema } from '@/modules/pacientes/schemas'
 
 // Tipo flexible para valores iniciales del formulario.
 // Las fechas llegan como strings YYYY-MM-DD desde el servidor,
@@ -67,6 +67,7 @@ export function PacienteForm({
   planes,
   coseguros,
 }: PacienteFormProps) {
+  const esEdicion = Boolean(pacienteId)
   const router = useRouter()
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -83,7 +84,7 @@ export function PacienteForm({
     formState: { errors },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<any>({
-    resolver: zodResolver(CrearPacienteSchema),
+    resolver: zodResolver(esEdicion ? ActualizarPacienteSchema : CrearPacienteSchema),
     defaultValues: valoresIniciales ?? {},
   })
 
@@ -185,6 +186,12 @@ export function PacienteForm({
         </div>
       )}
 
+      {!esEdicion && (
+        <p className="text-xs text-gray-500">
+          Los campos marcados con <span className="text-red-500">*</span> son obligatorios.
+        </p>
+      )}
+
       {/* Identificación */}
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
@@ -197,6 +204,7 @@ export function PacienteForm({
             </label>
             <input
               {...register('apellido')}
+              required={!esEdicion}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
               placeholder="GARCIA"
             />
@@ -211,6 +219,7 @@ export function PacienteForm({
             </label>
             <input
               {...register('nombre')}
+              required={!esEdicion}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Juan Manuel"
             />
@@ -221,10 +230,11 @@ export function PacienteForm({
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
-              Tipo de Documento
+              Tipo de Documento <span className="text-red-500">*</span>
             </label>
             <select
               {...register('tipoDocumento')}
+              required={!esEdicion}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">-- Seleccionar --</option>
@@ -234,15 +244,19 @@ export function PacienteForm({
               <option value="PAS">Pasaporte</option>
               <option value="CUI">CUI</option>
             </select>
+            {errors.tipoDocumento && (
+              <p className="text-xs text-red-500 mt-1">{String(errors.tipoDocumento.message)}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
-              Número de Documento
+              Numero de Documento
             </label>
             <input
               {...register('numeroDocumento', { valueAsNumber: true })}
               type="number"
+              min={1}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="30123456"
             />
@@ -253,11 +267,12 @@ export function PacienteForm({
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
-              Fecha de Nacimiento
+              Fecha de Nacimiento <span className="text-red-500">*</span>
             </label>
             <input
               {...register('fechaNacimiento')}
               type="date"
+              required={!esEdicion}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             {errors.fechaNacimiento && (
@@ -266,9 +281,12 @@ export function PacienteForm({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Sexo</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Sexo <span className="text-red-500">*</span>
+            </label>
             <select
               {...register('sexo')}
+              required={!esEdicion}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">-- Seleccionar --</option>
@@ -276,6 +294,9 @@ export function PacienteForm({
               <option value="F">Femenino</option>
               <option value="I">Indeterminado</option>
             </select>
+            {errors.sexo && (
+              <p className="text-xs text-red-500 mt-1">{String(errors.sexo.message)}</p>
+            )}
           </div>
 
           <div>

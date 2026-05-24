@@ -24,6 +24,16 @@ export async function crearPaciente(
     }
   }
 
+  // Verificar duplicado por CUIL si se provee
+  if (data.cuil) {
+    const existente = await repo.obtenerPacientePorCUIL(data.cuil)
+    if (existente) {
+      throw new Error(
+        `Ya existe un paciente con CUIL ${data.cuil} (HC: ${existente.historiaClinica ?? 'sin HC'})`
+      )
+    }
+  }
+
   const paciente = await repo.crearPaciente(data, usuario)
 
   await registrarAudit({
@@ -76,6 +86,15 @@ export async function actualizarPaciente(
     const conMismoDni = await repo.obtenerPacientePorDNI(data.numeroDocumento)
     if (conMismoDni && conMismoDni.id !== id) {
       throw new Error(`Ya existe un paciente con DNI ${data.numeroDocumento}`)
+    }
+  }
+
+  // Si se cambia el CUIL, verificar que no esté en uso
+  const cuilActual = existe.cuil?.toString() ?? null
+  if (data.cuil && data.cuil !== cuilActual) {
+    const conMismoCuil = await repo.obtenerPacientePorCUIL(data.cuil)
+    if (conMismoCuil && conMismoCuil.id !== id) {
+      throw new Error(`Ya existe un paciente con CUIL ${data.cuil}`)
     }
   }
 

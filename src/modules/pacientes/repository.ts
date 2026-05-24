@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { generarNombreCompleto } from '@/lib/utils'
 import type { CrearPacienteInput, ActualizarPacienteInput, BusquedaPacienteInput } from './schemas'
 import type { ResultadoPaginado } from '@/types'
@@ -82,6 +82,15 @@ export async function obtenerPacientePorDNI(
   })
 }
 
+export async function obtenerPacientePorCUIL(
+  cuil: string
+): Promise<PacienteConRelaciones | null> {
+  return prisma.paciente.findFirst({
+    where: { cuil: new Prisma.Decimal(cuil) },
+    include: incluirRelaciones,
+  })
+}
+
 export async function obtenerPacientePorHC(
   historiaClinica: number
 ): Promise<PacienteConRelaciones | null> {
@@ -110,7 +119,7 @@ export async function actualizarPaciente(
   }
 
   const camposDirectos = [
-    'tipoDocumento', 'numeroDocumento', 'fechaNacimiento', 'sexo',
+    'tipoDocumento', 'numeroDocumento', 'cuil', 'fechaNacimiento', 'sexo',
     'estadoCivil', 'paisId', 'profesionId', 'domicilio', 'provinciaId',
     'localidadId', 'barrioId', 'telefonoFijo', 'telefonoLaboral', 'celular1',
     'celular2', 'email', 'obraSocialId', 'planId', 'numeroAfiliado',

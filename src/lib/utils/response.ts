@@ -76,6 +76,7 @@ export function manejarErrorApi(error: unknown): NextResponse<ApiResponse> {
     if (error.message === 'No autenticado') return apiNoAutorizado()
     if (error.message === 'Sin permisos') return apiForbidden()
     if (error.message.includes('no encontrado')) return apiNotFound()
+    if (error.message.includes('Ya existe')) return apiError(error.message, 409)
 
     // En producción no exponer detalles internos
     const mensaje =

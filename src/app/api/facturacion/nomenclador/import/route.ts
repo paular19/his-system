@@ -8,7 +8,7 @@ import { apiOk, apiError, apiForbidden, manejarErrorApi } from '@/lib/utils/resp
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
-const IMPORT_BATCH_SIZE = 100
+const IMPORT_BATCH_SIZE = 500
 
 type ParsedRow = {
     codigo: string
@@ -121,6 +121,90 @@ function chunk<T>(items: T[], size: number): T[][] {
         out.push(items.slice(i, i + size))
     }
     return out
+}
+
+async function upsertNomencladorPrestacionBatch(
+    rows: ParsedRow[],
+    now: Date,
+    usuarioCod: string
+): Promise<void> {
+    if (rows.length === 0) return
+
+    const values = Prisma.join(
+        rows.map((row) =>
+            Prisma.sql`(
+                ${row.codigo},
+                ${row.descripcion},
+                ${categoriaFromNivel(row.nivel)},
+                ${row.valor},
+                ${'A'},
+                ${now},
+                ${usuarioCod}
+            )`
+        )
+    )
+
+    await prisma.$executeRaw`
+        INSERT INTO "NomPrestacion" (
+            "NprCodig",
+            "NprDescrip",
+            "NprCategoria",
+            "NprValor",
+            "NprEstado",
+            "NprFchEstado",
+            "UsuCodig"
+        )
+        VALUES ${values}
+        ON CONFLICT ("NprCodig") DO UPDATE
+        SET
+            "NprDescrip" = EXCLUDED."NprDescrip",
+            "NprCategoria" = EXCLUDED."NprCategoria",
+            "NprValor" = EXCLUDED."NprValor",
+            "NprEstado" = EXCLUDED."NprEstado",
+            "NprFchEstado" = EXCLUDED."NprFchEstado",
+            "UsuCodig" = EXCLUDED."UsuCodig"
+    `
+}
+
+async function upsertNomencladorPracticaBatch(
+    convenioId: number,
+    rows: ParsedRow[]
+): Promise<void> {
+    if (rows.length === 0) return
+
+    const values = Prisma.join(
+        rows.map((row) =>
+            Prisma.sql`(
+                ${convenioId},
+                ${row.codigo},
+                ${row.descripcion},
+                ${row.esp},
+                ${row.ayu},
+                ${row.ane},
+                ${row.gto}
+            )`
+        )
+    )
+
+    await prisma.$executeRaw`
+        INSERT INTO "NPractica" (
+            "NConCodig",
+            "NPrCodig",
+            "NPrDescrip",
+            "NPrValEsp",
+            "NPrValAyu",
+            "NPrValAne",
+            "NPrValGto"
+        )
+        VALUES ${values}
+        ON CONFLICT ("NConCodig", "NPrCodig") DO UPDATE
+        SET
+            "NPrDescrip" = EXCLUDED."NPrDescrip",
+            "NPrValEsp" = EXCLUDED."NPrValEsp",
+            "NPrValAyu" = EXCLUDED."NPrValAyu",
+            "NPrValAne" = EXCLUDED."NPrValAne",
+            "NPrValGto" = EXCLUDED."NPrValGto"
+    `
 }
 
 function normalizarNombreArchivo(nombre: string): string {
@@ -267,29 +351,7 @@ export async function POST(req: NextRequest) {
         let upsertsPrestacion = 0
         console.log(`[POST /nomenclador/import] Iniciando upserts de NomencladorPrestacion`)
         for (const batch of chunk(rows, IMPORT_BATCH_SIZE)) {
-            // Limitar concurrencia a 4 (tamaño de la pool) para evitar "Timed out fetching connection"
-            for (const row of batch) {
-                await prisma.nomencladorPrestacion.upsert({
-                    where: { codigo: row.codigo },
-                    create: {
-                        codigo: row.codigo,
-                        descripcion: row.descripcion,
-                        categoria: categoriaFromNivel(row.nivel),
-                        valor: row.valor,
-                        estado: 'A',
-                        fechaEstado: now,
-                        usuario: usuarioCod,
-                    },
-                    update: {
-                        descripcion: row.descripcion,
-                        categoria: categoriaFromNivel(row.nivel),
-                        valor: row.valor,
-                        estado: 'A',
-                        fechaEstado: now,
-                        usuario: usuarioCod,
-                    },
-                })
-            }
+            await upsertNomencladorPrestacionBatch(batch, now, usuarioCod)
             upsertsPrestacion += batch.length
         }
 
@@ -301,33 +363,7 @@ export async function POST(req: NextRequest) {
             const validForPractica = batch.filter((row) => row.codigo.length <= 8)
             skippedByCodeLength += batch.length - validForPractica.length
 
-            // Limitar concurrencia a 4 (tamaño de la pool) para evitar "Timed out fetching connection"
-            for (const row of validForPractica) {
-                await prisma.nomencladorPractica.upsert({
-                    where: {
-                        convenioId_codigo: {
-                            convenioId,
-                            codigo: row.codigo,
-                        },
-                    },
-                    create: {
-                        convenioId,
-                        codigo: row.codigo,
-                        descripcion: row.descripcion,
-                        valorEspecialista: row.esp,
-                        valorAyudante: row.ayu,
-                        valorAnestesista: row.ane,
-                        valorGastos: row.gto,
-                    },
-                    update: {
-                        descripcion: row.descripcion,
-                        valorEspecialista: row.esp,
-                        valorAyudante: row.ayu,
-                        valorAnestesista: row.ane,
-                        valorGastos: row.gto,
-                    },
-                })
-            }
+            await upsertNomencladorPracticaBatch(convenioId, validForPractica)
 
             upsertsPractica += validForPractica.length
         }

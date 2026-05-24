@@ -4,6 +4,7 @@ export interface DiferencialesFacturacion {
     mismaViaPatologia: boolean
     diferentesViasPatologia: boolean
     diferentesViasDiferentesPatologia: boolean
+    dobleCirugia?: boolean
 }
 
 export interface ValoresNomencladorFacturacion {
@@ -29,7 +30,8 @@ export function tieneDiferencialesActivos(diferenciales?: DiferencialesFacturaci
         diferenciales.esNocturna ||
         diferenciales.mismaViaPatologia ||
         diferenciales.diferentesViasPatologia ||
-        diferenciales.diferentesViasDiferentesPatologia
+        diferenciales.diferentesViasDiferentesPatologia ||
+        diferenciales.dobleCirugia
     )
 }
 
@@ -83,5 +85,6 @@ export function resumenDiferenciales(diferenciales?: DiferencialesFacturacion | 
     if (diferenciales.mismaViaPatologia) etiquetas.push('Misma vía / distinta patología')
     if (diferenciales.diferentesViasPatologia) etiquetas.push('Distintas vías / misma patología')
     if (diferenciales.diferentesViasDiferentesPatologia) etiquetas.push('Distintas vías / distinta patología')
+    if (diferenciales.dobleCirugia) etiquetas.push('Doble cirugía')
     return etiquetas
 }

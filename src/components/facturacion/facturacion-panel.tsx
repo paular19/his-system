@@ -37,11 +37,37 @@ type PrestacionOrdenInput = {
     codigoPractica: string
     descripcionPractica: string
     cantidad: number
+    incluyeCodigo?: string | null
     numeroAutorizacion?: string | null
     importeTotal?: number
     matriculaEspecialista?: number | null
     matriculaAnestesista?: number | null
     grupoOrden?: number | null
+}
+
+type DiferencialesCirugiaEditState = {
+    esFeriado: boolean
+    esNocturna: boolean
+    mismaViaPatologia: boolean
+    diferentesViasPatologia: boolean
+    diferentesViasDiferentesPatologia: boolean
+    dobleCirugia: boolean
+    practicaBaseId: string
+}
+
+type CirugiaPracticaEditable = {
+    practicaId: number
+    descripcion: string
+    importeTotal: number
+    importeTotalReferencia: number
+    esPracticaBase: boolean
+    aplicaDiferencial: boolean
+}
+
+type CirugiaEditableGroup = {
+    cirugiaId: number
+    practicas: CirugiaPracticaEditable[]
+    diferenciales: PrestacionFacturableItem['diferenciales']
 }
 
 function toDateInput(value: Date | string | null | undefined): string {
@@ -64,6 +90,57 @@ function formatOrderNumber(puestoNumero: number | null | undefined, ordenNumero:
     return `${puestoNumero.toString().padStart(4, '0')}-${ordenNumero.toString().padStart(8, '0')}`
 }
 
+function calcularRecargosDiferencial(diferenciales: PrestacionFacturableItem['diferenciales'] | null | undefined): {
+    especialista: number
+    gastos: number
+} {
+    if (!diferenciales) return { especialista: 0, gastos: 0 }
+
+    const especialista =
+        (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia ? 75 : 0) +
+        (diferenciales.esFeriado ? 20 : 0) +
+        (diferenciales.esNocturna ? 20 : 0)
+
+    const gastos =
+        (diferenciales.mismaViaPatologia ? 30 : 0) +
+        (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia ? 50 : 0) +
+        (diferenciales.esFeriado ? 20 : 0) +
+        (diferenciales.esNocturna ? 20 : 0)
+
+    return { especialista, gastos }
+}
+
+function etiquetasCamposDiferencial(
+    diferenciales: PrestacionFacturableItem['diferenciales'] | null | undefined
+): string[] {
+    if (!diferenciales) return []
+    if (diferenciales.aplicaDiferencial === false) return ['Base 100%']
+
+    const recargos = calcularRecargosDiferencial(diferenciales)
+    const etiquetas: string[] = []
+    if (recargos.especialista > 0) etiquetas.push(`Especialista +${recargos.especialista}%`)
+    if (recargos.gastos > 0) etiquetas.push(`Gastos +${recargos.gastos}%`)
+    return etiquetas
+}
+
+function etiquetasCamposDiferencialCirugia(draft: DiferencialesCirugiaEditState): string[] {
+    const recargosEspecialista =
+        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 75 : 0) +
+        (draft.esFeriado ? 20 : 0) +
+        (draft.esNocturna ? 20 : 0)
+
+    const recargosGastos =
+        (draft.mismaViaPatologia ? 30 : 0) +
+        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 50 : 0) +
+        (draft.esFeriado ? 20 : 0) +
+        (draft.esNocturna ? 20 : 0)
+
+    const etiquetas: string[] = []
+    if (recargosEspecialista > 0) etiquetas.push(`Especialista +${recargosEspecialista}%`)
+    if (recargosGastos > 0) etiquetas.push(`Gastos +${recargosGastos}%`)
+    return etiquetas
+}
+
 function tieneNumeroAutorizacionValido(numeroAutorizacion: string | null | undefined): boolean {
     return typeof numeroAutorizacion === 'string' && numeroAutorizacion.trim().length > 0
 }
@@ -80,16 +157,103 @@ function esCodigoHeConOpcionHa(codigoPractica: string | null | undefined): boole
     return normalizarCodigoPractica(codigoPractica) === '420303'
 }
 
+function esCodigoHaObligatorio(codigoPractica: string | null | undefined): boolean {
+    return normalizarCodigoPractica(codigoPractica) === '169006'
+}
+
 function obtenerDesgloseSelector(p: PrestacionFacturableItem): ComponenteValores | null {
-    if (!p.desglose) return null
-    if (!esCodigoHeConOpcionHa(p.codigoPractica)) return p.desglose
-    if (p.desglose.valorAnestesista != null) return p.desglose
-    if (p.desglose.valorEspecialista == null) return p.desglose
+    if (!p.desglose) {
+        if (p.precioUnitario == null) return null
+        return {
+            valorEspecialista: null,
+            valorAyudante: null,
+            valorAnestesista: null,
+            valorGastos: null,
+            valorTotal: p.precioUnitario,
+        }
+    }
+    if (!esCodigoHeConOpcionHa(p.codigoPractica) && !esCodigoHaObligatorio(p.codigoPractica)) {
+        return p.desglose
+    }
+
+    if (p.desglose.valorEspecialista != null && p.desglose.valorAnestesista != null) return p.desglose
 
     return {
         ...p.desglose,
-        valorAnestesista: p.desglose.valorEspecialista,
+        valorEspecialista: p.desglose.valorEspecialista ?? p.desglose.valorAnestesista,
+        valorAnestesista: p.desglose.valorAnestesista ?? p.desglose.valorEspecialista,
     }
+}
+
+function parseIncluyeCodigoSeleccion(incluyeCodigo: string | null | undefined): ComponenteSeleccion | null {
+    const normalized = (incluyeCodigo ?? '').trim().toUpperCase()
+    if (!normalized || normalized === 'COMPLETA') return null
+
+    const parts = normalized
+        .split('+')
+        .map((part) => part.trim())
+        .filter((part) => /^(GA|HE|HA|A[1-3])$/.test(part))
+
+    if (parts.length === 0) return null
+
+    return {
+        especialista: parts.includes('HE') ? 1 : 0,
+        ayudante: Math.min(3, parts.filter((part) => /^A[1-3]$/.test(part)).length),
+        anestesista: parts.includes('HA') ? 1 : 0,
+        gastos: parts.includes('GA') ? 1 : 0,
+    }
+}
+
+function incluyeTieneAyudante(incluyeCodigo: string | null | undefined): boolean {
+    const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
+    return Boolean(seleccion && seleccion.ayudante > 0)
+}
+
+function incluyeTieneEspecialista(incluyeCodigo: string | null | undefined): boolean {
+    const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
+    return Boolean(seleccion && seleccion.especialista > 0)
+}
+
+function descripcionEsAyudante(value: string | null | undefined): boolean {
+    const text = (value ?? '').toUpperCase()
+    return text.includes('AYUD') || text.includes('[A1') || text.includes('[A2') || text.includes('[A3')
+}
+
+function construirIncluyeCodigoDesdeSeleccion(
+    valores: ComponenteValores | null,
+    seleccion: ComponenteSeleccion | null | undefined,
+    incluyeCodigoActual?: string | null
+): string | null {
+    if (!valores || !seleccion) return null
+
+    const espDisp = valores.valorEspecialista != null
+    const ayuDisp = valores.valorAyudante != null
+    const aneDisp = valores.valorAnestesista != null
+    const gasDisp = valores.valorGastos != null
+
+    const esCompleta =
+        (espDisp ? seleccion.especialista === 1 : seleccion.especialista === 0) &&
+        (ayuDisp ? seleccion.ayudante === 1 : seleccion.ayudante === 0) &&
+        (aneDisp ? seleccion.anestesista === 1 : seleccion.anestesista === 0) &&
+        (gasDisp ? seleccion.gastos === 1 : seleccion.gastos === 0)
+
+    if (esCompleta) {
+        const actual = (incluyeCodigoActual ?? '').trim().toUpperCase()
+        return actual && actual !== 'COMPLETA' ? actual : null
+    }
+
+    const codigos: string[] = []
+    if (seleccion.gastos > 0 && gasDisp) codigos.push('GA')
+    if (seleccion.especialista > 0 && espDisp) codigos.push('HE')
+    if (seleccion.anestesista > 0 && aneDisp) codigos.push('HA')
+    if (seleccion.ayudante > 0 && ayuDisp) {
+        const cantidadAyudantes = Math.min(seleccion.ayudante, 3)
+        for (let i = 1; i <= cantidadAyudantes; i += 1) {
+            codigos.push(`A${i}`)
+        }
+    }
+
+    return codigos.length > 0 ? codigos.join('+') : null
 }
 
 type EditState = {
@@ -99,12 +263,28 @@ type EditState = {
     cantidad: string
     numeroAutorizacion: string
     importeTotal: string
-    matriculaMedico: string
+    matriculaAyudante: string
     matriculaEspecialista: string
     matriculaAnestesista: string
 }
 
+const MATRICULA_AYUDANTE_DEFAULT = 995
+
+function incluyeSoloAyudante(incluyeCodigo: string | null | undefined): boolean {
+    const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
+    if (!seleccion) return false
+    return (
+        seleccion.ayudante > 0 &&
+        seleccion.especialista === 0 &&
+        seleccion.anestesista === 0 &&
+        seleccion.gastos === 0
+    )
+}
+
 function buildEditState(p: PrestacionFacturableItem): EditState {
+    const soloAyudante = incluyeSoloAyudante(p.incluyeCodigo)
+    const tieneAyudante = incluyeTieneAyudante(p.incluyeCodigo) || (!p.incluyeCodigo && descripcionEsAyudante(p.descripcion))
+    const tieneEspecialista = incluyeTieneEspecialista(p.incluyeCodigo)
     return {
         fecha: toDateInput(p.fecha),
         codigoPractica: p.codigoPractica ?? '',
@@ -112,9 +292,26 @@ function buildEditState(p: PrestacionFacturableItem): EditState {
         cantidad: String(p.cantidad ?? 1),
         numeroAutorizacion: p.numeroAutorizacion ?? '',
         importeTotal: String(p.importeTotal ?? 0),
-        matriculaMedico: p.matriculaProfesional ? String(p.matriculaProfesional) : '',
-        matriculaEspecialista: p.matriculaEspecialista ? String(p.matriculaEspecialista) : '',
+        matriculaAyudante: tieneAyudante ? String(MATRICULA_AYUDANTE_DEFAULT) : '',
+        matriculaEspecialista: (!soloAyudante || tieneEspecialista) && p.matriculaEspecialista ? String(p.matriculaEspecialista) : '',
         matriculaAnestesista: p.matriculaAnestesista ? String(p.matriculaAnestesista) : '',
+    }
+}
+
+function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): DiferencialesCirugiaEditState {
+    const baseIdActual = cirugia.diferenciales?.practicaBaseId ?? null
+    const baseIdPorImporte = cirugia.practicas[0]?.practicaId ?? null
+    const dobleCirugia = Boolean(cirugia.diferenciales?.dobleCirugia)
+    const baseIdFinal = dobleCirugia ? (baseIdActual ?? baseIdPorImporte) : baseIdActual
+
+    return {
+        esFeriado: Boolean(cirugia.diferenciales?.esFeriado),
+        esNocturna: Boolean(cirugia.diferenciales?.esNocturna),
+        mismaViaPatologia: Boolean(cirugia.diferenciales?.mismaViaPatologia),
+        diferentesViasPatologia: Boolean(cirugia.diferenciales?.diferentesViasPatologia),
+        diferentesViasDiferentesPatologia: Boolean(cirugia.diferenciales?.diferentesViasDiferentesPatologia),
+        dobleCirugia,
+        practicaBaseId: baseIdFinal ? String(baseIdFinal) : '',
     }
 }
 
@@ -188,15 +385,16 @@ export function FacturacionPanel() {
     const descartableDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const [editRows, setEditRows] = useState<Record<string, EditState>>({})
+    const [rowEditMode, setRowEditMode] = useState<Record<string, boolean>>({})
     const [guardandoRowUid, setGuardandoRowUid] = useState<string | null>(null)
     const [ordenesExpand, setOrdenesExpand] = useState<Record<string, boolean>>({})
     const [anulando, setAnulando] = useState<string | null>(null)
+    const [guardandoDiferencialCirugiaId, setGuardandoDiferencialCirugiaId] = useState<number | null>(null)
     const [mostrarImportadorNomenclador, setMostrarImportadorNomenclador] = useState(false)
-    const [modoFacturacion, setModoFacturacion] = useState<'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'>('MASIVA')
-    const [ordenGrupoByUid, setOrdenGrupoByUid] = useState<Record<string, string>>({})
 
     // Component selection per practice uid
     const [compSeleccion, setCompSeleccion] = useState<Record<string, ComponenteSeleccion>>({})
+    const [diferencialesCirugiaEdit, setDiferencialesCirugiaEdit] = useState<Record<number, DiferencialesCirugiaEditState>>({})
 
     // Auto-dismiss success toast after 3.5 s
     useEffect(() => {
@@ -298,11 +496,12 @@ export function FacturacionPanel() {
             const puesto = Number(puestoStr ?? 0)
             const numero = Number(numeroStr ?? 0)
             const total = items.reduce((sum, i) => sum + Number(i.importeTotal ?? 0), 0)
+            const itemAyudante = items.find((it) => incluyeTieneAyudante(it.incluyeCodigo))
             return {
                 key,
                 puesto,
                 numero,
-                matriculaMedico: items[0]?.matriculaProfesional ?? null,
+                matriculaAyudante: itemAyudante ? MATRICULA_AYUDANTE_DEFAULT : null,
                 matriculaEspecialista: items[0]?.matriculaEspecialista ?? null,
                 matriculaAnestesista: items[0]?.matriculaAnestesista ?? null,
                 total,
@@ -319,6 +518,66 @@ export function FacturacionPanel() {
             return true
         })
     }, [contexto])
+
+    const cirugiasEditables = useMemo(() => {
+        if (!contexto) return []
+
+        const map = new Map<number, CirugiaEditableGroup>()
+
+        for (const p of contexto.prestaciones) {
+            if (p.tipo !== 'PRACTICA') continue
+            if (!p.esPracticaCirugia) continue
+            if (!p.origen.cirugiaProgramadaId) continue
+            if (!p.origen.practicaId) continue
+
+            const cirugiaId = p.origen.cirugiaProgramadaId
+            const practica: CirugiaPracticaEditable = {
+                practicaId: p.origen.practicaId,
+                descripcion: p.descripcion,
+                importeTotal: Number(p.importeTotal ?? 0),
+                importeTotalReferencia: Number(p.importeTotalOriginal ?? p.importeTotal ?? 0),
+                esPracticaBase: Boolean(p.diferenciales?.esPracticaBase),
+                aplicaDiferencial: Boolean(p.diferenciales?.aplicaDiferencial),
+            }
+
+            const existente = map.get(cirugiaId)
+            if (!existente) {
+                map.set(cirugiaId, {
+                    cirugiaId,
+                    practicas: [practica],
+                    diferenciales: p.diferenciales ?? null,
+                })
+                continue
+            }
+
+            existente.practicas.push(practica)
+            if (!existente.diferenciales && p.diferenciales) {
+                existente.diferenciales = p.diferenciales
+            }
+        }
+
+        return Array.from(map.values())
+            .map((cirugia) => ({
+                ...cirugia,
+                practicas: [...cirugia.practicas].sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia),
+            }))
+            .sort((a, b) => b.cirugiaId - a.cirugiaId)
+    }, [contexto])
+
+    const diferencialesCirugiaCongelados = useMemo(() => {
+        if (!contexto) return false
+        return contexto.prestaciones.some(
+            (p) => (p.tipo === 'PRACTICA' && p.facturada) || p.tipo === 'ORDEN_ITEM'
+        )
+    }, [contexto])
+
+    useEffect(() => {
+        const next: Record<number, DiferencialesCirugiaEditState> = {}
+        for (const cirugia of cirugiasEditables) {
+            next[cirugia.cirugiaId] = buildDiferencialesCirugiaState(cirugia)
+        }
+        setDiferencialesCirugiaEdit(next)
+    }, [cirugiasEditables])
 
     const profesionalesConMatricula = useMemo(() => {
         return (contexto?.profesionales ?? []).filter(
@@ -355,16 +614,19 @@ export function FacturacionPanel() {
     const applyProfesionalSelection = (
         uid: string,
         draft: EditState,
-        field: 'matriculaMedico' | 'matriculaEspecialista' | 'matriculaAnestesista',
+        field: 'matriculaAyudante' | 'matriculaEspecialista' | 'matriculaAnestesista',
         profesionalIdRaw: string
     ) => {
         const profesionalId = Number.parseInt(profesionalIdRaw, 10)
         const matricula = Number.isFinite(profesionalId) ? matriculaPorProfesionalId.get(profesionalId) : null
+        const matriculaFinal = field === 'matriculaAyudante'
+            ? String(MATRICULA_AYUDANTE_DEFAULT)
+            : (matricula ? String(matricula) : '')
         setEditRows((prev) => ({
             ...prev,
             [uid]: {
                 ...draft,
-                [field]: matricula ? String(matricula) : '',
+                [field]: matriculaFinal,
             },
         }))
     }
@@ -383,20 +645,20 @@ export function FacturacionPanel() {
     function initEditRows(data: FacturacionContexto) {
         const state: Record<string, EditState> = {}
         const selMap: Record<string, ComponenteSeleccion> = {}
-        const ordenGrupoMap: Record<string, string> = {}
         for (const p of data.prestaciones) {
             state[p.uid] = buildEditState(p)
-            if (p.tipo === 'PRACTICA' && p.desglose && tieneDesglose(p.desglose)) {
-                selMap[p.uid] = seleccionPorDefecto(p.desglose)
-            }
             if (p.tipo === 'PRACTICA') {
-                const grupo = p.origen.ordenItem && p.origen.ordenItem > 0 ? p.origen.ordenItem : 1
-                ordenGrupoMap[p.uid] = String(grupo)
+                const seleccionDesdeIncluye = parseIncluyeCodigoSeleccion(p.incluyeCodigo)
+                const desgloseSelector = obtenerDesgloseSelector(p)
+                if (seleccionDesdeIncluye) {
+                    selMap[p.uid] = seleccionDesdeIncluye
+                } else if (desgloseSelector && tieneDesglose(desgloseSelector)) {
+                    selMap[p.uid] = seleccionPorDefecto(desgloseSelector)
+                }
             }
         }
         setEditRows(state)
         setCompSeleccion(selMap)
-        setOrdenGrupoByUid(ordenGrupoMap)
     }
 
     async function buscarAdmisiones() {
@@ -444,6 +706,7 @@ export function FacturacionPanel() {
             initEditRows(json.data)
             setSeleccion({})
             setOrdenesExpand({})
+            setRowEditMode({})
             setEditandoFicha(false)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al cargar contexto')
@@ -681,18 +944,27 @@ export function FacturacionPanel() {
                     const importeTotal = draft ? Number(draft.importeTotal) : (p.importeTotal ?? undefined)
                     const sel = compSeleccion[p.uid]
                     const baseDesc = draft?.descripcion ?? p.descripcion
-                    const descripcionPractica = sel ? baseDesc + descripcionComponentes(sel) : baseDesc
+                    const desgloseSelector = obtenerDesgloseSelector(p)
+                    const incluyeCodigo = construirIncluyeCodigoDesdeSeleccion(desgloseSelector, sel, p.incluyeCodigo)
+                    const usaMatriculaAyudante =
+                        incluyeSoloAyudante(incluyeCodigo ?? p.incluyeCodigo) ||
+                        (!incluyeCodigo && !p.incluyeCodigo && descripcionEsAyudante(baseDesc))
+                    const descripcionPractica = sel && incluyeCodigo
+                        ? baseDesc + descripcionComponentes(sel)
+                        : baseDesc
                     return {
                         practicaId: p.origen.practicaId,
                         convenioId: p.convenioId as number,
                         codigoPractica: (p.codigoPractica as string).trim(),
                         descripcionPractica,
                         cantidad: draft ? Number(draft.cantidad) : p.cantidad,
+                        incluyeCodigo,
                         numeroAutorizacion: draft?.numeroAutorizacion?.trim() ?? p.numeroAutorizacion?.trim() ?? null,
                         importeTotal: importeTotal && importeTotal > 0 ? importeTotal : undefined,
-                        grupoOrden: Number.parseInt(ordenGrupoByUid[p.uid] ?? '1', 10) || 1,
                         matriculaEspecialista: draft
-                            ? (draft.matriculaEspecialista ? Number(draft.matriculaEspecialista) : null)
+                            ? (usaMatriculaAyudante
+                                ? MATRICULA_AYUDANTE_DEFAULT
+                                : (draft.matriculaEspecialista ? Number(draft.matriculaEspecialista) : null))
                             : (p.matriculaEspecialista ?? null),
                         matriculaAnestesista: draft
                             ? (draft.matriculaAnestesista ? Number(draft.matriculaAnestesista) : null)
@@ -707,7 +979,6 @@ export function FacturacionPanel() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ingresoId: contexto.ingreso.id,
-                    modo: modoFacturacion,
                     facturarTodo: false,
                     prestaciones,
                 }),
@@ -716,7 +987,7 @@ export function FacturacionPanel() {
             if (!res.ok || !json.ok || !json.data) throw new Error(json.error ?? 'No se pudieron generar ordenes')
 
             setMensaje(
-                `Facturación registrada para paciente (${modoFacturacion === 'MASIVA' ? 'orden única' : modoFacturacion === 'INDIVIDUAL' ? 'orden por práctica' : 'orden agrupada'}). Órdenes generadas: ${json.data.ordenes.length}`
+                `Facturación registrada para paciente. Prácticas procesadas: ${prestaciones.length}.`
             )
             setSeleccion({})
             await cargarContexto(contexto.ingreso.id)
@@ -725,6 +996,34 @@ export function FacturacionPanel() {
         } finally {
             setCargandoOrdenes(false)
         }
+    }
+
+    function habilitarEdicionFila(p: PrestacionFacturableItem) {
+        setEditRows((prev) => ({ ...prev, [p.uid]: prev[p.uid] ?? buildEditState(p) }))
+        setRowEditMode((prev) => ({ ...prev, [p.uid]: true }))
+    }
+
+    function cancelarEdicionFila(p: PrestacionFacturableItem) {
+        setEditRows((prev) => ({ ...prev, [p.uid]: buildEditState(p) }))
+
+        if (p.tipo === 'PRACTICA') {
+            const seleccionDesdeIncluye = parseIncluyeCodigoSeleccion(p.incluyeCodigo)
+            const desgloseSelector = obtenerDesgloseSelector(p)
+
+            setCompSeleccion((prev) => {
+                const next = { ...prev }
+                if (seleccionDesdeIncluye) {
+                    next[p.uid] = seleccionDesdeIncluye
+                } else if (desgloseSelector && tieneDesglose(desgloseSelector)) {
+                    next[p.uid] = seleccionPorDefecto(desgloseSelector)
+                } else {
+                    delete next[p.uid]
+                }
+                return next
+            })
+        }
+
+        setRowEditMode((prev) => ({ ...prev, [p.uid]: false }))
     }
 
     async function guardarPrestacion(p: PrestacionFacturableItem) {
@@ -742,6 +1041,9 @@ export function FacturacionPanel() {
         setGuardandoRowUid(p.uid)
         setError(null)
         try {
+            const usaMatriculaAyudante =
+                incluyeSoloAyudante(p.incluyeCodigo) ||
+                (!p.incluyeCodigo && descripcionEsAyudante(draft.descripcion || p.descripcion))
             const common = {
                 fecha: new Date(draft.fecha || p.fecha).toISOString(),
                 codigoPractica: (draft.codigoPractica || p.codigoPractica || '').trim(),
@@ -749,8 +1051,10 @@ export function FacturacionPanel() {
                 cantidad: Number(draft.cantidad || 1),
                 numeroAutorizacion: draft.numeroAutorizacion || null,
                 importeTotal: Number(draft.importeTotal || 0),
-                matriculaProfesional: draft.matriculaMedico ? Number(draft.matriculaMedico) : null,
-                matriculaEspecialista: draft.matriculaEspecialista ? Number(draft.matriculaEspecialista) : null,
+                matriculaProfesional: null,
+                matriculaEspecialista: usaMatriculaAyudante
+                    ? MATRICULA_AYUDANTE_DEFAULT
+                    : (draft.matriculaEspecialista ? Number(draft.matriculaEspecialista) : null),
                 matriculaAnestesista: draft.matriculaAnestesista ? Number(draft.matriculaAnestesista) : null,
             }
 
@@ -780,11 +1084,58 @@ export function FacturacionPanel() {
             const json = (await res.json()) as ApiResponse<{ ok: boolean }>
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo guardar prestación')
 
+            setRowEditMode((prev) => ({ ...prev, [p.uid]: false }))
             if (contexto) await cargarContexto(contexto.ingreso.id)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al guardar prestación')
         } finally {
             setGuardandoRowUid(null)
+        }
+    }
+
+    async function guardarDiferencialesCirugia(cirugia: CirugiaEditableGroup) {
+        if (!contexto) return
+        if (diferencialesCirugiaCongelados) {
+            setError('Los diferenciales de cirugía están congelados porque ya se facturó el paciente.')
+            return
+        }
+
+        const draft = diferencialesCirugiaEdit[cirugia.cirugiaId] ?? buildDiferencialesCirugiaState(cirugia)
+        const practicaBaseId = draft.practicaBaseId ? Number.parseInt(draft.practicaBaseId, 10) : null
+
+        if (draft.dobleCirugia && (!practicaBaseId || !cirugia.practicas.some((p) => p.practicaId === practicaBaseId))) {
+            setError('Debe seleccionar la cirugía base al 100% para aplicar doble cirugía')
+            return
+        }
+
+        setGuardandoDiferencialCirugiaId(cirugia.cirugiaId)
+        setError(null)
+        try {
+            const res = await fetch('/api/facturacion/diferenciales', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ingresoId: contexto.ingreso.id,
+                    cirugiaProgramadaId: cirugia.cirugiaId,
+                    practicaBaseId: draft.dobleCirugia ? practicaBaseId : null,
+                    esFeriado: draft.esFeriado,
+                    esNocturna: draft.esNocturna,
+                    mismaViaPatologia: draft.mismaViaPatologia,
+                    diferentesViasPatologia: draft.diferentesViasPatologia,
+                    diferentesViasDiferentesPatologia: draft.diferentesViasDiferentesPatologia,
+                    dobleCirugia: draft.dobleCirugia,
+                }),
+            })
+
+            const json = (await res.json()) as ApiResponse<{ ok: boolean }>
+            if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudieron guardar los diferenciales de cirugía')
+
+            setMensaje('Diferenciales de cirugía actualizados')
+            await cargarContexto(contexto.ingreso.id)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al guardar diferenciales de cirugía')
+        } finally {
+            setGuardandoDiferencialCirugiaId(null)
         }
     }
 
@@ -946,20 +1297,6 @@ export function FacturacionPanel() {
                         <div className="his-card p-10 text-center text-gray-500">
                             <FileSpreadsheet className="h-8 w-8 mx-auto mb-2 text-gray-300" />
                             Selecciona una admisión para comenzar
-                            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-                                <Link
-                                    href="/dashboard/cirugia/nuevo"
-                                    className="inline-flex h-10 items-center justify-center rounded-md bg-amber-600 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-amber-700"
-                                >
-                                    Cargar cirugía desde cero
-                                </Link>
-                                <Link
-                                    href="/dashboard/cirugia"
-                                    className="inline-flex h-10 items-center justify-center rounded-md border border-amber-300 bg-amber-50 px-4 text-sm font-medium text-amber-700 shadow-sm transition-colors hover:bg-amber-100"
-                                >
-                                    Ir a cirugías
-                                </Link>
-                            </div>
                         </div>
                     )}
 
@@ -995,6 +1332,170 @@ export function FacturacionPanel() {
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50 md:col-span-2"><span className="text-gray-500 text-xs">Regla de facturación aplicada</span><div className="font-medium text-gray-900">{contexto.reglaFacturacion.descripcion}</div></div>
                                 </div>
                             </div>
+
+                            {cirugiasEditables.length > 0 && (
+                                <div className="his-card p-4 space-y-4 border-amber-200">
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-amber-900">Diferenciales de cirugía</h4>
+                                        <p className="text-xs text-amber-700">
+                                            Definí la cirugía base al 100% y qué diferenciales se aplican al resto.
+                                        </p>
+                                        {diferencialesCirugiaCongelados && (
+                                            <p className="mt-1 text-xs font-medium text-amber-800">
+                                                Diferenciales congelados: el paciente ya tiene facturación registrada.
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {cirugiasEditables.map((cirugia) => {
+                                        const draft = diferencialesCirugiaEdit[cirugia.cirugiaId] ?? buildDiferencialesCirugiaState(cirugia)
+                                        const practicaBaseId = draft.practicaBaseId ? Number.parseInt(draft.practicaBaseId, 10) : null
+                                        const practicaBase = cirugia.practicas.find((p) => p.practicaId === practicaBaseId) ?? null
+                                        const practicasConDiferencial = cirugia.practicas.filter((p) => p.practicaId !== practicaBaseId)
+                                        const etiquetasAplicadas = etiquetasCamposDiferencialCirugia(draft)
+
+                                        return (
+                                            <div key={cirugia.cirugiaId} className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-3">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="text-xs font-semibold text-amber-900">
+                                                        Cirugía #{cirugia.cirugiaId} · Prácticas: {cirugia.practicas.length}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => guardarDiferencialesCirugia(cirugia)}
+                                                        disabled={diferencialesCirugiaCongelados || guardandoDiferencialCirugiaId === cirugia.cirugiaId}
+                                                        className="rounded border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+                                                    >
+                                                        {guardandoDiferencialCirugiaId === cirugia.cirugiaId ? 'Guardando...' : 'Guardar diferenciales'}
+                                                    </button>
+                                                </div>
+
+                                                <div className="rounded border border-amber-200 bg-white px-2 py-2 text-xs text-amber-900">
+                                                    <span className="font-semibold">Campos con diferencial:</span>{' '}
+                                                    {etiquetasAplicadas.length > 0 ? etiquetasAplicadas.join(' · ') : 'Base 100%'}
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 text-xs text-amber-900">
+                                                    <label className="inline-flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={draft.esFeriado}
+                                                            disabled={diferencialesCirugiaCongelados}
+                                                            onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
+                                                                ...prev,
+                                                                [cirugia.cirugiaId]: { ...draft, esFeriado: e.target.checked },
+                                                            }))}
+                                                        />
+                                                        Feriado
+                                                    </label>
+                                                    <label className="inline-flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={draft.esNocturna}
+                                                            disabled={diferencialesCirugiaCongelados}
+                                                            onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
+                                                                ...prev,
+                                                                [cirugia.cirugiaId]: { ...draft, esNocturna: e.target.checked },
+                                                            }))}
+                                                        />
+                                                        Nocturna
+                                                    </label>
+                                                    <label className="inline-flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={draft.mismaViaPatologia}
+                                                            disabled={diferencialesCirugiaCongelados}
+                                                            onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
+                                                                ...prev,
+                                                                [cirugia.cirugiaId]: { ...draft, mismaViaPatologia: e.target.checked },
+                                                            }))}
+                                                        />
+                                                        Misma vía / distinta patología
+                                                    </label>
+                                                    <label className="inline-flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={draft.diferentesViasPatologia}
+                                                            disabled={diferencialesCirugiaCongelados}
+                                                            onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
+                                                                ...prev,
+                                                                [cirugia.cirugiaId]: { ...draft, diferentesViasPatologia: e.target.checked },
+                                                            }))}
+                                                        />
+                                                        Distintas vías / misma patología
+                                                    </label>
+                                                    <label className="inline-flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={draft.diferentesViasDiferentesPatologia}
+                                                            disabled={diferencialesCirugiaCongelados}
+                                                            onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
+                                                                ...prev,
+                                                                [cirugia.cirugiaId]: { ...draft, diferentesViasDiferentesPatologia: e.target.checked },
+                                                            }))}
+                                                        />
+                                                        Distintas vías / distinta patología
+                                                    </label>
+                                                    <label className="inline-flex items-center gap-2 font-semibold">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={draft.dobleCirugia}
+                                                            disabled={diferencialesCirugiaCongelados || cirugia.practicas.length < 2}
+                                                            onChange={(e) => {
+                                                                if (cirugia.practicas.length < 2) return
+                                                                if (diferencialesCirugiaCongelados) return
+                                                                const checked = e.target.checked
+                                                                setDiferencialesCirugiaEdit((prev) => ({
+                                                                    ...prev,
+                                                                    [cirugia.cirugiaId]: {
+                                                                        ...draft,
+                                                                        dobleCirugia: checked,
+                                                                        practicaBaseId: checked
+                                                                            ? (draft.practicaBaseId || String(cirugia.practicas[0]?.practicaId ?? ''))
+                                                                            : '',
+                                                                    },
+                                                                }))
+                                                            }}
+                                                        />
+                                                        Doble cirugía
+                                                    </label>
+                                                </div>
+
+                                                {cirugia.practicas.length < 2 && (
+                                                    <div className="text-[11px] text-amber-800">
+                                                        Doble cirugía requiere al menos 2 prácticas quirúrgicas en esta cirugía.
+                                                    </div>
+                                                )}
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
+                                                    <label className="text-xs text-amber-900">
+                                                        Cirugía base al 100%
+                                                        <select
+                                                            value={draft.practicaBaseId}
+                                                            onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
+                                                                ...prev,
+                                                                [cirugia.cirugiaId]: { ...draft, practicaBaseId: e.target.value },
+                                                            }))}
+                                                            disabled={diferencialesCirugiaCongelados || !draft.dobleCirugia}
+                                                            className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs disabled:bg-amber-100"
+                                                        >
+                                                            <option value="">-- Seleccionar práctica base --</option>
+                                                            {cirugia.practicas.map((practica) => (
+                                                                <option key={practica.practicaId} value={String(practica.practicaId)}>
+                                                                    {practica.descripcion} · {formatCurrency(practica.importeTotalReferencia)}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </label>
+                                                    <div className="text-xs text-amber-900 rounded border border-amber-200 bg-white px-2 py-2">
+                                                        <div><span className="font-semibold">Base 100%:</span> {practicaBase ? `${practicaBase.descripcion} (${formatCurrency(practicaBase.importeTotalReferencia)})` : 'Sin selección'}</div>
+                                                        <div><span className="font-semibold">Con diferenciales:</span> {draft.dobleCirugia ? (practicasConDiferencial.length > 0 ? practicasConDiferencial.map((p) => p.descripcion).join(' · ') : 'Ninguna') : 'Todas las prácticas de la cirugía'}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                 <div className="his-card p-4 space-y-3">
@@ -1142,16 +1643,6 @@ export function FacturacionPanel() {
                                         <p className="text-xs text-gray-500">Editar y validar antes del armado de lotes.</p>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <select
-                                            value={modoFacturacion}
-                                            onChange={(e) => setModoFacturacion(e.target.value as 'MASIVA' | 'INDIVIDUAL')}
-                                            className="rounded-md border border-gray-300 bg-white px-2 py-2 text-xs text-gray-700"
-                                            title="Modo de generación de órdenes"
-                                        >
-                                            <option value="MASIVA">Una sola orden (seleccionadas)</option>
-                                            <option value="AGRUPADA">Una orden por N° de orden</option>
-                                            <option value="INDIVIDUAL">Una orden por práctica</option>
-                                        </select>
                                         <button onClick={facturarPaciente} disabled={cargandoOrdenes} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60">{cargandoOrdenes ? 'Facturando...' : 'Facturar paciente'}</button>
                                     </div>
                                 </div>
@@ -1160,14 +1651,14 @@ export function FacturacionPanel() {
                                     <table className="w-full text-sm">
                                         <thead>
                                             <tr className="border-b bg-white text-left">
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Sel / #</th>
+                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Sel</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Fecha</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Código</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Descripción</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Cantidad</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Nro orden</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Nro autorización</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Monto</th>
+                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Diferencial aplicado</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Matrículas</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Importe total</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Acción</th>
@@ -1176,6 +1667,7 @@ export function FacturacionPanel() {
                                         <tbody className="divide-y">
                                             {prestacionesNoOrdenadas.map((p) => {
                                                 const draft = editRows[p.uid] ?? buildEditState(p)
+                                                const filaEnEdicion = Boolean(rowEditMode[p.uid])
                                                 const desgloseSelector = obtenerDesgloseSelector(p)
                                                 const seleccionable =
                                                     p.tipo === 'PRACTICA' &&
@@ -1191,12 +1683,19 @@ export function FacturacionPanel() {
                                                     ? (compSeleccion[p.uid] ?? seleccionPorDefecto(desgloseSelector!))
                                                     : (mostrarSelectorComponentes ? (compSeleccion[p.uid] ?? { especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }) : null)
                                                 const diferencialesActivos = resumenDiferenciales(p.diferenciales)
+                                                if (p.diferenciales?.dobleCirugia && p.diferenciales?.esPracticaBase) {
+                                                    diferencialesActivos.push('Base 100% (doble cirugía)')
+                                                }
+                                                if (p.diferenciales?.dobleCirugia && p.diferenciales?.aplicaDiferencial) {
+                                                    diferencialesActivos.push('Secundaria con diferencial')
+                                                }
+                                                const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
                                                 return (
                                                     <Fragment key={p.uid}>
                                                         <tr className={yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
                                                             <td className="px-3 py-2">
                                                                 {yaFacturada ? (
-                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700" title={`Ord. ${p.ordenPuestoNumero}-${p.ordenNumero}`}>✓ Facturada</span>
+                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>
                                                                 ) : seleccionable ? (
                                                                     <div className="flex items-center gap-2">
                                                                         {p.esPracticaCirugia && (
@@ -1205,19 +1704,6 @@ export function FacturacionPanel() {
                                                                             </span>
                                                                         )}
                                                                         <input type="checkbox" checked={Boolean(seleccion[p.uid])} onChange={(e) => setSeleccion((prev) => ({ ...prev, [p.uid]: e.target.checked }))} />
-                                                                        <input
-                                                                            type="number"
-                                                                            min={1}
-                                                                            value={ordenGrupoByUid[p.uid] ?? '1'}
-                                                                            onChange={(e) => {
-                                                                                const raw = e.target.value
-                                                                                const parsed = Number.parseInt(raw, 10)
-                                                                                const normalized = Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '1'
-                                                                                setOrdenGrupoByUid((prev) => ({ ...prev, [p.uid]: normalized }))
-                                                                            }}
-                                                                            className="w-14 rounded border border-gray-300 px-1.5 py-0.5 text-[11px]"
-                                                                            title="N° de orden para agrupar"
-                                                                        />
                                                                     </div>
                                                                 ) : (
                                                                     <div className="flex items-center gap-2">
@@ -1230,21 +1716,32 @@ export function FacturacionPanel() {
                                                                     </div>
                                                                 )}
                                                             </td>
-                                                            <td className="px-3 py-2"><input type="datetime-local" value={draft.fecha} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-44" /></td>
-                                                            <td className="px-3 py-2"><input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
-                                                            <td className="px-3 py-2"><input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-72" /></td>
-                                                            <td className="px-3 py-2"><input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-16" /></td>
-                                                            <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{formatOrderNumber(p.ordenPuestoNumero, p.ordenNumero)}</td>
-                                                            <td className="px-3 py-2"><input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} placeholder="Nro autorización" className="rounded border border-gray-300 px-2 py-1 text-xs w-32" /></td>
+                                                            <td className="px-3 py-2"><input type="datetime-local" value={draft.fecha} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-44 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                            <td className="px-3 py-2"><input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-24 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                            <td className="px-3 py-2"><input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-72 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                            <td className="px-3 py-2"><input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-16 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                            <td className="px-3 py-2"><input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="rounded border border-gray-300 px-2 py-1 text-xs w-32 disabled:bg-gray-100 disabled:text-gray-500" /></td>
                                                             <td className="px-3 py-2 text-xs text-gray-600">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</td>
+                                                            <td className="px-3 py-2 text-xs">
+                                                                {etiquetasDiferencial.length > 0 ? (
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {etiquetasDiferencial.map((etq) => (
+                                                                            <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-gray-400">—</span>
+                                                                )}
+                                                            </td>
                                                             <td className="px-3 py-2">
                                                                 <div className="grid gap-1">
                                                                     <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                                                        <span className="w-20">Médico</span>
+                                                                        <span className="w-20">Ayudante</span>
                                                                         <select
-                                                                            value={resolveSelectedProfesionalId(draft.matriculaMedico)}
-                                                                            onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaMedico', e.target.value)}
-                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                            value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
+                                                                            onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', e.target.value)}
+                                                                            disabled={!filaEnEdicion}
+                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
                                                                         >
                                                                             <option value="">-- Seleccionar --</option>
                                                                             {profesionalesConMatricula.map((profesional) => (
@@ -1259,7 +1756,8 @@ export function FacturacionPanel() {
                                                                         <select
                                                                             value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
                                                                             onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaEspecialista', e.target.value)}
-                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                            disabled={!filaEnEdicion}
+                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
                                                                         >
                                                                             <option value="">-- Seleccionar --</option>
                                                                             {profesionalesConMatricula.map((profesional) => (
@@ -1274,7 +1772,8 @@ export function FacturacionPanel() {
                                                                         <select
                                                                             value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
                                                                             onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', e.target.value)}
-                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                            disabled={!filaEnEdicion}
+                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
                                                                         >
                                                                             <option value="">-- Seleccionar --</option>
                                                                             {profesionalesConMatricula.map((profesional) => (
@@ -1295,8 +1794,21 @@ export function FacturacionPanel() {
                                                                     )}
                                                                 </div>
                                                             </td>
-                                                            <td className="px-3 py-2"><input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
-                                                            <td className="px-3 py-2">{p.tipo === 'PRACTICA' || p.tipo === 'ORDEN_ITEM' ? (<button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button>) : (<span className="text-xs text-gray-400">No aplica</span>)}</td>
+                                                            <td className="px-3 py-2"><input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-24 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                            <td className="px-3 py-2">
+                                                                {p.tipo === 'PRACTICA' || p.tipo === 'ORDEN_ITEM' ? (
+                                                                    filaEnEdicion ? (
+                                                                        <div className="flex items-center gap-1">
+                                                                            <button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button>
+                                                                            <button onClick={() => cancelarEdicionFila(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cancelar</button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button onClick={() => habilitarEdicionFila(p)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Editar</button>
+                                                                    )
+                                                                ) : (
+                                                                    <span className="text-xs text-gray-400">No aplica</span>
+                                                                )}
+                                                            </td>
                                                         </tr>
                                                         {(tieneComponentes || mostrarSelectorComponentes) && selComp && (
                                                             <tr className="bg-blue-50">
@@ -1307,10 +1819,12 @@ export function FacturacionPanel() {
                                                                             valorAyudante: null,
                                                                             valorAnestesista: null,
                                                                             valorGastos: null,
-                                                                            valorTotal: null,
+                                                                            valorTotal: p.precioUnitario ?? null,
                                                                         }}
                                                                         seleccion={selComp}
+                                                                        disabled={!filaEnEdicion}
                                                                         onChange={(nuevaSeleccion) => {
+                                                                            if (!filaEnEdicion) return
                                                                             setCompSeleccion((prev) => ({ ...prev, [p.uid]: nuevaSeleccion }))
                                                                             if (tieneComponentes) {
                                                                                 const totalBase = calcularTotalSeleccionado(desgloseSelector!, nuevaSeleccion)
@@ -1330,14 +1844,30 @@ export function FacturacionPanel() {
 
                                             {ordenesConItems.map((orden) => {
                                                 const expand = ordenesExpand[orden.key] ?? true
+                                                const etiquetasDiferencialOrden = Array.from(
+                                                    new Set(
+                                                        orden.items.flatMap((item) => etiquetasCamposDiferencial(item.diferenciales))
+                                                    )
+                                                )
                                                 return (
                                                     <Fragment key={orden.key}>
                                                         <tr key={`head-${orden.key}`} className="bg-green-50">
-                                                            <td className="px-3 py-2" colSpan={7}><button onClick={() => setOrdenesExpand((prev) => ({ ...prev, [orden.key]: !expand }))} className="inline-flex items-center gap-2 text-xs font-semibold text-green-800">{expand ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}<span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>Orden {orden.puesto.toString().padStart(4, '0')}-{orden.numero.toString().padStart(8, '0')} ({orden.items.length} prácticas)</button></td>
+                                                            <td className="px-3 py-2" colSpan={6}><button onClick={() => setOrdenesExpand((prev) => ({ ...prev, [orden.key]: !expand }))} className="inline-flex items-center gap-2 text-xs font-semibold text-green-800">{expand ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}<span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>{orden.items.length} prácticas</button></td>
                                                             <td className="px-3 py-2 text-xs">—</td>
                                                             <td className="px-3 py-2 text-xs">
+                                                                {etiquetasDiferencialOrden.length > 0 ? (
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {etiquetasDiferencialOrden.map((etq) => (
+                                                                            <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-gray-400">—</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-xs">
                                                                 <div className="leading-tight">
-                                                                    <div>Médico: {orden.matriculaMedico ?? '—'}</div>
+                                                                    <div>Ayudante: {orden.matriculaAyudante ?? '—'}</div>
                                                                     <div>Especialista: {orden.matriculaEspecialista ?? '—'}</div>
                                                                     <div>Anestesista: {orden.matriculaAnestesista ?? '—'}</div>
                                                                 </div>
@@ -1347,26 +1877,37 @@ export function FacturacionPanel() {
                                                         </tr>
                                                         {expand && orden.items.map((p) => {
                                                             const draft = editRows[p.uid] ?? buildEditState(p)
+                                                            const filaEnEdicion = Boolean(rowEditMode[p.uid])
+                                                            const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
                                                             return (
                                                                 <tr key={p.uid} className="hover:bg-gray-50">
                                                                     <td className="px-3 py-2 text-xs text-gray-400">{p.origen.ordenItem}</td>
-                                                                    <td className="px-3 py-2"><input type="datetime-local" value={draft.fecha} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-44" /></td>
-                                                                    <td className="px-3 py-2"><input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
-                                                                    <td className="px-3 py-2"><input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-72" /></td>
-                                                                    <td className="px-3 py-2"><input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-16" /></td>
-                                                                    <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
-                                                                        {formatOrderNumber(p.ordenPuestoNumero, p.ordenNumero)} · ítem {p.origen.ordenItem}
-                                                                    </td>
-                                                                    <td className="px-3 py-2"><input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} placeholder="Nro autorización" className="rounded border border-gray-300 px-2 py-1 text-xs w-32" /></td>
+                                                                    <td className="px-3 py-2"><input type="datetime-local" value={draft.fecha} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-44 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                                    <td className="px-3 py-2"><input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-24 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                                    <td className="px-3 py-2"><input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-72 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                                    <td className="px-3 py-2"><input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-16 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                                    <td className="px-3 py-2"><input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="rounded border border-gray-300 px-2 py-1 text-xs w-32 disabled:bg-gray-100 disabled:text-gray-500" /></td>
                                                                     <td className="px-3 py-2 text-xs text-gray-600">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</td>
+                                                                    <td className="px-3 py-2 text-xs">
+                                                                        {etiquetasDiferencial.length > 0 ? (
+                                                                            <div className="flex flex-wrap gap-1">
+                                                                                {etiquetasDiferencial.map((etq) => (
+                                                                                    <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
+                                                                                ))}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-gray-400">—</span>
+                                                                        )}
+                                                                    </td>
                                                                     <td className="px-3 py-2">
                                                                         <div className="grid gap-1">
                                                                             <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                                                                <span className="w-20">Médico</span>
+                                                                                <span className="w-20">Ayudante</span>
                                                                                 <select
-                                                                                    value={resolveSelectedProfesionalId(draft.matriculaMedico)}
-                                                                                    onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaMedico', e.target.value)}
-                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                                    value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
+                                                                                    onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', e.target.value)}
+                                                                                    disabled={!filaEnEdicion}
+                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
                                                                                 >
                                                                                     <option value="">-- Seleccionar --</option>
                                                                                     {profesionalesConMatricula.map((profesional) => (
@@ -1381,7 +1922,8 @@ export function FacturacionPanel() {
                                                                                 <select
                                                                                     value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
                                                                                     onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaEspecialista', e.target.value)}
-                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                                    disabled={!filaEnEdicion}
+                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
                                                                                 >
                                                                                     <option value="">-- Seleccionar --</option>
                                                                                     {profesionalesConMatricula.map((profesional) => (
@@ -1396,7 +1938,8 @@ export function FacturacionPanel() {
                                                                                 <select
                                                                                     value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
                                                                                     onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', e.target.value)}
-                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64"
+                                                                                    disabled={!filaEnEdicion}
+                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
                                                                                 >
                                                                                     <option value="">-- Seleccionar --</option>
                                                                                     {profesionalesConMatricula.map((profesional) => (
@@ -1408,8 +1951,17 @@ export function FacturacionPanel() {
                                                                             </label>
                                                                         </div>
                                                                     </td>
-                                                                    <td className="px-3 py-2"><input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} className="rounded border border-gray-300 px-2 py-1 text-xs w-24" /></td>
-                                                                    <td className="px-3 py-2"><button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button></td>
+                                                                    <td className="px-3 py-2"><input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-24 disabled:bg-gray-100 disabled:text-gray-500" /></td>
+                                                                    <td className="px-3 py-2">
+                                                                        {filaEnEdicion ? (
+                                                                            <div className="flex items-center gap-1">
+                                                                                <button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button>
+                                                                                <button onClick={() => cancelarEdicionFila(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cancelar</button>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <button onClick={() => habilitarEdicionFila(p)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Editar</button>
+                                                                        )}
+                                                                    </td>
                                                                 </tr>
                                                             )
                                                         })}
@@ -1417,7 +1969,7 @@ export function FacturacionPanel() {
                                                 )
                                             })}
 
-                                            {contexto.prestaciones.length === 0 && <tr><td colSpan={10} className="px-3 py-6 text-center text-sm text-gray-500">Sin prestaciones registradas</td></tr>}
+                                            {contexto.prestaciones.length === 0 && <tr><td colSpan={11} className="px-3 py-6 text-center text-sm text-gray-500">Sin prestaciones registradas</td></tr>}
                                         </tbody>
                                     </table>
                                 </div>
@@ -1558,9 +2110,13 @@ function ImportarNomencladorModal({ onClose, onExito, onError }: ImportarNomencl
             )
         } catch (err) {
             console.error(`[ImportarNomencladorModal] Error:`, err)
-            const msg = err instanceof Error && err.name === 'AbortError'
+            const esAbort = err instanceof Error && err.name === 'AbortError'
+            const esNetworkFetch = err instanceof TypeError && /Failed to fetch/i.test(err.message)
+            const msg = esAbort
                 ? 'La actualización superó los 14 minutos. El archivo puede ser muy grande o haber un problema de formato.'
-                : (err instanceof Error ? err.message : 'Error desconocido al importar nomenclador')
+                : esNetworkFetch
+                    ? 'No se pudo conectar con el servidor. Verificá que haya una sola instancia de npm run dev activa y reintentá.'
+                    : (err instanceof Error ? err.message : 'Error desconocido al importar nomenclador')
             setErrorLocal(msg)
             onError(msg)
         } finally {

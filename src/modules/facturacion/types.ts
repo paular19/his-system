@@ -30,6 +30,7 @@ export interface PrestacionFacturableItem {
     cantidad: number
     precioUnitario: number | null
     importeTotal: number | null
+    importeTotalOriginal?: number | null
     facturada: boolean
     matriculaProfesional: number | null
     matriculaEspecialista: number | null
@@ -38,6 +39,7 @@ export interface PrestacionFacturableItem {
     ordenNumero: number | null
     convenioId: number | null
     codigoPractica: string | null
+    incluyeCodigo?: string | null
     numeroAutorizacion: string | null
     origen: {
         ingresoId: number
@@ -56,6 +58,10 @@ export interface PrestacionFacturableItem {
         mismaViaPatologia: boolean
         diferentesViasPatologia: boolean
         diferentesViasDiferentesPatologia: boolean
+        dobleCirugia?: boolean
+        practicaBaseId?: number | null
+        esPracticaBase?: boolean
+        aplicaDiferencial?: boolean
     } | null
     desglose?: {
         valorEspecialista: number | null
@@ -145,6 +151,38 @@ export interface LoteFacturacionDetalle extends LoteFacturacionListItem {
     itemsIPSTxt: LoteIPSTxtItemDetalle[]
 }
 
+export interface LotePracticaFacturadaProfesionalItem {
+    loteId: number
+    loteNumero: number
+    loteEstado: EstadoLote
+    lotePeriodo: string
+    loteFecha: Date
+    loteObraSocial: { id: number; nombre: string } | null
+    lotePlan: { id: number; descripcion: string } | null
+    ingresoId: number
+    tipoIngresoCodigo: string
+    numeroIngreso: number
+    paciente: {
+        id: number
+        nombreCompleto: string
+        numeroDocumento: number | null
+    } | null
+    profesional: {
+        id: number
+        nombre: string
+        matricula: number | null
+    } | null
+    ordenPuestoNumero: number
+    ordenNumero: number
+    ordenFechaEmision: Date
+    item: number
+    codigoPractica: string
+    descripcionPractica: string | null
+    cantidad: number
+    numeroAutorizacion: string | null
+    importeTotal: number
+}
+
 export interface LoteFacturacionItemDetalle {
     id: number
     loteId: number
@@ -178,6 +216,7 @@ export interface OrdenAutorizadaLote {
     importeTotal: number
     items: Array<{
         item: number
+        fecha: Date
         codigoPractica: string
         descripcion: string | null
         cantidad: number

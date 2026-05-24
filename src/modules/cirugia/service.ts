@@ -17,6 +17,7 @@ interface CrearCirugiaPersistidaInput {
         mismaViaPatologia: boolean
         diferentesViasPatologia: boolean
         diferentesViasDiferentesPatologia: boolean
+        dobleCirugia: boolean
     }
 }
 

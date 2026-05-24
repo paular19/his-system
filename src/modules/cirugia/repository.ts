@@ -17,6 +17,7 @@ interface GuardarCirugiaParams {
         mismaViaPatologia: boolean
         diferentesViasPatologia: boolean
         diferentesViasDiferentesPatologia: boolean
+        dobleCirugia: boolean
     }
 }
 
@@ -106,6 +107,7 @@ export async function guardarCirugiaProgramada(data: GuardarCirugiaParams) {
                         mismaViaPatologia: data.diferenciales.mismaViaPatologia,
                         diferentesViasPatologia: data.diferenciales.diferentesViasPatologia,
                         diferentesViasDiferentesPatologia: data.diferenciales.diferentesViasDiferentesPatologia,
+                        dobleCirugia: data.diferenciales.dobleCirugia,
                     },
                 }
                 : undefined,
@@ -141,7 +143,7 @@ export async function listarCirugiasProgramadas(
         ],
     }
 
-    const [rows, total] = await Promise.all([
+    const [rows, total] = await prisma.$transaction([
         prisma.cirugiaProgramada.findMany({
             where,
             include: {

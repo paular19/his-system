@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import type { LoteFacturacionListItem } from '@/modules/facturacion/types'
+import type { LoteFacturacionListItem, LotePracticaFacturadaProfesionalItem } from '@/modules/facturacion/types'
 import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -35,6 +35,7 @@ export function LotesPanel() {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const [lotes, setLotes] = useState<LoteFacturacionListItem[]>([])
+    const [practicasProfesional, setPracticasProfesional] = useState<LotePracticaFacturadaProfesionalItem[]>([])
     const [total, setTotal] = useState(0)
     const [loading, setLoading] = useState(false)
     const [mostrarForm, setMostrarForm] = useState(false)
@@ -64,6 +65,14 @@ export function LotesPanel() {
     const filtroTipo = searchParams.get('tipo') ?? ''
     const filtroMedico = searchParams.get('medico') ?? ''
     const filtroMatricula = searchParams.get('matricula') ?? ''
+    const modoPracticasProfesional = Boolean(filtroMedico.trim() || filtroMatricula.trim())
+    const [draftMedico, setDraftMedico] = useState(filtroMedico)
+    const [draftMatricula, setDraftMatricula] = useState(filtroMatricula)
+
+    useEffect(() => {
+        setDraftMedico(filtroMedico)
+        setDraftMatricula(filtroMatricula)
+    }, [filtroMatricula, filtroMedico])
 
     const updateSearch = useCallback((mutator: (sp: URLSearchParams) => void) => {
         const sp = new URLSearchParams(searchParams.toString())
@@ -74,8 +83,33 @@ export function LotesPanel() {
         sp.delete('pagina')
         sp.delete('porPagina')
         const href = `${pathname}?${sp.toString()}`
-        router.push(href as never, { scroll: false })
+        router.replace(href as never, { scroll: false })
     }, [pathname, porPagina, router, searchParams])
+
+    const aplicarBusquedaProfesional = useCallback(() => {
+        updateSearch((sp) => {
+            const medico = draftMedico.trim()
+            const matricula = draftMatricula.trim()
+
+            if (medico.length >= 2) sp.set('medico', medico)
+            else sp.delete('medico')
+
+            if (/^[1-9]\d*$/.test(matricula)) sp.set('matricula', matricula)
+            else sp.delete('matricula')
+
+            sp.set('page', '1')
+        })
+    }, [draftMatricula, draftMedico, updateSearch])
+
+    const limpiarBusquedaProfesional = useCallback(() => {
+        setDraftMedico('')
+        setDraftMatricula('')
+        updateSearch((sp) => {
+            sp.delete('medico')
+            sp.delete('matricula')
+            sp.set('page', '1')
+        })
+    }, [updateSearch])
 
     const cargarLotes = useCallback(async () => {
         setLoading(true)
@@ -87,26 +121,40 @@ export function LotesPanel() {
             if (filtroMedico) sp.set('medico', filtroMedico)
             if (filtroMatricula) sp.set('matricula', filtroMatricula)
 
-            const res = await fetch(`/api/facturacion/lotes?${sp}`)
+            const endpoint = modoPracticasProfesional
+                ? '/api/facturacion/lotes/practicas-profesional'
+                : '/api/facturacion/lotes'
+
+            const res = await fetch(`${endpoint}?${sp}`)
             if (!res.ok) throw new Error('Error al cargar lotes')
             const json = await res.json()
-            setLotes(json.data.items)
+            if (modoPracticasProfesional) {
+                setPracticasProfesional(json.data.items)
+                setLotes([])
+            } else {
+                setLotes(json.data.items)
+                setPracticasProfesional([])
+            }
             setTotal(json.data.total)
         } catch {
             // silencioso
         } finally {
             setLoading(false)
         }
-    }, [filtroEstado, filtroPeriodo, filtroTipo, filtroMedico, filtroMatricula, pagina, porPagina])
+    }, [filtroEstado, filtroPeriodo, filtroTipo, filtroMedico, filtroMatricula, modoPracticasProfesional, pagina, porPagina])
 
     useEffect(() => { cargarLotes() }, [cargarLotes])
 
     const totalPaginas = Math.max(1, Math.ceil(total / porPagina))
 
+    function imprimirResultados() {
+        window.print()
+    }
+
     return (
         <div className="p-6 space-y-4">
             {/* Filtros + Nuevo */}
-            <div className="flex flex-wrap gap-3 items-end justify-between">
+            <div className="flex flex-wrap gap-3 items-end justify-between print:hidden">
                 <div className="flex flex-wrap gap-3">
                     <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Período</label>
@@ -167,14 +215,13 @@ export function LotesPanel() {
                         <label className="block text-xs font-medium text-gray-600 mb-1">Médico</label>
                         <input
                             type="text"
-                            value={filtroMedico}
-                            onChange={(e) => {
-                                const value = e.target.value
-                                updateSearch((sp) => {
-                                    if (value.trim()) sp.set('medico', value)
-                                    else sp.delete('medico')
-                                    sp.set('page', '1')
-                                })
+                            value={draftMedico}
+                            onChange={(e) => setDraftMedico(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    aplicarBusquedaProfesional()
+                                }
                             }}
                             placeholder="Nombre del profesional"
                             className="border rounded px-3 py-1.5 text-sm"
@@ -185,18 +232,35 @@ export function LotesPanel() {
                         <input
                             type="number"
                             min={1}
-                            value={filtroMatricula}
-                            onChange={(e) => {
-                                const value = e.target.value
-                                updateSearch((sp) => {
-                                    if (value.trim()) sp.set('matricula', value)
-                                    else sp.delete('matricula')
-                                    sp.set('page', '1')
-                                })
+                            value={draftMatricula}
+                            onChange={(e) => setDraftMatricula(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    aplicarBusquedaProfesional()
+                                }
                             }}
                             placeholder="Ej: 9110"
                             className="border rounded px-3 py-1.5 text-sm w-32"
                         />
+                    </div>
+                    <div className="flex gap-2 pb-0.5">
+                        <button
+                            type="button"
+                            onClick={aplicarBusquedaProfesional}
+                            className="border border-blue-300 bg-blue-50 text-blue-700 px-3 py-1.5 rounded text-sm hover:bg-blue-100"
+                        >
+                            Buscar profesional
+                        </button>
+                        {(filtroMedico || filtroMatricula || draftMedico || draftMatricula) && (
+                            <button
+                                type="button"
+                                onClick={limpiarBusquedaProfesional}
+                                className="border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
+                            >
+                                Limpiar
+                            </button>
+                        )}
                     </div>
                 </div>
                 <button
@@ -205,79 +269,163 @@ export function LotesPanel() {
                 >
                     + Nuevo Lote
                 </button>
+                {modoPracticasProfesional && (
+                    <button
+                        onClick={imprimirResultados}
+                        className="border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-medium hover:bg-gray-50"
+                    >
+                        Imprimir resultados
+                    </button>
+                )}
             </div>
 
             {/* Tabla */}
             <div className="overflow-x-auto rounded-lg border border-gray-200">
                 <table className="w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-700">
-                        <tr>
-                            <th className="px-4 py-3 text-left font-medium">Nro</th>
-                            <th className="px-4 py-3 text-left font-medium">Fecha</th>
-                            <th className="px-4 py-3 text-left font-medium">Sede</th>
-                            <th className="px-4 py-3 text-left font-medium">Período</th>
-                            <th className="px-4 py-3 text-left font-medium">Tipo</th>
-                            <th className="px-4 py-3 text-left font-medium">Cliente</th>
-                            <th className="px-4 py-3 text-left font-medium">Concepto</th>
-                            <th className="px-4 py-3 text-left font-medium">Descripción</th>
-                            <th className="px-4 py-3 text-right font-medium">Importe Total</th>
-                            <th className="px-4 py-3 text-center font-medium">Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {loading && (
-                            <tr>
-                                <td colSpan={10} className="px-4 py-8">
-                                    <Skeleton className="h-8 w-1/2 mx-auto mb-2" />
-                                    <Skeleton className="h-6 w-full mb-2" />
-                                    <Skeleton className="h-6 w-2/3 mx-auto" />
-                                </td>
-                            </tr>
-                        )}
-                        {!loading && lotes.length === 0 && (
-                            <tr>
-                                <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
-                                    No hay lotes registrados
-                                </td>
-                            </tr>
-                        )}
-                        {!loading && lotes.map((lote) => {
-                            const est = ESTADO_LABEL[lote.estado] ?? { label: lote.estado, cls: 'bg-gray-100 text-gray-700' }
-                            return (
-                                <tr
-                                    key={lote.id}
-                                    className="hover:bg-blue-50 cursor-pointer"
-                                    onClick={() => router.push(`/facturacion/lotes/${lote.id}`)}
-                                >
-                                    <td className="px-4 py-3 font-mono font-semibold text-blue-700">
-                                        #{lote.numero}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        {new Date(lote.fecha).toLocaleDateString('es-AR')}
-                                    </td>
-                                    <td className="px-4 py-3">{lote.sedeId ?? '-'}</td>
-                                    <td className="px-4 py-3">{formatPeriodo(lote.periodo)}</td>
-                                    <td className="px-4 py-3">{TIPO_LABEL[lote.tipo] ?? lote.tipo}</td>
-                                    <td className="px-4 py-3">
-                                        {lote.obraSocial?.nombre ?? <span className="text-gray-400">Particular</span>}
-                                        {lote.plan && (
-                                            <span className="block text-xs text-gray-500">{lote.plan.descripcion}</span>
-                                        )}
-                                    </td>
-                                    <td className="px-4 py-3 text-gray-600">{lote.concepto ?? '-'}</td>
-                                    <td className="px-4 py-3 text-gray-600">{lote.descripcion ?? '-'}</td>
-                                    <td className="px-4 py-3 text-right font-semibold">
-                                        {formatMonto(lote.importeTotal)}
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${est.cls}`}>
-                                            {est.label}
-                                        </span>
-                                    </td>
+                    {!modoPracticasProfesional ? (
+                        <>
+                            <thead className="bg-gray-50 text-gray-700">
+                                <tr>
+                                    <th className="px-4 py-3 text-left font-medium">Nro</th>
+                                    <th className="px-4 py-3 text-left font-medium">Fecha</th>
+                                    <th className="px-4 py-3 text-left font-medium">Sede</th>
+                                    <th className="px-4 py-3 text-left font-medium">Período</th>
+                                    <th className="px-4 py-3 text-left font-medium">Tipo</th>
+                                    <th className="px-4 py-3 text-left font-medium">Cliente</th>
+                                    <th className="px-4 py-3 text-left font-medium">Concepto</th>
+                                    <th className="px-4 py-3 text-left font-medium">Descripción</th>
+                                    <th className="px-4 py-3 text-right font-medium">Importe Total</th>
+                                    <th className="px-4 py-3 text-center font-medium">Estado</th>
                                 </tr>
-                            )
-                        })}
-                    </tbody>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {loading && (
+                                    <tr>
+                                        <td colSpan={10} className="px-4 py-8">
+                                            <Skeleton className="h-8 w-1/2 mx-auto mb-2" />
+                                            <Skeleton className="h-6 w-full mb-2" />
+                                            <Skeleton className="h-6 w-2/3 mx-auto" />
+                                        </td>
+                                    </tr>
+                                )}
+                                {!loading && lotes.length === 0 && (
+                                    <tr>
+                                        <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
+                                            No hay lotes registrados
+                                        </td>
+                                    </tr>
+                                )}
+                                {!loading && lotes.map((lote) => {
+                                    const est = ESTADO_LABEL[lote.estado] ?? { label: lote.estado, cls: 'bg-gray-100 text-gray-700' }
+                                    return (
+                                        <tr
+                                            key={lote.id}
+                                            className="hover:bg-blue-50 cursor-pointer"
+                                            onClick={() => router.push(`/facturacion/lotes/${lote.id}`)}
+                                        >
+                                            <td className="px-4 py-3 font-mono font-semibold text-blue-700">
+                                                #{lote.numero}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {new Date(lote.fecha).toLocaleDateString('es-AR')}
+                                            </td>
+                                            <td className="px-4 py-3">{lote.sedeId ?? '-'}</td>
+                                            <td className="px-4 py-3">{formatPeriodo(lote.periodo)}</td>
+                                            <td className="px-4 py-3">{TIPO_LABEL[lote.tipo] ?? lote.tipo}</td>
+                                            <td className="px-4 py-3">
+                                                {lote.obraSocial?.nombre ?? <span className="text-gray-400">Particular</span>}
+                                                {lote.plan && (
+                                                    <span className="block text-xs text-gray-500">{lote.plan.descripcion}</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-600">{lote.concepto ?? '-'}</td>
+                                            <td className="px-4 py-3 text-gray-600">{lote.descripcion ?? '-'}</td>
+                                            <td className="px-4 py-3 text-right font-semibold">
+                                                {formatMonto(lote.importeTotal)}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${est.cls}`}>
+                                                    {est.label}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </>
+                    ) : (
+                        <>
+                            <thead className="bg-gray-50 text-gray-700">
+                                <tr>
+                                    <th className="px-4 py-3 text-left font-medium">Lote</th>
+                                    <th className="px-4 py-3 text-center font-medium">Estado</th>
+                                    <th className="px-4 py-3 text-left font-medium">Período</th>
+                                    <th className="px-4 py-3 text-left font-medium">Ingreso</th>
+                                    <th className="px-4 py-3 text-left font-medium">Paciente</th>
+                                    <th className="px-4 py-3 text-left font-medium">Profesional</th>
+                                    <th className="px-4 py-3 text-left font-medium">Fecha Orden</th>
+                                    <th className="px-4 py-3 text-left font-medium">Código</th>
+                                    <th className="px-4 py-3 text-left font-medium">Descripción</th>
+                                    <th className="px-4 py-3 text-center font-medium">Cant.</th>
+                                    <th className="px-4 py-3 text-left font-medium">Nro. Aut.</th>
+                                    <th className="px-4 py-3 text-right font-medium">Importe</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {loading && (
+                                    <tr>
+                                        <td colSpan={12} className="px-4 py-8">
+                                            <Skeleton className="h-8 w-1/2 mx-auto mb-2" />
+                                            <Skeleton className="h-6 w-full mb-2" />
+                                            <Skeleton className="h-6 w-2/3 mx-auto" />
+                                        </td>
+                                    </tr>
+                                )}
+                                {!loading && practicasProfesional.length === 0 && (
+                                    <tr>
+                                        <td colSpan={12} className="px-4 py-8 text-center text-gray-400">
+                                            No hay prácticas facturadas para el médico/matrícula indicado
+                                        </td>
+                                    </tr>
+                                )}
+                                {!loading && practicasProfesional.map((fila, idx) => {
+                                    const est = ESTADO_LABEL[fila.loteEstado] ?? { label: fila.loteEstado, cls: 'bg-gray-100 text-gray-700' }
+                                    return (
+                                        <tr
+                                            key={`${fila.loteId}:${fila.ordenPuestoNumero}:${fila.ordenNumero}:${fila.item}:${idx}`}
+                                            className="hover:bg-blue-50 cursor-pointer"
+                                            onClick={() => router.push(`/facturacion/lotes/${fila.loteId}`)}
+                                        >
+                                            <td className="px-4 py-3 font-mono font-semibold text-blue-700">#{fila.loteNumero}</td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${est.cls}`}>
+                                                    {est.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">{formatPeriodo(fila.lotePeriodo)}</td>
+                                            <td className="px-4 py-3 font-mono text-xs">{fila.tipoIngresoCodigo}-{fila.numeroIngreso}</td>
+                                            <td className="px-4 py-3">
+                                                <div className="font-medium text-gray-800">{fila.paciente?.nombreCompleto ?? '-'}</div>
+                                                {fila.paciente?.numeroDocumento && (
+                                                    <div className="text-xs text-gray-500">DNI {fila.paciente.numeroDocumento.toLocaleString('es-AR')}</div>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="text-gray-800">{fila.profesional?.nombre ?? '-'}</div>
+                                                <div className="text-xs text-gray-500">Matrícula: {fila.profesional?.matricula ?? '-'}</div>
+                                            </td>
+                                            <td className="px-4 py-3">{new Date(fila.ordenFechaEmision).toLocaleDateString('es-AR')}</td>
+                                            <td className="px-4 py-3 font-mono">{fila.codigoPractica}</td>
+                                            <td className="px-4 py-3 text-gray-600">{fila.descripcionPractica ?? '-'}</td>
+                                            <td className="px-4 py-3 text-center">{fila.cantidad}</td>
+                                            <td className="px-4 py-3 text-blue-600">{fila.numeroAutorizacion ?? '—'}</td>
+                                            <td className="px-4 py-3 text-right font-semibold">{formatMonto(fila.importeTotal)}</td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </>
+                    )}
                 </table>
             </div>
 
@@ -684,19 +832,11 @@ function CrearLoteIPSTxtModal({ onClose, onCreado }: CrearLoteIPSTxtModalProps) 
     const hoy = new Date().toISOString().slice(0, 10)
     const periodoActual = new Date().toISOString().slice(0, 7)
 
-    const [form, setForm] = useState({ fecha: hoy, periodo: periodoActual, obraSocialId: '', descripcion: '' })
+    const [form, setForm] = useState({ fecha: hoy, periodo: periodoActual, descripcion: '' })
     const [items, setItems] = useState<IPSTxtItem[]>([])
     const [fileName, setFileName] = useState('')
-    const [obrasSociales, setObrasSociales] = useState<Array<{ id: number; nombre: string }>>([])
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
-
-    useEffect(() => {
-        fetch('/api/facturacion/obras-sociales?porPagina=300')
-            .then((r) => r.json())
-            .then((j) => setObrasSociales(j.data?.items ?? j.data ?? []))
-            .catch(() => { })
-    }, [])
 
     const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -718,7 +858,6 @@ function CrearLoteIPSTxtModal({ onClose, onCreado }: CrearLoteIPSTxtModalProps) 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         setError('')
-        if (!form.obraSocialId) { setError('Seleccioná la obra social'); return }
         if (items.length === 0) { setError('Primero cargá el archivo TXT'); return }
 
         setLoading(true)
@@ -726,7 +865,6 @@ function CrearLoteIPSTxtModal({ onClose, onCreado }: CrearLoteIPSTxtModalProps) 
             const body = {
                 fecha: new Date(form.fecha).toISOString(),
                 periodo: form.periodo,
-                obraSocialId: Number(form.obraSocialId),
                 descripcion: form.descripcion || null,
                 items,
             }
@@ -768,16 +906,6 @@ function CrearLoteIPSTxtModal({ onClose, onCreado }: CrearLoteIPSTxtModalProps) 
                     </div>
 
                     <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Obra Social</label>
-                        <select value={form.obraSocialId} onChange={(e) => set('obraSocialId', e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm">
-                            <option value="">Seleccionar obra social</option>
-                            {obrasSociales.map((os) => (
-                                <option key={os.id} value={os.id}>{os.nombre}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Descripción (opcional)</label>
                         <input type="text" maxLength={200} value={form.descripcion} onChange={(e) => set('descripcion', e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm" />
                     </div>
@@ -793,7 +921,7 @@ function CrearLoteIPSTxtModal({ onClose, onCreado }: CrearLoteIPSTxtModalProps) 
                             <p className="font-medium text-blue-800">Vista previa</p>
                             <p className="text-blue-700">{items.length} registros cargados</p>
                             <p className="text-blue-700">Importe total bruto: <span className="font-semibold">{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(totalBruto)}</span></p>
-                            <p className="text-xs text-blue-600">Al aplicar PROMEDI se calculará el 40% de cada importe.</p>
+                            <p className="text-xs text-blue-600">Al aplicar PROMEDI se calculará el 40% solo para los códigos alcanzados por la regla; el resto quedará al 100%.</p>
                         </div>
                     )}
 

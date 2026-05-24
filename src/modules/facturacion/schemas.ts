@@ -79,6 +79,12 @@ export const PrestacionOrdenInputSchema = z.object({
     codigoPractica: z.string().trim().min(1).max(8),
     descripcionPractica: z.string().trim().min(1).max(500),
     cantidad: z.coerce.number().positive(),
+    incluyeCodigo: z
+        .string()
+        .trim()
+        .regex(/^(GA|HE|HA|A[1-3])(\+(GA|HE|HA|A[1-3]))*$/)
+        .optional()
+        .nullable(),
     numeroAutorizacion: z.string().trim().max(50).optional().nullable(),
     importeTotal: z.coerce.number().min(0).optional().nullable(),
     matriculaEspecialista: z.number().int().positive().optional().nullable(),
@@ -146,6 +152,20 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
 ])
 
 export type ActualizarPrestacionFacturacionInput = z.infer<typeof ActualizarPrestacionFacturacionSchema>
+
+export const ActualizarDiferencialesCirugiaFacturacionSchema = z.object({
+    ingresoId: z.number().int().positive(),
+    cirugiaProgramadaId: z.number().int().positive(),
+    practicaBaseId: z.number().int().positive().optional().nullable(),
+    esFeriado: z.boolean().default(false),
+    esNocturna: z.boolean().default(false),
+    mismaViaPatologia: z.boolean().default(false),
+    diferentesViasPatologia: z.boolean().default(false),
+    diferentesViasDiferentesPatologia: z.boolean().default(false),
+    dobleCirugia: z.boolean().default(false),
+})
+
+export type ActualizarDiferencialesCirugiaFacturacionInput = z.infer<typeof ActualizarDiferencialesCirugiaFacturacionSchema>
 
 // ============================================
 // LOTES DE FACTURACIÓN
@@ -221,7 +241,7 @@ export const CrearLoteIPSTxtSchema = z.object({
     periodo: z
         .string()
         .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato: YYYY-MM'),
-    obraSocialId: z.number().int().positive(),
+    obraSocialId: z.number().int().positive().optional().nullable(),
     planId: z.number().int().positive().optional().nullable(),
     descripcion: z.string().trim().max(500).optional().nullable(),
     items: z.array(IPSTxtItemSchema).min(1),

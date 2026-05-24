@@ -123,6 +123,7 @@ export function CirugiaProgramadaForm({
     const [mismaViaPatologia, setMismaViaPatologia] = useState(false)
     const [diferentesViasPatologia, setDiferentesViasPatologia] = useState(false)
     const [diferentesViasDiferentesPatologia, setDiferentesViasDiferentesPatologia] = useState(false)
+    const [dobleCirugia, setDobleCirugia] = useState(false)
 
     const obraSocialIdNumero = obraSocialId ? Number.parseInt(obraSocialId, 10) : null
     const obraSocialSeleccionada = obraSociales.find((o) => o.id === obraSocialIdNumero)
@@ -179,6 +180,12 @@ export function CirugiaProgramadaForm({
 
         return () => clearTimeout(timer)
     }, [terminoBusquedaPractica, obraSocialIdNumero])
+
+    useEffect(() => {
+        if (practicas.length < 2 && dobleCirugia) {
+            setDobleCirugia(false)
+        }
+    }, [practicas.length, dobleCirugia])
 
     const buscarMedicamentoCatalogo = (value: string) => {
         setNuevaMedNombre(value)
@@ -328,6 +335,11 @@ export function CirugiaProgramadaForm({
             return
         }
 
+        if (dobleCirugia && practicas.length < 2) {
+            setError('Para aplicar doble cirugía, debe cargar al menos dos prácticas')
+            return
+        }
+
         setError(null)
         setGuardando(true)
 
@@ -362,6 +374,7 @@ export function CirugiaProgramadaForm({
                     mismaViaPatologia,
                     diferentesViasPatologia,
                     diferentesViasDiferentesPatologia,
+                    dobleCirugia,
                 },
             })
 
@@ -931,6 +944,24 @@ export function CirugiaProgramadaForm({
                             Diferentes vías, diferentes patologías
                         </label>
                     </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            id="dobleCirugia"
+                            checked={dobleCirugia}
+                            onChange={(e) => setDobleCirugia(e.target.checked)}
+                            disabled={practicas.length < 2}
+                            className="w-4 h-4 text-blue-600 rounded"
+                        />
+                        <label htmlFor="dobleCirugia" className="text-sm text-gray-700">
+                            Doble cirugía (una práctica base al 100% y recargo en las restantes)
+                        </label>
+                    </div>
+                    {practicas.length < 2 && (
+                        <p className="text-xs text-amber-700">
+                            Para habilitar doble cirugía, agregue al menos dos prácticas.
+                        </p>
+                    )}
                 </div>
             </div>
 

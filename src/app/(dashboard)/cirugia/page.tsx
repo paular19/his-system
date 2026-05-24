@@ -46,12 +46,23 @@ export default async function CirugiaPage({ searchParams }: PageProps) {
         : DEFAULT_LIMIT
     const q = params.q?.trim() || undefined
 
-    const resultado = await listarCirugiasProgramadas({
-        historico: false,
-        q,
-        pagina: page,
-        porPagina: limit,
-    })
+    let resultado = { items: [] as Awaited<ReturnType<typeof listarCirugiasProgramadas>>['items'], total: 0 }
+    let dbError: string | null = null
+    try {
+        resultado = await listarCirugiasProgramadas({
+            historico: false,
+            q,
+            pagina: page,
+            porPagina: limit,
+        })
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (message.includes("Can't reach database server") || message.includes('P1001')) {
+            dbError = 'No se pudo conectar a la base de datos. Reintentá en unos segundos o verificá la conexión de Neon.'
+        } else {
+            throw error
+        }
+    }
 
     const totalPaginas = Math.max(1, Math.ceil(resultado.total / limit))
 
@@ -59,6 +70,12 @@ export default async function CirugiaPage({ searchParams }: PageProps) {
         <>
             <Header titulo="Cirugías programadas" />
             <div className="p-6 space-y-5">
+                {dbError && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {dbError}
+                    </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <form method="GET" className="flex items-center gap-2 w-full sm:w-auto">
                         <div className="relative flex-1 sm:w-80">

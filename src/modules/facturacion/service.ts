@@ -2,6 +2,7 @@ import { registrarAudit } from '@/lib/security/audit'
 import type {
     ActualizarAutorizacionInput,
     ActualizarContextoFacturacionInput,
+    ActualizarDiferencialesCirugiaFacturacionInput,
     ActualizarLoteFacturacionInput,
     ActualizarPrestacionFacturacionInput,
     BusquedaFacturacionInput,
@@ -148,6 +149,23 @@ export async function actualizarPrestacionFacturacion(
     })
 }
 
+export async function actualizarDiferencialesCirugiaFacturacion(
+    data: ActualizarDiferencialesCirugiaFacturacionInput,
+    usuario: string,
+    ip?: string
+) {
+    await repo.actualizarDiferencialesCirugiaFacturacion(data)
+
+    await registrarAudit({
+        usuario,
+        accion: 'MODIFICAR',
+        entidad: 'CirugiaDiferencial',
+        registroId: data.cirugiaProgramadaId,
+        detalle: 'Actualizacion de diferenciales de cirugía desde facturacion',
+        direccionIp: ip,
+    })
+}
+
 export async function anularOrdenFacturacion(
     puestoNumero: number,
     numero: number,
@@ -172,6 +190,10 @@ export async function anularOrdenFacturacion(
 
 export async function buscarLotes(params: BusquedaLotesInput) {
     return repo.buscarLotes(params)
+}
+
+export async function buscarPracticasFacturadasProfesionalEnLotes(params: BusquedaLotesInput) {
+    return repo.buscarPracticasFacturadasProfesionalEnLotes(params)
 }
 
 export async function obtenerLote(id: number, filtros?: { medico?: string; matricula?: number }) {

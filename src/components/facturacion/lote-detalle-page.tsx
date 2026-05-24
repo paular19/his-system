@@ -45,6 +45,37 @@ function esObraSocialOsecac(nombre: string | null | undefined): boolean {
 
 interface Props { loteId: number }
 
+type OrdenItemEditState = {
+    fecha: string
+    codigoPractica: string
+    descripcion: string
+    cantidad: string
+    numeroAutorizacion: string
+    importeTotal: string
+}
+
+function toDateTimeInput(value: Date | string | null | undefined): string {
+    if (!value) return ''
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    return date.toISOString().slice(0, 16)
+}
+
+function keyOrdenItem(puestoNumero: number, ordenNumero: number, item: number): string {
+    return `${puestoNumero}:${ordenNumero}:${item}`
+}
+
+function buildOrdenItemEditState(item: OrdenAutorizadaLote['items'][number]): OrdenItemEditState {
+    return {
+        fecha: toDateTimeInput(item.fecha),
+        codigoPractica: (item.codigoPractica ?? '').trim(),
+        descripcion: item.descripcion ?? '',
+        cantidad: String(item.cantidad ?? 1),
+        numeroAutorizacion: item.numeroAutorizacion ?? '',
+        importeTotal: String(item.importeTotal ?? 0),
+    }
+}
+
 export function LoteDetallePage({ loteId }: Props) {
     const router = useRouter()
     const [lote, setLote] = useState<LoteFacturacionDetalle | null>(null)
@@ -54,17 +85,9 @@ export function LoteDetallePage({ loteId }: Props) {
     const [ordenes, setOrdenes] = useState<OrdenAutorizadaLote[]>([])
     const [loadingOrdenes, setLoadingOrdenes] = useState(false)
     const [procesando, setProcesando] = useState(false)
-    const [editando, setEditando] = useState(false)
-    const [formEdit, setFormEdit] = useState({
-        fecha: '',
-        periodo: '',
-        descripcion: '',
-        concepto: '',
-        sedeId: '',
-        tipoIngresoCodigo: '',
-        rangoDesde: '',
-        rangoHasta: '',
-    })
+    const [editandoPracticas, setEditandoPracticas] = useState(false)
+    const [editItems, setEditItems] = useState<Record<string, OrdenItemEditState>>({})
+    const [guardandoItemKey, setGuardandoItemKey] = useState<string | null>(null)
     const [mostrarImpresion, setMostrarImpresion] = useState(false)
     const [mostrarConfirmPromedi, setMostrarConfirmPromedi] = useState(false)
     const [errorPromedi, setErrorPromedi] = useState('')
@@ -82,16 +105,6 @@ export function LoteDetallePage({ loteId }: Props) {
             const json = await res.json()
             if (!res.ok || !json.ok) { setError(json.error ?? 'Error'); return }
             setLote(json.data)
-            setFormEdit({
-                fecha: new Date(json.data.fecha).toISOString().slice(0, 10),
-                periodo: json.data.periodo,
-                descripcion: json.data.descripcion ?? '',
-                concepto: json.data.concepto ?? '',
-                sedeId: json.data.sedeId ? String(json.data.sedeId) : '',
-                tipoIngresoCodigo: json.data.tipoIngresoCodigo ?? '',
-                rangoDesde: json.data.rangoDesde ? String(json.data.rangoDesde) : '',
-                rangoHasta: json.data.rangoHasta ? String(json.data.rangoHasta) : '',
-            })
         } catch {
             setError('Error de conexión')
         } finally {
@@ -111,9 +124,19 @@ export function LoteDetallePage({ loteId }: Props) {
             if (lote?.periodo) sp.set('periodo', lote.periodo)
             const res = await fetch(`/api/facturacion/lotes/ingreso/${ingresoId}/ordenes?${sp.toString()}`)
             const json = await res.json()
-            setOrdenes(json.data ?? [])
+            const ordenesData: OrdenAutorizadaLote[] = json.data ?? []
+            setOrdenes(ordenesData)
+
+            const nextEditItems: Record<string, OrdenItemEditState> = {}
+            for (const orden of ordenesData) {
+                for (const item of orden.items) {
+                    nextEditItems[keyOrdenItem(orden.puestoNumero, orden.numero, item.item)] = buildOrdenItemEditState(item)
+                }
+            }
+            setEditItems(nextEditItems)
         } catch {
             setOrdenes([])
+            setEditItems({})
         } finally {
             setLoadingOrdenes(false)
         }
@@ -150,28 +173,59 @@ export function LoteDetallePage({ loteId }: Props) {
         }
     }
 
-    async function guardarEdicion() {
-        setProcesando(true)
+    async function guardarOrdenItem(orden: OrdenAutorizadaLote, item: OrdenAutorizadaLote['items'][number]) {
+        const key = keyOrdenItem(orden.puestoNumero, orden.numero, item.item)
+        const draft = editItems[key]
+        if (!draft) return
+
+        setGuardandoItemKey(key)
+        setError('')
         try {
-            await fetch(`/api/facturacion/lotes/${loteId}`, {
-                method: 'PUT',
+            const payload = {
+                tipo: 'ORDEN_ITEM' as const,
+                puestoNumero: orden.puestoNumero,
+                ordenNumero: orden.numero,
+                item: item.item,
+                fecha: new Date(draft.fecha || item.fecha).toISOString(),
+                codigoPractica: (draft.codigoPractica || item.codigoPractica || '').trim(),
+                descripcionPractica: draft.descripcion || null,
+                cantidad: Number(draft.cantidad || item.cantidad || 1),
+                numeroAutorizacion: draft.numeroAutorizacion.trim() || null,
+                importeTotal: Number(draft.importeTotal || item.importeTotal || 0),
+                matriculaProfesional: null,
+                matriculaEspecialista: null,
+                matriculaAnestesista: null,
+            }
+
+            const res = await fetch('/api/facturacion/prestaciones/editar', {
+                method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    fecha: formEdit.fecha ? new Date(formEdit.fecha).toISOString() : undefined,
-                    periodo: formEdit.periodo || undefined,
-                    descripcion: formEdit.descripcion || null,
-                    concepto: formEdit.concepto || null,
-                    sedeId: formEdit.sedeId ? Number(formEdit.sedeId) : null,
-                    tipoIngresoCodigo: formEdit.tipoIngresoCodigo || null,
-                    rangoDesde: formEdit.rangoDesde ? Number(formEdit.rangoDesde) : null,
-                    rangoHasta: formEdit.rangoHasta ? Number(formEdit.rangoHasta) : null,
-                }),
+                body: JSON.stringify(payload),
             })
-            setEditando(false)
-            cargar()
+
+            const json = await res.json()
+            if (!res.ok || !json.ok) {
+                setError(json.error ?? 'No se pudo guardar la práctica de la orden')
+                return
+            }
+
+            await cargar()
+            if (selectedIngresoId !== null) {
+                await cargarOrdenes(selectedIngresoId)
+            }
+        } catch {
+            setError('Error al guardar la práctica de la orden')
         } finally {
-            setProcesando(false)
+            setGuardandoItemKey(null)
         }
+    }
+
+    function cancelarEdicionItem(orden: OrdenAutorizadaLote, item: OrdenAutorizadaLote['items'][number]) {
+        const key = keyOrdenItem(orden.puestoNumero, orden.numero, item.item)
+        setEditItems((prev) => ({
+            ...prev,
+            [key]: buildOrdenItemEditState(item),
+        }))
     }
 
     async function aplicarPromedi() {
@@ -281,10 +335,10 @@ export function LoteDetallePage({ loteId }: Props) {
                         {esPendiente && !esIPSTxt && (
                             <>
                                 <button
-                                    onClick={() => setEditando(!editando)}
+                                    onClick={() => setEditandoPracticas((prev) => !prev)}
                                     className="border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
                                 >
-                                    ✏️ Editar
+                                    {editandoPracticas ? 'Finalizar edición de prácticas' : '✏️ Editar prácticas'}
                                 </button>
                                 <button
                                     onClick={() => cambiarEstado('ANU')}
@@ -320,110 +374,15 @@ export function LoteDetallePage({ loteId }: Props) {
                     </div>
                 </div>
 
-                {/* Concepto / Descripción */}
-                {editando ? (
-                    <div className="mt-4 space-y-2 print:hidden">
-                        <div className="grid grid-cols-2 gap-2">
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
-                                <input
-                                    type="date"
-                                    value={formEdit.fecha}
-                                    onChange={(e) => setFormEdit((f) => ({ ...f, fecha: e.target.value }))}
-                                    className="w-full border rounded px-3 py-1.5 text-sm"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Período</label>
-                                <input
-                                    type="month"
-                                    value={formEdit.periodo}
-                                    onChange={(e) => setFormEdit((f) => ({ ...f, periodo: e.target.value }))}
-                                    className="w-full border rounded px-3 py-1.5 text-sm"
-                                />
-                            </div>
+                <div className="mt-3 space-y-1 text-sm text-gray-600">
+                    {lote.concepto && <div><strong>Concepto:</strong> {lote.concepto}</div>}
+                    {lote.descripcion && <div><strong>Descripción:</strong> {lote.descripcion}</div>}
+                    {esPendiente && !esIPSTxt && editandoPracticas && (
+                        <div className="text-xs font-medium text-blue-700">
+                            Modo edición activo: seleccioná un paciente y corregí las prácticas en sus órdenes.
                         </div>
-
-                        <div className="grid grid-cols-4 gap-2">
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Sede ID</label>
-                                <input
-                                    type="number"
-                                    value={formEdit.sedeId}
-                                    onChange={(e) => setFormEdit((f) => ({ ...f, sedeId: e.target.value }))}
-                                    className="w-full border rounded px-3 py-1.5 text-sm"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Tipo Ingreso</label>
-                                <input
-                                    type="text"
-                                    maxLength={3}
-                                    value={formEdit.tipoIngresoCodigo}
-                                    onChange={(e) => setFormEdit((f) => ({ ...f, tipoIngresoCodigo: e.target.value.toUpperCase() }))}
-                                    className="w-full border rounded px-3 py-1.5 text-sm"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Rango Desde</label>
-                                <input
-                                    type="number"
-                                    value={formEdit.rangoDesde}
-                                    onChange={(e) => setFormEdit((f) => ({ ...f, rangoDesde: e.target.value }))}
-                                    className="w-full border rounded px-3 py-1.5 text-sm"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Rango Hasta</label>
-                                <input
-                                    type="number"
-                                    value={formEdit.rangoHasta}
-                                    onChange={(e) => setFormEdit((f) => ({ ...f, rangoHasta: e.target.value }))}
-                                    className="w-full border rounded px-3 py-1.5 text-sm"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">Concepto</label>
-                            <input
-                                type="text"
-                                value={formEdit.concepto}
-                                onChange={(e) => setFormEdit((f) => ({ ...f, concepto: e.target.value }))}
-                                className="w-full border rounded px-3 py-1.5 text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">Descripción</label>
-                            <textarea
-                                value={formEdit.descripcion}
-                                onChange={(e) => setFormEdit((f) => ({ ...f, descripcion: e.target.value }))}
-                                rows={2}
-                                className="w-full border rounded px-3 py-1.5 text-sm resize-none"
-                            />
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={guardarEdicion}
-                                disabled={procesando}
-                                className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
-                            >
-                                Guardar
-                            </button>
-                            <button
-                                onClick={() => setEditando(false)}
-                                className="border px-3 py-1.5 rounded text-sm"
-                            >
-                                Cancelar
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="mt-3 space-y-1 text-sm text-gray-600">
-                        {lote.concepto && <div><strong>Concepto:</strong> {lote.concepto}</div>}
-                        {lote.descripcion && <div><strong>Descripción:</strong> {lote.descripcion}</div>}
-                    </div>
-                )}
+                    )}
+                </div>
 
                 {/* Resumen numérico */}
                 <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4 text-sm">
@@ -631,23 +590,119 @@ export function LoteDetallePage({ loteId }: Props) {
                                             <table className="w-full text-xs">
                                                 <thead className="text-gray-500">
                                                     <tr>
+                                                        <th className="px-4 py-1.5 text-left">Fecha</th>
                                                         <th className="px-4 py-1.5 text-left">Práctica</th>
                                                         <th className="px-4 py-1.5 text-left">Descripción</th>
                                                         <th className="px-4 py-1.5 text-center">Cant.</th>
                                                         <th className="px-4 py-1.5 text-left">Nro. Aut.</th>
                                                         <th className="px-4 py-1.5 text-right">Importe</th>
+                                                        {esPendiente && editandoPracticas && <th className="px-4 py-1.5 text-right">Acción</th>}
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-50">
-                                                    {orden.items.map((it) => (
-                                                        <tr key={it.item}>
-                                                            <td className="px-4 py-1.5 font-mono">{it.codigoPractica}</td>
-                                                            <td className="px-4 py-1.5 text-gray-600">{it.descripcion ?? '-'}</td>
-                                                            <td className="px-4 py-1.5 text-center">{it.cantidad}</td>
-                                                            <td className="px-4 py-1.5 text-blue-600">{it.numeroAutorizacion ?? '—'}</td>
-                                                            <td className="px-4 py-1.5 text-right">{formatMonto(it.importeTotal)}</td>
-                                                        </tr>
-                                                    ))}
+                                                    {orden.items.map((it) => {
+                                                        const key = keyOrdenItem(orden.puestoNumero, orden.numero, it.item)
+                                                        const draft = editItems[key] ?? buildOrdenItemEditState(it)
+                                                        const guardando = guardandoItemKey === key
+
+                                                        return (
+                                                            <tr key={it.item}>
+                                                                <td className="px-4 py-1.5 text-gray-600">
+                                                                    {esPendiente && editandoPracticas ? (
+                                                                        <input
+                                                                            type="datetime-local"
+                                                                            value={draft.fecha}
+                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, fecha: e.target.value } }))}
+                                                                            className="w-44 rounded border border-gray-300 px-2 py-1"
+                                                                        />
+                                                                    ) : (
+                                                                        new Date(it.fecha).toLocaleString('es-AR')
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-1.5 font-mono">
+                                                                    {esPendiente && editandoPracticas ? (
+                                                                        <input
+                                                                            value={draft.codigoPractica}
+                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, codigoPractica: e.target.value } }))}
+                                                                            className="w-24 rounded border border-gray-300 px-2 py-1"
+                                                                        />
+                                                                    ) : (
+                                                                        it.codigoPractica
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-1.5 text-gray-600">
+                                                                    {esPendiente && editandoPracticas ? (
+                                                                        <input
+                                                                            value={draft.descripcion}
+                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, descripcion: e.target.value } }))}
+                                                                            className="w-full rounded border border-gray-300 px-2 py-1"
+                                                                        />
+                                                                    ) : (
+                                                                        it.descripcion ?? '-'
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-1.5 text-center">
+                                                                    {esPendiente && editandoPracticas ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            min={0.01}
+                                                                            step={0.01}
+                                                                            value={draft.cantidad}
+                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, cantidad: e.target.value } }))}
+                                                                            className="w-20 rounded border border-gray-300 px-2 py-1 text-center"
+                                                                        />
+                                                                    ) : (
+                                                                        it.cantidad
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-1.5 text-blue-600">
+                                                                    {esPendiente && editandoPracticas ? (
+                                                                        <input
+                                                                            value={draft.numeroAutorizacion}
+                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, numeroAutorizacion: e.target.value } }))}
+                                                                            className="w-32 rounded border border-gray-300 px-2 py-1 text-gray-700"
+                                                                        />
+                                                                    ) : (
+                                                                        it.numeroAutorizacion ?? '—'
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-1.5 text-right">
+                                                                    {esPendiente && editandoPracticas ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            min={0}
+                                                                            step={0.01}
+                                                                            value={draft.importeTotal}
+                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, importeTotal: e.target.value } }))}
+                                                                            className="w-28 rounded border border-gray-300 px-2 py-1 text-right"
+                                                                        />
+                                                                    ) : (
+                                                                        formatMonto(it.importeTotal)
+                                                                    )}
+                                                                </td>
+                                                                {esPendiente && editandoPracticas && (
+                                                                    <td className="px-4 py-1.5 text-right">
+                                                                        <div className="flex justify-end gap-1">
+                                                                            <button
+                                                                                onClick={() => guardarOrdenItem(orden, it)}
+                                                                                disabled={guardando}
+                                                                                className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                                                                            >
+                                                                                {guardando ? 'Guardando...' : 'Guardar'}
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => cancelarEdicionItem(orden, it)}
+                                                                                disabled={guardando}
+                                                                                className="rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                                                                            >
+                                                                                Cancelar
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                )}
+                                                            </tr>
+                                                        )
+                                                    })}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -674,7 +729,7 @@ export function LoteDetallePage({ loteId }: Props) {
                         </div>
                         <div className="px-5 py-4 space-y-3">
                             <p className="text-sm text-gray-700">
-                                ¿Aplicar PROMEDI ({porcentajePromedi}%) a los códigos configurados? Esta acción confirmará el lote.
+                                ¿Aplicar PROMEDI ({porcentajePromedi}%) a los códigos configurados? Los códigos fuera de regla conservan el 100%. Esta acción confirmará el lote.
                             </p>
                             {errorPromedi && (
                                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -728,6 +783,9 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                     </span>
                 )}
             </div>
+            <p className="text-xs text-gray-500 print:hidden">
+                PROMEDI aplica solo a códigos alcanzados por regla; los demás quedan al 100%.
+            </p>
             <div className="ips-print-table overflow-x-auto rounded-lg border border-gray-200 print:rounded-none print:border-0">
                 <table className="w-full text-xs print:text-[9px]">
                     <colgroup>
@@ -755,7 +813,7 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                             <th className="px-3 py-2.5 text-right font-medium">Ane.</th>
                             <th className="px-3 py-2.5 text-right font-medium">Gto.</th>
                             <th className="px-3 py-2.5 text-right font-medium">Total</th>
-                            <th className="px-3 py-2.5 text-right font-medium">PROMEDI (40%)</th>
+                            <th className="px-3 py-2.5 text-right font-medium">Importe aplicado</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">

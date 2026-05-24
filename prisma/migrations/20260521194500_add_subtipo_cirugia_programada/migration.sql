@@ -17,5 +17,5 @@ WHERE "is"."SAdCodig" = 'SUT'
   AND EXISTS (
     SELECT 1
     FROM "CirugiaProgramada" AS cp
-    WHERE cp."IngID" = "is"."IngID"
+    WHERE cp."internacionId" = "is"."IngID"
   );

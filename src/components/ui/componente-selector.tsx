@@ -82,6 +82,7 @@ export function ComponenteSelector({
         valores.valorAyudante != null ||
         valores.valorAnestesista != null ||
         valores.valorGastos != null
+    const tieneValoresNomenclador = tieneDesglose || valores.valorTotal != null
 
     // Siempre mostrar el selector, aunque sea para selection manual sin valores
     const total = calcularTotalSeleccionado(valores, seleccion)
@@ -94,11 +95,16 @@ export function ComponenteSelector({
     return (
         <div className="rounded-lg border border-blue-100 bg-blue-50/30 px-3 py-2 space-y-1.5">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-                Componentes a facturar {!tieneDesglose && <span className="text-amber-600">(sin valores del nomenclador)</span>}
+                Componentes a facturar {!tieneValoresNomenclador && <span className="text-amber-600">(sin valores del nomenclador)</span>}
             </p>
-            {!tieneDesglose && (
+            {!tieneValoresNomenclador && (
                 <p className="text-[10px] text-amber-700 italic">
                     Seleccionar los componentes que se facturarán. Sin valores definidos en nomenclador.
+                </p>
+            )}
+            {!tieneDesglose && valores.valorTotal != null && (
+                <p className="text-[10px] text-blue-700 italic">
+                    Sin desglose por componente. Se usa el valor total del nomenclador.
                 </p>
             )}
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">

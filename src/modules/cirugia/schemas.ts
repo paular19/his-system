@@ -17,6 +17,7 @@ export const DiferencialesSchema = z.object({
     mismaViaPatologia: z.boolean().default(false),
     diferentesViasPatologia: z.boolean().default(false),
     diferentesViasDiferentesPatologia: z.boolean().default(false),
+    dobleCirugia: z.boolean().default(false),
 }).optional()
 
 export const CrearCirugiaProgramadaSchema = z.object({
@@ -52,6 +53,14 @@ export const CrearCirugiaProgramadaSchema = z.object({
         )
         .optional(),
     diferenciales: DiferencialesSchema,
+}).superRefine((data, ctx) => {
+    if (data.diferenciales?.dobleCirugia && data.practicas.length < 2) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['diferenciales', 'dobleCirugia'],
+            message: 'Doble cirugía requiere al menos dos prácticas',
+        })
+    }
 })
 
 export type CrearCirugiaProgramadaInputSchema = z.infer<typeof CrearCirugiaProgramadaSchema>

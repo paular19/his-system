@@ -154,6 +154,18 @@ function normalizarIncluyeCodigo(codigo: string | null | undefined): string | nu
 // ============================================
 
 export async function crearOrden(data: CrearOrdenInput, usuario: string) {
+  return crearOrdenInterna(data, usuario, { permitirCombinacionesYaAutorizadas: false })
+}
+
+type CrearOrdenOpciones = {
+  permitirCombinacionesYaAutorizadas?: boolean
+}
+
+export async function crearOrdenInterna(
+  data: CrearOrdenInput,
+  usuario: string,
+  opciones: CrearOrdenOpciones = {}
+) {
   return prisma.$transaction(async (tx) => {
     const usuarioRegistro = usuario.trim().slice(0, 10) || 'SISTEMA'
     const tipoOrdenCodigo = await resolverTipoOrdenCodigo(tx, data.tipoOrdenCodigo)
@@ -165,55 +177,44 @@ export async function crearOrden(data: CrearOrdenInput, usuario: string) {
       incluyeCodigo: normalizarIncluyeCodigo(item.incluyeCodigo),
     }))
 
-    // Evitar duplicados dentro del mismo envío
-    const claves = new Set<string>()
-    const duplicadosInput: string[] = []
-    for (const item of itemsNormalizados) {
-      const clave = `${item.convenioId}:${item.codigoPractica}:${item.incluyeCodigo ?? 'BASE'}`
-      if (claves.has(clave)) duplicadosInput.push(item.codigoPractica)
-      claves.add(clave)
-    }
-    if (duplicadosInput.length > 0) {
-      const codigos = Array.from(new Set(duplicadosInput)).join(', ')
-      throw new Error(`Se enviaron prácticas repetidas en la misma autorización: ${codigos}.`)
-    }
+    if (!opciones.permitirCombinacionesYaAutorizadas) {
+      // Validar que la práctica no tenga ya orden en el mismo ingreso/paciente
+      const whereOrden: Prisma.OrdenWhereInput = data.ingresoId
+        ? { ingresoId: data.ingresoId }
+        : data.pacienteId
+          ? { pacienteId: data.pacienteId }
+          : {}
 
-    // Validar que la práctica no tenga ya orden en el mismo ingreso/paciente
-    const whereOrden: Prisma.OrdenWhereInput = data.ingresoId
-      ? { ingresoId: data.ingresoId }
-      : data.pacienteId
-        ? { pacienteId: data.pacienteId }
-        : {}
+      const practicasConOrden = await tx.ordenPractica.findMany({
+        where: {
+          orden: whereOrden,
+          OR: itemsNormalizados.map((item) => ({
+            convenioId: item.convenioId,
+            codigoPractica: item.codigoPractica,
+            modulo: item.incluyeCodigo,
+          })),
+        },
+        select: {
+          codigoPractica: true,
+          convenioId: true,
+          modulo: true,
+          ordenNumero: true,
+          puestoNumero: true,
+        },
+      })
 
-    const practicasConOrden = await tx.ordenPractica.findMany({
-      where: {
-        orden: whereOrden,
-        OR: itemsNormalizados.map((item) => ({
-          convenioId: item.convenioId,
-          codigoPractica: item.codigoPractica,
-          modulo: item.incluyeCodigo,
-        })),
-      },
-      select: {
-        codigoPractica: true,
-        convenioId: true,
-        modulo: true,
-        ordenNumero: true,
-        puestoNumero: true,
-      },
-    })
-
-    if (practicasConOrden.length > 0) {
-      const practicas = practicasConOrden
-        .map((p) => {
-          const modulo = p.modulo?.trim()
-          const moduloLabel = modulo ? ` [${modulo}]` : ''
-          return `${p.codigoPractica.trim()}${moduloLabel} (Orden ${p.puestoNumero}-${p.ordenNumero})`
-        })
-        .join(', ')
-      throw new Error(
-        `Las prácticas/subitems ya están autorizados: ${practicas}. No se pueden generar nuevas órdenes para la misma combinación.`
-      )
+      if (practicasConOrden.length > 0) {
+        const practicas = practicasConOrden
+          .map((p) => {
+            const modulo = p.modulo?.trim()
+            const moduloLabel = modulo ? ` [${modulo}]` : ''
+            return `${p.codigoPractica.trim()}${moduloLabel} (Orden ${p.puestoNumero}-${p.ordenNumero})`
+          })
+          .join(', ')
+        throw new Error(
+          `Las prácticas/subitems ya están autorizados: ${practicas}. No se pueden generar nuevas órdenes para la misma combinación.`
+        )
+      }
     }
 
     // Obtener próximo número de orden
@@ -859,12 +860,89 @@ async function enriquecerPracticasConValor(
     prestaciones.map((prestacion) => [prestacion.codigo.trim(), Number(prestacion.valor ?? 0)])
   )
 
+  const codigosSinDesglose = Array.from(
+    new Set(
+      practicas
+        .filter(
+          (p) =>
+            p.valorEspecialista == null &&
+            p.valorAyudante == null &&
+            p.valorAnestesista == null &&
+            p.valorGastos == null
+        )
+        .map((p) => p.codigo.trim())
+        .filter(Boolean)
+    )
+  )
+
+  const fallbackDesgloseRaw = codigosSinDesglose.length
+    ? await prisma.nomencladorPractica.findMany({
+      where: {
+        AND: [
+          {
+            OR: codigosSinDesglose.map((codigo) => ({ codigo: { startsWith: codigo } })),
+          },
+          {
+            OR: [
+              { valorEspecialista: { not: null } },
+              { valorAyudante: { not: null } },
+              { valorAnestesista: { not: null } },
+              { valorGastos: { not: null } },
+            ],
+          },
+        ],
+      },
+      select: {
+        codigo: true,
+        valorEspecialista: true,
+        valorAyudante: true,
+        valorAnestesista: true,
+        valorGastos: true,
+      },
+      orderBy: [{ codigo: 'asc' }, { convenioId: 'asc' }],
+    })
+    : []
+
+  const fallbackDesglosePorCodigo = new Map<
+    string,
+    {
+      valorEspecialista: number | null
+      valorAyudante: number | null
+      valorAnestesista: number | null
+      valorGastos: number | null
+    }
+  >()
+
+  for (const row of fallbackDesgloseRaw) {
+    const codigo = row.codigo.trim()
+    if (fallbackDesglosePorCodigo.has(codigo)) continue
+    fallbackDesglosePorCodigo.set(codigo, {
+      valorEspecialista: row.valorEspecialista != null ? Number(row.valorEspecialista) : null,
+      valorAyudante: row.valorAyudante != null ? Number(row.valorAyudante) : null,
+      valorAnestesista: row.valorAnestesista != null ? Number(row.valorAnestesista) : null,
+      valorGastos: row.valorGastos != null ? Number(row.valorGastos) : null,
+    })
+  }
+
   return practicas.map((practica) => ({
+    ...(fallbackDesglosePorCodigo.get(practica.codigo.trim()) ?? {}),
     ...practica,
     valor: valorPorCodigo.get(practica.codigo.trim()) ?? null,
-    valorEspecialista: practica.valorEspecialista != null ? Number(practica.valorEspecialista) : null,
-    valorAyudante: practica.valorAyudante != null ? Number(practica.valorAyudante) : null,
-    valorAnestesista: practica.valorAnestesista != null ? Number(practica.valorAnestesista) : null,
-    valorGastos: practica.valorGastos != null ? Number(practica.valorGastos) : null,
+    valorEspecialista:
+      practica.valorEspecialista != null
+        ? Number(practica.valorEspecialista)
+        : (fallbackDesglosePorCodigo.get(practica.codigo.trim())?.valorEspecialista ?? null),
+    valorAyudante:
+      practica.valorAyudante != null
+        ? Number(practica.valorAyudante)
+        : (fallbackDesglosePorCodigo.get(practica.codigo.trim())?.valorAyudante ?? null),
+    valorAnestesista:
+      practica.valorAnestesista != null
+        ? Number(practica.valorAnestesista)
+        : (fallbackDesglosePorCodigo.get(practica.codigo.trim())?.valorAnestesista ?? null),
+    valorGastos:
+      practica.valorGastos != null
+        ? Number(practica.valorGastos)
+        : (fallbackDesglosePorCodigo.get(practica.codigo.trim())?.valorGastos ?? null),
   }))
 }

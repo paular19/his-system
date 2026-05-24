@@ -727,10 +727,13 @@ model CirugiaDiferencial {
   mismaViaPatologia                 Boolean @default(false)
   diferentesViasPatologia           Boolean @default(false)
   diferentesViasDiferentesPatologia Boolean @default(false)
+  dobleCirugia                      Boolean @default(false)
+  practicaBaseId                    Int?
 
   cirugia CirugiaProgramada @relation(fields: [cirugiaId], references: [id], onDelete: Cascade)
 
   @@index([cirugiaId])
+  @@index([practicaBaseId])
 }
 
 // ============================================
@@ -1319,4 +1322,33 @@ model LoteIPSTxtItem {
 
   @@index([loteId])
   @@map("LoteIPSTxtItem")
+}
+
+// ============================================
+// GUIA DEL SISTEMA - FEEDBACK
+// ============================================
+
+model GuiaFeedback {
+  id Int @id @default(autoincrement())
+
+  modulo            String  @db.VarChar(30)
+  tipo              String  @db.VarChar(20)
+  prioridad         String  @db.VarChar(10)
+  titulo            String  @db.VarChar(140)
+  comentario        String  @db.Text
+  pantalla          String? @db.VarChar(120)
+  pasos             String? @db.Text
+  resultadoEsperado String? @db.Text
+
+  usuarioClerkId String @db.VarChar(50)
+  usuarioCodigo  String @db.Char(10)
+  usuarioNombre  String @db.VarChar(120)
+  usuarioEmail   String @db.VarChar(120)
+
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @db.Timestamp(6)
+
+  @@index([modulo])
+  @@index([createdAt])
+  @@map("GuiaFeedback")
 }

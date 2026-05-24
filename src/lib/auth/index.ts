@@ -1,5 +1,7 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
+import { headers } from 'next/headers'
 import { type RolHIS, ROLES } from './rbac'
+import { setAuditContext } from '@/lib/security/audit-context'
 
 export interface UsuarioSesion {
   clerkId: string
@@ -17,6 +19,31 @@ function resolverRolDesdeMetadata(user: Awaited<ReturnType<typeof currentUser>>)
   }
   // Fallback por defecto
   return ROLES.ADMISION
+}
+
+function normalizarIpDesdeHeader(raw: string | null): string | undefined {
+  if (!raw) return undefined
+  const first = raw.split(',')[0]?.trim()
+  return first || undefined
+}
+
+async function obtenerMetadataRequestAudit(): Promise<{
+  direccionIp?: string
+  userAgent?: string
+}> {
+  try {
+    const h = await headers()
+    return {
+      direccionIp:
+        normalizarIpDesdeHeader(h.get('x-forwarded-for')) ??
+        h.get('x-real-ip') ??
+        undefined,
+      userAgent: h.get('user-agent') ?? undefined,
+    }
+  } catch {
+    // Puede no existir contexto request (scripts/seed/tests).
+    return {}
+  }
 }
 
 /**
@@ -39,6 +66,13 @@ export async function getUsuarioSesion(): Promise<UsuarioSesion> {
   const rol = resolverRolDesdeMetadata(user)
   const codigoUsuario =
     (user.publicMetadata?.codigoUsuario as string) ?? userId.slice(0, 10)
+
+  const requestMetadata = await obtenerMetadataRequestAudit()
+  setAuditContext({
+    usuario: codigoUsuario,
+    direccionIp: requestMetadata.direccionIp,
+    userAgent: requestMetadata.userAgent,
+  })
 
   return {
     clerkId: userId,

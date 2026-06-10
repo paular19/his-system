@@ -65,7 +65,10 @@ const BasePacienteSchema = z.object({
 
   // Demografía
   sexo: z.enum(['M', 'F', 'I']).optional().nullable(),
-  estadoCivil: z.enum(['S', 'C', 'D', 'V', 'U']).optional().nullable(),
+  estadoCivil: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['S', 'C', 'D', 'V', 'U']).optional().nullable()
+  ),
   paisId: z.number().int().positive().optional().nullable(),
   profesionId: z.number().int().positive().optional().nullable(),
 
@@ -80,7 +83,13 @@ const BasePacienteSchema = z.object({
   telefonoLaboral: campoTelefono,
   celular1: campoTelefono,
   celular2: campoTelefono,
-  email: z.string().email('Email invalido').max(100).trim().optional().nullable(),
+  email: z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return value
+      return value.trim() === '' ? undefined : value
+    },
+    z.string().email('Email invalido').max(100).trim().optional().nullable()
+  ),
 
   // Obra Social
   obraSocialId: z.number().int().positive().optional().nullable(),
@@ -123,6 +132,21 @@ export const CrearPacienteSchema = BasePacienteSchema.extend({
     required_error: 'El sexo es requerido',
     invalid_type_error: 'El sexo es requerido',
   }),
+  estadoCivil: z.enum(['S', 'C', 'D', 'V', 'U'], {
+    required_error: 'El estado civil es requerido',
+    invalid_type_error: 'El estado civil es requerido',
+  }),
+  email: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z
+      .string({
+        required_error: 'El email es requerido',
+        invalid_type_error: 'El email es requerido',
+      })
+      .email('Email invalido')
+      .max(100)
+      .trim()
+  ),
 }).superRefine((data, ctx) => {
   if (!data.numeroDocumento && !data.cuil) {
     const mensaje = 'Debe informar DNI o CUIL para identificar al paciente'

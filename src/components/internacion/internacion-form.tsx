@@ -8,10 +8,12 @@ import type { CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
 import { BedDouble } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 
 interface ProfesionalOption {
   id: number
   nombre: string
+  matricula?: number | null
 }
 
 interface ObraSocialOption {
@@ -35,12 +37,14 @@ interface InternacionFormProps {
   camaInicial?: number | null
 }
 
-function hoyLocalInput(): string {
+function ahoraLocalDateTimeInput(): string {
   const now = new Date()
   const y = now.getFullYear()
   const m = String(now.getMonth() + 1).padStart(2, '0')
   const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  return `${y}-${m}-${d}T${hh}:${mm}`
 }
 
 export function InternacionForm({
@@ -56,7 +60,7 @@ export function InternacionForm({
   const [error, setError] = useState<string | null>(null)
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
 
-  const [fechaIngreso, setFechaIngreso] = useState(hoyLocalInput())
+  const [fechaIngreso, setFechaIngreso] = useState(ahoraLocalDateTimeInput())
   const [fechaEgresoPrevista, setFechaEgresoPrevista] = useState('')
   const [camaId, setCamaId] = useState(camaInicial?.toString() ?? '')
   const [profesionalGuardiaId, setProfesionalGuardiaId] = useState('')
@@ -191,10 +195,10 @@ export function InternacionForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Fecha de ingreso <span className="text-red-500">*</span>
+              Fecha y hora de ingreso <span className="text-red-500">*</span>
             </label>
             <input
-              type="date"
+              type="datetime-local"
               required
               value={fechaIngreso}
               onChange={(e) => setFechaIngreso(e.target.value)}
@@ -216,31 +220,25 @@ export function InternacionForm({
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Médico de guardia
             </label>
-            <select
+            <ProfesionalSelect
+              profesionales={profesionales}
               value={profesionalGuardiaId}
-              onChange={(e) => setProfesionalGuardiaId(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
-            >
-              <option value="">— Seleccionar —</option>
-              {profesionales.map((p) => (
-                <option key={p.id} value={p.id}>{p.nombre}</option>
-              ))}
-            </select>
+              onChange={setProfesionalGuardiaId}
+              placeholderOption="— Seleccionar —"
+              selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Médico tratante
             </label>
-            <select
+            <ProfesionalSelect
+              profesionales={profesionales}
               value={profesionalTratanteId}
-              onChange={(e) => setProfesionalTratanteId(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
-            >
-              <option value="">— Seleccionar —</option>
-              {profesionales.map((p) => (
-                <option key={p.id} value={p.id}>{p.nombre}</option>
-              ))}
-            </select>
+              onChange={setProfesionalTratanteId}
+              placeholderOption="— Seleccionar —"
+              selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+            />
           </div>
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-gray-700 mb-1">

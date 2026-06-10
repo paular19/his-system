@@ -300,9 +300,12 @@ export function PacienteForm({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Estado Civil</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Estado Civil <span className="text-red-500">*</span>
+            </label>
             <select
               {...register('estadoCivil')}
+              required={!esEdicion}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">-- Seleccionar --</option>
@@ -371,10 +374,13 @@ export function PacienteForm({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Email <span className="text-red-500">*</span>
+            </label>
             <input
               {...register('email')}
               type="email"
+              required={!esEdicion}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="correo@ejemplo.com"
             />

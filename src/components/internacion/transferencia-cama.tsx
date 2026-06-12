@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { ArrowRightLeft } from 'lucide-react'
 import type { TransferenciaItem, CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 
 const MOTIVOS_EGRESO = [
     { codigo: 'AL', descripcion: 'Alta medica' },
@@ -19,7 +20,7 @@ interface TransferenciaCamaProps {
     camaActual: { id: number; identificador: string; sector: string; estado: string } | null
     transferencias: TransferenciaItem[]
     camasDisponibles: CamaConOcupante[]
-    profesionales: Array<{ id: number; nombre: string }>
+    profesionales: Array<{ id: number; nombre: string; matricula?: number | null }>
     puedeModificar: boolean
     estadoInternacion: string | null
 }
@@ -259,13 +260,13 @@ export function TransferenciaCama({
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Profesional</label>
-                            <select
-                                value={profesionalId} onChange={(e) => setProfesionalId(e.target.value)}
-                                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
-                            >
-                                <option value="">— Sin asignar —</option>
-                                {profesionales.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                            </select>
+                            <ProfesionalSelect
+                                profesionales={profesionales}
+                                value={profesionalId}
+                                onChange={setProfesionalId}
+                                placeholderOption="— Sin asignar —"
+                                selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                            />
                         </div>
                         <div className="sm:col-span-2">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Motivo de la transferencia</label>

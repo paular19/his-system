@@ -1,0 +1,95 @@
+name: Prod DB Backup
+
+on:
+  schedule:
+    # 03:00 Argentina (UTC-3) every day
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: prod-db-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required secret
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.PROD_DATABASE_URL }}" ]; then
+            echo "Missing required secret: PROD_DATABASE_URL"
+            exit 1
+          fi
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Build backup metadata
+        id: meta
+        shell: bash
+        run: |
+          timestamp="$(date -u +'%Y%m%dT%H%M%SZ')"
+          backup_file="his-prod-${timestamp}.dump"
+          echo "timestamp=${timestamp}" >> "$GITHUB_OUTPUT"
+          echo "backup_file=${backup_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Create backup with pg_dump
+        shell: bash
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          pg_dump "$PROD_DATABASE_URL" \
+            --format=custom \
+            --compress=9 \
+            --no-owner \
+            --no-acl \
+            --file "${{ steps.meta.outputs.backup_file }}"
+
+      - name: Validate dump and generate checksum
+        shell: bash
+        run: |
+          pg_restore --list "${{ steps.meta.outputs.backup_file }}" > /dev/null
+          sha256sum "${{ steps.meta.outputs.backup_file }}" > "${{ steps.meta.outputs.backup_file }}.sha256"
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-db-backup-${{ steps.meta.outputs.timestamp }}
+          path: |
+            ${{ steps.meta.outputs.backup_file }}
+            ${{ steps.meta.outputs.backup_file }}.sha256
+          retention-days: 30
+
+      - name: Configure AWS credentials
+        if: ${{ secrets.BACKUP_S3_BUCKET != '' && secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' && secrets.AWS_REGION != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload backup to S3
+        if: ${{ secrets.BACKUP_S3_BUCKET != '' && secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' && secrets.AWS_REGION != '' }}
+        shell: bash
+        env:
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+        run: |
+          aws s3 cp "${{ steps.meta.outputs.backup_file }}" "s3://${BACKUP_S3_BUCKET}/postgres/prod/${{ steps.meta.outputs.backup_file }}"
+          aws s3 cp "${{ steps.meta.outputs.backup_file }}.sha256" "s3://${BACKUP_S3_BUCKET}/postgres/prod/${{ steps.meta.outputs.backup_file }}.sha256"
+
+      - name: Report S3 upload skipped
+        if: ${{ !(secrets.BACKUP_S3_BUCKET != '' && secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' && secrets.AWS_REGION != '') }}
+        shell: bash
+        run: echo "S3 upload skipped. Backup is available as GitHub artifact."

@@ -121,6 +121,21 @@ export const CrearPacienteSchema = BasePacienteSchema.extend({
     required_error: 'El tipo de documento es requerido',
     invalid_type_error: 'El tipo de documento es requerido',
   }),
+  numeroDocumento: z.preprocess(
+    (value) => {
+      if (value === '' || value === null || value === undefined) return undefined
+      if (typeof value === 'number' && Number.isNaN(value)) return undefined
+      return value
+    },
+    z
+      .number({
+        required_error: 'El numero de documento es requerido',
+        invalid_type_error: 'El numero de documento es requerido',
+      })
+      .int()
+      .positive('El numero de documento debe ser positivo')
+      .max(99_999_999, 'El numero de documento no puede superar 8 digitos')
+  ),
   fechaNacimiento: z.preprocess(
     (value) => (value === '' ? undefined : value),
     z.coerce.date({
@@ -132,35 +147,6 @@ export const CrearPacienteSchema = BasePacienteSchema.extend({
     required_error: 'El sexo es requerido',
     invalid_type_error: 'El sexo es requerido',
   }),
-  estadoCivil: z.enum(['S', 'C', 'D', 'V', 'U'], {
-    required_error: 'El estado civil es requerido',
-    invalid_type_error: 'El estado civil es requerido',
-  }),
-  email: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    z
-      .string({
-        required_error: 'El email es requerido',
-        invalid_type_error: 'El email es requerido',
-      })
-      .email('Email invalido')
-      .max(100)
-      .trim()
-  ),
-}).superRefine((data, ctx) => {
-  if (!data.numeroDocumento && !data.cuil) {
-    const mensaje = 'Debe informar DNI o CUIL para identificar al paciente'
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['numeroDocumento'],
-      message: mensaje,
-    })
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['cuil'],
-      message: mensaje,
-    })
-  }
 })
 
 export type CrearPacienteInput = z.infer<typeof CrearPacienteSchema>

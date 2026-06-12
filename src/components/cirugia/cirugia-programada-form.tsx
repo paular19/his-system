@@ -58,22 +58,26 @@ interface PracticaFormItem {
 
 interface MedicacionFormItem {
     nombre: string
-    dosis: string
-    viaAdministracion: string
-    frecuencia: string
-    observaciones: string
 }
 
 interface DescartableFormItem {
     nombre: string
-    cantidad: number
-    observaciones: string
 }
 
 interface CirugiaProgramadaFormProps {
     obraSociales: ObraSocialOption[]
     planes: PlanOption[]
     coseguros: CoseguroOption[]
+}
+
+function normalizarNombreObraSocial(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
 }
 
 export function CirugiaProgramadaForm({
@@ -102,20 +106,10 @@ export function CirugiaProgramadaForm({
     const [practicas, setPracticas] = useState<PracticaFormItem[]>([])
     const [medicaciones, setMedicaciones] = useState<MedicacionFormItem[]>([])
     const [nuevaMedNombre, setNuevaMedNombre] = useState('')
-    const [nuevaMedDosis, setNuevaMedDosis] = useState('')
-    const [nuevaMedVia, setNuevaMedVia] = useState('')
-    const [nuevaMedFrecuencia, setNuevaMedFrecuencia] = useState('')
-    const [nuevaMedObs, setNuevaMedObs] = useState('')
-    const [buscandoMedicamentoCatalogo, setBuscandoMedicamentoCatalogo] = useState(false)
-    const [resultadosMedicamentoCatalogo, setResultadosMedicamentoCatalogo] = useState<Array<{ id: number; nombre: string }>>([])
-    const medicamentoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [descartables, setDescartables] = useState<DescartableFormItem[]>([])
     const [nuevoDesNombre, setNuevoDesNombre] = useState('')
-    const [nuevoDesCantidad, setNuevoDesCantidad] = useState('1')
-    const [nuevoDesObs, setNuevoDesObs] = useState('')
-    const [buscandoDescartableCatalogo, setBuscandoDescartableCatalogo] = useState(false)
-    const [resultadosDescartableCatalogo, setResultadosDescartableCatalogo] = useState<Array<{ id: number; nombre: string }>>([])
-    const descartableDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [opcionesInsumosUti, setOpcionesInsumosUti] = useState<Array<{ id: number; nombre: string }>>([])
+    const [cargandoInsumosUti, setCargandoInsumosUti] = useState(false)
 
     // Diferenciales
     const [esFeriado, setEsFeriado] = useState(false)
@@ -127,7 +121,11 @@ export function CirugiaProgramadaForm({
 
     const obraSocialIdNumero = obraSocialId ? Number.parseInt(obraSocialId, 10) : null
     const obraSocialSeleccionada = obraSociales.find((o) => o.id === obraSocialIdNumero)
-    const esIPSS = obraSocialSeleccionada?.nombre?.toUpperCase().includes('IPSS') ?? false
+    const nombreObraSocialNormalizado = normalizarNombreObraSocial(obraSocialSeleccionada?.nombre ?? '')
+    const tokensObraSocial = nombreObraSocialNormalizado.split(' ')
+    const esIPSS = tokensObraSocial.includes('IPSS') || tokensObraSocial.includes('IPS')
+    const esCoberturaConCoseguro = esIPSS
+    const cosegurosDisponibles = esIPSS ? coseguros : []
     const planesFiltrados = planes.filter(
         (p) => !obraSocialIdNumero || p.obraSocialId === obraSocialIdNumero
     )
@@ -187,53 +185,28 @@ export function CirugiaProgramadaForm({
         }
     }, [practicas.length, dobleCirugia])
 
-    const buscarMedicamentoCatalogo = (value: string) => {
-        setNuevaMedNombre(value)
-        if (medicamentoDebounceRef.current) clearTimeout(medicamentoDebounceRef.current)
+    useEffect(() => {
+        let activo = true
 
-        const query = value.trim()
-        if (query.length < 2) {
-            setResultadosMedicamentoCatalogo([])
-            return
+        const cargarInsumos = async () => {
+            setCargandoInsumosUti(true)
+            try {
+                const res = await fetch('/api/catalogos/insumos-uti?limit=5000')
+                const json = await res.json()
+                if (!activo) return
+                setOpcionesInsumosUti(Array.isArray(json.data) ? json.data : [])
+            } catch {
+                if (activo) setOpcionesInsumosUti([])
+            } finally {
+                if (activo) setCargandoInsumosUti(false)
+            }
         }
 
-        medicamentoDebounceRef.current = setTimeout(async () => {
-            setBuscandoMedicamentoCatalogo(true)
-            try {
-                const res = await fetch(`/api/catalogos/medicamentos-uti?q=${encodeURIComponent(query)}&limit=12`)
-                const json = await res.json()
-                setResultadosMedicamentoCatalogo(Array.isArray(json.data) ? json.data : [])
-            } catch {
-                setResultadosMedicamentoCatalogo([])
-            } finally {
-                setBuscandoMedicamentoCatalogo(false)
-            }
-        }, 300)
-    }
-
-    const buscarDescartableCatalogo = (value: string) => {
-        setNuevoDesNombre(value)
-        if (descartableDebounceRef.current) clearTimeout(descartableDebounceRef.current)
-
-        const query = value.trim()
-        if (query.length < 2) {
-            setResultadosDescartableCatalogo([])
-            return
+        void cargarInsumos()
+        return () => {
+            activo = false
         }
-
-        descartableDebounceRef.current = setTimeout(async () => {
-            setBuscandoDescartableCatalogo(true)
-            try {
-                const res = await fetch(`/api/catalogos/descartables-uti?q=${encodeURIComponent(query)}&limit=12`)
-                const json = await res.json()
-                setResultadosDescartableCatalogo(Array.isArray(json.data) ? json.data : [])
-            } catch {
-                setResultadosDescartableCatalogo([])
-            } finally {
-                setBuscandoDescartableCatalogo(false)
-            }
-        }, 300)
-    }
+    }, [])
 
     const agregarPractica = (p: NomencladorPracticaItem) => {
         setPracticas((prev) => {
@@ -281,21 +254,10 @@ export function CirugiaProgramadaForm({
 
         setMedicaciones((prev) => [
             ...prev,
-            {
-                nombre: nuevaMedNombre,
-                dosis: nuevaMedDosis,
-                viaAdministracion: nuevaMedVia,
-                frecuencia: nuevaMedFrecuencia,
-                observaciones: nuevaMedObs,
-            },
+            { nombre: nuevaMedNombre },
         ])
 
         setNuevaMedNombre('')
-        setNuevaMedDosis('')
-        setNuevaMedVia('')
-        setNuevaMedFrecuencia('')
-        setNuevaMedObs('')
-        setResultadosMedicamentoCatalogo([])
     }
 
     const quitarMedicacion = (idx: number) => {
@@ -307,17 +269,10 @@ export function CirugiaProgramadaForm({
 
         setDescartables((prev) => [
             ...prev,
-            {
-                nombre: nuevoDesNombre,
-                cantidad: Math.max(1, Number.parseInt(nuevoDesCantidad, 10) || 1),
-                observaciones: nuevoDesObs,
-            },
+            { nombre: nuevoDesNombre },
         ])
 
         setNuevoDesNombre('')
-        setNuevoDesCantidad('1')
-        setNuevoDesObs('')
-        setResultadosDescartableCatalogo([])
     }
 
     const quitarDescartable = (idx: number) => {
@@ -351,6 +306,7 @@ export function CirugiaProgramadaForm({
                 obraSocialId: obraSocialId ? Number.parseInt(obraSocialId, 10) : null,
                 planId: planId ? Number.parseInt(planId, 10) : null,
                 obraSocialCoseguroId: obraSocialCoseguroId
+                    && esCoberturaConCoseguro
                     ? Number.parseInt(obraSocialCoseguroId, 10)
                     : null,
                 numeroAfiliado: numeroAfiliado || null,
@@ -366,8 +322,18 @@ export function CirugiaProgramadaForm({
                     matriculaEspecialista: p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
                     matriculaAnestesista: p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
                 })),
-                medicaciones: medicaciones.length > 0 ? medicaciones : undefined,
-                descartables: descartables.length > 0 ? descartables : undefined,
+                medicaciones: medicaciones.length > 0
+                    ? medicaciones.map((m) => ({
+                        nombre: m.nombre,
+                        dosis: null,
+                        viaAdministracion: null,
+                        frecuencia: null,
+                        observaciones: null,
+                    }))
+                    : undefined,
+                descartables: descartables.length > 0
+                    ? descartables.map((d) => ({ nombre: d.nombre, cantidad: 1, observaciones: null }))
+                    : undefined,
                 diferenciales: {
                     esFeriado,
                     esNocturna,
@@ -460,7 +426,6 @@ export function CirugiaProgramadaForm({
                             {obraSociales.map((os, idx) => (
                                 <option key={`${os.id}-${idx}`} value={String(os.id)}>
                                     {os.nombre}
-                                    {os.requiereCoseguro ? ' (requiere coseguro)' : ''}
                                 </option>
                             ))}
                         </select>
@@ -493,16 +458,16 @@ export function CirugiaProgramadaForm({
                         />
                     </div>
 
-                    {esIPSS && (
+                    {esCoberturaConCoseguro && (
                         <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">Coseguro (solo IPSS)</label>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Coseguro</label>
                             <select
                                 value={obraSocialCoseguroId}
                                 onChange={(e) => setObraSocialCoseguroId(e.target.value)}
                                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
                                 <option value="">-- Sin coseguro --</option>
-                                {coseguros.map((c, idx) => (
+                                {cosegurosDisponibles.map((c, idx) => (
                                     <option key={`${c.id}-${idx}`} value={String(c.id)}>
                                         {c.nombre}
                                     </option>
@@ -677,76 +642,19 @@ export function CirugiaProgramadaForm({
             <div className="his-card p-5">
                 <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">Medicamentos</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-3 rounded-md bg-gray-50 border">
-                    <div className="relative">
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Medicamento <span className="text-red-500">*</span></label>
-                        <input
-                            type="text"
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Insumo <span className="text-red-500">*</span></label>
+                        <select
                             value={nuevaMedNombre}
-                            onChange={(e) => buscarMedicamentoCatalogo(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                            placeholder="Ej: Fentanilo"
-                        />
-                        {resultadosMedicamentoCatalogo.length > 0 && (
-                            <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
-                                {resultadosMedicamentoCatalogo.map((m) => (
-                                    <button
-                                        key={m.id}
-                                        type="button"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => {
-                                            setNuevaMedNombre(m.nombre)
-                                            setResultadosMedicamentoCatalogo([])
-                                        }}
-                                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                                    >
-                                        {m.nombre}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                        {buscandoMedicamentoCatalogo && (
-                            <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
-                        )}
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Dosis</label>
-                        <input
-                            type="text"
-                            value={nuevaMedDosis}
-                            onChange={(e) => setNuevaMedDosis(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                            placeholder="Ej: 50mg"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Vía</label>
-                        <input
-                            type="text"
-                            value={nuevaMedVia}
-                            onChange={(e) => setNuevaMedVia(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                            placeholder="Oral / EV"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Frecuencia</label>
-                        <input
-                            type="text"
-                            value={nuevaMedFrecuencia}
-                            onChange={(e) => setNuevaMedFrecuencia(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                            placeholder="Cada 8 hs"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Observaciones</label>
-                        <input
-                            type="text"
-                            value={nuevaMedObs}
-                            onChange={(e) => setNuevaMedObs(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                            placeholder="Notas"
-                        />
+                            onChange={(e) => setNuevaMedNombre(e.target.value)}
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                        >
+                            <option value="">-- Seleccionar de lista unificada --</option>
+                            {opcionesInsumosUti.map((item) => (
+                                <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                            ))}
+                        </select>
+                        {cargandoInsumosUti && <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>}
                     </div>
                     <div className="flex items-end">
                         <button
@@ -765,10 +673,6 @@ export function CirugiaProgramadaForm({
                             <div key={`${m.nombre}-${idx}`} className="flex items-center gap-3 px-3 py-2">
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-800">{m.nombre}</p>
-                                    <p className="text-xs text-gray-500">
-                                        {[m.dosis, m.viaAdministracion, m.frecuencia].filter(Boolean).join(' · ')}
-                                        {m.observaciones && <> - {m.observaciones}</>}
-                                    </p>
                                 </div>
                                 <button type="button" onClick={() => quitarMedicacion(idx)} className="text-red-400 hover:text-red-600">
                                     <Trash2 className="h-4 w-4" />
@@ -784,56 +688,19 @@ export function CirugiaProgramadaForm({
             <div className="his-card p-5">
                 <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">Descartables</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-3 rounded-md bg-gray-50 border">
-                    <div className="relative">
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Descartable <span className="text-red-500">*</span></label>
-                        <input
-                            type="text"
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Insumo <span className="text-red-500">*</span></label>
+                        <select
                             value={nuevoDesNombre}
-                            onChange={(e) => buscarDescartableCatalogo(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                            placeholder="Ej: Abocath 20"
-                        />
-                        {resultadosDescartableCatalogo.length > 0 && (
-                            <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
-                                {resultadosDescartableCatalogo.map((d) => (
-                                    <button
-                                        key={d.id}
-                                        type="button"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => {
-                                            setNuevoDesNombre(d.nombre)
-                                            setResultadosDescartableCatalogo([])
-                                        }}
-                                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                                    >
-                                        {d.nombre}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                        {buscandoDescartableCatalogo && (
-                            <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
-                        )}
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Cantidad</label>
-                        <input
-                            type="number"
-                            min={1}
-                            value={nuevoDesCantidad}
-                            onChange={(e) => setNuevoDesCantidad(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Observaciones</label>
-                        <input
-                            type="text"
-                            value={nuevoDesObs}
-                            onChange={(e) => setNuevoDesObs(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                            placeholder="Notas"
-                        />
+                            onChange={(e) => setNuevoDesNombre(e.target.value)}
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                        >
+                            <option value="">-- Seleccionar de lista unificada --</option>
+                            {opcionesInsumosUti.map((item) => (
+                                <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                            ))}
+                        </select>
+                        {cargandoInsumosUti && <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>}
                     </div>
                     <div className="flex items-end">
                         <button
@@ -851,8 +718,7 @@ export function CirugiaProgramadaForm({
                         {descartables.map((d, idx) => (
                             <div key={`${d.nombre}-${idx}`} className="flex items-center gap-3 px-3 py-2">
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-800">{d.nombre} <span className="text-xs text-gray-500">x{d.cantidad}</span></p>
-                                    {d.observaciones && <p className="text-xs text-gray-500">{d.observaciones}</p>}
+                                    <p className="text-sm font-medium text-gray-800">{d.nombre}</p>
                                 </div>
                                 <button type="button" onClick={() => quitarDescartable(idx)} className="text-red-400 hover:text-red-600">
                                     <Trash2 className="h-4 w-4" />

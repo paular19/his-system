@@ -103,6 +103,7 @@ export const TransferirCamaSchema = z.object({
   camaDestinoId: z.number().int().positive(),
   motivo: z.string().max(500).trim().optional().nullable(),
   profesionalId: z.number().int().positive().optional().nullable(),
+  reservarCama: z.boolean().optional().default(false),
 })
 
 export type TransferirCamaInput = z.infer<typeof TransferirCamaSchema>

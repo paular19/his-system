@@ -8,13 +8,12 @@ import { ActualizarPacienteSchema, CrearPacienteSchema } from '@/modules/pacient
 
 // Tipo flexible para valores iniciales del formulario.
 // Las fechas llegan como strings YYYY-MM-DD desde el servidor,
-// cuil como string numérico. Zod coerciona en el submit.
+// y Zod coerciona tipos en el submit.
 type PacienteFormDefaults = {
   apellido?: string
   nombre?: string
   tipoDocumento?: string | null
   numeroDocumento?: number | null
-  cuil?: string | null
   fechaNacimiento?: string | null
   sexo?: string | null
   estadoCivil?: string | null
@@ -30,7 +29,6 @@ type PacienteFormDefaults = {
   numeroAfiliado?: string | null
   nombreTutor?: string | null
   telefonoTutor?: string | null
-  empleoTutor?: string | null
   observaciones?: string | null
   [key: string]: unknown
 }
@@ -72,9 +70,6 @@ export function PacienteForm({
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exito, setExito] = useState(false)
-  const [tieneCoseguro, setTieneCoseguro] = useState<'SI' | 'NO'>(
-    valoresIniciales?.obraSocialCoseguroId ? 'SI' : 'NO'
-  )
 
   const {
     register,
@@ -91,7 +86,6 @@ export function PacienteForm({
   const obraSocialIdRaw = watch('obraSocialId') as number | string | undefined
   const obraSocialIdSeleccionada = obraSocialIdRaw ? Number(obraSocialIdRaw) : undefined
   const obraSocialSeleccionada = obraSociales.find((os) => os.id === obraSocialIdSeleccionada)
-  const requiereCoseguro = Boolean(obraSocialSeleccionada?.requiereCoseguro)
   const planesDisponibles = obraSocialIdSeleccionada
     ? planes.filter((plan) => plan.obraSocialId === obraSocialIdSeleccionada)
     : []
@@ -105,10 +99,10 @@ export function PacienteForm({
       .replace(/\s+/g, ' ')
       .trim()
   }
-  const esIPSS = (() => {
-    const tokens = normalizarNomOS(obraSocialSeleccionada?.nombre ?? '').split(' ')
-    return tokens.includes('IPSS') || tokens.includes('IPS')
-  })()
+  const nombreObraSocialNormalizado = normalizarNomOS(obraSocialSeleccionada?.nombre ?? '')
+  const tokensObraSocial = nombreObraSocialNormalizado.split(' ')
+  const esIPSS = tokensObraSocial.includes('IPSS') || tokensObraSocial.includes('IPS')
+  const esObraSocialConCoseguro = esIPSS
   const cosegurosDisponibles = esIPSS ? coseguros : []
 
   const obraSocialRegister = register('obraSocialId', {
@@ -128,20 +122,11 @@ export function PacienteForm({
     setExito(false)
 
     try {
-      const obraSocialData = obraSociales.find((os) => os.id === Number(data.obraSocialId))
-      if (tieneCoseguro === 'SI' && !data.obraSocialCoseguroId) {
-        throw new Error('Debe seleccionar el coseguro correspondiente')
-      }
-
-      if (obraSocialData?.requiereCoseguro && tieneCoseguro !== 'SI') {
-        throw new Error('La obra social seleccionada requiere que indique un coseguro')
-      }
-
       const payload = {
         ...data,
         obraSocialCoseguroId:
-          tieneCoseguro === 'SI'
-            ? (data.obraSocialCoseguroId ?? obraSocialIdSeleccionada ?? null)
+          esObraSocialConCoseguro
+            ? (data.obraSocialCoseguroId ?? null)
             : null,
       }
 
@@ -251,12 +236,13 @@ export function PacienteForm({
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
-              Numero de Documento
+              Numero de Documento <span className="text-red-500">*</span>
             </label>
             <input
               {...register('numeroDocumento', { valueAsNumber: true })}
               type="number"
               min={1}
+              required={!esEdicion}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="30123456"
             />
@@ -315,21 +301,6 @@ export function PacienteForm({
               <option value="V">Viudo/a</option>
               <option value="U">Unión convivencial</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">CUIL</label>
-            <input
-              {...register('cuil')}
-              type="text"
-              inputMode="numeric"
-              maxLength={11}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="20301234567"
-            />
-            {errors.cuil && (
-              <p className="text-xs text-red-500 mt-1">{String(errors.cuil.message)}</p>
-            )}
           </div>
         </div>
       </div>
@@ -414,7 +385,6 @@ export function PacienteForm({
                 obraSocialRegister.onChange(e)
                 setValue('planId', undefined)
                 setValue('obraSocialCoseguroId', undefined)
-                setTieneCoseguro('NO')
               }}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
@@ -422,7 +392,6 @@ export function PacienteForm({
               {obraSociales.map((obraSocial) => (
                 <option key={obraSocial.id} value={String(obraSocial.id)}>
                   {obraSocial.nombre}
-                  {obraSocial.requiereCoseguro ? ' (requiere coseguro)' : ''}
                 </option>
               ))}
             </select>
@@ -431,38 +400,16 @@ export function PacienteForm({
             )}
           </div>
 
-          {obraSocialIdSeleccionada && esIPSS && (
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">¿Tiene coseguro?</label>
-              <select
-                value={tieneCoseguro}
-                onChange={(e) => {
-                  const value = e.target.value === 'SI' ? 'SI' : 'NO'
-                  setTieneCoseguro(value)
-                  if (value === 'NO') {
-                    setValue('obraSocialCoseguroId', undefined)
-                  } else if (cosegurosDisponibles.length === 1) {
-                    setValue('obraSocialCoseguroId', cosegurosDisponibles[0]?.id)
-                  }
-                }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="NO">No</option>
-                <option value="SI">Sí</option>
-              </select>
-            </div>
-          )}
-
-          {obraSocialIdSeleccionada && esIPSS && tieneCoseguro === 'SI' && (
+          {obraSocialIdSeleccionada && esObraSocialConCoseguro && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
-                Coseguro <span className="text-red-500">*</span>
+                Coseguro
               </label>
               <select
                 {...obraSocialCoseguroRegister}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                <option value="">-- Seleccionar coseguro --</option>
+                <option value="">-- Sin coseguro --</option>
                 {cosegurosDisponibles.map((coseguro) => (
                   <option key={coseguro.id} value={String(coseguro.id)}>
                     {coseguro.nombre}
@@ -488,9 +435,9 @@ export function PacienteForm({
             />
           </div>
         </div>
-        {(requiereCoseguro || tieneCoseguro === 'SI') && (
+        {esObraSocialConCoseguro && (
           <p className="mt-3 text-xs text-amber-700">
-            Si el paciente tiene coseguro, seleccione una opción correspondiente a su obra social.
+            Para IPSS, seleccione coseguro solo si corresponde.
           </p>
         )}
       </div>
@@ -521,17 +468,6 @@ export function PacienteForm({
               {...register('telefonoTutor')}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="3514999888"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Empleo del tutor
-            </label>
-            <input
-              {...register('empleoTutor')}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Docente"
             />
           </div>
         </div>

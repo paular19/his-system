@@ -5,7 +5,7 @@ import { redirect, notFound } from 'next/navigation'
 import { obtenerPaciente } from '@/modules/pacientes/service'
 import { PacienteForm } from '@/components/pacientes/paciente-form'
 import { prisma } from '@/lib/db'
-import { asegurarCosegurosIPSS } from '@/lib/utils/coseguros'
+import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -49,7 +49,7 @@ export default async function EditarPacientePage({ params }: PageProps) {
     }),
   ])
 
-  const obraSociales = obraSocialesRows
+  const obraSociales = filtrarObrasSocialesPrincipales(obraSocialesRows)
     .filter((os) => (os.estado ?? '').trim().toUpperCase() === 'A')
     .map((os) => {
       const req = (os.requiereCoseguro ?? '').trim().toUpperCase()
@@ -74,8 +74,6 @@ export default async function EditarPacientePage({ params }: PageProps) {
     nombre: paciente.nombre,
     tipoDocumento: paciente.tipoDocumento ?? undefined,
     numeroDocumento: paciente.numeroDocumento ?? undefined,
-    // cuil: Decimal → string para el input de texto
-    cuil: paciente.cuil?.toString() ?? undefined,
     // fechaNacimiento: Date → YYYY-MM-DD para input type="date"
     fechaNacimiento: paciente.fechaNacimiento
       ? paciente.fechaNacimiento.toISOString().split('T')[0]
@@ -99,7 +97,6 @@ export default async function EditarPacientePage({ params }: PageProps) {
     obraSocialCoseguroId: paciente.obraSocialCoseguroId ?? undefined,
     nombreTutor: paciente.nombreTutor ?? undefined,
     telefonoTutor: paciente.telefonoTutor ?? undefined,
-    empleoTutor: paciente.empleoTutor ?? undefined,
     observaciones: paciente.observaciones ?? undefined,
   }
 

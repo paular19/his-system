@@ -12,6 +12,7 @@ import {
   type ComponenteSeleccion,
   type ComponenteValores,
 } from '@/components/ui/componente-selector'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import type { PacienteResumen } from '@/modules/admision/types'
 
 interface ItemPractica {
@@ -30,16 +31,10 @@ interface ItemPractica {
 
 interface ItemMedicacion {
   nombre: string
-  dosis: string
-  viaAdministracion: string
-  frecuencia: string
-  observaciones: string
 }
 
 interface ItemDescartable {
   nombre: string
-  cantidad: number
-  observaciones: string
 }
 
 interface ProfesionalOption {
@@ -100,12 +95,14 @@ function crearTempId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function hoyLocalInput(): string {
+function ahoraLocalDateTimeInput(): string {
   const now = new Date()
   const y = now.getFullYear()
   const m = String(now.getMonth() + 1).padStart(2, '0')
   const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  return `${y}-${m}-${d}T${hh}:${mm}`
 }
 
 export function AdmisionForm({
@@ -124,11 +121,10 @@ export function AdmisionForm({
 
   // Tipo de ingreso por defecto para admisión general
   const tipoIngresoCodigo = 'AMB'
+  const tipoIngresoDescripcion = 'Ambulatorio'
 
   // Estado general
-  const [fechaIngreso, setFechaIngreso] = useState(
-    hoyLocalInput()
-  )
+  const [fechaIngreso, setFechaIngreso] = useState(ahoraLocalDateTimeInput())
   const [fechaEgresoPrevista, setFechaEgresoPrevista] = useState('')
   const [subtipoAdmisionCodigo, setSubtipoAdmisionCodigo] = useState('')
   const [profesionalGuardiaId, setProfesionalGuardiaId] = useState('')
@@ -178,20 +174,9 @@ export function AdmisionForm({
 
   // Nueva medicación
   const [nuevaMedNombre, setNuevaMedNombre] = useState('')
-  const [nuevaMedDosis, setNuevaMedDosis] = useState('')
-  const [nuevaMedVia, setNuevaMedVia] = useState('')
-  const [nuevaMedFrecuencia, setNuevaMedFrecuencia] = useState('')
-  const [nuevaMedObs, setNuevaMedObs] = useState('')
-  const [buscandoMedicamentoCatalogo, setBuscandoMedicamentoCatalogo] = useState(false)
-  const [resultadosMedicamentoCatalogo, setResultadosMedicamentoCatalogo] = useState<Array<{ id: number; nombre: string }>>([])
-  const medicamentoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   const [nuevoDesNombre, setNuevoDesNombre] = useState('')
-  const [nuevoDesCantidad, setNuevoDesCantidad] = useState('1')
-  const [nuevoDesObs, setNuevoDesObs] = useState('')
-  const [buscandoDescartableCatalogo, setBuscandoDescartableCatalogo] = useState(false)
-  const [resultadosDescartableCatalogo, setResultadosDescartableCatalogo] = useState<Array<{ id: number; nombre: string }>>([])
-  const descartableDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [opcionesInsumosUti, setOpcionesInsumosUti] = useState<Array<{ id: number; nombre: string }>>([])
+  const [cargandoInsumosUti, setCargandoInsumosUti] = useState(false)
 
   const subtiposConPracticasMeds = ['GUA', 'DER', 'TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'IND', 'PAM']
   const subtiposTurnoPractica = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM']
@@ -266,53 +251,28 @@ export function AdmisionForm({
     return () => clearTimeout(timer)
   }, [terminoBusquedaPractica, obraSocialId])
 
-  const buscarMedicamentoCatalogo = (value: string) => {
-    setNuevaMedNombre(value)
-    if (medicamentoDebounceRef.current) clearTimeout(medicamentoDebounceRef.current)
+  useEffect(() => {
+    let activo = true
 
-    const query = value.trim()
-    if (query.length < 2) {
-      setResultadosMedicamentoCatalogo([])
-      return
+    const cargarInsumos = async () => {
+      setCargandoInsumosUti(true)
+      try {
+        const res = await fetch('/api/catalogos/insumos-uti?limit=5000')
+        const json = await res.json()
+        if (!activo) return
+        setOpcionesInsumosUti(Array.isArray(json.data) ? json.data : [])
+      } catch {
+        if (activo) setOpcionesInsumosUti([])
+      } finally {
+        if (activo) setCargandoInsumosUti(false)
+      }
     }
 
-    medicamentoDebounceRef.current = setTimeout(async () => {
-      setBuscandoMedicamentoCatalogo(true)
-      try {
-        const res = await fetch(`/api/catalogos/medicamentos-uti?q=${encodeURIComponent(query)}&limit=12`)
-        const json = await res.json()
-        setResultadosMedicamentoCatalogo(Array.isArray(json.data) ? json.data : [])
-      } catch {
-        setResultadosMedicamentoCatalogo([])
-      } finally {
-        setBuscandoMedicamentoCatalogo(false)
-      }
-    }, 300)
-  }
-
-  const buscarDescartableCatalogo = (value: string) => {
-    setNuevoDesNombre(value)
-    if (descartableDebounceRef.current) clearTimeout(descartableDebounceRef.current)
-
-    const query = value.trim()
-    if (query.length < 2) {
-      setResultadosDescartableCatalogo([])
-      return
+    void cargarInsumos()
+    return () => {
+      activo = false
     }
-
-    descartableDebounceRef.current = setTimeout(async () => {
-      setBuscandoDescartableCatalogo(true)
-      try {
-        const res = await fetch(`/api/catalogos/descartables-uti?q=${encodeURIComponent(query)}&limit=12`)
-        const json = await res.json()
-        setResultadosDescartableCatalogo(Array.isArray(json.data) ? json.data : [])
-      } catch {
-        setResultadosDescartableCatalogo([])
-      } finally {
-        setBuscandoDescartableCatalogo(false)
-      }
-    }, 300)
-  }
+  }, [])
 
   const agregarPractica = (practica: {
     convenioId: number
@@ -380,18 +340,19 @@ export function AdmisionForm({
     )
   }, [mostrarPanelPracticasMeds, subtipoAdmisionCodigo, profesionalIdTurno, profesionalGuardiaId, profesionalTratanteId, practicas.length])
 
+  useEffect(() => {
+    if (mostrarPracticasAmbulatorias) {
+      setFechaEgresoPrevista('')
+    }
+  }, [mostrarPracticasAmbulatorias])
+
   const agregarMedicacion = () => {
     if (!nuevaMedNombre.trim()) return
     setMedicaciones((prev) => [
       ...prev,
-      { nombre: nuevaMedNombre, dosis: nuevaMedDosis, viaAdministracion: nuevaMedVia, frecuencia: nuevaMedFrecuencia, observaciones: nuevaMedObs },
+      { nombre: nuevaMedNombre },
     ])
     setNuevaMedNombre('')
-    setNuevaMedDosis('')
-    setNuevaMedVia('')
-    setNuevaMedFrecuencia('')
-    setNuevaMedObs('')
-    setResultadosMedicamentoCatalogo([])
   }
 
   const quitarMedicacion = (idx: number) => {
@@ -402,16 +363,9 @@ export function AdmisionForm({
     if (!nuevoDesNombre.trim()) return
     setDescartables((prev) => [
       ...prev,
-      {
-        nombre: nuevoDesNombre,
-        cantidad: Math.max(1, Number.parseInt(nuevoDesCantidad, 10) || 1),
-        observaciones: nuevoDesObs,
-      },
+      { nombre: nuevoDesNombre },
     ])
     setNuevoDesNombre('')
-    setNuevoDesCantidad('1')
-    setNuevoDesObs('')
-    setResultadosDescartableCatalogo([])
   }
 
   const quitarDescartable = (idx: number) => {
@@ -422,7 +376,10 @@ export function AdmisionForm({
     ? planes.filter((plan) => String(plan.obraSocialId ?? '') === obraSocialId)
     : planes
   const obraSocialSeleccionada = obraSociales.find((os) => String(os.id) === obraSocialId)
-  const esIPSS = esNombreIPSS(obraSocialSeleccionada?.nombre ?? '')
+  const nombreObraSocial = obraSocialSeleccionada?.nombre ?? ''
+  const esIPSS = esNombreIPSS(nombreObraSocial)
+  const esCoberturaConCoseguro = esIPSS
+  const cosegurosDisponibles = esIPSS ? coseguros : []
 
   // Sincronizar cobertura cuando cambia el paciente
   const handleSeleccionarPaciente = (p: PacienteResumen | null) => {
@@ -469,16 +426,6 @@ export function AdmisionForm({
           : p.matriculaAnestesista,
     }))
 
-    const practicaSinMatricula = practicasNormalizadas.find((p) =>
-      (p.requiereMatriculaEspecialista && p.seleccionComponentes.especialista > 0 && !p.matriculaEspecialista) ||
-      (p.requiereMatriculaAnestesista && p.seleccionComponentes.anestesista > 0 && !p.matriculaAnestesista)
-    )
-    if (practicaSinMatricula) {
-      setError('Complete matrícula en prácticas con HE/HA antes de registrar la admisión')
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      return
-    }
-
     setPracticas(practicasNormalizadas)
 
     setGuardando(true)
@@ -490,12 +437,15 @@ export function AdmisionForm({
         tipoIngresoCodigo,
         subtipoAdmisionCodigo,
         fechaIngreso,
-        fechaEgresoPrevista: fechaEgresoPrevista || null,
+        fechaEgresoPrevista: mostrarPracticasAmbulatorias ? null : (fechaEgresoPrevista || null),
         profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null,
         profesionalTratanteId: profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null,
         obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
         planId: planId ? parseInt(planId, 10) : null,
-        obraSocialCoseguroId: obraSocialCoseguroId ? parseInt(obraSocialCoseguroId, 10) : null,
+        obraSocialCoseguroId:
+          esCoberturaConCoseguro && obraSocialCoseguroId
+            ? parseInt(obraSocialCoseguroId, 10)
+            : null,
         numeroAfiliado: numeroAfiliado || null,
         descripcionPatologia: descripcionPatologia || null,
         observaciones: observaciones || null,
@@ -506,8 +456,18 @@ export function AdmisionForm({
           matriculaEspecialista: p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
           matriculaAnestesista: p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
         })) : undefined,
-        medicaciones: mostrarMedicacion && medicaciones.length > 0 ? medicaciones : undefined,
-        descartables: mostrarDescartables && descartables.length > 0 ? descartables : undefined,
+        medicaciones: mostrarMedicacion && medicaciones.length > 0
+          ? medicaciones.map((m) => ({
+            nombre: m.nombre,
+            dosis: null,
+            viaAdministracion: null,
+            frecuencia: null,
+            observaciones: null,
+          }))
+          : undefined,
+        descartables: mostrarDescartables && descartables.length > 0
+          ? descartables.map((d) => ({ nombre: d.nombre, cantidad: 1, observaciones: null }))
+          : undefined,
       }
 
       // Agregar campos específicos según el subtipo
@@ -606,6 +566,22 @@ export function AdmisionForm({
 
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
+          Tipo de Ingreso
+        </h3>
+        <div className="max-w-md space-y-1">
+          <input
+            value={`${tipoIngresoCodigo} - ${tipoIngresoDescripcion}`}
+            readOnly
+            className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700"
+          />
+          <p className="text-xs text-gray-500">
+            En esta pantalla el ingreso es ambulatorio. Para internación usar el módulo Internación.
+          </p>
+        </div>
+      </div>
+
+      <div className="his-card p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
           Tipo de Admisión <span className="text-red-500">*</span>
         </h3>
         <div className="max-w-md">
@@ -628,54 +604,42 @@ export function AdmisionForm({
         <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">Datos de Admisión</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Fecha de Ingreso</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Fecha y Hora de Ingreso</label>
             <input
-              type="date"
+              type="datetime-local"
               value={fechaIngreso}
               onChange={(e) => setFechaIngreso(e.target.value)}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Egreso Previsto</label>
-            <input
-              type="date"
-              value={fechaEgresoPrevista}
-              onChange={(e) => setFechaEgresoPrevista(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          {!mostrarPracticasAmbulatorias && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Egreso Previsto</label>
+              <input
+                type="date"
+                value={fechaEgresoPrevista}
+                onChange={(e) => setFechaEgresoPrevista(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
           {!mostrarPracticasAmbulatorias && (
             <>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Profesional Guardia</label>
-                <select
+                <ProfesionalSelect
+                  profesionales={profesionales}
                   value={profesionalGuardiaId}
-                  onChange={(e) => setProfesionalGuardiaId(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Seleccionar profesional --</option>
-                  {profesionales.map((prof) => (
-                    <option key={prof.id} value={String(prof.id)}>
-                      {prof.nombre}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setProfesionalGuardiaId}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Profesional Tratante</label>
-                <select
+                <ProfesionalSelect
+                  profesionales={profesionales}
                   value={profesionalTratanteId}
-                  onChange={(e) => setProfesionalTratanteId(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Seleccionar profesional --</option>
-                  {profesionales.map((prof) => (
-                    <option key={prof.id} value={String(prof.id)}>
-                      {prof.nombre}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setProfesionalTratanteId}
+                />
               </div>
             </>
           )}
@@ -690,18 +654,11 @@ export function AdmisionForm({
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Profesional de Guardia <span className="text-red-500">*</span>
               </label>
-              <select
+              <ProfesionalSelect
+                profesionales={profesionales}
                 value={profesionalGuardiaId}
-                onChange={(e) => setProfesionalGuardiaId(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Seleccionar profesional --</option>
-                {profesionales.map((prof) => (
-                  <option key={prof.id} value={String(prof.id)}>
-                    {prof.nombre}
-                  </option>
-                ))}
-              </select>
+                onChange={setProfesionalGuardiaId}
+              />
             </div>
           </div>
         </div>
@@ -715,18 +672,11 @@ export function AdmisionForm({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Profesional que indica la práctica</label>
-              <select
+              <ProfesionalSelect
+                profesionales={profesionales}
                 value={profesionalIdTurno}
-                onChange={(e) => setProfesionalIdTurno(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Seleccionar profesional --</option>
-                {profesionales.map((prof) => (
-                  <option key={prof.id} value={String(prof.id)}>
-                    {prof.nombre}
-                  </option>
-                ))}
-              </select>
+                onChange={setProfesionalIdTurno}
+              />
             </div>
           </div>
         </div>
@@ -844,7 +794,6 @@ export function AdmisionForm({
               {obraSociales.map((obraSocial) => (
                 <option key={obraSocial.id} value={String(obraSocial.id)}>
                   {obraSocial.nombre}
-                  {obraSocial.requiereCoseguro ? ' (requiere coseguro)' : ''}
                 </option>
               ))}
             </select>
@@ -859,23 +808,23 @@ export function AdmisionForm({
               placeholder="123456789"
             />
           </div>
-          {esIPSS && (
+          {esCoberturaConCoseguro && (
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Coseguro (solo IPSS)</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Coseguro</label>
               <select
                 value={obraSocialCoseguroId}
                 onChange={(e) => setObraSocialCoseguroId(e.target.value)}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">-- Sin coseguro --</option>
-                {coseguros.map((coseguro) => (
+                {cosegurosDisponibles.map((coseguro) => (
                   <option key={coseguro.id} value={String(coseguro.id)}>
                     {coseguro.nombre}
                   </option>
                 ))}
               </select>
               <p className="mt-1 text-xs text-amber-700">
-                Si el paciente tiene IPSS con coseguro, seleccione uno. Si no, deje "Sin coseguro".
+                Si corresponde, seleccione el coseguro para la cobertura elegida.
               </p>
             </div>
           )}
@@ -1043,76 +992,19 @@ export function AdmisionForm({
             <div className="his-card p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">Medicamentos administrados</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-3 rounded-md bg-gray-50 border">
-                <div className="relative">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Medicamento <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Insumo (opcional)</label>
+                  <select
                     value={nuevaMedNombre}
-                    onChange={(e) => buscarMedicamentoCatalogo(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Ej: Ibuprofeno"
-                  />
-                  {resultadosMedicamentoCatalogo.length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
-                      {resultadosMedicamentoCatalogo.map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setNuevaMedNombre(m.nombre)
-                            setResultadosMedicamentoCatalogo([])
-                          }}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                        >
-                          {m.nombre}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {buscandoMedicamentoCatalogo && (
-                    <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Dosis</label>
-                  <input
-                    type="text"
-                    value={nuevaMedDosis}
-                    onChange={(e) => setNuevaMedDosis(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Ej: 400mg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Vía de administración</label>
-                  <input
-                    type="text"
-                    value={nuevaMedVia}
-                    onChange={(e) => setNuevaMedVia(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Ej: Oral, EV, IM"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Frecuencia</label>
-                  <input
-                    type="text"
-                    value={nuevaMedFrecuencia}
-                    onChange={(e) => setNuevaMedFrecuencia(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Ej: Cada 8 hs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Observaciones</label>
-                  <input
-                    type="text"
-                    value={nuevaMedObs}
-                    onChange={(e) => setNuevaMedObs(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Notas adicionales"
-                  />
+                    onChange={(e) => setNuevaMedNombre(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">-- Seleccionar de lista unificada --</option>
+                    {opcionesInsumosUti.map((item) => (
+                      <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                    ))}
+                  </select>
+                  {cargandoInsumosUti && <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>}
                 </div>
                 <div className="flex items-end">
                   <button
@@ -1131,10 +1023,6 @@ export function AdmisionForm({
                     <div key={idx} className="flex items-center gap-3 px-3 py-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800">{m.nombre}</p>
-                        <p className="text-xs text-gray-500">
-                          {[m.dosis, m.viaAdministracion, m.frecuencia].filter(Boolean).join(' · ')}
-                          {m.observaciones && <> — {m.observaciones}</>}
-                        </p>
                       </div>
                       <button type="button" onClick={() => quitarMedicacion(idx)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">
                         <Trash2 className="h-4 w-4" />
@@ -1152,56 +1040,19 @@ export function AdmisionForm({
             <div className="his-card p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">Descartables utilizados</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-3 rounded-md bg-gray-50 border">
-                <div className="relative">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Descartable <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Insumo (opcional)</label>
+                  <select
                     value={nuevoDesNombre}
-                    onChange={(e) => buscarDescartableCatalogo(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Ej: Abocath 20"
-                  />
-                  {resultadosDescartableCatalogo.length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
-                      {resultadosDescartableCatalogo.map((d) => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setNuevoDesNombre(d.nombre)
-                            setResultadosDescartableCatalogo([])
-                          }}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                        >
-                          {d.nombre}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {buscandoDescartableCatalogo && (
-                    <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Cantidad</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={nuevoDesCantidad}
-                    onChange={(e) => setNuevoDesCantidad(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Observaciones</label>
-                  <input
-                    type="text"
-                    value={nuevoDesObs}
-                    onChange={(e) => setNuevoDesObs(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Notas adicionales"
-                  />
+                    onChange={(e) => setNuevoDesNombre(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">-- Seleccionar de lista unificada --</option>
+                    {opcionesInsumosUti.map((item) => (
+                      <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                    ))}
+                  </select>
+                  {cargandoInsumosUti && <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>}
                 </div>
                 <div className="flex items-end">
                   <button
@@ -1219,8 +1070,7 @@ export function AdmisionForm({
                   {descartables.map((d, idx) => (
                     <div key={idx} className="flex items-center gap-3 px-3 py-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800">{d.nombre} <span className="text-xs text-gray-500">x{d.cantidad}</span></p>
-                        {d.observaciones && <p className="text-xs text-gray-500">{d.observaciones}</p>}
+                        <p className="text-sm font-medium text-gray-800">{d.nombre}</p>
                       </div>
                       <button type="button" onClick={() => quitarDescartable(idx)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">
                         <Trash2 className="h-4 w-4" />

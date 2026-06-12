@@ -4,6 +4,7 @@ import { generarNombreCompleto } from '@/lib/utils'
 import type { CrearPacienteInput, ActualizarPacienteInput, BusquedaPacienteInput } from './schemas'
 import type { ResultadoPaginado } from '@/types'
 import type { PacienteConRelaciones, PacienteBusqueda } from './types'
+import { normalizarNombreObraSocial } from '@/lib/utils/coseguros'
 
 // Selección de campos para incluir en relaciones
 const incluirRelaciones = {
@@ -19,12 +20,26 @@ const incluirRelaciones = {
 // Única capa de acceso a datos. Sin SQL directo.
 // ============================================
 
+async function obraSocialEsIPSS(obraSocialId: number | null | undefined): Promise<boolean> {
+  if (!obraSocialId) return false
+
+  const obraSocial = await prisma.obraSocial.findUnique({
+    where: { id: obraSocialId },
+    select: { nombre: true },
+  })
+
+  const tokens = normalizarNombreObraSocial(obraSocial?.nombre ?? '').split(' ')
+  return tokens.includes('IPSS') || tokens.includes('IPS')
+}
+
 export async function crearPaciente(
   data: CrearPacienteInput,
   usuarioAlta: string
 ): Promise<PacienteConRelaciones> {
   const nombreCompleto = generarNombreCompleto(data.apellido, data.nombre)
   const ahora = new Date()
+  const esIPSS = await obraSocialEsIPSS(data.obraSocialId ?? null)
+  const obraSocialCoseguroId = esIPSS ? (data.obraSocialCoseguroId ?? null) : null
 
   return prisma.paciente.create({
     data: {
@@ -51,7 +66,7 @@ export async function crearPaciente(
       obraSocialId: data.obraSocialId ?? null,
       planId: data.planId ?? null,
       numeroAfiliado: data.numeroAfiliado ?? null,
-      obraSocialCoseguroId: data.obraSocialCoseguroId ?? null,
+      obraSocialCoseguroId,
       nombreTutor: data.nombreTutor ?? null,
       telefonoTutor: data.telefonoTutor ?? null,
       empleoTutor: data.empleoTutor ?? null,
@@ -105,6 +120,29 @@ export async function actualizarPaciente(
   data: ActualizarPacienteInput,
   usuarioModificacion: string
 ): Promise<PacienteConRelaciones> {
+  const pacienteActual = await prisma.paciente.findUniqueOrThrow({
+    where: { id },
+    select: {
+      apellido: true,
+      nombre: true,
+      obraSocialId: true,
+      obraSocialCoseguroId: true,
+    },
+  })
+
+  const obraSocialIdFinal =
+    data.obraSocialId !== undefined
+      ? (data.obraSocialId ?? null)
+      : pacienteActual.obraSocialId
+
+  const obraSocialCoseguroFinalInput =
+    data.obraSocialCoseguroId !== undefined
+      ? (data.obraSocialCoseguroId ?? null)
+      : pacienteActual.obraSocialCoseguroId
+
+  const esIPSSFinal = await obraSocialEsIPSS(obraSocialIdFinal)
+  const obraSocialCoseguroFinal = esIPSSFinal ? obraSocialCoseguroFinalInput : null
+
   const updateData: Record<string, unknown> = {
     fechaModificacion: new Date(),
   }
@@ -112,9 +150,8 @@ export async function actualizarPaciente(
   if (data.apellido !== undefined) updateData.apellido = data.apellido.toUpperCase()
   if (data.nombre !== undefined) updateData.nombre = data.nombre
   if (data.apellido !== undefined || data.nombre !== undefined) {
-    const paciente = await prisma.paciente.findUniqueOrThrow({ where: { id } })
-    const apellido = data.apellido?.toUpperCase() ?? paciente.apellido
-    const nombre = data.nombre ?? paciente.nombre
+    const apellido = data.apellido?.toUpperCase() ?? pacienteActual.apellido
+    const nombre = data.nombre ?? pacienteActual.nombre
     updateData.nombreCompleto = generarNombreCompleto(apellido, nombre)
   }
 
@@ -123,7 +160,7 @@ export async function actualizarPaciente(
     'estadoCivil', 'paisId', 'profesionId', 'domicilio', 'provinciaId',
     'localidadId', 'barrioId', 'telefonoFijo', 'telefonoLaboral', 'celular1',
     'celular2', 'email', 'obraSocialId', 'planId', 'numeroAfiliado',
-    'obraSocialCoseguroId', 'nombreTutor', 'telefonoTutor', 'empleoTutor',
+    'nombreTutor', 'telefonoTutor', 'empleoTutor',
     'observaciones',
   ] as const
 
@@ -131,6 +168,14 @@ export async function actualizarPaciente(
     if (data[campo] !== undefined) {
       updateData[campo] = data[campo]
     }
+  }
+
+  if (
+    data.obraSocialId !== undefined ||
+    data.obraSocialCoseguroId !== undefined ||
+    obraSocialCoseguroFinal !== pacienteActual.obraSocialCoseguroId
+  ) {
+    updateData.obraSocialCoseguroId = obraSocialCoseguroFinal
   }
 
   // Registrar en historial antes de actualizar

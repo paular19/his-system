@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { ChevronRight, FileText } from 'lucide-react'
 import type { Metadata } from 'next'
 import { PrintButton } from '@/components/ui/print-button'
+import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 
 export const metadata: Metadata = { title: 'Informe de Hospitalización' }
 
@@ -200,10 +201,10 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
           <div>
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Médicos</h2>
             <dl className="space-y-1.5 print:space-y-1">
-              <DataRow label="Guardia" value={ingreso.profesionalGuardia?.nombre ?? '—'} />
-              <DataRow label="Tratante" value={ingreso.profesionalTratante?.nombre ?? '—'} />
-              {informe?.profesionalEfector && <DataRow label="Efector" value={informe.profesionalEfector.nombre} />}
-              {informe?.profesionalPrescriptor && <DataRow label="Prescriptor" value={informe.profesionalPrescriptor.nombre} />}
+              <DataRow label="Guardia" value={ingreso.profesionalGuardia?.nombre ? nombreProfesionalParaMostrar(ingreso.profesionalGuardia.nombre) : '—'} />
+              <DataRow label="Tratante" value={ingreso.profesionalTratante?.nombre ? nombreProfesionalParaMostrar(ingreso.profesionalTratante.nombre) : '—'} />
+              {informe?.profesionalEfector && <DataRow label="Efector" value={nombreProfesionalParaMostrar(informe.profesionalEfector.nombre)} />}
+              {informe?.profesionalPrescriptor && <DataRow label="Prescriptor" value={nombreProfesionalParaMostrar(informe.profesionalPrescriptor.nombre)} />}
             </dl>
           </div>
         </div>
@@ -218,7 +219,13 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
                 <DataRow label="Hora" value={fmtHora(cirugia.horaCirugia)} />
                 <DataRow
                   label="Especialista a cargo"
-                  value={ingreso.profesionalTratante?.nombre ?? informe?.profesionalEfector?.nombre ?? '—'}
+                  value={
+                    ingreso.profesionalTratante?.nombre
+                      ? nombreProfesionalParaMostrar(ingreso.profesionalTratante.nombre)
+                      : informe?.profesionalEfector?.nombre
+                        ? nombreProfesionalParaMostrar(informe.profesionalEfector.nombre)
+                        : '—'
+                  }
                 />
                 <DataRow
                   label="N° autorización"
@@ -322,7 +329,7 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
                   </div>
                   <p className="text-gray-700 mt-0.5 whitespace-pre-wrap text-[11px] print:text-[10px]">{ev.descripcion}</p>
                   {ev.profesional && (
-                    <p className="text-gray-500 text-[10px] print:text-[9px] mt-0.5">Dr. {ev.profesional.nombre}</p>
+                    <p className="text-gray-500 text-[10px] print:text-[9px] mt-0.5">{nombreProfesionalParaMostrar(ev.profesional.nombre)}</p>
                   )}
                 </div>
               ))}

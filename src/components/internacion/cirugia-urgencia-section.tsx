@@ -107,6 +107,16 @@ interface CirugiaUrgenciaSectionProps {
     matriculaTratanteDefault?: number | null
 }
 
+function normalizarNombreObraSocial(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
 export function CirugiaUrgenciaSection({
     ingresoId,
     pacienteId,
@@ -157,7 +167,11 @@ export function CirugiaUrgenciaSection({
 
     const obraSocialIdNumero = obraSocialId ? Number.parseInt(obraSocialId, 10) : null
     const obraSocialSeleccionada = obraSociales.find((o) => o.id === obraSocialIdNumero)
-    const esIPSS = obraSocialSeleccionada?.nombre?.toUpperCase().includes('IPSS') ?? false
+    const nombreObraSocialNormalizado = normalizarNombreObraSocial(obraSocialSeleccionada?.nombre ?? '')
+    const tokensObraSocial = nombreObraSocialNormalizado.split(' ')
+    const esIPSS = tokensObraSocial.includes('IPSS') || tokensObraSocial.includes('IPS')
+    const esCoberturaConCoseguro = esIPSS
+    const cosegurosDisponibles = esIPSS ? coseguros : []
 
     const planesFiltrados = useMemo(
         () => planes.filter((p) => !obraSocialIdNumero || p.obraSocialId === obraSocialIdNumero),
@@ -292,6 +306,7 @@ export function CirugiaUrgenciaSection({
                     obraSocialId: obraSocialId ? Number.parseInt(obraSocialId, 10) : null,
                     planId: planId ? Number.parseInt(planId, 10) : null,
                     obraSocialCoseguroId: obraSocialCoseguroId
+                        && esCoberturaConCoseguro
                         ? Number.parseInt(obraSocialCoseguroId, 10)
                         : null,
                     numeroAfiliado: numeroAfiliado || null,
@@ -408,7 +423,6 @@ export function CirugiaUrgenciaSection({
                                         {obraSociales.map((os) => (
                                             <option key={os.id} value={String(os.id)}>
                                                 {os.nombre}
-                                                {os.requiereCoseguro ? ' (requiere coseguro)' : ''}
                                             </option>
                                         ))}
                                     </select>
@@ -441,16 +455,16 @@ export function CirugiaUrgenciaSection({
                                     />
                                 </div>
 
-                                {esIPSS && (
+                                {esCoberturaConCoseguro && (
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Coseguro (solo IPSS)</label>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Coseguro</label>
                                         <select
                                             value={obraSocialCoseguroId}
                                             onChange={(e) => setObraSocialCoseguroId(e.target.value)}
                                             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                                         >
                                             <option value="">-- Sin coseguro --</option>
-                                            {coseguros.map((c) => (
+                                            {cosegurosDisponibles.map((c) => (
                                                 <option key={c.id} value={String(c.id)}>
                                                     {c.nombre}
                                                 </option>

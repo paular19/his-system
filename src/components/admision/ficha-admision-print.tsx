@@ -20,6 +20,11 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
         ?? ingreso.evoluciones?.[0]?.profesional?.matricula
         ?? ingreso.profesionalTratanteFallback?.matricula
         ?? null
+    const esPracticaAmbulatoria =
+        ingreso.tipoIngresoCodigo === 'AMB' &&
+        ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
+            ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
+        )
 
     useEffect(() => {
         const originalTitle = document.title
@@ -219,10 +224,12 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                 <dt className="text-gray-600">Fecha de Egreso:</dt>
                                 <dd className="font-medium">{formatearFecha(ingreso.fechaEgreso) ?? '—'}</dd>
                             </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Egreso Previsto:</dt>
-                                <dd className="font-medium">{formatearFecha(ingreso.fechaEgresoPrevista) ?? '—'}</dd>
-                            </div>
+                            {!esPracticaAmbulatoria && (
+                                <div className="flex justify-between">
+                                    <dt className="text-gray-600">Egreso Previsto:</dt>
+                                    <dd className="font-medium">{formatearFecha(ingreso.fechaEgresoPrevista) ?? '—'}</dd>
+                                </div>
+                            )}
                             <div className="flex justify-between">
                                 <dt className="text-gray-600">Estado:</dt>
                                 <dd className="font-medium">{LABEL_ESTADO[ingreso.estado ?? ''] ?? ingreso.estado ?? '—'}</dd>

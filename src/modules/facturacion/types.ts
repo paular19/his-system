@@ -41,6 +41,13 @@ export interface PrestacionFacturableItem {
     codigoPractica: string | null
     incluyeCodigo?: string | null
     numeroAutorizacion: string | null
+    autorizacionesVinculadas?: Array<{
+        ordenPuestoNumero: number
+        ordenNumero: number
+        ordenItem: number
+        numeroAutorizacion: string | null
+        incluyeCodigo?: string | null
+    }>
     origen: {
         ingresoId: number
         practicaId?: number

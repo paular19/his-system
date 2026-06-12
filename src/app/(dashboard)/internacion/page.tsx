@@ -21,6 +21,7 @@ import {
 import { InternacionFiltros } from '@/components/internacion/internacion-filtros'
 import { InternacionFechaSelector } from '@/components/internacion/internacion-fecha-selector'
 import type { Metadata } from 'next'
+import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 
 export const metadata: Metadata = { title: 'Internación — Mapa de Camas' }
 
@@ -91,7 +92,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
     fechasDisponibles.find((f) => f.key === fechaSeleccionada)?.labelLarga ??
     fechaReferencia.toLocaleDateString('es-AR', { timeZone: ARG_TIME_ZONE })
 
-  const [mapa, internaciones, obrasSociales] = await Promise.all([
+  const [mapa, internaciones, obrasSocialesRaw] = await Promise.all([
     obtenerMapaCamas(fechaReferencia),
     obtenerInternacionesActivas(
       {
@@ -108,6 +109,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
       orderBy: { nombre: 'asc' },
     }),
   ])
+  const obrasSociales = filtrarObrasSocialesPrincipales(obrasSocialesRaw)
 
   const puedeCrear = tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
   const hayFiltros = Boolean(q || obraSocialIdFiltro)

@@ -1331,14 +1331,19 @@ model LoteIPSTxtItem {
 model GuiaFeedback {
   id Int @id @default(autoincrement())
 
-  modulo            String  @db.VarChar(30)
-  tipo              String  @db.VarChar(20)
-  prioridad         String  @db.VarChar(10)
-  titulo            String  @db.VarChar(140)
-  comentario        String  @db.Text
-  pantalla          String? @db.VarChar(120)
-  pasos             String? @db.Text
-  resultadoEsperado String? @db.Text
+  modulo                 String    @db.VarChar(30)
+  tipo                   String    @db.VarChar(20)
+  prioridad              String    @db.VarChar(10)
+  titulo                 String    @db.VarChar(140)
+  comentario             String    @db.Text
+  respuesta              String?   @db.Text
+  respuestaAt            DateTime? @db.Timestamp(6)
+  respuestaUsuarioCodigo String?   @db.Char(10)
+  respuestaUsuarioNombre String?   @db.VarChar(120)
+  respuestaUsuarioEmail  String?   @db.VarChar(120)
+  pantalla               String?   @db.VarChar(120)
+  pasos                  String?   @db.Text
+  resultadoEsperado      String?   @db.Text
 
   usuarioClerkId String @db.VarChar(50)
   usuarioCodigo  String @db.Char(10)

@@ -29,6 +29,19 @@ const OPERACION_A_ACCION_AUDIT: Record<string, AccionCrudAudit> = {
 }
 
 const OPERACIONES_AUDITABLES = new Set(Object.keys(OPERACION_A_ACCION_AUDIT))
+const OPERACIONES_LECTURA = new Set([
+  'findUnique',
+  'findUniqueOrThrow',
+  'findFirst',
+  'findFirstOrThrow',
+  'findMany',
+  'count',
+  'aggregate',
+  'groupBy',
+  '$queryRaw',
+  '$queryRawUnsafe',
+])
+const AUDITAR_OPERACIONES_LECTURA = process.env.PRISMA_AUDIT_READS === 'true'
 
 const MAX_DETALLE_AUDIT = 2000
 const AUDIT_DB_LIMITS = {
@@ -254,6 +267,10 @@ const prismaConAudit = prismaBase.$extends({
         }
 
         if (!OPERACIONES_AUDITABLES.has(operation)) {
+          return result
+        }
+
+        if (!AUDITAR_OPERACIONES_LECTURA && OPERACIONES_LECTURA.has(operation)) {
           return result
         }
 

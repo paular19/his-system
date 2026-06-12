@@ -1,8 +1,9 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Package } from 'lucide-react'
 import type { DescartableItem } from '@/modules/internacion/types'
+import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 
 interface DescartableSectionProps {
     ingresoId: number
@@ -25,44 +26,34 @@ export function DescartableSection({
     const [error, setError] = useState<string | null>(null)
 
     const [nombre, setNombre] = useState('')
-    const [cantidad, setCantidad] = useState('1')
-    const [observaciones, setObservaciones] = useState('')
-    const [profesionalId, setProfesionalId] = useState('')
+    const [opcionesInsumosUti, setOpcionesInsumosUti] = useState<Array<{ id: number; nombre: string }>>([])
+    const [cargandoInsumosUti, setCargandoInsumosUti] = useState(false)
 
-    const [buscandoCatalogo, setBuscandoCatalogo] = useState(false)
-    const [sugerencias, setSugerencias] = useState<Array<{ id: number; nombre: string }>>([])
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => {
+        let activo = true
 
-    const buscarCatalogo = (value: string) => {
-        setNombre(value)
-        if (debounceRef.current) clearTimeout(debounceRef.current)
-
-        const query = value.trim()
-        if (query.length < 2) {
-            setSugerencias([])
-            return
+        const cargarInsumos = async () => {
+            setCargandoInsumosUti(true)
+            try {
+                const res = await fetch('/api/catalogos/insumos-uti?limit=5000')
+                const json = await res.json()
+                if (!activo) return
+                setOpcionesInsumosUti(Array.isArray(json.data) ? json.data : [])
+            } catch {
+                if (activo) setOpcionesInsumosUti([])
+            } finally {
+                if (activo) setCargandoInsumosUti(false)
+            }
         }
 
-        debounceRef.current = setTimeout(async () => {
-            setBuscandoCatalogo(true)
-            try {
-                const res = await fetch(`/api/catalogos/descartables-uti?q=${encodeURIComponent(query)}&limit=12`)
-                const json = await res.json()
-                setSugerencias(Array.isArray(json.data) ? json.data : [])
-            } catch {
-                setSugerencias([])
-            } finally {
-                setBuscandoCatalogo(false)
-            }
-        }, 300)
-    }
+        void cargarInsumos()
+        return () => {
+            activo = false
+        }
+    }, [])
 
     const limpiar = () => {
         setNombre('')
-        setCantidad('1')
-        setObservaciones('')
-        setProfesionalId('')
-        setSugerencias([])
         setMostrarFormulario(false)
         setError(null)
     }
@@ -78,9 +69,9 @@ export function DescartableSection({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     nombre: nombre.trim(),
-                    cantidad: Math.max(1, Number.parseInt(cantidad, 10) || 1),
-                    observaciones: observaciones || null,
-                    profesionalId: profesionalId ? Number.parseInt(profesionalId, 10) : null,
+                    cantidad: 1,
+                    observaciones: null,
+                    profesionalId: null,
                 }),
             })
 
@@ -127,73 +118,24 @@ export function DescartableSection({
                         <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</p>
                     )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="sm:col-span-2 relative">
+                        <div className="sm:col-span-2">
                             <label className="block text-xs font-medium text-gray-700 mb-1">
-                                Descartable <span className="text-red-500">*</span>
+                                Insumo <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                required
-                                type="text"
-                                value={nombre}
-                                onChange={(e) => buscarCatalogo(e.target.value)}
-                                placeholder="Nombre del descartable"
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                            />
-                            {sugerencias.length > 0 && (
-                                <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
-                                    {sugerencias.map((s) => (
-                                        <button
-                                            key={s.id}
-                                            type="button"
-                                            onMouseDown={(e) => e.preventDefault()}
-                                            onClick={() => {
-                                                setNombre(s.nombre)
-                                                setSugerencias([])
-                                            }}
-                                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                                        >
-                                            {s.nombre}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                            {buscandoCatalogo && (
-                                <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
-                            )}
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Cantidad</label>
-                            <input
-                                type="number"
-                                min={1}
-                                value={cantidad}
-                                onChange={(e) => setCantidad(e.target.value)}
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Profesional indicador</label>
                             <select
-                                value={profesionalId}
-                                onChange={(e) => setProfesionalId(e.target.value)}
+                                required
+                                value={nombre}
+                                onChange={(e) => setNombre(e.target.value)}
                                 className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
                             >
-                                <option value="">- Sin asignar -</option>
-                                {profesionales.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.nombre}
-                                    </option>
+                                <option value="">-- Seleccionar de lista unificada --</option>
+                                {opcionesInsumosUti.map((item) => (
+                                    <option key={item.id} value={item.nombre}>{item.nombre}</option>
                                 ))}
                             </select>
-                        </div>
-                        <div className="sm:col-span-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Observaciones</label>
-                            <input
-                                type="text"
-                                value={observaciones}
-                                onChange={(e) => setObservaciones(e.target.value)}
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                            />
+                            {cargandoInsumosUti && (
+                                <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>
+                            )}
                         </div>
                     </div>
                     <div className="flex justify-end gap-2">
@@ -239,7 +181,7 @@ function DescartableRow({
                     <span className="text-xs text-gray-500">x{item.cantidad}</span>
                 </div>
                 <div className="text-xs text-gray-500 flex gap-3">
-                    {item.profesional && <span>Dr. {item.profesional.nombre}</span>}
+                    {item.profesional && <span>{nombreProfesionalParaMostrar(item.profesional.nombre)}</span>}
                     <span>{new Date(item.fechaInicio).toLocaleDateString('es-AR')}</span>
                 </div>
                 {item.observaciones && <p className="text-xs text-gray-500 mt-1 italic">{item.observaciones}</p>}

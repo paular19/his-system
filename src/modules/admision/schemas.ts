@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/
+const DATETIME_LOCAL_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/
+const DATETIME_WITH_TZ_REGEX =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/
 
 function parseFechaArgentina(value: unknown): unknown {
   if (value === undefined || value === null) return value
@@ -11,6 +14,15 @@ function parseFechaArgentina(value: unknown): unknown {
 
     if (DATE_ONLY_REGEX.test(raw)) {
       return new Date(`${raw}T12:00:00-03:00`)
+    }
+
+    if (DATETIME_LOCAL_REGEX.test(raw)) {
+      const normalizado = raw.length === 16 ? `${raw}:00` : raw
+      return new Date(`${normalizado}-03:00`)
+    }
+
+    if (DATETIME_WITH_TZ_REGEX.test(raw)) {
+      return new Date(raw)
     }
 
     return new Date(raw)

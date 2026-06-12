@@ -14,7 +14,12 @@ export default function SignUpPage() {
           <p className="text-gray-500 text-sm">Crear cuenta de acceso</p>
         </div>
         <div className="flex justify-center">
-          <SignUp />
+          <SignUp
+            routing="path"
+            path="/sign-up"
+            signInUrl="/sign-in"
+            fallbackRedirectUrl="/dashboard"
+          />
         </div>
       </div>
     </div>

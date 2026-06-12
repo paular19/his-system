@@ -4,11 +4,13 @@ import { useState } from 'react'
 import { ChevronDown, ChevronUp, Plus, Stethoscope } from 'lucide-react'
 import type { EvolucionItem } from '@/modules/internacion/types'
 import { TIPO_EVOLUCION_LABEL } from '@/modules/internacion/types'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
+import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 
 interface EvolucionSectionProps {
     ingresoId: number
     evoluciones: EvolucionItem[]
-    profesionales: Array<{ id: number; nombre: string }>
+    profesionales: Array<{ id: number; nombre: string; matricula?: number | null }>
     puedeCrear: boolean
 }
 
@@ -144,16 +146,13 @@ export function EvolucionSection({
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Profesional</label>
-                            <select
+                            <ProfesionalSelect
+                                profesionales={profesionales}
                                 value={profesionalId}
-                                onChange={(e) => setProfesionalId(e.target.value)}
-                                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
-                            >
-                                <option value="">— Sin asignar —</option>
-                                {profesionales.map((p) => (
-                                    <option key={p.id} value={p.id}>{p.nombre}</option>
-                                ))}
-                            </select>
+                                onChange={setProfesionalId}
+                                placeholderOption="— Sin asignar —"
+                                selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                            />
                         </div>
                     </div>
 
@@ -252,7 +251,7 @@ export function EvolucionSection({
             )}
 
             {/* Lista de evoluciones */}
-            <div className="divide-y max-h-[500px] overflow-y-auto">
+            <div className="divide-y max-h-125 overflow-y-auto">
                 {evoluciones.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-8">Sin evoluciones registradas</p>
                 ) : (
@@ -264,7 +263,7 @@ export function EvolucionSection({
                                         {TIPO_EVOLUCION_LABEL[ev.tipo] ?? ev.tipo}
                                     </span>
                                     {ev.profesional && (
-                                        <span className="text-xs text-gray-600">Dr. {ev.profesional.nombre}</span>
+                                        <span className="text-xs text-gray-600">{nombreProfesionalParaMostrar(ev.profesional.nombre)}</span>
                                     )}
                                 </div>
                                 <span className="text-xs text-gray-400 whitespace-nowrap">{fmt(ev.fecha)}</span>

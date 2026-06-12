@@ -83,6 +83,31 @@ export function FichaIngresoClient({
             : !tienePracticasPendientes
                 ? 'No hay prácticas pendientes de autorización'
                 : ''
+    const esPracticaAmbulatoria =
+        ingreso.tipoIngresoCodigo === 'AMB' &&
+        ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
+            ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
+        )
+
+    const toDateInputValue = (value: Date | string | null | undefined) => {
+        if (!value) return ''
+        const date = new Date(value)
+        const y = date.getFullYear()
+        const m = String(date.getMonth() + 1).padStart(2, '0')
+        const d = String(date.getDate()).padStart(2, '0')
+        return `${y}-${m}-${d}`
+    }
+
+    const toDateTimeLocalInputValue = (value: Date | string | null | undefined) => {
+        if (!value) return ''
+        const date = new Date(value)
+        const y = date.getFullYear()
+        const m = String(date.getMonth() + 1).padStart(2, '0')
+        const d = String(date.getDate()).padStart(2, '0')
+        const hh = String(date.getHours()).padStart(2, '0')
+        const mm = String(date.getMinutes()).padStart(2, '0')
+        return `${y}-${m}-${d}T${hh}:${mm}`
+    }
 
     // For select fields (e.g., profesionales), you may want to fetch options here if needed
 
@@ -197,10 +222,10 @@ export function FichaIngresoClient({
                                 onClick={() => {
                                     setEditingCard('admision');
                                     setCardValues({
-                                        fechaIngreso: ingreso.fechaIngreso ? new Date(ingreso.fechaIngreso).toISOString().split('T')[0] : '',
+                                        fechaIngreso: toDateTimeLocalInputValue(ingreso.fechaIngreso),
                                         profesionalGuardiaId: ingreso.profesionalGuardiaId || '',
-                                        fechaEgreso: ingreso.fechaEgreso ? new Date(ingreso.fechaEgreso).toISOString().split('T')[0] : '',
-                                        fechaEgresoPrevista: ingreso.fechaEgresoPrevista ? new Date(ingreso.fechaEgresoPrevista).toISOString().split('T')[0] : '',
+                                        fechaEgreso: toDateInputValue(ingreso.fechaEgreso),
+                                        fechaEgresoPrevista: toDateInputValue(ingreso.fechaEgresoPrevista),
                                         profesionalTratanteId: ingreso.profesionalTratanteId || '',
                                     });
                                 }}
@@ -281,18 +306,20 @@ export function FichaIngresoClient({
                                 </dd>
                             </div>
                             {/* Egreso Previsto */}
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Egreso Previsto</dt>
-                                <dd className="text-sm text-gray-900">
-                                    <input
-                                        type="datetime-local"
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.fechaEgresoPrevista ? cardValues.fechaEgresoPrevista + (cardValues.fechaEgresoPrevista.length === 10 ? 'T00:00' : '') : ''}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, fechaEgresoPrevista: e.target.value.slice(0, 16) }))}
-                                        disabled={cardLoading}
-                                    />
-                                </dd>
-                            </div>
+                            {!esPracticaAmbulatoria && (
+                                <div>
+                                    <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Egreso Previsto</dt>
+                                    <dd className="text-sm text-gray-900">
+                                        <input
+                                            type="datetime-local"
+                                            className="border rounded px-2 py-1 w-full"
+                                            value={cardValues.fechaEgresoPrevista ? cardValues.fechaEgresoPrevista + (cardValues.fechaEgresoPrevista.length === 10 ? 'T00:00' : '') : ''}
+                                            onChange={e => setCardValues((v: any) => ({ ...v, fechaEgresoPrevista: e.target.value.slice(0, 16) }))}
+                                            disabled={cardLoading}
+                                        />
+                                    </dd>
+                                </div>
+                            )}
                             {/* Profesional Tratante */}
                             <div>
                                 <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Profesional Tratante</dt>
@@ -329,7 +356,9 @@ export function FichaIngresoClient({
                             <DataItem label="Fecha de Ingreso" value={formatearFechaHora(ingreso.fechaIngreso)} />
                             <DataItem label="Profesional Guardia" value={ingreso.profesionalGuardia?.nombre} />
                             <DataItem label="Fecha de Egreso" value={formatearFecha(ingreso.fechaEgreso)} />
-                            <DataItem label="Egreso Previsto" value={formatearFecha(ingreso.fechaEgresoPrevista)} />
+                            {!esPracticaAmbulatoria && (
+                                <DataItem label="Egreso Previsto" value={formatearFecha(ingreso.fechaEgresoPrevista)} />
+                            )}
                             <DataItem label="Profesional Tratante" value={profesionalTratanteNombre} />
                             <DataItem
                                 label="Matrícula Tratante"
@@ -751,14 +780,33 @@ export function FichaIngresoClient({
                                                             {formatearFechaHora(p.fecha)}
                                                         </td>
                                                         <td className="py-2 text-emerald-900">
-                                                            {formatearNumeroOrden(
-                                                                p.ordenPractica[0]!.puestoNumero,
-                                                                p.ordenPractica[0]!.ordenNumero,
-                                                                p.ordenPractica[0]!.item
-                                                            )}
-                                                            {p.ordenPractica[0]!.numeroAutorizacion
-                                                                ? ` · ${p.ordenPractica[0]!.numeroAutorizacion}`
-                                                                : ' · falta N° de autorización'}
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {[...p.ordenPractica]
+                                                                    .sort((a, b) => {
+                                                                        if (a.puestoNumero !== b.puestoNumero) {
+                                                                            return a.puestoNumero - b.puestoNumero
+                                                                        }
+                                                                        if (a.ordenNumero !== b.ordenNumero) {
+                                                                            return a.ordenNumero - b.ordenNumero
+                                                                        }
+                                                                        return a.item - b.item
+                                                                    })
+                                                                    .map((orden) => (
+                                                                        <span
+                                                                            key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
+                                                                            className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900"
+                                                                        >
+                                                                            {formatearNumeroOrden(
+                                                                                orden.puestoNumero,
+                                                                                orden.ordenNumero,
+                                                                                orden.item
+                                                                            )}
+                                                                            {orden.numeroAutorizacion
+                                                                                ? ` · ${orden.numeroAutorizacion}`
+                                                                                : ' · falta N° de autorización'}
+                                                                        </span>
+                                                                    ))}
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}

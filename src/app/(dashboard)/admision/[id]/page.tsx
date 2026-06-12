@@ -28,8 +28,13 @@ export default async function FichaIngresoPage({ params }: PageProps) {
   let ingreso
   try {
     ingreso = await obtenerIngreso(ingresoId, usuario.clerkId)
-  } catch {
-    notFound()
+  } catch (error) {
+    if (error instanceof Error && /no encontrado/i.test(error.message)) {
+      notFound()
+    }
+
+    console.error(`[admision] Error cargando ingreso ${ingresoId}`, error)
+    throw error
   }
 
   const puedeModificar = tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')

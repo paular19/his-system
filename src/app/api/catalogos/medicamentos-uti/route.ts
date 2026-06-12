@@ -1,17 +1,26 @@
 import { type NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getUsuarioSesion } from '@/lib/auth'
+import { getUsuarioSesionLectura } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { apiForbidden, apiOk, manejarErrorApi } from '@/lib/utils/response'
+import NodeCache from 'node-cache'
+
+type CatalogoItem = { id: number; nombre: string }
+
+const cache = new NodeCache({ stdTTL: 90 })
 
 function sanitizeQuery(value: string): string {
     return value.trim().slice(0, 100)
 }
 
+function buildCacheKey(q: string, take: number): string {
+    return `catalogo-medicamentos-uti:${q.toLowerCase()}:${take}`
+}
+
 // GET /api/catalogos/medicamentos-uti?q=ibup
 export async function GET(request: NextRequest) {
     try {
-        const usuario = await getUsuarioSesion()
+        const usuario = await getUsuarioSesionLectura()
 
         const puedeConsultar =
             tienePermiso(usuario.rol, 'ADMISION', 'LEER') ||
@@ -31,40 +40,49 @@ export async function GET(request: NextRequest) {
             return apiOk([])
         }
 
-        const dataCatalogo = await prisma.catalogoMedicamentoUti.findMany({
-            where: {
-                estado: 'A',
-                nombre: {
-                    contains: q,
-                    mode: 'insensitive',
-                },
-            },
-            orderBy: { nombre: 'asc' },
-            take,
-            select: { id: true, nombre: true },
-        })
+        const cacheKey = buildCacheKey(q, take)
+        const cached = cache.get<CatalogoItem[]>(cacheKey)
+        if (cached) {
+            return apiOk(cached)
+        }
 
-        const fallbackUsados = await prisma.medicacionIngreso.findMany({
-            where: {
-                nombre: {
-                    contains: q,
-                    mode: 'insensitive',
+        const [dataCatalogo, fallbackUsados] = await Promise.all([
+            prisma.catalogoMedicamentoUti.findMany({
+                where: {
+                    estado: 'A',
+                    nombre: {
+                        contains: q,
+                        mode: 'insensitive',
+                    },
                 },
-            },
-            orderBy: { nombre: 'asc' },
-            take,
-            select: { nombre: true },
-            distinct: ['nombre'],
-        })
+                orderBy: { nombre: 'asc' },
+                take,
+                select: { id: true, nombre: true },
+            }),
+            prisma.medicacionIngreso.findMany({
+                where: {
+                    nombre: {
+                        contains: q,
+                        mode: 'insensitive',
+                    },
+                },
+                orderBy: { nombre: 'asc' },
+                take,
+                select: { nombre: true },
+                distinct: ['nombre'],
+            }),
+        ])
 
         const merged = new Map<number, { id: number; nombre: string }>()
         for (const item of dataCatalogo) {
             merged.set(item.id, item)
         }
 
+        const nombresCatalogo = new Set(dataCatalogo.map((item) => item.nombre.toLowerCase()))
+
         const syntheticBase = 2_000_000
         fallbackUsados.forEach((item, index) => {
-            const alreadyPresent = dataCatalogo.some((c) => c.nombre.toLowerCase() === item.nombre.toLowerCase())
+            const alreadyPresent = nombresCatalogo.has(item.nombre.toLowerCase())
             if (!alreadyPresent) {
                 merged.set(syntheticBase + index, { id: syntheticBase + index, nombre: item.nombre })
             }
@@ -73,6 +91,8 @@ export async function GET(request: NextRequest) {
         const data = Array.from(merged.values())
             .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
             .slice(0, take)
+
+        cache.set(cacheKey, data)
 
         return apiOk(data)
     } catch (err) {

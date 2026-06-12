@@ -12,6 +12,7 @@ import {
     seleccionPorDefecto,
     descripcionComponentes,
 } from '@/components/ui/componente-selector'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { resumenDiferenciales } from '@/modules/facturacion/diferenciales'
 
 interface NomencladorItem {
@@ -268,6 +269,20 @@ type EditState = {
     matriculaAnestesista: string
 }
 
+type AutorizacionVinculada = NonNullable<PrestacionFacturableItem['autorizacionesVinculadas']>[number]
+
+function keyAutorizacionVinculada(aut: AutorizacionVinculada): string {
+    return `${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`
+}
+
+function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Record<string, string> {
+    const state: Record<string, string> = {}
+    for (const aut of p.autorizacionesVinculadas ?? []) {
+        state[keyAutorizacionVinculada(aut)] = aut.numeroAutorizacion ?? ''
+    }
+    return state
+}
+
 const MATRICULA_AYUDANTE_DEFAULT = 995
 
 function incluyeSoloAyudante(incluyeCodigo: string | null | undefined): boolean {
@@ -368,24 +383,16 @@ export function FacturacionPanel() {
     const npDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const [nuevaMedicacionNombre, setNuevaMedicacionNombre] = useState('')
-    const [nuevaMedicacionDosis, setNuevaMedicacionDosis] = useState('')
-    const [nuevaMedicacionVia, setNuevaMedicacionVia] = useState('')
-    const [nuevaMedicacionFrecuencia, setNuevaMedicacionFrecuencia] = useState('')
     const [nuevaMedicacionFecha, setNuevaMedicacionFecha] = useState(() => toDateInput(new Date()))
-    const [nuevaMedicacionObservaciones, setNuevaMedicacionObservaciones] = useState('')
-    const [buscandoMedicamentoCatalogo, setBuscandoMedicamentoCatalogo] = useState(false)
-    const [resultadosMedicamentoCatalogo, setResultadosMedicamentoCatalogo] = useState<Array<{ id: number; nombre: string }>>([])
-    const medicamentoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const [nuevoDescartableNombre, setNuevoDescartableNombre] = useState('')
-    const [nuevoDescartableCantidad, setNuevoDescartableCantidad] = useState('1')
-    const [nuevoDescartableObservaciones, setNuevoDescartableObservaciones] = useState('')
-    const [buscandoDescartableCatalogo, setBuscandoDescartableCatalogo] = useState(false)
-    const [resultadosDescartableCatalogo, setResultadosDescartableCatalogo] = useState<Array<{ id: number; nombre: string }>>([])
-    const descartableDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [opcionesInsumosUti, setOpcionesInsumosUti] = useState<Array<{ id: number; nombre: string }>>([])
+    const [cargandoInsumosUti, setCargandoInsumosUti] = useState(false)
 
     const [editRows, setEditRows] = useState<Record<string, EditState>>({})
+    const [editAutorizacionesVinculadas, setEditAutorizacionesVinculadas] = useState<Record<string, Record<string, string>>>({})
     const [rowEditMode, setRowEditMode] = useState<Record<string, boolean>>({})
+    const [detallePrestacionesExpand, setDetallePrestacionesExpand] = useState<Record<string, boolean>>({})
     const [guardandoRowUid, setGuardandoRowUid] = useState<string | null>(null)
     const [ordenesExpand, setOrdenesExpand] = useState<Record<string, boolean>>({})
     const [anulando, setAnulando] = useState<string | null>(null)
@@ -403,53 +410,28 @@ export function FacturacionPanel() {
         return () => clearTimeout(t)
     }, [mensaje])
 
-    const buscarMedicamentoCatalogo = (value: string) => {
-        setNuevaMedicacionNombre(value)
-        if (medicamentoDebounceRef.current) clearTimeout(medicamentoDebounceRef.current)
+    useEffect(() => {
+        let activo = true
 
-        const query = value.trim()
-        if (query.length < 2) {
-            setResultadosMedicamentoCatalogo([])
-            return
+        const cargarInsumos = async () => {
+            setCargandoInsumosUti(true)
+            try {
+                const res = await fetch('/api/catalogos/insumos-uti?limit=5000')
+                const json = await res.json()
+                if (!activo) return
+                setOpcionesInsumosUti(Array.isArray(json.data) ? json.data : [])
+            } catch {
+                if (activo) setOpcionesInsumosUti([])
+            } finally {
+                if (activo) setCargandoInsumosUti(false)
+            }
         }
 
-        medicamentoDebounceRef.current = setTimeout(async () => {
-            setBuscandoMedicamentoCatalogo(true)
-            try {
-                const res = await fetch(`/api/catalogos/medicamentos-uti?q=${encodeURIComponent(query)}&limit=12`)
-                const json = await res.json()
-                setResultadosMedicamentoCatalogo(Array.isArray(json.data) ? json.data : [])
-            } catch {
-                setResultadosMedicamentoCatalogo([])
-            } finally {
-                setBuscandoMedicamentoCatalogo(false)
-            }
-        }, 300)
-    }
-
-    const buscarDescartableCatalogo = (value: string) => {
-        setNuevoDescartableNombre(value)
-        if (descartableDebounceRef.current) clearTimeout(descartableDebounceRef.current)
-
-        const query = value.trim()
-        if (query.length < 2) {
-            setResultadosDescartableCatalogo([])
-            return
+        void cargarInsumos()
+        return () => {
+            activo = false
         }
-
-        descartableDebounceRef.current = setTimeout(async () => {
-            setBuscandoDescartableCatalogo(true)
-            try {
-                const res = await fetch(`/api/catalogos/descartables-uti?q=${encodeURIComponent(query)}&limit=12`)
-                const json = await res.json()
-                setResultadosDescartableCatalogo(Array.isArray(json.data) ? json.data : [])
-            } catch {
-                setResultadosDescartableCatalogo([])
-            } finally {
-                setBuscandoDescartableCatalogo(false)
-            }
-        }, 300)
-    }
+    }, [])
 
     const prestacionesSeleccionables = useMemo(() => {
         if (!contexto) return []
@@ -644,9 +626,13 @@ export function FacturacionPanel() {
 
     function initEditRows(data: FacturacionContexto) {
         const state: Record<string, EditState> = {}
+        const authState: Record<string, Record<string, string>> = {}
         const selMap: Record<string, ComponenteSeleccion> = {}
         for (const p of data.prestaciones) {
             state[p.uid] = buildEditState(p)
+            if (p.tipo === 'PRACTICA' && !p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
+                authState[p.uid] = buildAutorizacionesVinculadasEditState(p)
+            }
             if (p.tipo === 'PRACTICA') {
                 const seleccionDesdeIncluye = parseIncluyeCodigoSeleccion(p.incluyeCodigo)
                 const desgloseSelector = obtenerDesgloseSelector(p)
@@ -658,6 +644,7 @@ export function FacturacionPanel() {
             }
         }
         setEditRows(state)
+        setEditAutorizacionesVinculadas(authState)
         setCompSeleccion(selMap)
     }
 
@@ -707,6 +694,7 @@ export function FacturacionPanel() {
             setSeleccion({})
             setOrdenesExpand({})
             setRowEditMode({})
+            setDetallePrestacionesExpand({})
             setEditandoFicha(false)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al cargar contexto')
@@ -857,11 +845,11 @@ export function FacturacionPanel() {
                 body: JSON.stringify({
                     ingresoId: contexto.ingreso.id,
                     nombre: nuevaMedicacionNombre.trim(),
-                    dosis: nuevaMedicacionDosis.trim() || null,
-                    viaAdministracion: nuevaMedicacionVia.trim() || null,
-                    frecuencia: nuevaMedicacionFrecuencia.trim() || null,
+                    dosis: null,
+                    viaAdministracion: null,
+                    frecuencia: null,
                     fechaInicio: new Date(nuevaMedicacionFecha).toISOString(),
-                    observaciones: nuevaMedicacionObservaciones.trim() || null,
+                    observaciones: null,
                 }),
             })
 
@@ -869,11 +857,6 @@ export function FacturacionPanel() {
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo crear la medicacion')
 
             setNuevaMedicacionNombre('')
-            setNuevaMedicacionDosis('')
-            setNuevaMedicacionVia('')
-            setNuevaMedicacionFrecuencia('')
-            setNuevaMedicacionObservaciones('')
-            setResultadosMedicamentoCatalogo([])
             setExpandNuevaMedicacion(false)
             setMensaje('Medicación agregada')
             await cargarContexto(contexto.ingreso.id)
@@ -896,8 +879,8 @@ export function FacturacionPanel() {
                 body: JSON.stringify({
                     ingresoId: contexto.ingreso.id,
                     nombre: nuevoDescartableNombre.trim(),
-                    cantidad: Math.max(1, Number.parseInt(nuevoDescartableCantidad, 10) || 1),
-                    observaciones: nuevoDescartableObservaciones.trim() || null,
+                    cantidad: 1,
+                    observaciones: null,
                 }),
             })
 
@@ -905,9 +888,6 @@ export function FacturacionPanel() {
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo crear el descartable')
 
             setNuevoDescartableNombre('')
-            setNuevoDescartableCantidad('1')
-            setNuevoDescartableObservaciones('')
-            setResultadosDescartableCatalogo([])
             setExpandNuevoDescartable(false)
             setMensaje('Descartable agregado')
             await cargarContexto(contexto.ingreso.id)
@@ -1000,11 +980,30 @@ export function FacturacionPanel() {
 
     function habilitarEdicionFila(p: PrestacionFacturableItem) {
         setEditRows((prev) => ({ ...prev, [p.uid]: prev[p.uid] ?? buildEditState(p) }))
+        if (p.tipo === 'PRACTICA' && !p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
+            setEditAutorizacionesVinculadas((prev) => ({
+                ...prev,
+                [p.uid]: prev[p.uid] ?? buildAutorizacionesVinculadasEditState(p),
+            }))
+        }
         setRowEditMode((prev) => ({ ...prev, [p.uid]: true }))
+        setDetallePrestacionesExpand((prev) => ({ ...prev, [p.uid]: true }))
     }
 
     function cancelarEdicionFila(p: PrestacionFacturableItem) {
         setEditRows((prev) => ({ ...prev, [p.uid]: buildEditState(p) }))
+
+        if (p.tipo === 'PRACTICA') {
+            setEditAutorizacionesVinculadas((prev) => {
+                const next = { ...prev }
+                if (!p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
+                    next[p.uid] = buildAutorizacionesVinculadasEditState(p)
+                } else {
+                    delete next[p.uid]
+                }
+                return next
+            })
+        }
 
         if (p.tipo === 'PRACTICA') {
             const seleccionDesdeIncluye = parseIncluyeCodigoSeleccion(p.incluyeCodigo)
@@ -1041,6 +1040,48 @@ export function FacturacionPanel() {
         setGuardandoRowUid(p.uid)
         setError(null)
         try {
+            let numeroAutorizacionPractica = draft.numeroAutorizacion || null
+
+            if (p.tipo === 'PRACTICA' && !p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
+                const draftPorOrden = editAutorizacionesVinculadas[p.uid] ?? buildAutorizacionesVinculadasEditState(p)
+                const updates = p.autorizacionesVinculadas!.map((aut) => {
+                    const key = keyAutorizacionVinculada(aut)
+                    return {
+                        ...aut,
+                        numeroAutorizacion: (draftPorOrden[key] ?? aut.numeroAutorizacion ?? '').trim() || null,
+                    }
+                })
+
+                await Promise.all(
+                    updates.map(async (aut) => {
+                        const res = await fetch('/api/facturacion/autorizaciones', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                tipo: 'ORDEN_ITEM' as const,
+                                puestoNumero: aut.ordenPuestoNumero,
+                                ordenNumero: aut.ordenNumero,
+                                item: aut.ordenItem,
+                                numeroAutorizacion: aut.numeroAutorizacion,
+                            }),
+                        })
+
+                        const json = (await res.json()) as ApiResponse<{ ok: boolean }>
+                        if (!res.ok || !json.ok) {
+                            throw new Error(
+                                json.error ??
+                                `No se pudo guardar autorización para ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} item ${aut.ordenItem}`
+                            )
+                        }
+                    })
+                )
+
+                if (!tieneNumeroAutorizacionValido(numeroAutorizacionPractica)) {
+                    numeroAutorizacionPractica =
+                        updates.find((aut) => tieneNumeroAutorizacionValido(aut.numeroAutorizacion))?.numeroAutorizacion ?? null
+                }
+            }
+
             const usaMatriculaAyudante =
                 incluyeSoloAyudante(p.incluyeCodigo) ||
                 (!p.incluyeCodigo && descripcionEsAyudante(draft.descripcion || p.descripcion))
@@ -1049,7 +1090,10 @@ export function FacturacionPanel() {
                 codigoPractica: (draft.codigoPractica || p.codigoPractica || '').trim(),
                 descripcionPractica: draft.descripcion,
                 cantidad: Number(draft.cantidad || 1),
-                numeroAutorizacion: draft.numeroAutorizacion || null,
+                numeroAutorizacion:
+                    p.tipo === 'PRACTICA'
+                        ? numeroAutorizacionPractica
+                        : (draft.numeroAutorizacion || null),
                 importeTotal: Number(draft.importeTotal || 0),
                 matriculaProfesional: null,
                 matriculaEspecialista: usaMatriculaAyudante
@@ -1562,36 +1606,21 @@ export function FacturacionPanel() {
                                     <button onClick={() => setExpandNuevaMedicacion((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50"><span className="inline-flex items-center gap-2"><Plus className="h-4 w-4" /> Agregar nueva medicación</span>{expandNuevaMedicacion ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>
                                     {expandNuevaMedicacion && (
                                         <>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div className="col-span-2 relative">
-                                                    <input value={nuevaMedicacionNombre} onChange={(e) => buscarMedicamentoCatalogo(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm w-full" placeholder="Medicamento" />
-                                                    {resultadosMedicamentoCatalogo.length > 0 && (
-                                                        <div className="absolute z-20 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
-                                                            {resultadosMedicamentoCatalogo.map((m) => (
-                                                                <button
-                                                                    key={m.id}
-                                                                    type="button"
-                                                                    onMouseDown={(e) => e.preventDefault()}
-                                                                    onClick={() => {
-                                                                        setNuevaMedicacionNombre(m.nombre)
-                                                                        setResultadosMedicamentoCatalogo([])
-                                                                    }}
-                                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                                                                >
-                                                                    {m.nombre}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    {buscandoMedicamentoCatalogo && (
-                                                        <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
-                                                    )}
+                                            <div className="grid grid-cols-1 gap-2">
+                                                <div>
+                                                    <select
+                                                        value={nuevaMedicacionNombre}
+                                                        onChange={(e) => setNuevaMedicacionNombre(e.target.value)}
+                                                        className="rounded-md border border-gray-300 px-2 py-2 text-sm w-full bg-white"
+                                                    >
+                                                        <option value="">-- Seleccionar de lista unificada --</option>
+                                                        {opcionesInsumosUti.map((item) => (
+                                                            <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                                                        ))}
+                                                    </select>
+                                                    {cargandoInsumosUti && <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>}
                                                 </div>
-                                                <input value={nuevaMedicacionDosis} onChange={(e) => setNuevaMedicacionDosis(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Dosis" />
-                                                <input value={nuevaMedicacionVia} onChange={(e) => setNuevaMedicacionVia(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Vía" />
-                                                <input value={nuevaMedicacionFrecuencia} onChange={(e) => setNuevaMedicacionFrecuencia(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Frecuencia" />
                                                 <input type="datetime-local" value={nuevaMedicacionFecha} onChange={(e) => setNuevaMedicacionFecha(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" />
-                                                <input value={nuevaMedicacionObservaciones} onChange={(e) => setNuevaMedicacionObservaciones(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm col-span-2" placeholder="Observaciones" />
                                             </div>
                                             <button onClick={crearMedicacion} disabled={guardandoMedicacion} className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoMedicacion ? 'Guardando...' : 'Guardar medicación'}</button>
                                         </>
@@ -1602,33 +1631,20 @@ export function FacturacionPanel() {
                                     <button onClick={() => setExpandNuevoDescartable((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50"><span className="inline-flex items-center gap-2"><Plus className="h-4 w-4" /> Agregar descartable</span>{expandNuevoDescartable ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>
                                     {expandNuevoDescartable && (
                                         <>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div className="col-span-2 relative">
-                                                    <input value={nuevoDescartableNombre} onChange={(e) => buscarDescartableCatalogo(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm w-full" placeholder="Descartable" />
-                                                    {resultadosDescartableCatalogo.length > 0 && (
-                                                        <div className="absolute z-20 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
-                                                            {resultadosDescartableCatalogo.map((d) => (
-                                                                <button
-                                                                    key={d.id}
-                                                                    type="button"
-                                                                    onMouseDown={(e) => e.preventDefault()}
-                                                                    onClick={() => {
-                                                                        setNuevoDescartableNombre(d.nombre)
-                                                                        setResultadosDescartableCatalogo([])
-                                                                    }}
-                                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                                                                >
-                                                                    {d.nombre}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    {buscandoDescartableCatalogo && (
-                                                        <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
-                                                    )}
+                                            <div className="grid grid-cols-1 gap-2">
+                                                <div>
+                                                    <select
+                                                        value={nuevoDescartableNombre}
+                                                        onChange={(e) => setNuevoDescartableNombre(e.target.value)}
+                                                        className="rounded-md border border-gray-300 px-2 py-2 text-sm w-full bg-white"
+                                                    >
+                                                        <option value="">-- Seleccionar de lista unificada --</option>
+                                                        {opcionesInsumosUti.map((item) => (
+                                                            <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                                                        ))}
+                                                    </select>
+                                                    {cargandoInsumosUti && <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>}
                                                 </div>
-                                                <input type="number" min={1} value={nuevoDescartableCantidad} onChange={(e) => setNuevoDescartableCantidad(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Cantidad" />
-                                                <input value={nuevoDescartableObservaciones} onChange={(e) => setNuevoDescartableObservaciones(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Observaciones" />
                                             </div>
                                             <button onClick={crearDescartable} disabled={guardandoDescartable} className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoDescartable ? 'Guardando...' : 'Guardar descartable'}</button>
                                         </>
@@ -1647,27 +1663,40 @@ export function FacturacionPanel() {
                                     </div>
                                 </div>
 
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
+                                <div className="overflow-hidden">
+                                    <table className="w-full table-fixed text-sm">
                                         <thead>
                                             <tr className="border-b bg-white text-left">
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Sel</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Fecha</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Código</th>
+                                                <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">Sel</th>
+                                                <th className="w-32 px-3 py-2 text-xs font-medium text-gray-500">Fecha</th>
+                                                <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Código</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Descripción</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Cantidad</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Nro autorización</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Monto</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Diferencial aplicado</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Matrículas</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Importe total</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Acción</th>
+                                                <th className="w-16 px-3 py-2 text-xs font-medium text-gray-500">Cant</th>
+                                                <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Importe</th>
+                                                <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">Acción</th>
+                                                <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Detalle</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
                                             {prestacionesNoOrdenadas.map((p) => {
                                                 const draft = editRows[p.uid] ?? buildEditState(p)
                                                 const filaEnEdicion = Boolean(rowEditMode[p.uid])
+                                                const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
+                                                const autorizacionesVinculadasOrdenadas =
+                                                    p.tipo === 'PRACTICA' && !p.facturada
+                                                        ? [...(p.autorizacionesVinculadas ?? [])].sort((a, b) => {
+                                                            if (a.ordenPuestoNumero !== b.ordenPuestoNumero) {
+                                                                return a.ordenPuestoNumero - b.ordenPuestoNumero
+                                                            }
+                                                            if (a.ordenNumero !== b.ordenNumero) {
+                                                                return a.ordenNumero - b.ordenNumero
+                                                            }
+                                                            return a.ordenItem - b.ordenItem
+                                                        })
+                                                        : []
+                                                const tieneAutorizacionesVinculadas = autorizacionesVinculadasOrdenadas.length > 0
+                                                const draftAutorizacionesVinculadas =
+                                                    editAutorizacionesVinculadas[p.uid] ?? buildAutorizacionesVinculadasEditState(p)
                                                 const desgloseSelector = obtenerDesgloseSelector(p)
                                                 const seleccionable =
                                                     p.tipo === 'PRACTICA' &&
@@ -1675,9 +1704,7 @@ export function FacturacionPanel() {
                                                     Boolean(p.codigoPractica && p.convenioId !== null) &&
                                                     tieneNumeroAutorizacionValido(p.numeroAutorizacion)
                                                 const yaFacturada = p.tipo === 'PRACTICA' && p.facturada
-                                                // Mostrar selector de componentes si: es práctica, no está facturada y tiene desglose
                                                 const tieneComponentes = p.tipo === 'PRACTICA' && !p.facturada && desgloseSelector != null && tieneDesglose(desgloseSelector)
-                                                // NUEVO: Siempre permitir seleccionar componentes para prácticas pendientes (incluso sin desglose del nomenclador)
                                                 const mostrarSelectorComponentes = p.tipo === 'PRACTICA' && !p.facturada
                                                 const selComp = tieneComponentes
                                                     ? (compSeleccion[p.uid] ?? seleccionPorDefecto(desgloseSelector!))
@@ -1690,10 +1717,15 @@ export function FacturacionPanel() {
                                                     diferencialesActivos.push('Secundaria con diferencial')
                                                 }
                                                 const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
+                                                const fechaDraft = draft.fecha ? new Date(draft.fecha) : null
+                                                const fechaResumen = fechaDraft && !Number.isNaN(fechaDraft.getTime())
+                                                    ? fechaDraft.toLocaleString('es-AR')
+                                                    : '—'
+                                                const importeResumen = Number.parseFloat(draft.importeTotal)
                                                 return (
                                                     <Fragment key={p.uid}>
                                                         <tr className={yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
-                                                            <td className="px-3 py-2">
+                                                            <td className="px-3 py-2 align-top">
                                                                 {yaFacturada ? (
                                                                     <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>
                                                                 ) : seleccionable ? (
@@ -1706,7 +1738,7 @@ export function FacturacionPanel() {
                                                                         <input type="checkbox" checked={Boolean(seleccion[p.uid])} onChange={(e) => setSeleccion((prev) => ({ ...prev, [p.uid]: e.target.checked }))} />
                                                                     </div>
                                                                 ) : (
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className="flex flex-wrap items-center gap-2">
                                                                         {p.esPracticaCirugia && (
                                                                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800" title={diferencialesActivos.join(' · ') || 'Práctica vinculada a cirugía'}>
                                                                                 Cirugía
@@ -1716,89 +1748,25 @@ export function FacturacionPanel() {
                                                                     </div>
                                                                 )}
                                                             </td>
-                                                            <td className="px-3 py-2"><input type="datetime-local" value={draft.fecha} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-44 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                            <td className="px-3 py-2"><input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-24 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                            <td className="px-3 py-2"><input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-72 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                            <td className="px-3 py-2"><input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-16 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                            <td className="px-3 py-2"><input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="rounded border border-gray-300 px-2 py-1 text-xs w-32 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                            <td className="px-3 py-2 text-xs text-gray-600">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</td>
-                                                            <td className="px-3 py-2 text-xs">
-                                                                {etiquetasDiferencial.length > 0 ? (
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {etiquetasDiferencial.map((etq) => (
-                                                                            <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
-                                                                        ))}
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="text-gray-400">—</span>
-                                                                )}
+                                                            <td className="px-3 py-2 align-top">
+                                                                <div className="text-xs text-gray-700">{fechaResumen}</div>
                                                             </td>
-                                                            <td className="px-3 py-2">
-                                                                <div className="grid gap-1">
-                                                                    <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                                                        <span className="w-20">Ayudante</span>
-                                                                        <select
-                                                                            value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
-                                                                            onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', e.target.value)}
-                                                                            disabled={!filaEnEdicion}
-                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
-                                                                        >
-                                                                            <option value="">-- Seleccionar --</option>
-                                                                            {profesionalesConMatricula.map((profesional) => (
-                                                                                <option key={profesional.id} value={String(profesional.id)}>
-                                                                                    {profesional.nombre} · MP {profesional.matricula}
-                                                                                </option>
-                                                                            ))}
-                                                                        </select>
-                                                                    </label>
-                                                                    <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                                                        <span className="w-20">Especialista</span>
-                                                                        <select
-                                                                            value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
-                                                                            onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaEspecialista', e.target.value)}
-                                                                            disabled={!filaEnEdicion}
-                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
-                                                                        >
-                                                                            <option value="">-- Seleccionar --</option>
-                                                                            {profesionalesConMatricula.map((profesional) => (
-                                                                                <option key={profesional.id} value={String(profesional.id)}>
-                                                                                    {profesional.nombre} · MP {profesional.matricula}
-                                                                                </option>
-                                                                            ))}
-                                                                        </select>
-                                                                    </label>
-                                                                    <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                                                        <span className="w-20">Anestesista</span>
-                                                                        <select
-                                                                            value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
-                                                                            onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', e.target.value)}
-                                                                            disabled={!filaEnEdicion}
-                                                                            className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
-                                                                        >
-                                                                            <option value="">-- Seleccionar --</option>
-                                                                            {profesionalesConMatricula.map((profesional) => (
-                                                                                <option key={profesional.id} value={String(profesional.id)}>
-                                                                                    {profesional.nombre} · MP {profesional.matricula}
-                                                                                </option>
-                                                                            ))}
-                                                                        </select>
-                                                                    </label>
-                                                                    {diferencialesActivos.length > 0 && (
-                                                                        <div className="flex flex-wrap gap-1 pt-0.5">
-                                                                            {diferencialesActivos.map((texto) => (
-                                                                                <span key={texto} className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                                                                                    {texto}
-                                                                                </span>
-                                                                            ))}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
+                                                            <td className="px-3 py-2 align-top">
+                                                                <span className="font-mono text-xs text-gray-700">{draft.codigoPractica || '—'}</span>
                                                             </td>
-                                                            <td className="px-3 py-2"><input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-24 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                            <td className="px-3 py-2">
+                                                            <td className="px-3 py-2 align-top">
+                                                                <div className="truncate text-xs text-gray-700" title={draft.descripcion || ''}>{draft.descripcion || '—'}</div>
+                                                            </td>
+                                                            <td className="px-3 py-2 align-top">
+                                                                <span className="text-xs text-gray-700">{draft.cantidad || '—'}</span>
+                                                            </td>
+                                                            <td className="px-3 py-2 align-top">
+                                                                <span className="text-xs font-semibold text-gray-800">{Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}</span>
+                                                            </td>
+                                                            <td className="px-3 py-2 align-top">
                                                                 {p.tipo === 'PRACTICA' || p.tipo === 'ORDEN_ITEM' ? (
                                                                     filaEnEdicion ? (
-                                                                        <div className="flex items-center gap-1">
+                                                                        <div className="flex flex-col gap-1">
                                                                             <button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button>
                                                                             <button onClick={() => cancelarEdicionFila(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cancelar</button>
                                                                         </div>
@@ -1809,32 +1777,229 @@ export function FacturacionPanel() {
                                                                     <span className="text-xs text-gray-400">No aplica</span>
                                                                 )}
                                                             </td>
+                                                            <td className="px-3 py-2 align-top">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setDetallePrestacionesExpand((prev) => ({ ...prev, [p.uid]: !detalleAbierto }))}
+                                                                    className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded border px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                                                >
+                                                                    {detalleAbierto ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                                    {detalleAbierto ? 'Ocultar' : 'Ver'}
+                                                                </button>
+                                                            </td>
                                                         </tr>
-                                                        {(tieneComponentes || mostrarSelectorComponentes) && selComp && (
-                                                            <tr className="bg-blue-50">
-                                                                <td colSpan={11} className="px-4 py-2">
-                                                                    <ComponenteSelector
-                                                                        valores={desgloseSelector ?? {
-                                                                            valorEspecialista: null,
-                                                                            valorAyudante: null,
-                                                                            valorAnestesista: null,
-                                                                            valorGastos: null,
-                                                                            valorTotal: p.precioUnitario ?? null,
-                                                                        }}
-                                                                        seleccion={selComp}
-                                                                        disabled={!filaEnEdicion}
-                                                                        onChange={(nuevaSeleccion) => {
-                                                                            if (!filaEnEdicion) return
-                                                                            setCompSeleccion((prev) => ({ ...prev, [p.uid]: nuevaSeleccion }))
-                                                                            if (tieneComponentes) {
-                                                                                const totalBase = calcularTotalSeleccionado(desgloseSelector!, nuevaSeleccion)
-                                                                                const cant = Number(draft.cantidad || 1)
-                                                                                const pct = contexto?.reglaFacturacion.porcentajeFacturacion ?? 100
-                                                                                const nuevoImporte = Math.round((totalBase * cant * pct / 100) * 100) / 100
-                                                                                setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: String(nuevoImporte) } }))
-                                                                            }
-                                                                        }}
-                                                                    />
+
+                                                        {detalleAbierto && (
+                                                            <tr className="bg-slate-50">
+                                                                <td colSpan={8} className="px-4 py-3">
+                                                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                                                        <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Datos de prestación</p>
+                                                                            <div className="mt-1 grid gap-2">
+                                                                                <label className="text-[11px] text-gray-600">
+                                                                                    Fecha
+                                                                                    <input
+                                                                                        type="datetime-local"
+                                                                                        value={draft.fecha}
+                                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))}
+                                                                                        disabled={!filaEnEdicion}
+                                                                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                    />
+                                                                                </label>
+                                                                                <label className="text-[11px] text-gray-600">
+                                                                                    Código
+                                                                                    <input
+                                                                                        value={draft.codigoPractica}
+                                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))}
+                                                                                        disabled={!filaEnEdicion}
+                                                                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                    />
+                                                                                </label>
+                                                                                <label className="text-[11px] text-gray-600">
+                                                                                    Descripción
+                                                                                    <input
+                                                                                        value={draft.descripcion}
+                                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))}
+                                                                                        disabled={!filaEnEdicion}
+                                                                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                    />
+                                                                                </label>
+                                                                                <div className="grid grid-cols-2 gap-2">
+                                                                                    <label className="text-[11px] text-gray-600">
+                                                                                        Cantidad
+                                                                                        <input
+                                                                                            value={draft.cantidad}
+                                                                                            onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))}
+                                                                                            disabled={!filaEnEdicion}
+                                                                                            className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                        />
+                                                                                    </label>
+                                                                                    <label className="text-[11px] text-gray-600">
+                                                                                        Importe total
+                                                                                        <input
+                                                                                            value={draft.importeTotal}
+                                                                                            onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))}
+                                                                                            disabled={!filaEnEdicion}
+                                                                                            className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                        />
+                                                                                    </label>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Autorizaciones</p>
+                                                                            <div className="mt-1 space-y-1">
+                                                                                {p.tipo === 'PRACTICA' && !p.facturada ? (
+                                                                                    tieneAutorizacionesVinculadas ? (
+                                                                                        filaEnEdicion ? (
+                                                                                            <div className="space-y-1">
+                                                                                                {autorizacionesVinculadasOrdenadas.map((aut) => {
+                                                                                                    const key = keyAutorizacionVinculada(aut)
+                                                                                                    return (
+                                                                                                        <div key={`${p.uid}:${key}`} className="flex flex-wrap items-center gap-2">
+                                                                                                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                                                                                                                {formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · Item {aut.ordenItem}{aut.incluyeCodigo ? ` [${aut.incluyeCodigo}]` : ''}
+                                                                                                            </span>
+                                                                                                            <input
+                                                                                                                value={draftAutorizacionesVinculadas[key] ?? ''}
+                                                                                                                onChange={(e) =>
+                                                                                                                    setEditAutorizacionesVinculadas((prev) => ({
+                                                                                                                        ...prev,
+                                                                                                                        [p.uid]: {
+                                                                                                                            ...(prev[p.uid] ?? draftAutorizacionesVinculadas),
+                                                                                                                            [key]: e.target.value,
+                                                                                                                        },
+                                                                                                                    }))
+                                                                                                                }
+                                                                                                                placeholder="Nro autorización"
+                                                                                                                className="w-full rounded border border-gray-300 px-2 py-1 text-xs md:w-44"
+                                                                                                            />
+                                                                                                        </div>
+                                                                                                    )
+                                                                                                })}
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <div className="flex flex-wrap gap-1">
+                                                                                                {autorizacionesVinculadasOrdenadas.map((aut) => (
+                                                                                                    <span
+                                                                                                        key={`${p.uid}:${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`}
+                                                                                                        className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800"
+                                                                                                        title={`Orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · Item ${aut.ordenItem}`}
+                                                                                                    >
+                                                                                                        {formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · {aut.numeroAutorizacion ?? 'S/A'}{aut.incluyeCodigo ? ` [${aut.incluyeCodigo}]` : ''}
+                                                                                                    </span>
+                                                                                                ))}
+                                                                                            </div>
+                                                                                        )
+                                                                                    ) : (
+                                                                                        <span className="text-[11px] text-gray-400">Sin órdenes vinculadas</span>
+                                                                                    )
+                                                                                ) : (
+                                                                                    <input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Valores y diferenciales</p>
+                                                                            <div className="mt-1 space-y-1 text-xs text-gray-700">
+                                                                                <div>Monto unitario: <span className="font-medium">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</span></div>
+                                                                                <div>
+                                                                                    {etiquetasDiferencial.length > 0 ? (
+                                                                                        <div className="flex flex-wrap gap-1">
+                                                                                            {etiquetasDiferencial.map((etq) => (
+                                                                                                <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <span className="text-gray-400">Sin diferencial aplicado</span>
+                                                                                    )}
+                                                                                </div>
+                                                                                {diferencialesActivos.length > 0 && (
+                                                                                    <div className="flex flex-wrap gap-1 pt-1">
+                                                                                        {diferencialesActivos.map((texto) => (
+                                                                                            <span key={texto} className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                                                                                                {texto}
+                                                                                            </span>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Matrículas</p>
+                                                                            <div className="mt-1 grid gap-2">
+                                                                                <label className="text-[11px] text-gray-600">
+                                                                                    Ayudante
+                                                                                    <ProfesionalSelect
+                                                                                        profesionales={profesionalesConMatricula}
+                                                                                        value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
+                                                                                        onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', nextValue)}
+                                                                                        disabled={!filaEnEdicion}
+                                                                                        placeholderOption="-- Seleccionar --"
+                                                                                        searchPlaceholder="Buscar nombre o matricula"
+                                                                                        selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                        searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                    />
+                                                                                </label>
+                                                                                <label className="text-[11px] text-gray-600">
+                                                                                    Especialista
+                                                                                    <ProfesionalSelect
+                                                                                        profesionales={profesionalesConMatricula}
+                                                                                        value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
+                                                                                        onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaEspecialista', nextValue)}
+                                                                                        disabled={!filaEnEdicion}
+                                                                                        placeholderOption="-- Seleccionar --"
+                                                                                        searchPlaceholder="Buscar nombre o matricula"
+                                                                                        selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                        searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                    />
+                                                                                </label>
+                                                                                <label className="text-[11px] text-gray-600">
+                                                                                    Anestesista
+                                                                                    <ProfesionalSelect
+                                                                                        profesionales={profesionalesConMatricula}
+                                                                                        value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
+                                                                                        onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', nextValue)}
+                                                                                        disabled={!filaEnEdicion}
+                                                                                        placeholderOption="-- Seleccionar --"
+                                                                                        searchPlaceholder="Buscar nombre o matricula"
+                                                                                        selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                        searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                    />
+                                                                                </label>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {(tieneComponentes || mostrarSelectorComponentes) && selComp && (
+                                                                        <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-2">
+                                                                            <ComponenteSelector
+                                                                                valores={desgloseSelector ?? {
+                                                                                    valorEspecialista: null,
+                                                                                    valorAyudante: null,
+                                                                                    valorAnestesista: null,
+                                                                                    valorGastos: null,
+                                                                                    valorTotal: p.precioUnitario ?? null,
+                                                                                }}
+                                                                                seleccion={selComp}
+                                                                                disabled={!filaEnEdicion}
+                                                                                onChange={(nuevaSeleccion) => {
+                                                                                    if (!filaEnEdicion) return
+                                                                                    setCompSeleccion((prev) => ({ ...prev, [p.uid]: nuevaSeleccion }))
+                                                                                    if (tieneComponentes) {
+                                                                                        const totalBase = calcularTotalSeleccionado(desgloseSelector!, nuevaSeleccion)
+                                                                                        const cant = Number(draft.cantidad || 1)
+                                                                                        const pct = contexto?.reglaFacturacion.porcentajeFacturacion ?? 100
+                                                                                        const nuevoImporte = Math.round((totalBase * cant * pct / 100) * 100) / 100
+                                                                                        setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: String(nuevoImporte) } }))
+                                                                                    }
+                                                                                }}
+                                                                            />
+                                                                        </div>
+                                                                    )}
                                                                 </td>
                                                             </tr>
                                                         )}
@@ -1844,132 +2009,175 @@ export function FacturacionPanel() {
 
                                             {ordenesConItems.map((orden) => {
                                                 const expand = ordenesExpand[orden.key] ?? true
-                                                const etiquetasDiferencialOrden = Array.from(
-                                                    new Set(
-                                                        orden.items.flatMap((item) => etiquetasCamposDiferencial(item.diferenciales))
-                                                    )
-                                                )
                                                 return (
                                                     <Fragment key={orden.key}>
                                                         <tr key={`head-${orden.key}`} className="bg-green-50">
-                                                            <td className="px-3 py-2" colSpan={6}><button onClick={() => setOrdenesExpand((prev) => ({ ...prev, [orden.key]: !expand }))} className="inline-flex items-center gap-2 text-xs font-semibold text-green-800">{expand ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}<span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>{orden.items.length} prácticas</button></td>
-                                                            <td className="px-3 py-2 text-xs">—</td>
-                                                            <td className="px-3 py-2 text-xs">
-                                                                {etiquetasDiferencialOrden.length > 0 ? (
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {etiquetasDiferencialOrden.map((etq) => (
-                                                                            <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
-                                                                        ))}
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="text-gray-400">—</span>
-                                                                )}
+                                                            <td className="px-3 py-2" colSpan={4}>
+                                                                <button onClick={() => setOrdenesExpand((prev) => ({ ...prev, [orden.key]: !expand }))} className="inline-flex items-center gap-2 text-xs font-semibold text-green-800">
+                                                                    {expand ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>
+                                                                    Orden {formatOrderNumber(orden.puesto, orden.numero)}
+                                                                </button>
                                                             </td>
-                                                            <td className="px-3 py-2 text-xs">
-                                                                <div className="leading-tight">
-                                                                    <div>Ayudante: {orden.matriculaAyudante ?? '—'}</div>
-                                                                    <div>Especialista: {orden.matriculaEspecialista ?? '—'}</div>
-                                                                    <div>Anestesista: {orden.matriculaAnestesista ?? '—'}</div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-3 py-2 text-xs font-semibold">{formatCurrency(orden.total)}</td>
+                                                            <td className="px-3 py-2 text-xs text-gray-700">{orden.items.length} ítems</td>
+                                                            <td className="px-3 py-2 text-xs font-semibold text-gray-800">{formatCurrency(orden.total)}</td>
                                                             <td className="px-3 py-2"><button onClick={() => anularOrden(orden.puesto, orden.numero)} disabled={anulando === orden.key} className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"><XCircle className="h-3.5 w-3.5" />{anulando === orden.key ? 'Anulando...' : 'Anular'}</button></td>
+                                                            <td className="px-3 py-2 text-xs text-gray-500">Facturada</td>
                                                         </tr>
+
                                                         {expand && orden.items.map((p) => {
                                                             const draft = editRows[p.uid] ?? buildEditState(p)
                                                             const filaEnEdicion = Boolean(rowEditMode[p.uid])
+                                                            const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
                                                             const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
+                                                            const fechaDraft = draft.fecha ? new Date(draft.fecha) : null
+                                                            const fechaResumen = fechaDraft && !Number.isNaN(fechaDraft.getTime())
+                                                                ? fechaDraft.toLocaleString('es-AR')
+                                                                : '—'
+                                                            const importeResumen = Number.parseFloat(draft.importeTotal)
+
                                                             return (
-                                                                <tr key={p.uid} className="hover:bg-gray-50">
-                                                                    <td className="px-3 py-2 text-xs text-gray-400">{p.origen.ordenItem}</td>
-                                                                    <td className="px-3 py-2"><input type="datetime-local" value={draft.fecha} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-44 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                                    <td className="px-3 py-2"><input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-24 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                                    <td className="px-3 py-2"><input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-72 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                                    <td className="px-3 py-2"><input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-16 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                                    <td className="px-3 py-2"><input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="rounded border border-gray-300 px-2 py-1 text-xs w-32 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                                    <td className="px-3 py-2 text-xs text-gray-600">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</td>
-                                                                    <td className="px-3 py-2 text-xs">
-                                                                        {etiquetasDiferencial.length > 0 ? (
-                                                                            <div className="flex flex-wrap gap-1">
-                                                                                {etiquetasDiferencial.map((etq) => (
-                                                                                    <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
-                                                                                ))}
-                                                                            </div>
-                                                                        ) : (
-                                                                            <span className="text-gray-400">—</span>
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="px-3 py-2">
-                                                                        <div className="grid gap-1">
-                                                                            <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                                                                <span className="w-20">Ayudante</span>
-                                                                                <select
-                                                                                    value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
-                                                                                    onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', e.target.value)}
-                                                                                    disabled={!filaEnEdicion}
-                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                >
-                                                                                    <option value="">-- Seleccionar --</option>
-                                                                                    {profesionalesConMatricula.map((profesional) => (
-                                                                                        <option key={profesional.id} value={String(profesional.id)}>
-                                                                                            {profesional.nombre} · MP {profesional.matricula}
-                                                                                        </option>
-                                                                                    ))}
-                                                                                </select>
-                                                                            </label>
-                                                                            <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                                                                <span className="w-20">Especialista</span>
-                                                                                <select
-                                                                                    value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
-                                                                                    onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaEspecialista', e.target.value)}
-                                                                                    disabled={!filaEnEdicion}
-                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                >
-                                                                                    <option value="">-- Seleccionar --</option>
-                                                                                    {profesionalesConMatricula.map((profesional) => (
-                                                                                        <option key={profesional.id} value={String(profesional.id)}>
-                                                                                            {profesional.nombre} · MP {profesional.matricula}
-                                                                                        </option>
-                                                                                    ))}
-                                                                                </select>
-                                                                            </label>
-                                                                            <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                                                                                <span className="w-20">Anestesista</span>
-                                                                                <select
-                                                                                    value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
-                                                                                    onChange={(e) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', e.target.value)}
-                                                                                    disabled={!filaEnEdicion}
-                                                                                    className="rounded border border-gray-300 px-2 py-1 text-xs w-64 disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                >
-                                                                                    <option value="">-- Seleccionar --</option>
-                                                                                    {profesionalesConMatricula.map((profesional) => (
-                                                                                        <option key={profesional.id} value={String(profesional.id)}>
-                                                                                            {profesional.nombre} · MP {profesional.matricula}
-                                                                                        </option>
-                                                                                    ))}
-                                                                                </select>
-                                                                            </label>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="px-3 py-2"><input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} disabled={!filaEnEdicion} className="rounded border border-gray-300 px-2 py-1 text-xs w-24 disabled:bg-gray-100 disabled:text-gray-500" /></td>
-                                                                    <td className="px-3 py-2">
-                                                                        {filaEnEdicion ? (
-                                                                            <div className="flex items-center gap-1">
-                                                                                <button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button>
-                                                                                <button onClick={() => cancelarEdicionFila(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cancelar</button>
-                                                                            </div>
-                                                                        ) : (
-                                                                            <button onClick={() => habilitarEdicionFila(p)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Editar</button>
-                                                                        )}
-                                                                    </td>
-                                                                </tr>
+                                                                <Fragment key={p.uid}>
+                                                                    <tr className="hover:bg-gray-50">
+                                                                        <td className="px-3 py-2 align-top text-xs text-gray-500">
+                                                                            Item {p.origen.ordenItem}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 align-top text-xs text-gray-700">{fechaResumen}</td>
+                                                                        <td className="px-3 py-2 align-top"><span className="font-mono text-xs text-gray-700">{draft.codigoPractica || '—'}</span></td>
+                                                                        <td className="px-3 py-2 align-top"><div className="truncate text-xs text-gray-700" title={draft.descripcion || ''}>{draft.descripcion || '—'}</div></td>
+                                                                        <td className="px-3 py-2 align-top text-xs text-gray-700">{draft.cantidad || '—'}</td>
+                                                                        <td className="px-3 py-2 align-top text-xs font-semibold text-gray-800">{Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}</td>
+                                                                        <td className="px-3 py-2 align-top">
+                                                                            {filaEnEdicion ? (
+                                                                                <div className="flex flex-col gap-1">
+                                                                                    <button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button>
+                                                                                    <button onClick={() => cancelarEdicionFila(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cancelar</button>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <button onClick={() => habilitarEdicionFila(p)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Editar</button>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 align-top">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setDetallePrestacionesExpand((prev) => ({ ...prev, [p.uid]: !detalleAbierto }))}
+                                                                                className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded border px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                                                            >
+                                                                                {detalleAbierto ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                                                {detalleAbierto ? 'Ocultar' : 'Ver'}
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+
+                                                                    {detalleAbierto && (
+                                                                        <tr className="bg-slate-50">
+                                                                            <td colSpan={8} className="px-4 py-3">
+                                                                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Datos de prestación</p>
+                                                                                        <div className="mt-1 grid gap-2">
+                                                                                            <label className="text-[11px] text-gray-600">
+                                                                                                Fecha
+                                                                                                <input type="datetime-local" value={draft.fecha} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))} disabled={!filaEnEdicion} className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
+                                                                                            </label>
+                                                                                            <label className="text-[11px] text-gray-600">
+                                                                                                Código
+                                                                                                <input value={draft.codigoPractica} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))} disabled={!filaEnEdicion} className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
+                                                                                            </label>
+                                                                                            <label className="text-[11px] text-gray-600">
+                                                                                                Descripción
+                                                                                                <input value={draft.descripcion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))} disabled={!filaEnEdicion} className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
+                                                                                            </label>
+                                                                                            <div className="grid grid-cols-2 gap-2">
+                                                                                                <label className="text-[11px] text-gray-600">
+                                                                                                    Cantidad
+                                                                                                    <input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} disabled={!filaEnEdicion} className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
+                                                                                                </label>
+                                                                                                <label className="text-[11px] text-gray-600">
+                                                                                                    Importe total
+                                                                                                    <input value={draft.importeTotal} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))} disabled={!filaEnEdicion} className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
+                                                                                                </label>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+
+                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Autorización</p>
+                                                                                        <input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
+                                                                                    </div>
+                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Valores y diferenciales</p>
+                                                                                        <div className="mt-1 space-y-1 text-xs text-gray-700">
+                                                                                            <div>Monto unitario: <span className="font-medium">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</span></div>
+                                                                                            <div>
+                                                                                                {etiquetasDiferencial.length > 0 ? (
+                                                                                                    <div className="flex flex-wrap gap-1">
+                                                                                                        {etiquetasDiferencial.map((etq) => (
+                                                                                                            <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
+                                                                                                        ))}
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <span className="text-gray-400">Sin diferencial aplicado</span>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Matrículas</p>
+                                                                                        <div className="mt-1 grid gap-2">
+                                                                                            <label className="text-[11px] text-gray-600">
+                                                                                                Ayudante
+                                                                                                <ProfesionalSelect
+                                                                                                    profesionales={profesionalesConMatricula}
+                                                                                                    value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
+                                                                                                    onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', nextValue)}
+                                                                                                    disabled={!filaEnEdicion}
+                                                                                                    placeholderOption="-- Seleccionar --"
+                                                                                                    searchPlaceholder="Buscar nombre o matricula"
+                                                                                                    selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                    searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                />
+                                                                                            </label>
+                                                                                            <label className="text-[11px] text-gray-600">
+                                                                                                Especialista
+                                                                                                <ProfesionalSelect
+                                                                                                    profesionales={profesionalesConMatricula}
+                                                                                                    value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
+                                                                                                    onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaEspecialista', nextValue)}
+                                                                                                    disabled={!filaEnEdicion}
+                                                                                                    placeholderOption="-- Seleccionar --"
+                                                                                                    searchPlaceholder="Buscar nombre o matricula"
+                                                                                                    selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                    searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                />
+                                                                                            </label>
+                                                                                            <label className="text-[11px] text-gray-600">
+                                                                                                Anestesista
+                                                                                                <ProfesionalSelect
+                                                                                                    profesionales={profesionalesConMatricula}
+                                                                                                    value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
+                                                                                                    onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', nextValue)}
+                                                                                                    disabled={!filaEnEdicion}
+                                                                                                    placeholderOption="-- Seleccionar --"
+                                                                                                    searchPlaceholder="Buscar nombre o matricula"
+                                                                                                    selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                    searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                />
+                                                                                            </label>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </Fragment>
                                                             )
                                                         })}
                                                     </Fragment>
                                                 )
                                             })}
 
-                                            {contexto.prestaciones.length === 0 && <tr><td colSpan={11} className="px-3 py-6 text-center text-sm text-gray-500">Sin prestaciones registradas</td></tr>}
+                                            {contexto.prestaciones.length === 0 && <tr><td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-500">Sin prestaciones registradas</td></tr>}
                                         </tbody>
                                     </table>
                                 </div>

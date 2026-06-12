@@ -2,10 +2,12 @@ import { prisma } from '@/lib/db'
 
 export const COSEGUROS_IPSS = [
     'EMPRENDER',
-    'TOTAL A / B',
+    'TOTAL A',
+    'TOTAL B',
     'UTM',
     'UPCN',
     'INTEGRAL',
+    'ATE',
     'ATSA',
     'ADP',
     'PREVISER',
@@ -22,6 +24,20 @@ export function normalizarNombreObraSocial(nombre: string): string {
         .replace(/[^A-Z0-9]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
+}
+
+const COSEGUROS_IPSS_NORMALIZADOS = new Set(
+    COSEGUROS_IPSS.map((nombre) => normalizarNombreObraSocial(nombre))
+)
+
+export function esCoseguroIPSS(nombre: string): boolean {
+    return COSEGUROS_IPSS_NORMALIZADOS.has(normalizarNombreObraSocial(nombre))
+}
+
+export function filtrarObrasSocialesPrincipales<T extends { nombre: string }>(
+    obrasSociales: T[]
+): T[] {
+    return obrasSociales.filter((os) => !esCoseguroIPSS(os.nombre))
 }
 
 export async function asegurarCosegurosIPSS(): Promise<Array<{ id: number; nombre: string }>> {

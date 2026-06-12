@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import type { PacienteResumen } from '@/modules/admision/types'
+import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 
 export const metadata: Metadata = { title: 'Nueva Internación' }
 
@@ -28,7 +29,7 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
   const [profesionales, camasDisponibles] = await Promise.all([
     prisma.profesional.findMany({
       where: { estado: 'A' },
-      select: { id: true, nombre: true },
+      select: { id: true, nombre: true, matricula: true },
       orderBy: { nombre: 'asc' },
     }),
     obtenerCamasDisponibles(),
@@ -55,7 +56,7 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
       FROM "ObraSocial"
       ORDER BY nombre ASC
     `
-    obraSociales = rows
+    obraSociales = filtrarObrasSocialesPrincipales(rows)
       .filter((r) => r.activa)
       .map(({ id, nombre, requiereCoseguro }) => ({ id, nombre, requiereCoseguro }))
   } catch {

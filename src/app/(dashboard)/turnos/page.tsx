@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { CalendarClock, UserCheck, Clock, AlertCircle } from 'lucide-react'
 import type { Metadata } from 'next'
+import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 
 export const metadata: Metadata = { title: 'Turnos' }
 
@@ -47,25 +48,25 @@ export default async function TurnosPage({ searchParams }: PageProps) {
     }),
     prisma.profesional.findMany({
       where: { estado: 'A' },
-      select: { id: true, nombre: true },
+      select: { id: true, nombre: true, matricula: true },
       orderBy: { nombre: 'asc' },
     }),
   ])
 
   const estadoLabel = (e: string | null | undefined) => {
     switch (e) {
-      case 'L': return { text: 'Libre',      cls: 'bg-gray-100 text-gray-600' }
-      case 'R': return { text: 'Reservado',  cls: 'bg-blue-100 text-blue-700' }
-      case 'P': return { text: 'Presente',   cls: 'bg-yellow-100 text-yellow-700' }
-      case 'A': return { text: 'Atendido',   cls: 'bg-green-100 text-green-700' }
-      case 'X': return { text: 'Anulado',    cls: 'bg-red-100 text-red-600' }
-      default:  return { text: e ?? '—',     cls: 'bg-gray-100 text-gray-500' }
+      case 'L': return { text: 'Libre', cls: 'bg-gray-100 text-gray-600' }
+      case 'R': return { text: 'Reservado', cls: 'bg-blue-100 text-blue-700' }
+      case 'P': return { text: 'Presente', cls: 'bg-yellow-100 text-yellow-700' }
+      case 'A': return { text: 'Atendido', cls: 'bg-green-100 text-green-700' }
+      case 'X': return { text: 'Anulado', cls: 'bg-red-100 text-red-600' }
+      default: return { text: e ?? '—', cls: 'bg-gray-100 text-gray-500' }
     }
   }
 
-  const reservados  = turnos.filter((t) => t.estado === 'R').length
-  const presentes   = turnos.filter((t) => t.estado === 'P').length
-  const atendidos   = turnos.filter((t) => t.estado === 'A').length
+  const reservados = turnos.filter((t) => t.estado === 'R').length
+  const presentes = turnos.filter((t) => t.estado === 'P').length
+  const atendidos = turnos.filter((t) => t.estado === 'A').length
 
   return (
     <>
@@ -92,7 +93,7 @@ export default async function TurnosPage({ searchParams }: PageProps) {
             >
               <option value="">Todos</option>
               {profesionales.map((p) => (
-                <option key={p.id} value={String(p.id)}>{p.nombre}</option>
+                <option key={p.id} value={String(p.id)}>{nombreProfesionalParaMostrar(p.nombre)}</option>
               ))}
             </select>
           </div>
@@ -167,7 +168,7 @@ export default async function TurnosPage({ searchParams }: PageProps) {
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {t.profesional?.nombre ?? '—'}
+                        {t.profesional?.nombre ? nombreProfesionalParaMostrar(t.profesional.nombre) : '—'}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
                         {t.obraSocial?.nombre ?? '—'}

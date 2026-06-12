@@ -15,6 +15,8 @@ import {
   calcularTotalSeleccionado,
   seleccionPorDefecto,
 } from '@/components/ui/componente-selector'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
+import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 
 interface ObraSocialItem {
   id: number
@@ -1125,25 +1127,20 @@ export function ConsultaForm({
             Tratante en admisión:{' '}
             <span className="font-medium text-gray-900">
               {profesionalTratanteAdmision
-                ? `${profesionalTratanteAdmision.nombre}${profesionalTratanteAdmision.matricula ? ` · MP ${profesionalTratanteAdmision.matricula}` : ''}`
+                ? nombreProfesionalParaMostrar(profesionalTratanteAdmision.nombre)
                 : 'Sin médico tratante cargado'}
             </span>
           </p>
         )}
         <div className="space-y-1">
           <label className="text-xs text-gray-500">Profesional de la orden (opcional modificar)</label>
-          <select
+          <ProfesionalSelect
+            profesionales={profesionales}
             value={profesionalId}
-            onChange={(e) => setProfesionalId(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">-- Seleccionar --</option>
-            {profesionales.map((profesional) => (
-              <option key={profesional.id} value={String(profesional.id)}>
-                {profesional.nombre}{profesional.matricula ? ` · MP ${profesional.matricula}` : ''}
-              </option>
-            ))}
-          </select>
+            onChange={setProfesionalId}
+            placeholderOption="-- Seleccionar --"
+            selectClassName="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
       </div>
 

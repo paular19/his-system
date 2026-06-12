@@ -8,7 +8,26 @@
 
 import { PrismaClient } from '@prisma/client'
 
-const prisma = new PrismaClient()
+const RETRYABLE_ERROR_CODES = new Set(['P1001', 'P1002', 'P2024'])
+
+function construirDatasourceUrlSeed(): string | undefined {
+    const raw = process.env.DATABASE_URL
+    if (!raw) return undefined
+
+    try {
+        const url = new URL(raw)
+        url.searchParams.set('connection_limit', process.env.PRISMA_SEED_CONNECTION_LIMIT ?? '1')
+        url.searchParams.set('pool_timeout', process.env.PRISMA_SEED_POOL_TIMEOUT ?? '120')
+        return url.toString()
+    } catch {
+        return raw
+    }
+}
+
+const datasourceUrlSeed = construirDatasourceUrlSeed()
+const prisma = datasourceUrlSeed
+    ? new PrismaClient({ datasourceUrl: datasourceUrlSeed })
+    : new PrismaClient()
 
 const OBRAS_SOCIALES = [
     // ── Obras sociales principales con reglas especiales ──────────────────────
@@ -17,6 +36,7 @@ const OBRAS_SOCIALES = [
     { id: 41, nombre: 'OSPSA - SALTA - Cod.41', requiereCoseguro: 'N' },
     { id: 202, nombre: 'OSPERHYRA - Cod.202', requiereCoseguro: 'N' },
     { id: 213, nombre: 'RED ARGENTINA SALUD - Cod.213', requiereCoseguro: 'N' },
+    { id: 235, nombre: 'MEDIFE', requiereCoseguro: 'N' },
     { id: 346, nombre: 'ACIDSAL - Cod.346', requiereCoseguro: 'N' },
     { id: 511, nombre: 'OSECAC CONV DIRECT - Cod.511', requiereCoseguro: 'N' },
     { id: 1520, nombre: 'OSUTHGRA - Cod.1520', requiereCoseguro: 'N' },
@@ -39,36 +59,66 @@ const OBRAS_SOCIALES = [
     { id: 1514, nombre: 'EMPRENDER', requiereCoseguro: 'N' },
 ] as const
 
+function esErrorPrismaReintentable(error: unknown): boolean {
+    if (!(error instanceof Error)) return false
+
+    const code = (error as { code?: string }).code
+    if (typeof code === 'string' && RETRYABLE_ERROR_CODES.has(code)) return true
+
+    const msg = error.message ?? ''
+    return /Timed out fetching a new connection from the connection pool|Can't reach database server/i.test(msg)
+}
+
+async function ejecutarConReintento<T>(
+    descripcion: string,
+    fn: () => Promise<T>,
+    maxIntentos = 6
+): Promise<T> {
+    let intento = 1
+
+    while (true) {
+        try {
+            return await fn()
+        } catch (error) {
+            const ultimoIntento = intento >= maxIntentos
+            if (ultimoIntento || !esErrorPrismaReintentable(error)) throw error
+
+            const esperaMs = Math.min(6000, intento * 1200)
+            console.warn(
+                `  Reintentando ${descripcion} (${intento}/${maxIntentos - 1}) en ${esperaMs}ms...`
+            )
+            await new Promise((resolve) => setTimeout(resolve, esperaMs))
+            intento += 1
+        }
+    }
+}
+
 async function main() {
     console.log('Iniciando seed de obras sociales para reglas de facturación...\n')
 
-    const batchSize = 10; // Procesar en lotes de 10
-    for (let i = 0; i < OBRAS_SOCIALES.length; i += batchSize) {
-        const batch = OBRAS_SOCIALES.slice(i, i + batchSize);
-        await Promise.all(
-            batch.map(async (os) => {
-                const result = await prisma.obraSocial.upsert({
-                    where: { id: os.id },
-                    update: {
-                        nombre: os.nombre,
-                        estado: 'A',
-                        requiereCoseguro: os.requiereCoseguro,
-                    },
-                    create: {
-                        id: os.id,
-                        nombre: os.nombre,
-                        requiereCoseguro: os.requiereCoseguro,
-                        estado: 'A',
-                        fechaEstado: new Date(),
-                    },
-                });
-                console.log(`  [${result.id.toString().padStart(4, ' ')}] ${result.nombre}`)
+    for (const os of OBRAS_SOCIALES) {
+        const result = await ejecutarConReintento(`OS ${os.id}`, () =>
+            prisma.obraSocial.upsert({
+                where: { id: os.id },
+                update: {
+                    nombre: os.nombre,
+                    estado: 'A',
+                    requiereCoseguro: os.requiereCoseguro,
+                },
+                create: {
+                    id: os.id,
+                    nombre: os.nombre,
+                    requiereCoseguro: os.requiereCoseguro,
+                    estado: 'A',
+                    fechaEstado: new Date(),
+                },
             })
-        );
+        )
+
+        console.log(`  [${result.id.toString().padStart(4, ' ')}] ${result.nombre}`)
     }
 
     console.log(`\nSeed completado. ${OBRAS_SOCIALES.length} registros procesados.`)
-    await prisma.$disconnect();
 }
 
 main()

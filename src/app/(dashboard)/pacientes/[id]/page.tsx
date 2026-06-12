@@ -161,7 +161,6 @@ export default async function FichaPacientePage({ params }: PageProps) {
             fechaNacimiento: paciente.fechaNacimiento,
             sexo: paciente.sexo,
             estadoCivil: paciente.estadoCivil,
-            cuil: paciente.cuil ? paciente.cuil.toString() : null,
             domicilio: paciente.domicilio,
             celular1: paciente.celular1,
             telefonoFijo: paciente.telefonoFijo,
@@ -236,7 +235,6 @@ export default async function FichaPacientePage({ params }: PageProps) {
               label="Estado Civil"
               value={mapEstadoCivil(paciente.estadoCivil)}
             />
-            <DataItem label="CUIL" value={paciente.cuil?.toString()} />
           </dl>
         </div>
 

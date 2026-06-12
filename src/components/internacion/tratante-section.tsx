@@ -3,10 +3,13 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Stethoscope } from 'lucide-react'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
+import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 
 interface ProfesionalOption {
     id: number
     nombre: string
+    matricula?: number | null
 }
 
 interface HistorialTratanteItem {
@@ -94,22 +97,16 @@ export function TratanteSection({
                 <h3 className="text-sm font-semibold text-gray-900">Médico tratante</h3>
             </div>
 
-            <p className="text-xs text-gray-500 mb-2">Actual: <span className="text-gray-800 font-medium">{tratanteActualNombre ?? 'Sin asignar'}</span></p>
+            <p className="text-xs text-gray-500 mb-2">Actual: <span className="text-gray-800 font-medium">{tratanteActualNombre ? nombreProfesionalParaMostrar(tratanteActualNombre) : 'Sin asignar'}</span></p>
 
             <div className="space-y-2">
-                <select
+                <ProfesionalSelect
+                    profesionales={profesionales}
                     value={tratanteSeleccionado}
-                    onChange={(e) => setTratanteSeleccionado(e.target.value)}
+                    onChange={setTratanteSeleccionado}
                     disabled={!puedeModificar || guardando}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                >
-                    <option value="">Seleccionar médico tratante</option>
-                    {profesionales.map((p) => (
-                        <option key={p.id} value={String(p.id)}>
-                            {p.nombre}
-                        </option>
-                    ))}
-                </select>
+                    placeholderOption="Seleccionar médico tratante"
+                />
                 {puedeModificar && cambiosDetectados && (
                     <button
                         type="button"
@@ -134,7 +131,7 @@ export function TratanteSection({
                     <ul className="space-y-1.5">
                         {historialTratantes.map((item) => (
                             <li key={item.id} className="text-xs text-gray-700">
-                                <span className="font-medium">{item.profesionalNombre}</span>
+                                <span className="font-medium">{nombreProfesionalParaMostrar(item.profesionalNombre)}</span>
                                 <span className="text-gray-500"> · {fmtFecha(item.fecha)} · usuario {item.usuario}</span>
                             </li>
                         ))}

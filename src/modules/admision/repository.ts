@@ -92,6 +92,7 @@ export async function crearIngreso(
 ): Promise<IngresoConRelaciones> {
   const ahora = new Date()
   const edad = paciente.fechaNacimiento ? calcularEdad(paciente.fechaNacimiento) : null
+  const usuarioNormalizado = usuarioAlta.slice(0, 10)
 
   return prisma.$transaction(async (tx) => {
     // Incrementar el contador atómicamente; el valor devuelto es el NUEVO valor
@@ -101,6 +102,36 @@ export async function crearIngreso(
     })
     // El número a usar es el valor ANTES del incremento
     const numeroIngreso = tipoIngreso.proximoNumero - 1
+
+    if (data.tipoIngresoCodigo === 'INT' && data.camaId) {
+      const cama = await tx.cama.findUnique({
+        where: { id: data.camaId },
+        select: { id: true, estado: true },
+      })
+
+      if (!cama) {
+        throw new Error('La cama seleccionada no existe')
+      }
+
+      if (cama.estado === 'OCUPADA') {
+        throw new Error('La cama seleccionada ya está ocupada')
+      }
+
+      if (cama.estado === 'MANTENIMIENTO') {
+        throw new Error('La cama seleccionada está en mantenimiento')
+      }
+
+      const estadoDestino = data.subtipoAdmisionCodigo === 'PRG' ? 'RESERVADA' : 'OCUPADA'
+
+      await tx.cama.update({
+        where: { id: data.camaId },
+        data: {
+          estado: estadoDestino,
+          usuario: usuarioNormalizado,
+          fechaEstado: ahora,
+        },
+      })
+    }
 
     const ingreso = await tx.ingreso.create({
       data: {
@@ -128,7 +159,7 @@ export async function crearIngreso(
         observaciones: data.observaciones ?? null,
         estado: 'A',
         fechaEstado: ahora,
-        usuario: usuarioAlta,
+        usuario: usuarioNormalizado,
       },
       include: incluirRelacionesBase,
     })
@@ -150,7 +181,7 @@ export async function crearIngreso(
           profesionalIndicadorNombre: data.profesionalIndicadorNombre ?? null,
           tipoIndicacion: data.tipoIndicacion ?? null,
           descripcionIndicacion: data.descripcionIndicacion ?? null,
-          usuario: usuarioAlta,
+          usuario: usuarioNormalizado,
           fechaEstado: ahora,
         },
       })

@@ -1,9 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Pill, CheckCircle, XCircle, Clock } from 'lucide-react'
 import type { MedicacionItem } from '@/modules/internacion/types'
 import { ESTADO_MEDICACION_LABEL } from '@/modules/internacion/types'
+import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 
 interface MedicacionSectionProps {
     ingresoId: number
@@ -18,11 +19,6 @@ const ESTADO_ICON: Record<string, React.ReactNode> = {
     S: <XCircle className="h-3.5 w-3.5 text-orange-500" />,
     F: <Clock className="h-3.5 w-3.5 text-gray-400" />,
 }
-
-const VIA_OPTIONS = [
-    'Oral', 'Intravenosa', 'Intramuscular', 'Subcutánea',
-    'Inhalatoria', 'Tópica', 'Sublingual', 'Rectal', 'Otra',
-]
 
 export function MedicacionSection({
     ingresoId,
@@ -39,46 +35,34 @@ export function MedicacionSection({
 
     // Formulario
     const [nombre, setNombre] = useState('')
-    const [dosis, setDosis] = useState('')
-    const [via, setVia] = useState('')
-    const [frecuencia, setFrecuencia] = useState('')
-    const [fechaInicio, setFechaInicio] = useState(new Date().toISOString().split('T')[0])
-    const [fechaFin, setFechaFin] = useState('')
-    const [observaciones, setObservaciones] = useState('')
-    const [profesionalId, setProfesionalId] = useState('')
-    const [buscandoCatalogo, setBuscandoCatalogo] = useState(false)
-    const [sugerencias, setSugerencias] = useState<Array<{ id: number; nombre: string }>>([])
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [opcionesInsumosUti, setOpcionesInsumosUti] = useState<Array<{ id: number; nombre: string }>>([])
+    const [cargandoInsumosUti, setCargandoInsumosUti] = useState(false)
 
-    const buscarCatalogo = (value: string) => {
-        setNombre(value)
-        if (debounceRef.current) clearTimeout(debounceRef.current)
+    useEffect(() => {
+        let activo = true
 
-        const query = value.trim()
-        if (query.length < 2) {
-            setSugerencias([])
-            return
+        const cargarInsumos = async () => {
+            setCargandoInsumosUti(true)
+            try {
+                const res = await fetch('/api/catalogos/insumos-uti?limit=5000')
+                const json = await res.json()
+                if (!activo) return
+                setOpcionesInsumosUti(Array.isArray(json.data) ? json.data : [])
+            } catch {
+                if (activo) setOpcionesInsumosUti([])
+            } finally {
+                if (activo) setCargandoInsumosUti(false)
+            }
         }
 
-        debounceRef.current = setTimeout(async () => {
-            setBuscandoCatalogo(true)
-            try {
-                const res = await fetch(`/api/catalogos/medicamentos-uti?q=${encodeURIComponent(query)}&limit=12`)
-                const json = await res.json()
-                setSugerencias(Array.isArray(json.data) ? json.data : [])
-            } catch {
-                setSugerencias([])
-            } finally {
-                setBuscandoCatalogo(false)
-            }
-        }, 300)
-    }
+        void cargarInsumos()
+        return () => {
+            activo = false
+        }
+    }, [])
 
     const limpiar = () => {
-        setNombre(''); setDosis(''); setVia(''); setFrecuencia('')
-        setFechaInicio(new Date().toISOString().split('T')[0])
-        setFechaFin(''); setObservaciones(''); setProfesionalId('')
-        setSugerencias([])
+        setNombre('')
         setMostrarFormulario(false)
         setError(null)
     }
@@ -92,13 +76,13 @@ export function MedicacionSection({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     nombre: nombre.trim(),
-                    dosis: dosis || null,
-                    viaAdministracion: via || null,
-                    frecuencia: frecuencia || null,
-                    fechaInicio: fechaInicio ? new Date(fechaInicio).toISOString() : new Date().toISOString(),
-                    fechaFin: fechaFin ? new Date(fechaFin).toISOString() : null,
-                    observaciones: observaciones || null,
-                    profesionalId: profesionalId ? parseInt(profesionalId) : null,
+                    dosis: null,
+                    viaAdministracion: null,
+                    frecuencia: null,
+                    fechaInicio: new Date().toISOString(),
+                    fechaFin: null,
+                    observaciones: null,
+                    profesionalId: null,
                 }),
             })
             if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Error') }
@@ -163,99 +147,24 @@ export function MedicacionSection({
                         <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</p>
                     )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="sm:col-span-2 relative">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                Medicamento <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                                required type="text" value={nombre}
-                                onChange={(e) => buscarCatalogo(e.target.value)}
-                                placeholder="Nombre del medicamento"
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                            />
-                            {sugerencias.length > 0 && (
-                                <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow-sm max-h-40 overflow-y-auto divide-y">
-                                    {sugerencias.map((s) => (
-                                        <button
-                                            key={s.id}
-                                            type="button"
-                                            onMouseDown={(e) => e.preventDefault()}
-                                            onClick={() => {
-                                                setNombre(s.nombre)
-                                                setSugerencias([])
-                                            }}
-                                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                                        >
-                                            {s.nombre}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                            {buscandoCatalogo && (
-                                <p className="mt-1 text-xs text-gray-400">Buscando en catálogo UTI...</p>
-                            )}
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Dosis</label>
-                            <input
-                                type="text" value={dosis}
-                                onChange={(e) => setDosis(e.target.value)}
-                                placeholder="Ej: 500mg"
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Vía de administración</label>
-                            <select
-                                value={via} onChange={(e) => setVia(e.target.value)}
-                                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
-                            >
-                                <option value="">— Seleccionar —</option>
-                                {VIA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Frecuencia</label>
-                            <input
-                                type="text" value={frecuencia}
-                                onChange={(e) => setFrecuencia(e.target.value)}
-                                placeholder="Ej: Cada 8hs"
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Profesional indicador</label>
-                            <select
-                                value={profesionalId} onChange={(e) => setProfesionalId(e.target.value)}
-                                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
-                            >
-                                <option value="">— Sin asignar —</option>
-                                {profesionales.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Fecha inicio</label>
-                            <input
-                                type="date" required value={fechaInicio}
-                                onChange={(e) => setFechaInicio(e.target.value)}
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Fecha fin (opcional)</label>
-                            <input
-                                type="date" value={fechaFin}
-                                onChange={(e) => setFechaFin(e.target.value)}
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                            />
-                        </div>
                         <div className="sm:col-span-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Observaciones</label>
-                            <input
-                                type="text" value={observaciones}
-                                onChange={(e) => setObservaciones(e.target.value)}
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                            />
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Insumo <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                                required
+                                value={nombre}
+                                onChange={(e) => setNombre(e.target.value)}
+                                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                            >
+                                <option value="">-- Seleccionar de lista unificada --</option>
+                                {opcionesInsumosUti.map((item) => (
+                                    <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                                ))}
+                            </select>
+                            {cargandoInsumosUti && (
+                                <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>
+                            )}
                         </div>
                     </div>
                     <div className="flex justify-end gap-2">
@@ -332,7 +241,7 @@ function MedicacionRow({
                 <div className="text-xs text-gray-500 flex gap-3">
                     <span>Inicio: {fmtDate(med.fechaInicio)}</span>
                     {med.fechaFin && <span>Fin: {fmtDate(med.fechaFin)}</span>}
-                    {med.profesional && <span>Dr. {med.profesional.nombre}</span>}
+                    {med.profesional && <span>{nombreProfesionalParaMostrar(med.profesional.nombre)}</span>}
                 </div>
                 {med.observaciones && (
                     <p className="text-xs text-gray-500 mt-1 italic">{med.observaciones}</p>

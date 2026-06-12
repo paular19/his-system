@@ -518,16 +518,31 @@ export function PracticaSection({
                                                 <div className="flex items-center gap-3 mt-1 text-emerald-700 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
                                                     <span>Cant: {p.cantidad}</span>
-                                                    <span className="font-medium">
-                                                        {formatearNumeroOrden(
-                                                            p.ordenPractica?.[0]!.puestoNumero,
-                                                            p.ordenPractica?.[0]!.ordenNumero,
-                                                            p.ordenPractica?.[0]!.item
-                                                        )}
-                                                        {p.ordenPractica?.[0]!.numeroAutorizacion
-                                                            ? ` · ${p.ordenPractica?.[0]!.numeroAutorizacion}`
-                                                            : ' · falta N° de autorización'}
-                                                    </span>
+                                                    {[...p.ordenPractica]
+                                                        .sort((a, b) => {
+                                                            if (a.puestoNumero !== b.puestoNumero) {
+                                                                return a.puestoNumero - b.puestoNumero
+                                                            }
+                                                            if (a.ordenNumero !== b.ordenNumero) {
+                                                                return a.ordenNumero - b.ordenNumero
+                                                            }
+                                                            return a.item - b.item
+                                                        })
+                                                        .map((orden) => (
+                                                            <span
+                                                                key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
+                                                                className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900"
+                                                            >
+                                                                {formatearNumeroOrden(
+                                                                    orden.puestoNumero,
+                                                                    orden.ordenNumero,
+                                                                    orden.item
+                                                                )}
+                                                                {orden.numeroAutorizacion
+                                                                    ? ` · ${orden.numeroAutorizacion}`
+                                                                    : ' · falta N° de autorización'}
+                                                            </span>
+                                                        ))}
                                                 </div>
                                             </div>
                                         </div>

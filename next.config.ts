@@ -1,6 +1,12 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    '/api/catalogos/insumos-uti/route': [
+      './existencia.xlsx',
+      './LISTADO MEDICACION.xlsx',
+    ],
+  },
   async redirects() {
     return [
       {

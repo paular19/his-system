@@ -7,7 +7,7 @@ import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
-import { asegurarCosegurosIPSS } from '@/lib/utils/coseguros'
+import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 
 export const metadata: Metadata = { title: 'Nueva cirugia programada' }
 
@@ -31,7 +31,7 @@ export default async function NuevaCirugiaPage() {
         asegurarCosegurosIPSS(),
     ])
 
-    const obraSociales = obrasSocialesRows.map((os) => ({
+    const obraSociales = filtrarObrasSocialesPrincipales(obrasSocialesRows).map((os) => ({
         id: os.id,
         nombre: os.nombre,
         requiereCoseguro: os.requiereCoseguro === 'S',

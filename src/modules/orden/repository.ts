@@ -149,6 +149,50 @@ function normalizarIncluyeCodigo(codigo: string | null | undefined): string | nu
   return normalized
 }
 
+function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
+  const normalized = value?.trim() ?? ''
+  return normalized.length > 0 ? normalized : null
+}
+
+type OrdenListaRowConItems = {
+  puestoNumero: number
+  numero: number
+  ingresoId: number | null
+  nombrePaciente: string
+  obraSocialCoseguroId: number | null
+  numeroAutorizacion: string | null
+  fechaEmision: Date
+  estado: string
+  obraSocial: { nombre: string } | null
+  _count: { items: number }
+  items: Array<{
+    item: number
+    numeroAutorizacion: string | null
+  }>
+}
+
+function resolverNumeroAutorizacionOrdenLista(row: OrdenListaRowConItems): string | null {
+  for (const it of row.items) {
+    const numeroItem = normalizarNumeroAutorizacion(it.numeroAutorizacion)
+    if (!numeroItem) continue
+
+    const generado = generarCodigoBarras(row.puestoNumero, row.numero, it.item)
+    if (numeroItem === generado) continue
+
+    return numeroItem
+  }
+
+  const numeroOrden = normalizarNumeroAutorizacion(row.numeroAutorizacion)
+  if (!numeroOrden) return null
+
+  for (const it of row.items) {
+    const generado = generarCodigoBarras(row.puestoNumero, row.numero, it.item)
+    if (numeroOrden === generado) return null
+  }
+
+  return numeroOrden
+}
+
 // ============================================
 // CREAR ORDEN
 // ============================================
@@ -430,7 +474,10 @@ export async function listarOrdenes(params: {
   q?: string
 }): Promise<{ ordenes: OrdenListItem[]; total: number }> {
   const q = params.q?.trim()
+  const qLower = q?.toLowerCase()
   const numeroBuscado = q && /^\d+$/.test(q) ? parseInt(q, 10) : null
+  const skip = params.skip ?? 0
+  const take = params.take ?? 20
   const estadoTab =
     params.estadoTab ??
     (params.pendiente === true
@@ -438,6 +485,122 @@ export async function listarOrdenes(params: {
       : params.pendiente === false
         ? 'confirmadas'
         : undefined)
+
+  const mapearResultado = async (
+    rows: Array<{
+      puestoNumero: number
+      numero: number
+      ingresoId: number | null
+      nombrePaciente: string
+      obraSocialCoseguroId: number | null
+      numeroAutorizacion: string | null
+      fechaEmision: Date
+      estado: string
+      obraSocial: { nombre: string } | null
+      _count: { items: number }
+    }>,
+    total: number
+  ) => {
+    const idsCoseguro = Array.from(
+      new Set(rows.map((o) => o.obraSocialCoseguroId).filter((id): id is number => id != null))
+    )
+
+    const coseguros =
+      idsCoseguro.length > 0
+        ? await prisma.obraSocial.findMany({
+          where: { id: { in: idsCoseguro } },
+          select: { id: true, nombre: true },
+        })
+        : []
+
+    const coseguroPorId = new Map(coseguros.map((c) => [c.id, c.nombre]))
+
+    return {
+      total,
+      ordenes: rows.map((o) => ({
+        puestoNumero: o.puestoNumero,
+        numero: o.numero,
+        ingresoId: o.ingresoId,
+        nombrePaciente: o.nombrePaciente,
+        obraSocialNombre: o.obraSocial?.nombre ?? '',
+        coseguroNombre: o.obraSocialCoseguroId ? (coseguroPorId.get(o.obraSocialCoseguroId) ?? '-') : '-',
+        fechaEmision: o.fechaEmision,
+        estado: o.estado,
+        cantidadItems: o._count.items,
+        numeroAutorizacion: o.numeroAutorizacion,
+      })),
+    }
+  }
+
+  if (estadoTab === 'pendientes' || estadoTab === 'confirmadas') {
+    const rows = await prisma.orden.findMany({
+      where: { estado: { not: 'X' } },
+      orderBy: [{ puestoNumero: 'desc' }, { numero: 'desc' }],
+      select: {
+        puestoNumero: true,
+        numero: true,
+        ingresoId: true,
+        nombrePaciente: true,
+        numeroAfiliado: true,
+        obraSocialCoseguroId: true,
+        numeroAutorizacion: true,
+        fechaEmision: true,
+        estado: true,
+        obraSocial: { select: { nombre: true } },
+        _count: { select: { items: true } },
+        items: {
+          select: {
+            item: true,
+            numeroAutorizacion: true,
+          },
+        },
+      },
+    })
+
+    const filtradas = rows
+      .map((row) => {
+        const numeroAutorizacionReal = resolverNumeroAutorizacionOrdenLista(row)
+        return {
+          ...row,
+          numeroAutorizacionReal,
+        }
+      })
+      .filter((row) => {
+        const esPendiente = row.numeroAutorizacionReal == null
+
+        if (estadoTab === 'pendientes' && !esPendiente) return false
+        if (estadoTab === 'confirmadas' && esPendiente) return false
+
+        if (!q || !qLower) return true
+
+        const nombrePaciente = row.nombrePaciente.toLowerCase()
+        const numeroAfiliado = row.numeroAfiliado.toLowerCase()
+        const numeroAutorizacion = row.numeroAutorizacionReal?.toLowerCase() ?? ''
+
+        return (
+          nombrePaciente.includes(qLower) ||
+          numeroAfiliado.includes(qLower) ||
+          numeroAutorizacion.includes(qLower) ||
+          (numeroBuscado != null && row.numero === numeroBuscado)
+        )
+      })
+
+    const total = filtradas.length
+    const pageRows = filtradas.slice(skip, skip + take).map((row) => ({
+      puestoNumero: row.puestoNumero,
+      numero: row.numero,
+      ingresoId: row.ingresoId,
+      nombrePaciente: row.nombrePaciente,
+      obraSocialCoseguroId: row.obraSocialCoseguroId,
+      numeroAutorizacion: row.numeroAutorizacionReal,
+      fechaEmision: row.fechaEmision,
+      estado: row.estado,
+      obraSocial: row.obraSocial,
+      _count: row._count,
+    }))
+
+    return mapearResultado(pageRows, total)
+  }
 
   const filtroBusqueda = q
     ? {
@@ -451,30 +614,18 @@ export async function listarOrdenes(params: {
     : {}
 
   const where: Prisma.OrdenWhereInput =
-    estadoTab === 'pendientes'
+    estadoTab === 'anuladas'
       ? {
-        estado: { not: 'X' },
-        numeroAutorizacion: null,
+        estado: 'X',
         ...filtroBusqueda,
       }
-      : estadoTab === 'confirmadas'
-        ? {
-          estado: { not: 'X' },
-          numeroAutorizacion: { not: null },
-          ...filtroBusqueda,
-        }
-        : estadoTab === 'anuladas'
-          ? {
-            estado: 'X',
-            ...filtroBusqueda,
-          }
-          : {}
+      : filtroBusqueda
 
   const [rows, total] = await Promise.all([
     prisma.orden.findMany({
       where,
-      skip: params.skip ?? 0,
-      take: params.take ?? 20,
+      skip,
+      take,
       orderBy: [{ puestoNumero: 'desc' }, { numero: 'desc' }],
       select: {
         puestoNumero: true,
@@ -492,35 +643,7 @@ export async function listarOrdenes(params: {
     prisma.orden.count({ where }),
   ])
 
-  const idsCoseguro = Array.from(
-    new Set(rows.map((o) => o.obraSocialCoseguroId).filter((id): id is number => id != null))
-  )
-
-  const coseguros =
-    idsCoseguro.length > 0
-      ? await prisma.obraSocial.findMany({
-        where: { id: { in: idsCoseguro } },
-        select: { id: true, nombre: true },
-      })
-      : []
-
-  const coseguroPorId = new Map(coseguros.map((c) => [c.id, c.nombre]))
-
-  return {
-    total,
-    ordenes: rows.map((o) => ({
-      puestoNumero: o.puestoNumero,
-      numero: o.numero,
-      ingresoId: o.ingresoId,
-      nombrePaciente: o.nombrePaciente,
-      obraSocialNombre: o.obraSocial?.nombre ?? '',
-      coseguroNombre: o.obraSocialCoseguroId ? (coseguroPorId.get(o.obraSocialCoseguroId) ?? '-') : '-',
-      fechaEmision: o.fechaEmision,
-      estado: o.estado,
-      cantidadItems: o._count.items,
-      numeroAutorizacion: o.numeroAutorizacion,
-    })),
-  }
+  return mapearResultado(rows, total)
 }
 
 // ============================================

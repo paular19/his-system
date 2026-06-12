@@ -15,7 +15,7 @@ import { CirugiaUrgenciaSection } from '@/components/internacion/cirugia-urgenci
 import { SECTOR_LABEL, ESTADO_CAMA_LABEL } from '@/modules/internacion/types'
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { asegurarCosegurosIPSS } from '@/lib/utils/coseguros'
+import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 import {
     ChevronRight,
     User,
@@ -25,6 +25,7 @@ import {
     Activity,
     Printer,
 } from 'lucide-react'
+import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 
 interface PageProps {
     params: Promise<{ id: string }>
@@ -81,7 +82,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         asegurarCosegurosIPSS(),
     ])
 
-    const obraSociales = obrasSocialesRows.map((os) => ({
+    const obraSociales = filtrarObrasSocialesPrincipales(obrasSocialesRows).map((os) => ({
         id: os.id,
         nombre: os.nombre,
         requiereCoseguro: os.requiereCoseguro === 'S',
@@ -211,14 +212,14 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                 <DataItem label="Alta prevista" value={fmtDate(detalle.fechaEgresoPrevista)} />
                                 <DataItem label="Estancia" value={diasEstancia()} />
                                 {detalle.fechaEgreso && <DataItem label="Alta real" value={fmtDate(detalle.fechaEgreso)} />}
-                                <DataItem label="Médico guardia" value={detalle.profesionalGuardia?.nombre ?? null} />
+                                <DataItem label="Médico guardia" value={detalle.profesionalGuardia?.nombre ? nombreProfesionalParaMostrar(detalle.profesionalGuardia.nombre) : null} />
                             </dl>
                         </div>
 
                         <TratanteSection
                             ingresoId={ingresoId}
                             tratanteActualId={detalle.profesionalTratante?.id ?? null}
-                            tratanteActualNombre={detalle.profesionalTratante?.nombre ?? null}
+                            tratanteActualNombre={detalle.profesionalTratante?.nombre ? nombreProfesionalParaMostrar(detalle.profesionalTratante.nombre) : null}
                             profesionales={profesionales}
                             historialTratantes={detalle.historialTratantes}
                             puedeModificar={puedeModificar}

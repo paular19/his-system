@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Save, Loader2, CheckCircle2, AlertCircle, Search, Plus, X } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { updateIngresoAction, getProfesionalesAction, getMotivosEgresoAction } from '@/modules/admision/actions'
 import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
 import type { ActualizarIngresoInput } from '@/modules/admision/schemas'
@@ -36,9 +37,11 @@ interface PracticaEditable {
     matriculaAnestesista?: number | null
 }
 
+const MATRICULA_AMBULATORIO_DEFAULT = 9110
+
 export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) {
     const [isPending, startTransition] = useTransition()
-    const [profesionales, setProfesionales] = useState<{ id: number; nombre: string }[]>([])
+    const [profesionales, setProfesionales] = useState<{ id: number; nombre: string; matricula?: number | null }[]>([])
     const [motivosEgreso, setMotivosEgreso] = useState<{ codigo: string; descripcion: string }[]>([])
     const [isLoadingData, setIsLoadingData] = useState(true)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -47,8 +50,27 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
     const [buscandoPractica, setBuscandoPractica] = useState(false)
     const [resultadosPractica, setResultadosPractica] = useState<PracticaBusquedaItem[]>([])
     const [practicasAgregar, setPracticasAgregar] = useState<PracticaEditable[]>([])
+    const esAmbulatorio = ingreso.tipoIngresoCodigo === 'AMB'
+    const subtiposPracticaAmbulatoria = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM']
+    const esPracticaAmbulatoria =
+        esAmbulatorio &&
+        subtiposPracticaAmbulatoria.includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
 
     const crearTempId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+
+    const completarMatriculasAmbulatorias = (items: PracticaEditable[]): PracticaEditable[] => {
+        if (!esAmbulatorio) return items
+
+        return items.map((p) => ({
+            ...p,
+            matriculaEspecialista: p.requiereMatriculaEspecialista
+                ? (p.matriculaEspecialista ?? MATRICULA_AMBULATORIO_DEFAULT)
+                : p.matriculaEspecialista,
+            matriculaAnestesista: p.requiereMatriculaAnestesista
+                ? (p.matriculaAnestesista ?? MATRICULA_AMBULATORIO_DEFAULT)
+                : p.matriculaAnestesista,
+        }))
+    }
 
     // Convierte un Date/string/null a YYYY-MM-DD para <input type="date">
     const toDateStr = (d: Date | string | null | undefined) => {
@@ -60,13 +82,26 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         return `${y}-${m}-${day}`
     }
 
+    // Convierte un Date/string/null a YYYY-MM-DDTHH:mm para <input type="datetime-local">
+    const toDateTimeLocalStr = (d: Date | string | null | undefined) => {
+        if (!d) return ''
+        const date = new Date(d)
+        const y = date.getFullYear()
+        const m = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const hh = String(date.getHours()).padStart(2, '0')
+        const mm = String(date.getMinutes()).padStart(2, '0')
+        return `${y}-${m}-${day}T${hh}:${mm}`
+    }
+
     const form = useForm<ActualizarIngresoInput>({
         resolver: zodResolver(ActualizarIngresoSchema),
         defaultValues: {
             subtipoAdmisionCodigo: ingreso.ingresoSubtipo?.subtipoAdmisionCodigo,
-            // Los inputs type="date" necesitan string YYYY-MM-DD, no objetos Date
-            fechaIngreso: toDateStr(ingreso.fechaIngreso) as unknown as Date,
-            fechaEgresoPrevista: toDateStr(ingreso.fechaEgresoPrevista) as unknown as Date,
+            fechaIngreso: toDateTimeLocalStr(ingreso.fechaIngreso) as unknown as Date,
+            fechaEgresoPrevista: esPracticaAmbulatoria
+                ? undefined
+                : (toDateStr(ingreso.fechaEgresoPrevista) as unknown as Date),
             fechaEgreso: toDateStr(ingreso.fechaEgreso) as unknown as Date,
             profesionalGuardiaId: ingreso.profesionalGuardiaId ?? undefined,
             profesionalTratanteId: ingreso.profesionalTratanteId ?? undefined,
@@ -82,6 +117,9 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
             motivoEgresoCodigo: ingreso.motivoEgresoCodigo ?? undefined,
         } as Partial<ActualizarIngresoInput>,
     })
+
+    const profesionalGuardiaSeleccionado = form.watch('profesionalGuardiaId')
+    const profesionalTratanteSeleccionado = form.watch('profesionalTratanteId')
 
     useEffect(() => {
         const loadData = async () => {
@@ -166,8 +204,12 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                 cantidad: 1,
                 requiereMatriculaEspecialista: practica.valorEspecialista != null,
                 requiereMatriculaAnestesista: practica.valorAnestesista != null,
-                matriculaEspecialista: null,
-                matriculaAnestesista: null,
+                matriculaEspecialista: esAmbulatorio && practica.valorEspecialista != null
+                    ? MATRICULA_AMBULATORIO_DEFAULT
+                    : null,
+                matriculaAnestesista: esAmbulatorio && practica.valorAnestesista != null
+                    ? MATRICULA_AMBULATORIO_DEFAULT
+                    : null,
             },
         ])
         setBusquedaPractica('')
@@ -211,13 +253,9 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         setSuccessMsg(null)
         setErrorMsg(null)
 
-        const practicaSinMatricula = practicasAgregar.find((p) =>
-            (p.requiereMatriculaEspecialista && !p.matriculaEspecialista) ||
-            (p.requiereMatriculaAnestesista && !p.matriculaAnestesista)
-        )
-        if (practicaSinMatricula) {
-            setErrorMsg('Complete matrícula en prácticas con HE/HA antes de guardar')
-            return
+        const practicasAgregarNormalizadas = completarMatriculasAmbulatorias(practicasAgregar)
+        if (esAmbulatorio) {
+            setPracticasAgregar(practicasAgregarNormalizadas)
         }
 
         // Sanear selects numéricos: la opción vacía con valueAsNumber devuelve NaN.
@@ -237,10 +275,12 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
             ...data,
             profesionalGuardiaId: sanitizeNum(data.profesionalGuardiaId, ingreso.profesionalGuardiaId),
             profesionalTratanteId: sanitizeNum(data.profesionalTratanteId, ingreso.profesionalTratanteId),
-            practicasAgregar: practicasAgregar.length > 0 ? practicasAgregar : undefined,
+            practicasAgregar: practicasAgregarNormalizadas.length > 0 ? practicasAgregarNormalizadas : undefined,
             // Fechas vacías: string vacío no debe pisar valores existentes
             fechaIngreso: (data.fechaIngreso as unknown as string) ? data.fechaIngreso : undefined,
-            fechaEgresoPrevista: (data.fechaEgresoPrevista as unknown as string) ? data.fechaEgresoPrevista : undefined,
+            fechaEgresoPrevista: esPracticaAmbulatoria
+                ? null
+                : ((data.fechaEgresoPrevista as unknown as string) ? data.fechaEgresoPrevista : undefined),
             fechaEgreso: (data.fechaEgreso as unknown as string) ? data.fechaEgreso : undefined,
         }
 
@@ -275,11 +315,11 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                 {/* Fecha de Ingreso */}
                 <div className="space-y-2">
                     <label htmlFor="fechaIngreso" className="block text-sm font-medium text-gray-700">
-                        Fecha de Ingreso
+                        Fecha y hora de ingreso
                     </label>
                     <input
                         id="fechaIngreso"
-                        type="date"
+                        type="datetime-local"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         {...form.register('fechaIngreso')}
                     />
@@ -305,20 +345,22 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                 </div>
 
                 {/* Egreso Previsto */}
-                <div className="space-y-2">
-                    <label htmlFor="fechaEgresoPrevista" className="block text-sm font-medium text-gray-700">
-                        Egreso Previsto
-                    </label>
-                    <input
-                        id="fechaEgresoPrevista"
-                        type="date"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        {...form.register('fechaEgresoPrevista')}
-                    />
-                    {form.formState.errors.fechaEgresoPrevista && (
-                        <p className="text-sm text-red-600">{form.formState.errors.fechaEgresoPrevista.message}</p>
-                    )}
-                </div>
+                {!esPracticaAmbulatoria && (
+                    <div className="space-y-2">
+                        <label htmlFor="fechaEgresoPrevista" className="block text-sm font-medium text-gray-700">
+                            Egreso Previsto
+                        </label>
+                        <input
+                            id="fechaEgresoPrevista"
+                            type="date"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            {...form.register('fechaEgresoPrevista')}
+                        />
+                        {form.formState.errors.fechaEgresoPrevista && (
+                            <p className="text-sm text-red-600">{form.formState.errors.fechaEgresoPrevista.message}</p>
+                        )}
+                    </div>
+                )}
 
                 {/* Estado */}
                 <div className="space-y-2">
@@ -346,18 +388,23 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                     <label htmlFor="profesionalGuardiaId" className="block text-sm font-medium text-gray-700">
                         Profesional Guardia
                     </label>
-                    <select
+                    <ProfesionalSelect
                         id="profesionalGuardiaId"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        {...form.register('profesionalGuardiaId', { valueAsNumber: true })}
-                    >
-                        <option value="">Seleccionar profesional</option>
-                        {profesionales.map((prof) => (
-                            <option key={prof.id} value={prof.id}>
-                                {prof.nombre}
-                            </option>
-                        ))}
-                    </select>
+                        profesionales={profesionales}
+                        value={
+                            typeof profesionalGuardiaSeleccionado === 'number'
+                                ? String(profesionalGuardiaSeleccionado)
+                                : ''
+                        }
+                        onChange={(nextValue) => {
+                            form.setValue(
+                                'profesionalGuardiaId',
+                                nextValue ? Number.parseInt(nextValue, 10) : undefined,
+                                { shouldDirty: true, shouldValidate: true }
+                            )
+                        }}
+                        selectClassName="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                     {form.formState.errors.profesionalGuardiaId && (
                         <p className="text-sm text-red-600">{form.formState.errors.profesionalGuardiaId.message}</p>
                     )}
@@ -368,18 +415,23 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                     <label htmlFor="profesionalTratanteId" className="block text-sm font-medium text-gray-700">
                         Profesional Tratante
                     </label>
-                    <select
+                    <ProfesionalSelect
                         id="profesionalTratanteId"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        {...form.register('profesionalTratanteId', { valueAsNumber: true })}
-                    >
-                        <option value="">Seleccionar profesional</option>
-                        {profesionales.map((prof) => (
-                            <option key={prof.id} value={prof.id}>
-                                {prof.nombre}
-                            </option>
-                        ))}
-                    </select>
+                        profesionales={profesionales}
+                        value={
+                            typeof profesionalTratanteSeleccionado === 'number'
+                                ? String(profesionalTratanteSeleccionado)
+                                : ''
+                        }
+                        onChange={(nextValue) => {
+                            form.setValue(
+                                'profesionalTratanteId',
+                                nextValue ? Number.parseInt(nextValue, 10) : undefined,
+                                { shouldDirty: true, shouldValidate: true }
+                            )
+                        }}
+                        selectClassName="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                     {form.formState.errors.profesionalTratanteId && (
                         <p className="text-sm text-red-600">{form.formState.errors.profesionalTratanteId.message}</p>
                     )}

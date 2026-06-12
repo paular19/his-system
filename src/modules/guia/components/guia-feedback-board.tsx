@@ -19,6 +19,11 @@ export interface GuiaFeedbackItem {
   prioridad: GuiaPrioridadFeedback
   titulo: string
   comentario: string
+  respuesta: string | null
+  respuestaAt: string | null
+  respuestaUsuarioCodigo: string | null
+  respuestaUsuarioNombre: string | null
+  respuestaUsuarioEmail: string | null
   pantalla: string | null
   pasos: string | null
   resultadoEsperado: string | null
@@ -84,6 +89,16 @@ function crearFormulariosIniciales(): Record<GuiaModuloId, FormularioFeedback> {
   return estado
 }
 
+function crearRespuestasIniciales(feedbacks: GuiaFeedbackItem[]): Record<number, string> {
+  const estado: Record<number, string> = {}
+
+  for (const feedback of feedbacks) {
+    estado[feedback.id] = feedback.respuesta ?? ''
+  }
+
+  return estado
+}
+
 export function GuiaFeedbackBoard({ feedbacksIniciales }: GuiaFeedbackBoardProps) {
   const [feedbacks, setFeedbacks] = useState<GuiaFeedbackItem[]>(feedbacksIniciales)
   const [formularios, setFormularios] = useState<Record<GuiaModuloId, FormularioFeedback>>(
@@ -95,6 +110,11 @@ export function GuiaFeedbackBoard({ feedbacksIniciales }: GuiaFeedbackBoardProps
   const [mensajes, setMensajes] = useState<Record<GuiaModuloId, string>>(
     crearEstadoTextoInicial
   )
+  const [respuestas, setRespuestas] = useState<Record<number, string>>(
+    () => crearRespuestasIniciales(feedbacksIniciales)
+  )
+  const [enviandoRespuesta, setEnviandoRespuesta] = useState<Record<number, boolean>>({})
+  const [mensajesRespuesta, setMensajesRespuesta] = useState<Record<number, string>>({})
 
   const feedbacksPorModulo = useMemo(() => {
     const agrupados = {} as Record<GuiaModuloId, GuiaFeedbackItem[]>
@@ -159,6 +179,10 @@ export function GuiaFeedbackBoard({ feedbacksIniciales }: GuiaFeedbackBoardProps
       const nuevo = payload.data as GuiaFeedbackItem
 
       setFeedbacks((prev) => [nuevo, ...prev])
+      setRespuestas((prev) => ({
+        ...prev,
+        [nuevo.id]: '',
+      }))
       setFormularios((prev) => ({
         ...prev,
         [moduloId]: crearFormularioVacio(),
@@ -182,12 +206,78 @@ export function GuiaFeedbackBoard({ feedbacksIniciales }: GuiaFeedbackBoardProps
     }
   }
 
+  async function responderFeedback(feedbackId: number) {
+    const respuesta = (respuestas[feedbackId] ?? '').trim()
+
+    if (respuesta.length < 10) {
+      setMensajesRespuesta((prev) => ({
+        ...prev,
+        [feedbackId]: 'La respuesta debe tener al menos 10 caracteres.',
+      }))
+      return
+    }
+
+    setMensajesRespuesta((prev) => ({
+      ...prev,
+      [feedbackId]: '',
+    }))
+    setEnviandoRespuesta((prev) => ({
+      ...prev,
+      [feedbackId]: true,
+    }))
+
+    try {
+      const response = await fetch('/api/guia/feedback', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: feedbackId,
+          respuesta,
+        }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        const message = payload?.error ?? 'No se pudo guardar la respuesta.'
+        throw new Error(message)
+      }
+
+      const actualizado = payload.data as GuiaFeedbackItem
+
+      setFeedbacks((prev) =>
+        prev.map((item) => (item.id === actualizado.id ? actualizado : item))
+      )
+      setRespuestas((prev) => ({
+        ...prev,
+        [feedbackId]: actualizado.respuesta ?? respuesta,
+      }))
+      setMensajesRespuesta((prev) => ({
+        ...prev,
+        [feedbackId]: 'Respuesta guardada correctamente.',
+      }))
+    } catch (error) {
+      const mensaje =
+        error instanceof Error ? error.message : 'No se pudo guardar la respuesta.'
+      setMensajesRespuesta((prev) => ({
+        ...prev,
+        [feedbackId]: mensaje,
+      }))
+    } finally {
+      setEnviandoRespuesta((prev) => ({
+        ...prev,
+        [feedbackId]: false,
+      }))
+    }
+  }
+
   return (
     <section className="his-card p-5 space-y-4">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">Feedback por modulo</h2>
         <p className="text-sm text-gray-600 mt-1">
-          Cada modulo tiene su propio espacio para reportar dudas, bugs y mejoras. Los comentarios guardan quien lo envio y fecha.
+          Cada modulo tiene su propio espacio para reportar dudas, bugs y mejoras. Los comentarios guardan quien lo envio, fecha y respuesta oficial.
         </p>
       </div>
 
@@ -372,6 +462,54 @@ export function GuiaFeedbackBoard({ feedbacksIniciales }: GuiaFeedbackBoardProps
                       <p className="mt-2 text-xs text-gray-500">
                         Enviado por {comentario.usuarioNombre || comentario.usuarioCodigo} ({comentario.usuarioEmail})
                       </p>
+
+                      {comentario.respuesta && (
+                        <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                            Respuesta oficial
+                          </p>
+                          <p className="mt-1 text-sm text-emerald-900 whitespace-pre-wrap">
+                            {comentario.respuesta}
+                          </p>
+                          <p className="mt-1 text-xs text-emerald-800">
+                            Respondido por {comentario.respuestaUsuarioNombre || comentario.respuestaUsuarioCodigo || 'equipo'}
+                            {comentario.respuestaAt
+                              ? ` el ${new Date(comentario.respuestaAt).toLocaleString('es-AR')}`
+                              : ''}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-2">
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-blue-800">
+                          {comentario.respuesta ? 'Actualizar respuesta' : 'Responder comentario'}
+                          <textarea
+                            className="mt-2 min-h-20 w-full rounded-md border border-blue-200 bg-white px-2 py-2 text-sm text-gray-800"
+                            value={respuestas[comentario.id] ?? ''}
+                            onChange={(event) =>
+                              setRespuestas((prev) => ({
+                                ...prev,
+                                [comentario.id]: event.target.value,
+                              }))
+                            }
+                            maxLength={2000}
+                            placeholder="Escribi una respuesta para dejar visible en este comentario."
+                          />
+                        </label>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => responderFeedback(comentario.id)}
+                            disabled={enviandoRespuesta[comentario.id]}
+                            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {enviandoRespuesta[comentario.id] ? 'Guardando...' : comentario.respuesta ? 'Guardar cambios' : 'Guardar respuesta'}
+                          </button>
+                          {mensajesRespuesta[comentario.id] && (
+                            <p className="text-xs text-gray-600">{mensajesRespuesta[comentario.id]}</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))
                 )}

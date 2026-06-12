@@ -4,7 +4,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
 import { PacienteForm } from '@/components/pacientes/paciente-form'
 import { prisma } from '@/lib/db'
-import { asegurarCosegurosIPSS } from '@/lib/utils/coseguros'
+import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -30,7 +30,7 @@ export default async function NuevoPacientePage() {
     }),
   ])
 
-  const obraSociales = obraSocialesRows
+  const obraSociales = filtrarObrasSocialesPrincipales(obraSocialesRows)
     .filter((os) => (os.estado ?? '').trim().toUpperCase() === 'A')
     .map((os) => {
       const req = (os.requiereCoseguro ?? '').trim().toUpperCase()

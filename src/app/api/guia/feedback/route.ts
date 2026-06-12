@@ -25,6 +25,11 @@ const CrearFeedbackSchema = z.object({
   resultadoEsperado: z.string().trim().max(1500).optional().nullable(),
 })
 
+const ResponderFeedbackSchema = z.object({
+  id: z.number().int().positive(),
+  respuesta: z.string().trim().min(10).max(2000),
+})
+
 function limpiarOpcional(value: string | null | undefined): string | null {
   const limpio = value?.trim()
   return limpio ? limpio : null
@@ -76,6 +81,36 @@ export async function POST(request: NextRequest) {
     })
 
     return apiCreado(creado)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return apiValidationError(error)
+    }
+
+    return manejarErrorApi(error)
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const usuario = await getUsuarioSesion()
+
+    const body: unknown = await request.json()
+    const data = ResponderFeedbackSchema.parse(body)
+
+    const actualizado = await prisma.guiaFeedback.update({
+      where: {
+        id: data.id,
+      },
+      data: {
+        respuesta: data.respuesta,
+        respuestaAt: new Date(),
+        respuestaUsuarioCodigo: usuario.codigoUsuario.slice(0, 10),
+        respuestaUsuarioNombre: (usuario.nombre || usuario.codigoUsuario).slice(0, 120),
+        respuestaUsuarioEmail: (usuario.email || 'sin-email@local').slice(0, 120),
+      },
+    })
+
+    return apiOk(actualizado)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return apiValidationError(error)

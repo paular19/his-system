@@ -13,6 +13,54 @@ import type { IngresoConRelaciones, IngresoDetalle, IngresoListItem } from './ty
 import type { IngresoPatologia, MovimientoIngreso } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
 
+function normalizarNombreObraSocial(nombre: string): string {
+  return nombre
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function esNombreIPSS(nombre: string | null | undefined): boolean {
+  const tokens = normalizarNombreObraSocial(nombre ?? '').split(' ')
+  return tokens.includes('IPSS') || tokens.includes('IPS')
+}
+
+async function obtenerNombreObraSocial(obraSocialId: number | null | undefined): Promise<string | null> {
+  if (!obraSocialId) return null
+  const obraSocial = await prisma.obraSocial.findUnique({
+    where: { id: obraSocialId },
+    select: { nombre: true },
+  })
+  return obraSocial?.nombre ?? null
+}
+
+function normalizarCoseguroPorObraSocial<
+  T extends {
+    obraSocialCoseguroId?: number | null
+    planCoseguroId?: number | null
+    numeroAfiliadoCoseguro?: string | null
+  },
+>(data: T, obraSocialNombre: string | null): T {
+  if (esNombreIPSS(obraSocialNombre)) return data
+
+  return {
+    ...data,
+    obraSocialCoseguroId: null,
+    planCoseguroId: null,
+    numeroAfiliadoCoseguro: null,
+  }
+}
+
+const SUBTIPOS_PRACTICA_AMBULATORIA = new Set(['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'])
+
+function esSubtipoPracticaAmbulatoria(subtipo: string | null | undefined): boolean {
+  if (!subtipo) return false
+  return SUBTIPOS_PRACTICA_AMBULATORIA.has(subtipo.trim().toUpperCase())
+}
+
 // ============================================
 // SERVICIO ADMISIÓN
 // Lógica de negocio + auditoría
@@ -49,10 +97,18 @@ export async function crearIngreso(
     }
   }
 
-  const ingreso = await repo.crearIngreso(data, paciente, usuario)
+  const obraSocialNombre = await obtenerNombreObraSocial(data.obraSocialId)
+  const dataNormalizada = normalizarCoseguroPorObraSocial(data, obraSocialNombre)
+  const dataParaCrear =
+    dataNormalizada.tipoIngresoCodigo === 'AMB' &&
+      esSubtipoPracticaAmbulatoria(dataNormalizada.subtipoAdmisionCodigo)
+      ? { ...dataNormalizada, fechaEgresoPrevista: null }
+      : dataNormalizada
+
+  const ingreso = await repo.crearIngreso(dataParaCrear, paciente, usuario)
 
   // Auto-generar informe de hospitalización para internaciones
-  if (data.tipoIngresoCodigo === 'INT') {
+  if (dataNormalizada.tipoIngresoCodigo === 'INT') {
     await prisma.informeHospitalizacion.create({
       data: {
         ingresoId: ingreso.id,
@@ -80,16 +136,16 @@ export async function crearIngreso(
   ])
 
   if (
-    data.tipoIngresoCodigo === 'AMB' &&
-    !!data.subtipoAdmisionCodigo &&
-    subtiposInformeAmbulatorio.has(data.subtipoAdmisionCodigo)
+    dataParaCrear.tipoIngresoCodigo === 'AMB' &&
+    !!dataParaCrear.subtipoAdmisionCodigo &&
+    subtiposInformeAmbulatorio.has(dataParaCrear.subtipoAdmisionCodigo)
   ) {
     await prisma.informeAmbulatorio.create({
       data: {
         ingresoId: ingreso.id,
         fecha: new Date(),
         estado: 'A',
-        profesionalId: data.profesionalGuardiaId ?? null,
+        profesionalId: dataParaCrear.profesionalGuardiaId ?? null,
         usuario: usuario.slice(0, 10),
         fechaEstado: new Date(),
       },
@@ -106,9 +162,9 @@ export async function crearIngreso(
   })
 
   // Registrar prácticas al ingreso como entidades reales (no en observaciones)
-  if (data.practicas && data.practicas.length > 0) {
-    const practicasSinConvenio = data.practicas.filter(
-      (p) => !(p.convenioId ?? data.obraSocialId)
+  if (dataParaCrear.practicas && dataParaCrear.practicas.length > 0) {
+    const practicasSinConvenio = dataParaCrear.practicas.filter(
+      (p) => !(p.convenioId ?? dataParaCrear.obraSocialId)
     )
 
     if (practicasSinConvenio.length > 0) {
@@ -118,16 +174,13 @@ export async function crearIngreso(
     }
 
     // Calcular importeTotal para cada práctica
-    const obraSocial = data.obraSocialId
-      ? await prisma.obraSocial.findUnique({
-        where: { id: data.obraSocialId },
-        select: { nombre: true },
-      })
-      : null
-    const regla = resolverReglaFacturacion(obraSocial?.nombre, Boolean(data.obraSocialCoseguroId))
+    const regla = resolverReglaFacturacion(
+      obraSocialNombre,
+      Boolean(dataParaCrear.obraSocialCoseguroId)
+    )
 
     const codigos = Array.from(
-      new Set(data.practicas.map((p) => p.codigo.trim().toUpperCase()))
+      new Set(dataParaCrear.practicas.map((p) => p.codigo.trim().toUpperCase()))
     )
     const prestaciones = codigos.length
       ? await prisma.nomencladorPrestacion.findMany({
@@ -164,13 +217,13 @@ export async function crearIngreso(
 
     const ahora = new Date()
     await prisma.practica.createMany({
-      data: data.practicas.map((p) => {
+      data: dataParaCrear.practicas.map((p) => {
         const clave = p.codigo.trim().toUpperCase()
         const precio = valorNomenclador.get(clave) ?? 0
         const cobertura = calcularImporteFacturable(precio, p.cantidad, regla)
         return {
           ingresoId: ingreso.id,
-          convenioId: (p.convenioId ?? data.obraSocialId) as number,
+          convenioId: (p.convenioId ?? dataParaCrear.obraSocialId) as number,
           codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
           convenioValorId: 0,
           fecha: ahora,
@@ -178,8 +231,8 @@ export async function crearIngreso(
           numeroAutorizacion: null,
           matriculaEspecialista: p.matriculaEspecialista ?? null,
           matriculaAnestesista: p.matriculaAnestesista ?? null,
-          obraSocialId: data.obraSocialId ?? null,
-          planId: data.planId ?? null,
+          obraSocialId: dataParaCrear.obraSocialId ?? null,
+          planId: dataParaCrear.planId ?? null,
           facturable: true,
           estado: 'A',
           ordenItem: p.grupoOrden ?? null,
@@ -314,16 +367,32 @@ export async function obtenerIngreso(
       !(p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0)
   )
 
-  const ordenesPorPractica =
-    practicasSinVinculo.length > 0
-      ? await prisma.ordenPractica.findMany({
+  const clavesPracticaSinVinculo = Array.from(
+    new Set(practicasSinVinculo.map((p) => `${p.convenioId}:${p.codigoPractica.trim()}`))
+  ).map((key) => {
+    const [convenioIdRaw, ...codigoParts] = key.split(':')
+    return {
+      convenioId: Number.parseInt(convenioIdRaw ?? '0', 10),
+      codigoPractica: codigoParts.join(':'),
+    }
+  })
+
+  let ordenesPorPractica: Array<{
+    convenioId: number
+    codigoPractica: string
+    puestoNumero: number
+    ordenNumero: number
+    item: number
+    numeroAutorizacion: string | null
+  }> = []
+
+  if (clavesPracticaSinVinculo.length > 0) {
+    try {
+      ordenesPorPractica = await prisma.ordenPractica.findMany({
         where: {
           orden: { ingresoId: id },
           practicaId: null,
-          OR: practicasSinVinculo.map((p) => ({
-            convenioId: p.convenioId,
-            codigoPractica: p.codigoPractica,
-          })),
+          OR: clavesPracticaSinVinculo,
         },
         select: {
           convenioId: true,
@@ -334,7 +403,14 @@ export async function obtenerIngreso(
           numeroAutorizacion: true,
         },
       })
-      : []
+    } catch (error) {
+      console.error(
+        `[admision] Error recuperando ordenes pendientes para ingreso ${id}. Continuando sin vinculos automáticos.`,
+        error
+      )
+      ordenesPorPractica = []
+    }
+  }
 
   const ordenesPendientesPorClave = new Map<
     string,
@@ -425,13 +501,39 @@ export async function actualizarIngreso(
     throw new Error(`Ingreso con ID ${id} no encontrado`)
   }
 
-  const actualizado = await repo.actualizarIngreso(id, data, usuario)
+  const obraSocialIdFinal = data.obraSocialId ?? existe.obraSocialId ?? null
+  const obraSocialCoseguroIdFinal = data.obraSocialCoseguroId ?? existe.obraSocialCoseguroId ?? null
+  const planCoseguroIdFinal = data.planCoseguroId ?? existe.planCoseguroId ?? null
+  const numeroAfiliadoCoseguroFinal = data.numeroAfiliadoCoseguro ?? existe.numeroAfiliadoCoseguro ?? null
 
-  if (data.practicasAgregar && data.practicasAgregar.length > 0) {
-    const obraSocialId = data.obraSocialId ?? existe.obraSocialId ?? null
-    const planId = data.planId ?? existe.planId ?? null
+  const obraSocialNombreFinal = await obtenerNombreObraSocial(obraSocialIdFinal)
 
-    const practicasSinConvenio = data.practicasAgregar.filter(
+  const dataNormalizada: ActualizarIngresoInput = normalizarCoseguroPorObraSocial(
+    {
+      ...data,
+      obraSocialId: obraSocialIdFinal,
+      obraSocialCoseguroId: obraSocialCoseguroIdFinal,
+      planCoseguroId: planCoseguroIdFinal,
+      numeroAfiliadoCoseguro: numeroAfiliadoCoseguroFinal,
+    },
+    obraSocialNombreFinal
+  )
+
+  const subtipoAdmisionFinal = dataNormalizada.subtipoAdmisionCodigo
+    ?? existe.ingresoSubtipo?.subtipoAdmisionCodigo
+    ?? null
+  const dataParaActualizar: ActualizarIngresoInput =
+    existe.tipoIngresoCodigo === 'AMB' && esSubtipoPracticaAmbulatoria(subtipoAdmisionFinal)
+      ? { ...dataNormalizada, fechaEgresoPrevista: null }
+      : dataNormalizada
+
+  const actualizado = await repo.actualizarIngreso(id, dataParaActualizar, usuario)
+
+  if (dataParaActualizar.practicasAgregar && dataParaActualizar.practicasAgregar.length > 0) {
+    const obraSocialId = dataParaActualizar.obraSocialId ?? null
+    const planId = dataParaActualizar.planId ?? existe.planId ?? null
+
+    const practicasSinConvenio = dataParaActualizar.practicasAgregar.filter(
       (p) => !(p.convenioId ?? obraSocialId)
     )
 
@@ -442,13 +544,12 @@ export async function actualizarIngreso(
     }
 
     // Calcular importeTotal para cada práctica
-    const obraSocialParaRegla = obraSocialId
-      ? await prisma.obraSocial.findUnique({ where: { id: obraSocialId }, select: { nombre: true } })
-      : null
-    const obraSocialCoseguroId = data.obraSocialCoseguroId ?? existe.obraSocialCoseguroId ?? null
-    const reglaEdit = resolverReglaFacturacion(obraSocialParaRegla?.nombre, Boolean(obraSocialCoseguroId))
+    const obraSocialCoseguroId = dataParaActualizar.obraSocialCoseguroId ?? null
+    const reglaEdit = resolverReglaFacturacion(obraSocialNombreFinal, Boolean(obraSocialCoseguroId))
 
-    const codigosEdit = Array.from(new Set(data.practicasAgregar.map((p) => p.codigo.trim().toUpperCase())))
+    const codigosEdit = Array.from(
+      new Set(dataParaActualizar.practicasAgregar.map((p) => p.codigo.trim().toUpperCase()))
+    )
     const prestacionesEdit = codigosEdit.length
       ? await prisma.nomencladorPrestacion.findMany({
         where: { codigo: { in: codigosEdit } },
@@ -483,7 +584,7 @@ export async function actualizarIngreso(
 
     const ahoraEdit = new Date()
     await prisma.practica.createMany({
-      data: data.practicasAgregar.map((p) => {
+      data: dataParaActualizar.practicasAgregar.map((p) => {
         const clave = p.codigo.trim().toUpperCase()
         const precio = valorNomencladorEdit.get(clave) ?? 0
         const cobertura = calcularImporteFacturable(precio, p.cantidad, reglaEdit)

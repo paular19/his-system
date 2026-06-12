@@ -1,6 +1,6 @@
 /**
  * SEED — CAMAS
- * Crea las 39 camas de la clínica si no existen.
+ * Sincroniza el catálogo de camas de la clínica.
  *
  * Ejecución:
  *   npx tsx prisma/seed-camas.ts
@@ -14,6 +14,43 @@ const prisma = new PrismaClient()
 
 const USUARIO_SISTEMA = 'SISTEMA'
 
+const piso2Habitaciones = [
+  '201',
+  '201',
+  '202',
+  '202',
+  '203',
+  '203',
+  '204',
+  '204',
+  '205',
+  '205',
+  '206',
+  '206',
+  '208',
+  '208',
+  '209',
+  '209',
+  '210',
+  '210',
+]
+
+const piso3Habitaciones = [
+  '301',
+  '301',
+  '301',
+  '302',
+  '302',
+  '302',
+  '303',
+  '304',
+  '304',
+  '305',
+  '306',
+  '306',
+  '307',
+]
+
 const camas = [
   // ── UTI — Terapia Intensiva (10 camas) ──────────────────
   ...Array.from({ length: 10 }, (_, i) => ({
@@ -23,18 +60,18 @@ const camas = [
     estado: 'DISPONIBLE',
   })),
 
-  // ── Internación Piso 2 (16 camas) ───────────────────────
-  ...Array.from({ length: 16 }, (_, i) => ({
+  // ── Internación Piso 2 (18 camas) ───────────────────────
+  ...piso2Habitaciones.map((habitacion, i) => ({
     identificador: `P2-${String(i + 1).padStart(2, '0')}`,
-    habitacion: `2${String(Math.floor(i / 2) + 1).padStart(2, '0')}`,
+    habitacion,
     sector: 'PISO_2',
     estado: 'DISPONIBLE',
   })),
 
   // ── Internación Piso 3 (13 camas) ───────────────────────
-  ...Array.from({ length: 13 }, (_, i) => ({
+  ...piso3Habitaciones.map((habitacion, i) => ({
     identificador: `P3-${String(i + 1).padStart(2, '0')}`,
-    habitacion: `3${String(Math.floor(i / 2) + 1).padStart(2, '0')}`,
+    habitacion,
     sector: 'PISO_3',
     estado: 'DISPONIBLE',
   })),
@@ -44,6 +81,7 @@ async function main() {
   console.log(`Seeding ${camas.length} camas...`)
 
   let creadas = 0
+  let actualizadas = 0
   let omitidas = 0
 
   for (const cama of camas) {
@@ -52,7 +90,27 @@ async function main() {
     })
 
     if (existe) {
-      omitidas++
+      const requiereActualizacion =
+        existe.habitacion !== cama.habitacion ||
+        existe.sector !== cama.sector ||
+        existe.estado !== cama.estado
+
+      if (requiereActualizacion) {
+        await prisma.cama.update({
+          where: { id: existe.id },
+          data: {
+            habitacion: cama.habitacion,
+            sector: cama.sector,
+            estado: cama.estado,
+            usuario: USUARIO_SISTEMA,
+            fechaEstado: new Date(),
+          },
+        })
+        actualizadas++
+        console.log(`  ~ ${cama.identificador} actualizado [${cama.sector}]`)
+      } else {
+        omitidas++
+      }
       continue
     }
 
@@ -70,7 +128,9 @@ async function main() {
     console.log(`  ✓ ${cama.identificador} [${cama.sector}]`)
   }
 
-  console.log(`\nListo: ${creadas} creadas, ${omitidas} ya existían.`)
+  console.log(
+    `\nListo: ${creadas} creadas, ${actualizadas} actualizadas, ${omitidas} sin cambios.`
+  )
 }
 
 main()

@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import type { PacienteResumen } from '@/modules/admision/types'
-import { asegurarCosegurosIPSS } from '@/lib/utils/coseguros'
+import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 
 export const metadata: Metadata = { title: 'Nueva Admisión' }
 
@@ -53,7 +53,7 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
       select: { id: true, nombre: true, requiereCoseguro: true },
       orderBy: { nombre: 'asc' },
     })
-    obraSociales = rows.map((os) => ({
+    obraSociales = filtrarObrasSocialesPrincipales(rows).map((os) => ({
       id: os.id,
       nombre: os.nombre,
       requiereCoseguro: os.requiereCoseguro === 'S',

@@ -20,6 +20,7 @@ import type {
 import type { IngresoConRelaciones, IngresoDetalle, IngresoListItem } from '../types'
 import type { IngresoPatologia, MovimientoIngreso } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
+import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 
 // ============================================
 // SERVER ACTIONS — MÓDULO ADMISIÓN
@@ -90,7 +91,7 @@ export async function registrarMovimientoAction(
   return service.registrarMovimiento(validado, usuario.codigoUsuario)
 }
 
-export async function getProfesionalesAction(): Promise<{ id: number; nombre: string }[]> {
+export async function getProfesionalesAction(): Promise<{ id: number; nombre: string; matricula: number | null }[]> {
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'LEER')) {
     throw new Error('Sin permisos para consultar profesionales')
@@ -98,7 +99,7 @@ export async function getProfesionalesAction(): Promise<{ id: number; nombre: st
   const { prisma } = await import('@/lib/db')
   return prisma.profesional.findMany({
     where: { estado: 'A' },
-    select: { id: true, nombre: true },
+    select: { id: true, nombre: true, matricula: true },
     orderBy: { nombre: 'asc' },
   })
 }
@@ -121,11 +122,12 @@ export async function getObrasSocialesAction(): Promise<{ id: number; nombre: st
     throw new Error('Sin permisos para consultar obras sociales')
   }
   const { prisma } = await import('@/lib/db')
-  return prisma.obraSocial.findMany({
+  const rows = await prisma.obraSocial.findMany({
     where: { estado: 'A' },
     select: { id: true, nombre: true },
     orderBy: { nombre: 'asc' },
   })
+  return filtrarObrasSocialesPrincipales(rows)
 }
 
 export async function getPlanesAction(): Promise<{ id: number; nombre: string; obraSocialId: number | null }[]> {

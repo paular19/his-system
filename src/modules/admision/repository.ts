@@ -230,7 +230,10 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
   const practicaIds = practicasOrdenadas.map((p) => p.id)
   const ordenesPracticaRows = practicaIds.length
     ? await prisma.ordenPractica.findMany({
-      where: { practicaId: { in: practicaIds } },
+      where: {
+        practicaId: { in: practicaIds },
+        orden: { estado: { not: 'X' } },
+      },
       select: {
         practicaId: true,
         puestoNumero: true,

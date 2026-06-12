@@ -314,16 +314,50 @@ export async function obtenerIngreso(
       !(p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0)
   )
 
-  const ordenesPorPractica =
-    practicasSinVinculo.length > 0
-      ? await prisma.ordenPractica.findMany({
+  const clavesPracticaSinVinculo = Array.from(
+    new Set(practicasSinVinculo.map((p) => `${p.convenioId}:${p.codigoPractica.trim()}`))
+  ).map((key) => {
+    const [convenioIdRaw, ...codigoParts] = key.split(':')
+    return {
+      convenioId: Number.parseInt(convenioIdRaw ?? '0', 10),
+      codigoPractica: codigoParts.join(':'),
+    }
+  })
+
+  let ordenesPorPractica: Array<{
+    convenioId: number
+    codigoPractica: string
+    puestoNumero: number
+    ordenNumero: number
+    item: number
+    numeroAutorizacion: string | null
+  }> = []
+
+  const ordenesActivas = await prisma.orden.findMany({
+    where: {
+      ingresoId: id,
+      NOT: { estado: 'X' },
+    },
+    select: {
+      puestoNumero: true,
+      numero: true,
+    },
+  })
+
+  const ordenesActivasSet = new Set(
+    ordenesActivas.map((orden) => `${orden.puestoNumero}:${orden.numero}`)
+  )
+
+  if (clavesPracticaSinVinculo.length > 0) {
+    try {
+      ordenesPorPractica = await prisma.ordenPractica.findMany({
         where: {
-          orden: { ingresoId: id },
+          orden: {
+            ingresoId: id,
+            estado: { not: 'X' },
+          },
           practicaId: null,
-          OR: practicasSinVinculo.map((p) => ({
-            convenioId: p.convenioId,
-            codigoPractica: p.codigoPractica,
-          })),
+          OR: clavesPracticaSinVinculo,
         },
         select: {
           convenioId: true,
@@ -334,8 +368,14 @@ export async function obtenerIngreso(
           numeroAutorizacion: true,
         },
       })
-      : []
-
+    } catch (error) {
+      console.error(
+        `[admision] Error recuperando ordenes pendientes para ingreso ${id}. Continuando sin vinculos automáticos.`,
+        error
+      )
+      ordenesPorPractica = []
+    }
+  }
   const ordenesPendientesPorClave = new Map<
     string,
     Array<{
@@ -398,6 +438,9 @@ export async function obtenerIngreso(
         p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0
 
       if (!tieneOrdenDirecta) return p
+
+      const claveOrdenDirecta = `${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`
+      if (!ordenesActivasSet.has(claveOrdenDirecta)) return p
 
       return {
         ...p,

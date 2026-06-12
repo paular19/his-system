@@ -211,7 +211,7 @@ export async function anularOrdenAction(puestoNumero: number, numero: number) {
   try {
     const orden = await prisma.orden.findUnique({
       where: { puestoNumero_numero: { puestoNumero, numero } },
-      select: { estado: true, numeroAutorizacion: true },
+      select: { estado: true, numeroAutorizacion: true, ingresoId: true },
     })
 
     if (!orden) {
@@ -237,6 +237,12 @@ export async function anularOrdenAction(puestoNumero: number, numero: number) {
 
     revalidatePath('/dashboard/ambulatorio')
     revalidatePath(`/dashboard/ambulatorio/${puestoNumero}/${numero}`)
+    if (orden.ingresoId != null) {
+      revalidatePath('/dashboard/internacion')
+      revalidatePath('/dashboard/admision')
+      revalidatePath(`/dashboard/internacion/${orden.ingresoId}`)
+      revalidatePath(`/dashboard/admision/${orden.ingresoId}`)
+    }
     return { ok: true }
   } catch (err) {
     console.error('[ORDEN] Error al anular orden:', err)

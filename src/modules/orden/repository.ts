@@ -224,10 +224,10 @@ export async function crearOrdenInterna(
     if (!opciones.permitirCombinacionesYaAutorizadas) {
       // Validar que la práctica no tenga ya orden en el mismo ingreso/paciente
       const whereOrden: Prisma.OrdenWhereInput = data.ingresoId
-        ? { ingresoId: data.ingresoId }
+        ? { ingresoId: data.ingresoId, NOT: { estado: 'X' } }
         : data.pacienteId
-          ? { pacienteId: data.pacienteId }
-          : {}
+          ? { pacienteId: data.pacienteId, NOT: { estado: 'X' } }
+          : { NOT: { estado: 'X' } }
 
       const practicasConOrden = await tx.ordenPractica.findMany({
         where: {
@@ -736,6 +736,7 @@ export async function obtenerContextoAdmisionParaOrden(
       obraSocial: { select: { id: true, nombre: true } },
       plan: { select: { id: true, descripcion: true } },
       ordenes: {
+        where: { NOT: { estado: 'X' } },
         select: {
           puestoNumero: true,
           numero: true,
@@ -767,6 +768,7 @@ export async function obtenerContextoAdmisionParaOrden(
           matriculaEspecialista: true,
           matriculaAnestesista: true,
           ordenPractica: {
+            where: { orden: { estado: { not: 'X' } } },
             select: {
               puestoNumero: true,
               ordenNumero: true,
@@ -802,6 +804,10 @@ export async function obtenerContextoAdmisionParaOrden(
   })
 
   if (!ingreso) return null
+
+  const ordenesActivasSet = new Set(
+    ingreso.ordenes.map((orden) => `${orden.puestoNumero}:${orden.numero}`)
+  )
 
   const ordenesPendientesPorClave = new Map<
     string,
@@ -843,7 +849,12 @@ export async function obtenerContextoAdmisionParaOrden(
     .filter(
       (p) =>
         (p.ordenPractica?.length ?? 0) === 0 &&
-        !(p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0)
+        !(
+          p.puestoNumero != null &&
+          p.ordenNumero != null &&
+          Number(p.puestoNumero) > 0 &&
+          ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`)
+        )
     )
     .sort((a, b) => a.id - b.id)
 
@@ -889,7 +900,10 @@ export async function obtenerContextoAdmisionParaOrden(
             item: op.item,
             numeroAutorizacion: op.numeroAutorizacion,
           }))
-          : p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0
+          : p.puestoNumero != null &&
+            p.ordenNumero != null &&
+            Number(p.puestoNumero) > 0 &&
+            ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`)
             ? [
               {
                 puestoNumero: Number(p.puestoNumero),

@@ -484,7 +484,10 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
       },
     }),
     prisma.orden.findMany({
-      where: { ingresoId: id },
+      where: {
+        ingresoId: id,
+        NOT: { estado: 'X' },
+      },
       select: {
         puestoNumero: true,
         numero: true,
@@ -537,6 +540,7 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
     ? await prisma.ordenPractica.findMany({
       where: {
         practicaId: { in: practicaIds },
+        orden: { estado: { not: 'X' } },
       },
       select: {
         practicaId: true,
@@ -563,6 +567,10 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
       }
     })
     .filter((item): item is NonNullable<typeof item> => item !== null)
+
+  const ordenesActivasSet = new Set(
+    ordenes.map((orden) => `${orden.puestoNumero}:${orden.numero}`)
+  )
 
   const ordenPorClave = new Map(
     ordenes.flatMap((o) =>
@@ -626,7 +634,10 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
         ((ordenesPracticaPorId.get(p.id) ?? []).length > 0
           ? (ordenesPracticaPorId.get(p.id) ?? [])
           : null) ??
-        (p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0
+        (p.puestoNumero != null &&
+        p.ordenNumero != null &&
+        Number(p.puestoNumero) > 0 &&
+        ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`)
           ? [
             {
               puestoNumero: Number(p.puestoNumero),

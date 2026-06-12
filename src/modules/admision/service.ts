@@ -386,11 +386,29 @@ export async function obtenerIngreso(
     numeroAutorizacion: string | null
   }> = []
 
+  const ordenesActivas = await prisma.orden.findMany({
+    where: {
+      ingresoId: id,
+      NOT: { estado: 'X' },
+    },
+    select: {
+      puestoNumero: true,
+      numero: true,
+    },
+  })
+
+  const ordenesActivasSet = new Set(
+    ordenesActivas.map((orden) => `${orden.puestoNumero}:${orden.numero}`)
+  )
+
   if (clavesPracticaSinVinculo.length > 0) {
     try {
       ordenesPorPractica = await prisma.ordenPractica.findMany({
         where: {
-          orden: { ingresoId: id },
+          orden: {
+            ingresoId: id,
+            estado: { not: 'X' },
+          },
           practicaId: null,
           OR: clavesPracticaSinVinculo,
         },
@@ -474,6 +492,9 @@ export async function obtenerIngreso(
         p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0
 
       if (!tieneOrdenDirecta) return p
+
+      const claveOrdenDirecta = `${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`
+      if (!ordenesActivasSet.has(claveOrdenDirecta)) return p
 
       return {
         ...p,

@@ -859,7 +859,7 @@ export async function buscarAdmisionesFacturacion(
 }
 
 export async function obtenerContextoFacturacion(ingresoId: number): Promise<FacturacionContexto | null> {
-    const ingreso = await prisma.ingreso.findUnique({
+    const ingresoBase = await prisma.ingreso.findUnique({
         where: { id: ingresoId },
         select: {
             id: true,
@@ -891,112 +891,169 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             },
             obraSocial: { select: { id: true, nombre: true } },
             plan: { select: { id: true, descripcion: true } },
-            practicas: {
-                where: { OR: [{ estado: 'A' }, { estado: null }] },
-                orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
-                select: {
-                    id: true,
-                    fecha: true,
-                    codigoPractica: true,
-                    cantidad: true,
-                    convenioId: true,
-                    numeroAutorizacion: true,
-                    matriculaEspecialista: true,
-                    matriculaAnestesista: true,
-                    importeTotal: true,
-                    puestoNumero: true,
-                    ordenNumero: true,
-                    ordenItem: true,
-                    nomencladorPractica: { select: { descripcion: true, valorEspecialista: true, valorAyudante: true, valorAnestesista: true, valorGastos: true } },
-                },
+        },
+    })
+
+    if (!ingresoBase) return null
+
+    const [practicasBase, medicaciones, descartables, ordenes, cirugiasProgramadas] = await Promise.all([
+        prisma.practica.findMany({
+            where: {
+                ingresoId,
+                OR: [{ estado: 'A' }, { estado: null }],
             },
-            medicaciones: {
-                orderBy: [{ fechaInicio: 'desc' }, { id: 'desc' }],
-                select: {
-                    id: true,
-                    fechaInicio: true,
-                    nombre: true,
-                    dosis: true,
-                    viaAdministracion: true,
-                    frecuencia: true,
-                },
+            orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+            select: {
+                id: true,
+                fecha: true,
+                codigoPractica: true,
+                cantidad: true,
+                convenioId: true,
+                numeroAutorizacion: true,
+                matriculaEspecialista: true,
+                matriculaAnestesista: true,
+                importeTotal: true,
+                puestoNumero: true,
+                ordenNumero: true,
+                ordenItem: true,
             },
-            descartables: {
-                orderBy: [{ fechaInicio: 'desc' }, { id: 'desc' }],
-                select: {
-                    id: true,
-                    fechaInicio: true,
-                    nombre: true,
-                    cantidad: true,
-                    observaciones: true,
-                },
+        }),
+        prisma.medicacionIngreso.findMany({
+            where: { ingresoId },
+            orderBy: [{ fechaInicio: 'desc' }, { id: 'desc' }],
+            select: {
+                id: true,
+                fechaInicio: true,
+                nombre: true,
+                dosis: true,
+                viaAdministracion: true,
+                frecuencia: true,
             },
-            ordenes: {
-                orderBy: [{ fechaEmision: 'desc' }, { numero: 'desc' }],
-                select: {
-                    puestoNumero: true,
-                    numero: true,
-                    estado: true,
-                    numeroAutorizacion: true,
-                    descripcionPatologia: true,
-                    fechaEmision: true,
-                    profesional: { select: { matricula: true } },
-                    items: {
-                        orderBy: { item: 'asc' },
-                        select: {
-                            item: true,
-                            practicaId: true,
-                            efectorMatricula: true,
-                            titularModular: true,
-                            fecha: true,
-                            convenioId: true,
-                            codigoPractica: true,
-                            modulo: true,
-                            cantidad: true,
-                            numeroAutorizacion: true,
-                            importeTotal: true,
-                            practica: { select: { matriculaEspecialista: true, matriculaAnestesista: true } },
-                            nomencladorPractica: {
-                                select: {
-                                    descripcion: true,
-                                    valorEspecialista: true,
-                                    valorAyudante: true,
-                                    valorAnestesista: true,
-                                },
+        }),
+        prisma.descartableIngreso.findMany({
+            where: { ingresoId },
+            orderBy: [{ fechaInicio: 'desc' }, { id: 'desc' }],
+            select: {
+                id: true,
+                fechaInicio: true,
+                nombre: true,
+                cantidad: true,
+                observaciones: true,
+            },
+        }),
+        prisma.orden.findMany({
+            where: { ingresoId },
+            orderBy: [{ fechaEmision: 'desc' }, { numero: 'desc' }],
+            select: {
+                puestoNumero: true,
+                numero: true,
+                estado: true,
+                numeroAutorizacion: true,
+                descripcionPatologia: true,
+                fechaEmision: true,
+                profesional: { select: { matricula: true } },
+                items: {
+                    orderBy: { item: 'asc' },
+                    select: {
+                        item: true,
+                        practicaId: true,
+                        efectorMatricula: true,
+                        titularModular: true,
+                        fecha: true,
+                        convenioId: true,
+                        codigoPractica: true,
+                        modulo: true,
+                        cantidad: true,
+                        numeroAutorizacion: true,
+                        importeTotal: true,
+                        practica: { select: { matriculaEspecialista: true, matriculaAnestesista: true } },
+                        nomencladorPractica: {
+                            select: {
+                                descripcion: true,
+                                valorEspecialista: true,
+                                valorAyudante: true,
+                                valorAnestesista: true,
                             },
                         },
                     },
                 },
             },
-            cirugiasProgramadas: {
-                orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
-                select: {
-                    id: true,
-                    fechaCirugia: true,
-                    diferenciales: {
-                        select: {
-                            esFeriado: true,
-                            esNocturna: true,
-                            mismaViaPatologia: true,
-                            diferentesViasPatologia: true,
-                            diferentesViasDiferentesPatologia: true,
-                            dobleCirugia: true,
-                            practicaBaseId: true,
-                        },
+        }),
+        prisma.cirugiaProgramada.findMany({
+            where: { internacionId: ingresoId },
+            orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
+            select: {
+                id: true,
+                fechaCirugia: true,
+                diferenciales: {
+                    select: {
+                        esFeriado: true,
+                        esNocturna: true,
+                        mismaViaPatologia: true,
+                        diferentesViasPatologia: true,
+                        diferentesViasDiferentesPatologia: true,
+                        dobleCirugia: true,
+                        practicaBaseId: true,
                     },
-                    practicas: {
-                        select: {
-                            id: true,
-                            codigo: true,
-                            cantidad: true,
-                        },
+                },
+                practicas: {
+                    select: {
+                        id: true,
+                        codigo: true,
+                        cantidad: true,
                     },
                 },
             },
-        },
-    })
+        }),
+    ])
 
-    if (!ingreso) return null
+    const conveniosPractica = Array.from(new Set(practicasBase.map((p) => p.convenioId)))
+    const nomencladorRows = conveniosPractica.length
+        ? await prisma.nomencladorPractica.findMany({
+            where: { convenioId: { in: conveniosPractica } },
+            select: {
+                convenioId: true,
+                codigo: true,
+                descripcion: true,
+                valorEspecialista: true,
+                valorAyudante: true,
+                valorAnestesista: true,
+                valorGastos: true,
+            },
+        })
+        : []
+
+    const nomencladorPorClave = new Map<string, {
+        descripcion: string
+        valorEspecialista: Prisma.Decimal | null
+        valorAyudante: Prisma.Decimal | null
+        valorAnestesista: Prisma.Decimal | null
+        valorGastos: Prisma.Decimal | null
+    }>()
+
+    for (const n of nomencladorRows) {
+        nomencladorPorClave.set(`${n.convenioId}:${n.codigo.trim()}`, {
+            descripcion: n.descripcion,
+            valorEspecialista: n.valorEspecialista,
+            valorAyudante: n.valorAyudante,
+            valorAnestesista: n.valorAnestesista,
+            valorGastos: n.valorGastos,
+        })
+    }
+
+    const practicas = practicasBase.map((p) => ({
+        ...p,
+        nomencladorPractica: nomencladorPorClave.get(`${p.convenioId}:${p.codigoPractica.trim()}`) ?? null,
+    }))
+
+    const ingreso = {
+        ...ingresoBase,
+        practicas,
+        medicaciones,
+        descartables,
+        ordenes,
+        cirugiasProgramadas,
+    }
 
     const profesionalesBase = await prisma.profesional.findMany({
         where: { estado: 'A' },
@@ -2126,7 +2183,7 @@ export async function cargarOrdenesDesdePrestaciones(
                     if (sumaActual > 0) {
                         let acumulado = 0
                         for (let i = 0; i < itemsCompatibles.length; i += 1) {
-                            const it = itemsCompatibles[i]
+                            const it = itemsCompatibles[i]!
                             const esUltimo = i === itemsCompatibles.length - 1
                             const nuevoImporte = esUltimo
                                 ? redondear2(totalObjetivo - acumulado)
@@ -2147,7 +2204,7 @@ export async function cargarOrdenesDesdePrestaciones(
                         const cantidadItems = itemsCompatibles.length
                         let acumulado = 0
                         for (let i = 0; i < itemsCompatibles.length; i += 1) {
-                            const it = itemsCompatibles[i]
+                            const it = itemsCompatibles[i]!
                             const esUltimo = i === itemsCompatibles.length - 1
                             const nuevoImporte = esUltimo
                                 ? redondear2(totalObjetivo - acumulado)

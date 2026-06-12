@@ -19,6 +19,20 @@ interface RegistroAuditParams {
   userAgent?: string
 }
 
+const AUDIT_LIMITS = {
+  usuario: 100,
+  accion: 50,
+  entidad: 100,
+  registroId: 50,
+  direccionIp: 50,
+  userAgent: 500,
+} as const
+
+function truncar(value: string | undefined, max: number): string | undefined {
+  if (value == null) return undefined
+  return value.length > max ? value.slice(0, max) : value
+}
+
 /**
  * Registra una acción de auditoría en la base de datos.
  * No lanza excepciones para no interrumpir el flujo principal.
@@ -27,13 +41,13 @@ export async function registrarAudit(params: RegistroAuditParams): Promise<void>
   try {
     await prisma.auditLog.create({
       data: {
-        usuario: params.usuario,
-        accion: params.accion,
-        entidad: params.entidad,
-        registroId: params.registroId?.toString(),
+        usuario: truncar(params.usuario, AUDIT_LIMITS.usuario) ?? 'SISTEMA',
+        accion: truncar(params.accion, AUDIT_LIMITS.accion) as AccionAudit,
+        entidad: truncar(params.entidad, AUDIT_LIMITS.entidad) ?? 'Desconocida',
+        registroId: truncar(params.registroId?.toString(), AUDIT_LIMITS.registroId),
         detalle: params.detalle,
-        direccionIp: params.direccionIp,
-        userAgent: params.userAgent,
+        direccionIp: truncar(params.direccionIp, AUDIT_LIMITS.direccionIp),
+        userAgent: truncar(params.userAgent, AUDIT_LIMITS.userAgent),
       },
     })
   } catch (error) {

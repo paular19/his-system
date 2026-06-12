@@ -161,12 +161,138 @@ export async function crearIngreso(
 }
 
 export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await (prisma.ingreso.findUnique as any)({
+  const ingresoBase = await prisma.ingreso.findUnique({
     where: { id },
-    include: incluirRelacionesDetalle,
+    include: {
+      paciente: true,
+      tipoIngreso: true,
+      profesionalGuardia: true,
+      profesionalTratante: true,
+      ingresoSubtipo: {
+        include: { subtipoAdmision: { select: { codigo: true, descripcion: true } } },
+      },
+      obraSocial: { select: { id: true, nombre: true } },
+      plan: { select: { obraSocialId: true, id: true, descripcion: true } },
+      cama: {
+        select: { id: true, identificador: true, sector: true, habitacion: true },
+      },
+    },
   })
-  return result as IngresoDetalle | null
+
+  if (!ingresoBase) return null
+
+  const [ingresoPatologias, movimientosIngreso, evoluciones, practicasBase] = await Promise.all([
+    prisma.ingresoPatologia.findMany({
+      where: { ingresoId: id },
+      orderBy: { fecha: 'desc' },
+    }),
+    prisma.movimientoIngreso.findMany({
+      where: { ingresoId: id },
+      include: { tipoMovimiento: true },
+      orderBy: { fecha: 'desc' },
+    }),
+    prisma.evolucionIngreso.findMany({
+      where: { ingresoId: id },
+      orderBy: { fecha: 'desc' },
+      take: 1,
+      select: {
+        fecha: true,
+        profesional: { select: { nombre: true, matricula: true } },
+      },
+    }),
+    prisma.practica.findMany({
+      where: {
+        ingresoId: id,
+        OR: [{ estado: 'A' }, { estado: null }],
+      },
+      select: {
+        id: true,
+        convenioId: true,
+        codigoPractica: true,
+        cantidad: true,
+        fecha: true,
+        numeroAutorizacion: true,
+        matriculaEspecialista: true,
+        matriculaAnestesista: true,
+        puestoNumero: true,
+        ordenNumero: true,
+        ordenItem: true,
+      },
+    }),
+  ])
+
+  const practicasOrdenadas = [...practicasBase].sort((a, b) => {
+    const diffFecha = b.fecha.getTime() - a.fecha.getTime()
+    if (diffFecha !== 0) return diffFecha
+    return b.id - a.id
+  })
+
+  const practicaIds = practicasOrdenadas.map((p) => p.id)
+  const ordenesPracticaRows = practicaIds.length
+    ? await prisma.ordenPractica.findMany({
+      where: { practicaId: { in: practicaIds } },
+      select: {
+        practicaId: true,
+        puestoNumero: true,
+        ordenNumero: true,
+        item: true,
+        numeroAutorizacion: true,
+      },
+      orderBy: [{ practicaId: 'asc' }, { item: 'asc' }],
+    })
+    : []
+
+  const convenioIds = Array.from(new Set(practicasOrdenadas.map((p) => p.convenioId)))
+  const nomencladorRows = convenioIds.length
+    ? await prisma.nomencladorPractica.findMany({
+      where: { convenioId: { in: convenioIds } },
+      select: {
+        convenioId: true,
+        codigo: true,
+        descripcion: true,
+      },
+    })
+    : []
+
+  const descripcionPorClave = new Map<string, string>()
+  for (const row of nomencladorRows) {
+    descripcionPorClave.set(`${row.convenioId}:${row.codigo.trim()}`, row.descripcion)
+  }
+
+  const ordenesPracticaPorId = new Map<
+    number,
+    Array<{ puestoNumero: number; ordenNumero: number; item: number; numeroAutorizacion: string | null }>
+  >()
+
+  for (const row of ordenesPracticaRows) {
+    if (row.practicaId == null) continue
+    const prev = ordenesPracticaPorId.get(row.practicaId) ?? []
+    prev.push({
+      puestoNumero: row.puestoNumero,
+      ordenNumero: row.ordenNumero,
+      item: row.item,
+      numeroAutorizacion: row.numeroAutorizacion,
+    })
+    ordenesPracticaPorId.set(row.practicaId, prev)
+  }
+
+  const practicas = practicasOrdenadas.map((p) => ({
+    ...p,
+    cantidad: Number(p.cantidad),
+    ordenPractica: ordenesPracticaPorId.get(p.id) ?? [],
+    nomencladorPractica:
+      descripcionPorClave.get(`${p.convenioId}:${p.codigoPractica.trim()}`)
+        ? { descripcion: descripcionPorClave.get(`${p.convenioId}:${p.codigoPractica.trim()}`)! }
+        : null,
+  }))
+
+  return {
+    ...ingresoBase,
+    ingresoPatologias,
+    movimientosIngreso,
+    evoluciones,
+    practicas,
+  } as IngresoDetalle
 }
 
 export async function actualizarIngreso(

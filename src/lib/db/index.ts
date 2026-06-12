@@ -31,6 +31,19 @@ const OPERACION_A_ACCION_AUDIT: Record<string, AccionCrudAudit> = {
 const OPERACIONES_AUDITABLES = new Set(Object.keys(OPERACION_A_ACCION_AUDIT))
 
 const MAX_DETALLE_AUDIT = 2000
+const AUDIT_DB_LIMITS = {
+  usuario: 100,
+  accion: 50,
+  entidad: 100,
+  registroId: 50,
+  direccionIp: 50,
+  userAgent: 500,
+} as const
+
+function truncarAudit(value: string | undefined, max: number): string | undefined {
+  if (value == null) return undefined
+  return value.length > max ? value.slice(0, max) : value
+}
 
 function esScalar(value: unknown): value is string | number | boolean {
   return (
@@ -109,11 +122,12 @@ function extractRegistroId(args: unknown, result: unknown): string | undefined {
     if (where && typeof where === 'object' && !Array.isArray(where)) {
       const entries = Object.entries(where)
       if (entries.length === 1 && esScalar(entries[0]?.[1])) {
-        return String(entries[0][1])
+        return truncarAudit(String(entries[0][1]), AUDIT_DB_LIMITS.registroId)
       }
 
       const serialized = JSON.stringify(sanitizeAuditValue(where))
-      return serialized.length > 120 ? `${serialized.slice(0, 120)}...` : serialized
+      const compact = serialized.length > 120 ? `${serialized.slice(0, 120)}...` : serialized
+      return truncarAudit(compact, AUDIT_DB_LIMITS.registroId)
     }
   }
 
@@ -155,13 +169,13 @@ async function registrarCrudAutomatico(params: {
   try {
     await params.prismaBase.auditLog.create({
       data: {
-        usuario: contexto.usuario ?? 'SISTEMA',
-        accion,
-        entidad: params.model ?? 'RAW_SQL',
+        usuario: truncarAudit(contexto.usuario ?? 'SISTEMA', AUDIT_DB_LIMITS.usuario) ?? 'SISTEMA',
+        accion: truncarAudit(accion, AUDIT_DB_LIMITS.accion) as AccionCrudAudit,
+        entidad: truncarAudit(params.model ?? 'RAW_SQL', AUDIT_DB_LIMITS.entidad) ?? 'RAW_SQL',
         registroId: extractRegistroId(params.args, params.result),
         detalle: buildDetalleAudit(params.operation, params.args, params.result),
-        direccionIp: contexto.direccionIp,
-        userAgent: contexto.userAgent,
+        direccionIp: truncarAudit(contexto.direccionIp, AUDIT_DB_LIMITS.direccionIp),
+        userAgent: truncarAudit(contexto.userAgent, AUDIT_DB_LIMITS.userAgent),
       },
     })
   } catch (error) {

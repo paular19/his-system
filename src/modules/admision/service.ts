@@ -370,7 +370,7 @@ export async function obtenerIngreso(
       })
     } catch (error) {
       console.error(
-        `[admision] Error recuperando ordenes pendientes para ingreso ${id}. Continuando sin vinculos automáticos.`,
+        `[admision] Error recuperando ordenes pendientes para ingreso ${id}. Continuando sin vinculos automaticos.`,
         error
       )
       ordenesPorPractica = []

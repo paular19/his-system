@@ -256,39 +256,44 @@ export function PracticasAutorizacionSection({
             setError(null)
             setEliminandoPracticas(true)
 
-            const resultados = await Promise.all(
-                entradasSeleccionadas.map(async (entrada) => {
-                    if (!('practicaId' in entrada.actualizacion)) {
-                        return {
+            const resultados: Array<
+                | { uid: string; ok: true }
+                | { uid: string; ok: false; error: string }
+            > = []
+
+            for (const entrada of entradasSeleccionadas) {
+                if (!('practicaId' in entrada.actualizacion)) {
+                    resultados.push({
+                        uid: entrada.uid,
+                        ok: false,
+                        error: 'Solo se pueden eliminar prácticas base sin orden asociada',
+                    })
+                    continue
+                }
+
+                try {
+                    const res = await fetch(`/api/cirugia/${cirugiaId}/practicas/${entrada.actualizacion.practicaId}`, {
+                        method: 'DELETE',
+                    })
+                    const json = await res.json().catch(() => null)
+                    if (!res.ok) {
+                        resultados.push({
                             uid: entrada.uid,
                             ok: false,
-                            error: 'Solo se pueden eliminar prácticas base sin orden asociada',
-                        }
-                    }
-
-                    try {
-                        const res = await fetch(`/api/cirugia/${cirugiaId}/practicas/${entrada.actualizacion.practicaId}`, {
-                            method: 'DELETE',
+                            error: json?.error ?? 'No se pudo eliminar la práctica',
                         })
-                        const json = await res.json().catch(() => null)
-                        if (!res.ok) {
-                            return {
-                                uid: entrada.uid,
-                                ok: false,
-                                error: json?.error ?? 'No se pudo eliminar la práctica',
-                            }
-                        }
-
-                        return { uid: entrada.uid, ok: true as const }
-                    } catch {
-                        return {
-                            uid: entrada.uid,
-                            ok: false,
-                            error: 'Error de conexión al eliminar la práctica',
-                        }
+                        continue
                     }
-                })
-            )
+
+                    resultados.push({ uid: entrada.uid, ok: true })
+                } catch {
+                    resultados.push({
+                        uid: entrada.uid,
+                        ok: false,
+                        error: 'Error de conexión al eliminar la práctica',
+                    })
+                }
+            }
 
             const exitosas = resultados.filter((r) => r.ok).map((r) => r.uid)
             const fallidas = resultados.filter((r) => !r.ok)

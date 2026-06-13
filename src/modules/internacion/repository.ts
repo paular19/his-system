@@ -885,15 +885,12 @@ export async function eliminarPracticaNoAutorizada(
       }
     }
 
-    if (normalizarNumeroAutorizacion(practica.numeroAutorizacion)) {
-      throw new Error('No se puede eliminar una práctica con número de autorización cargado')
-    }
-
     const usuarioRegistro = usuario.trim().slice(0, 10) || 'SISTEMA'
     await tx.practica.update({
       where: { id: practica.id },
       data: {
         estado: 'X',
+        numeroAutorizacion: null,
         fechaUsuario: new Date(),
         usuarioRegistro,
       },

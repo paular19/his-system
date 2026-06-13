@@ -495,7 +495,6 @@ export async function eliminarPracticaCirugiaNoAutorizada(
 
             for (const candidata of candidatasIngreso) {
                 if ((candidata.ordenPractica?.length ?? 0) > 0) continue
-                if (normalizarNumeroAutorizacion(candidata.numeroAutorizacion)) continue
 
                 if (
                     candidata.puestoNumero != null &&

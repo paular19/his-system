@@ -244,31 +244,35 @@ export function PracticaSection({
         setError(null)
         setEliminandoPracticas(true)
         try {
-            const resultados = await Promise.all(
-                practicasSeleccionadas.map(async (practicaId) => {
-                    try {
-                        const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaId}`, {
-                            method: 'DELETE',
-                        })
-                        const json = await res.json().catch(() => null)
-                        if (!res.ok) {
-                            return {
-                                practicaId,
-                                ok: false,
-                                error: json?.error ?? 'No se pudo eliminar la práctica',
-                            }
-                        }
+            const resultados: Array<
+                | { practicaId: number; ok: true }
+                | { practicaId: number; ok: false; error: string }
+            > = []
 
-                        return { practicaId, ok: true as const }
-                    } catch {
-                        return {
+            for (const practicaId of practicasSeleccionadas) {
+                try {
+                    const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaId}`, {
+                        method: 'DELETE',
+                    })
+                    const json = await res.json().catch(() => null)
+                    if (!res.ok) {
+                        resultados.push({
                             practicaId,
                             ok: false,
-                            error: 'Error de conexión al eliminar la práctica',
-                        }
+                            error: json?.error ?? 'No se pudo eliminar la práctica',
+                        })
+                        continue
                     }
-                })
-            )
+
+                    resultados.push({ practicaId, ok: true })
+                } catch {
+                    resultados.push({
+                        practicaId,
+                        ok: false,
+                        error: 'Error de conexión al eliminar la práctica',
+                    })
+                }
+            }
 
             const exitosas = resultados.filter((r) => r.ok).map((r) => r.practicaId)
             const fallidas = resultados.filter((r) => !r.ok)

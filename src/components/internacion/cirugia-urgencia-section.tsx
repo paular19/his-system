@@ -209,13 +209,6 @@ export function CirugiaUrgenciaSection({
 
     const agregarPractica = (p: NomencladorPracticaItem) => {
         setPracticas((prev) => {
-            const existe = prev.find((x) => x.codigo.trim() === p.codigo.trim())
-            if (existe) {
-                return prev.map((x) =>
-                    x.codigo.trim() === p.codigo.trim() ? { ...x, cantidad: x.cantidad + 1 } : x
-                )
-            }
-
             return [
                 ...prev,
                 {
@@ -316,11 +309,11 @@ export function CirugiaUrgenciaSection({
                         convenioId: p.convenioId,
                         codigo: p.codigo,
                         descripcion: p.descripcion,
-                        cantidad: p.cantidad,
+                        cantidad: 1,
                         importeTotal: Number(
                             (
                                 calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) *
-                                p.cantidad
+                                1
                             ).toFixed(2)
                         ),
                         matriculaEspecialista:
@@ -552,23 +545,6 @@ export function CirugiaUrgenciaSection({
                                                     <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
                                                     <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
 
-                                                    <input
-                                                        type="number"
-                                                        min={1}
-                                                        value={p.cantidad}
-                                                        onChange={(e) => {
-                                                            const value = Number.parseInt(e.target.value, 10)
-                                                            setPracticas((prev) =>
-                                                                prev.map((x) =>
-                                                                    x._key === p._key
-                                                                        ? { ...x, cantidad: Number.isFinite(value) ? Math.max(1, value) : 1 }
-                                                                        : x
-                                                                )
-                                                            )
-                                                        }}
-                                                        className="w-14 rounded border border-gray-300 px-2 py-1 text-xs text-center"
-                                                    />
-
                                                     {p.requiereMatriculaEspecialista && (
                                                         <input
                                                             type="number"
@@ -777,7 +753,7 @@ export function CirugiaUrgenciaSection({
                                         <ul className="text-xs text-gray-700 space-y-1">
                                             {c.practicas.map((p) => (
                                                 <li key={p.id}>
-                                                    {p.codigo} - {p.descripcion} · Cant. {p.cantidad}
+                                                    {p.codigo} - {p.descripcion}
                                                 </li>
                                             ))}
                                         </ul>

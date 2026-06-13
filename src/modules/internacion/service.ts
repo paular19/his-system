@@ -290,6 +290,26 @@ export async function crearPractica(
   return practica
 }
 
+export async function eliminarPracticaNoAutorizada(
+  ingresoId: number,
+  practicaId: number,
+  usuario: string,
+  ip?: string
+): Promise<{ id: number; ingresoId: number; codigoPractica: string }> {
+  const practica = await repo.eliminarPracticaNoAutorizada(ingresoId, practicaId, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'ELIMINAR',
+    entidad: 'Practica',
+    registroId: practica.id,
+    detalle: `Práctica ${practica.codigoPractica} eliminada de internación ${ingresoId}`,
+    direccionIp: ip,
+  })
+
+  return practica
+}
+
 export async function crearCirugiaUrgencia(
   data: CrearCirugiaUrgenciaInput,
   usuario: string,

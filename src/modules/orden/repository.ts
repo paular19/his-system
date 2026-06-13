@@ -718,7 +718,10 @@ export async function obtenerContextoAdmisionParaOrden(
 ): Promise<AdmisionOrdenContexto | null> {
   try {
     const ingreso = await prisma.ingreso.findFirst({
-      where: { id: ingresoId, estado: { in: ['A', 'E'] } },
+      where: {
+        id: ingresoId,
+        OR: [{ estado: { not: 'X' } }, { estado: null }],
+      },
       select: {
         id: true,
         tipoIngresoCodigo: true,
@@ -802,15 +805,6 @@ export async function obtenerContextoAdmisionParaOrden(
           importeTotal: true,
           matriculaEspecialista: true,
           matriculaAnestesista: true,
-          nomencladorPractica: {
-            select: {
-              descripcion: true,
-              valorEspecialista: true,
-              valorAyudante: true,
-              valorAnestesista: true,
-              valorGastos: true,
-            },
-          },
         },
       }),
       prisma.ordenPractica.findMany({
@@ -965,6 +959,40 @@ export async function obtenerContextoAdmisionParaOrden(
       ordenAsignadaPorPracticaId.set(p.id, asignada)
     }
 
+    const clavesNomenclador = Array.from(
+      new Map(
+        practicasRows.map((p) => [
+          `${p.convenioId}:${p.codigoPractica.trim()}`,
+          {
+            convenioId: p.convenioId,
+            codigo: p.codigoPractica.trim(),
+          },
+        ])
+      ).values()
+    )
+
+    const nomencladorRows =
+      clavesNomenclador.length > 0
+        ? await prisma.nomencladorPractica.findMany({
+          where: {
+            OR: clavesNomenclador.map((k) => ({ convenioId: k.convenioId, codigo: k.codigo })),
+          },
+          select: {
+            convenioId: true,
+            codigo: true,
+            descripcion: true,
+            valorEspecialista: true,
+            valorAyudante: true,
+            valorAnestesista: true,
+            valorGastos: true,
+          },
+        })
+        : []
+
+    const nomencladorPorClave = new Map(
+      nomencladorRows.map((n) => [`${n.convenioId}:${n.codigo.trim()}`, n])
+    )
+
     return {
       ...ingreso,
       profesionalTratante: ingreso.profesionalTratante
@@ -974,47 +1002,50 @@ export async function obtenerContextoAdmisionParaOrden(
           matricula: ingreso.profesionalTratante.matricula,
         }
         : null,
-      practicas: practicas.map((p) => ({
-        id: p.id,
-        convenioId: p.convenioId,
-        codigoPractica: p.codigoPractica.trim(),
-        descripcionPractica: p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim(),
-        grupoOrden: p.ordenItem != null && Number(p.ordenItem) > 0 ? Number(p.ordenItem) : 1,
-        cantidad: Number(p.cantidad),
-        fecha: p.fecha,
-        numeroAutorizacion: p.numeroAutorizacion,
-        importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
-        valorEspecialista: p.nomencladorPractica?.valorEspecialista != null ? Number(p.nomencladorPractica.valorEspecialista) : null,
-        valorAyudante: p.nomencladorPractica?.valorAyudante != null ? Number(p.nomencladorPractica.valorAyudante) : null,
-        valorAnestesista: p.nomencladorPractica?.valorAnestesista != null ? Number(p.nomencladorPractica.valorAnestesista) : null,
-        valorGastos: p.nomencladorPractica?.valorGastos != null ? Number(p.nomencladorPractica.valorGastos) : null,
-        matriculaEspecialista: p.matriculaEspecialista,
-        matriculaAnestesista: p.matriculaAnestesista,
-        ordenPractica:
-          Array.isArray(p.ordenPractica) && p.ordenPractica.length > 0
-            ? p.ordenPractica.map((op) => ({
-              puestoNumero: op.puestoNumero,
-              ordenNumero: op.ordenNumero,
-              item: op.item,
-              numeroAutorizacion: op.numeroAutorizacion,
-            }))
-            : p.puestoNumero != null &&
-              p.ordenNumero != null &&
-              Number(p.puestoNumero) > 0 &&
-              ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`)
-              ? [
-                {
-                  puestoNumero: Number(p.puestoNumero),
-                  ordenNumero: Number(p.ordenNumero),
-                  item: p.ordenItem != null ? Number(p.ordenItem) : 1,
-                  numeroAutorizacion: p.numeroAutorizacion ?? null,
-                },
-              ]
-              : (() => {
-                const fallback = ordenAsignadaPorPracticaId.get(p.id)
-                return fallback ? [fallback] : []
-              })(),
-      })),
+      practicas: practicas.map((p) => {
+        const nomenclador = nomencladorPorClave.get(`${p.convenioId}:${p.codigoPractica.trim()}`)
+        return {
+          id: p.id,
+          convenioId: p.convenioId,
+          codigoPractica: p.codigoPractica.trim(),
+          descripcionPractica: nomenclador?.descripcion ?? p.codigoPractica.trim(),
+          grupoOrden: p.ordenItem != null && Number(p.ordenItem) > 0 ? Number(p.ordenItem) : 1,
+          cantidad: Number(p.cantidad),
+          fecha: p.fecha,
+          numeroAutorizacion: p.numeroAutorizacion,
+          importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
+          valorEspecialista: nomenclador?.valorEspecialista != null ? Number(nomenclador.valorEspecialista) : null,
+          valorAyudante: nomenclador?.valorAyudante != null ? Number(nomenclador.valorAyudante) : null,
+          valorAnestesista: nomenclador?.valorAnestesista != null ? Number(nomenclador.valorAnestesista) : null,
+          valorGastos: nomenclador?.valorGastos != null ? Number(nomenclador.valorGastos) : null,
+          matriculaEspecialista: p.matriculaEspecialista,
+          matriculaAnestesista: p.matriculaAnestesista,
+          ordenPractica:
+            Array.isArray(p.ordenPractica) && p.ordenPractica.length > 0
+              ? p.ordenPractica.map((op) => ({
+                puestoNumero: op.puestoNumero,
+                ordenNumero: op.ordenNumero,
+                item: op.item,
+                numeroAutorizacion: op.numeroAutorizacion,
+              }))
+              : p.puestoNumero != null &&
+                p.ordenNumero != null &&
+                Number(p.puestoNumero) > 0 &&
+                ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`)
+                ? [
+                  {
+                    puestoNumero: Number(p.puestoNumero),
+                    ordenNumero: Number(p.ordenNumero),
+                    item: p.ordenItem != null ? Number(p.ordenItem) : 1,
+                    numeroAutorizacion: p.numeroAutorizacion ?? null,
+                  },
+                ]
+                : (() => {
+                  const fallback = ordenAsignadaPorPracticaId.get(p.id)
+                  return fallback ? [fallback] : []
+                })(),
+        }
+      }),
       medicaciones: medicacionesRows,
     } as AdmisionOrdenContexto
   } catch (error) {

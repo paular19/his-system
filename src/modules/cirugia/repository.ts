@@ -437,6 +437,105 @@ export async function actualizarNumerosAutorizacionPracticas(
     }, { timeout: 30000, maxWait: 10000 })
 }
 
+export async function eliminarPracticaCirugiaNoAutorizada(
+    cirugiaId: number,
+    practicaId: number
+) {
+    return prisma.$transaction(async (tx) => {
+        const cirugia = await tx.cirugiaProgramada.findUnique({
+            where: { id: cirugiaId },
+            select: { id: true, internacionId: true },
+        })
+
+        if (!cirugia) {
+            throw new Error('Cirugía no encontrada')
+        }
+
+        const practica = await tx.cirugiaPractica.findUnique({
+            where: { id: practicaId },
+            select: {
+                id: true,
+                cirugiaId: true,
+                codigo: true,
+                numeroAutorizacion: true,
+            },
+        })
+
+        if (!practica || practica.cirugiaId !== cirugiaId) {
+            throw new Error('La práctica no pertenece a la cirugía seleccionada')
+        }
+
+        if (normalizarNumeroAutorizacion(practica.numeroAutorizacion)) {
+            throw new Error('No se puede eliminar una práctica ya autorizada')
+        }
+
+        const codigoTrim = practica.codigo.trim()
+
+        if (cirugia.internacionId != null && codigoTrim.length > 0) {
+            const candidatasIngreso = await tx.practica.findMany({
+                where: {
+                    ingresoId: cirugia.internacionId,
+                    codigoPractica: { startsWith: codigoTrim },
+                    OR: [{ estado: 'A' }, { estado: null }],
+                },
+                orderBy: { id: 'desc' },
+                select: {
+                    id: true,
+                    numeroAutorizacion: true,
+                    puestoNumero: true,
+                    ordenNumero: true,
+                    ordenPractica: {
+                        where: {
+                            orden: { NOT: { estado: 'X' } },
+                        },
+                        select: { item: true },
+                    },
+                },
+            })
+
+            for (const candidata of candidatasIngreso) {
+                if ((candidata.ordenPractica?.length ?? 0) > 0) continue
+                if (normalizarNumeroAutorizacion(candidata.numeroAutorizacion)) continue
+
+                if (
+                    candidata.puestoNumero != null &&
+                    candidata.ordenNumero != null &&
+                    Number(candidata.puestoNumero) > 0
+                ) {
+                    const ordenActiva = await tx.orden.findFirst({
+                        where: {
+                            ingresoId: cirugia.internacionId,
+                            puestoNumero: Number(candidata.puestoNumero),
+                            numero: Number(candidata.ordenNumero),
+                            NOT: { estado: 'X' },
+                        },
+                        select: { numero: true },
+                    })
+                    if (ordenActiva) continue
+                }
+
+                await tx.practica.update({
+                    where: { id: candidata.id },
+                    data: {
+                        estado: 'X',
+                        numeroAutorizacion: null,
+                        fechaUsuario: new Date(),
+                    },
+                })
+                break
+            }
+        }
+
+        await tx.cirugiaPractica.delete({ where: { id: practicaId } })
+
+        return {
+            id: practicaId,
+            cirugiaId,
+            codigo: codigoTrim,
+        }
+    }, { timeout: 30000, maxWait: 10000 })
+}
+
 export async function obtenerCamasDisponibles(fechaCirugia: string, sector?: string) {
     const fecha = new Date(fechaCirugia)
     const camas = await prisma.cama.findMany({

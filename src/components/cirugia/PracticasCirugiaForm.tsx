@@ -9,19 +9,19 @@ import { CirugiaContext } from './CirugiaForm';
 interface PracticaCirugia {
     codigo: string;
     descripcion: string;
-    cantidad: number;
 }
 
 const PracticasCirugiaForm = () => {
     const { practicas, setPracticas } = useContext(CirugiaContext);
-    const [nueva, setNueva] = useState<PracticaCirugia>({ codigo: '', descripcion: '', cantidad: 1 });
+    const [nueva, setNueva] = useState<PracticaCirugia>({ codigo: '', descripcion: '' });
     const [error, setError] = useState<string | null>(null);
 
     const handleAdd = () => {
         try {
-            PracticaCirugiaSchema.parse(nueva);
-            setPracticas([...practicas, nueva]);
-            setNueva({ codigo: '', descripcion: '', cantidad: 1 });
+            const practica = { ...nueva, cantidad: 1 };
+            PracticaCirugiaSchema.parse(practica);
+            setPracticas([...practicas, practica]);
+            setNueva({ codigo: '', descripcion: '' });
             setError(null);
         } catch (e: any) {
             setError(e.errors?.[0]?.message || 'Error en los datos');
@@ -46,15 +46,6 @@ const PracticasCirugiaForm = () => {
                     onChange={e => setNueva({ ...nueva, descripcion: e.target.value })}
                     className="border rounded px-2 py-1 text-sm"
                 />
-                <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    placeholder="Cantidad"
-                    value={nueva.cantidad}
-                    onChange={e => setNueva({ ...nueva, cantidad: Number(e.target.value) })}
-                    className="border rounded px-2 py-1 text-sm w-20"
-                />
                 <button type="button" onClick={handleAdd} className="bg-blue-600 text-white px-3 py-1 rounded">
                     Agregar
                 </button>
@@ -63,7 +54,7 @@ const PracticasCirugiaForm = () => {
             <ul className="list-disc pl-5">
                 {practicas.map((p: PracticaCirugia, idx: number) => (
                     <li key={idx} className="text-sm">
-                        {p.codigo} - {p.descripcion} (x{p.cantidad})
+                        {p.codigo} - {p.descripcion}
                     </li>
                 ))}
             </ul>

@@ -245,10 +245,6 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         setPracticasAgregar((prev) => prev.filter((p) => p.tempId !== tempId))
     }
 
-    const actualizarCantidadPractica = (tempId: string, cantidad: number) => {
-        setPracticasAgregar((prev) => prev.map((p) => p.tempId === tempId ? { ...p, cantidad } : p))
-    }
-
     const onSubmit = (data: ActualizarIngresoInput) => {
         setSuccessMsg(null)
         setErrorMsg(null)
@@ -528,7 +524,6 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                 <tr>
                                     <th className="px-3 py-2 text-left">Código</th>
                                     <th className="px-3 py-2 text-left">Práctica ya cargada</th>
-                                    <th className="px-3 py-2 text-right">Cant.</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
@@ -536,7 +531,6 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                     <tr key={p.id} className="bg-white">
                                         <td className="px-3 py-2 font-mono text-xs text-gray-600">{p.codigoPractica.trim()}</td>
                                         <td className="px-3 py-2 text-gray-900">{p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()}</td>
-                                        <td className="px-3 py-2 text-right text-gray-700">{Number(p.cantidad)}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -603,7 +597,6 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                 <tr>
                                     <th className="px-3 py-2 text-left">Código</th>
                                     <th className="px-3 py-2 text-left">Nueva práctica</th>
-                                    <th className="px-3 py-2 text-center w-20">Cant.</th>
                                     <th className="px-3 py-2 text-left">Matrículas</th>
                                     <th className="px-3 py-2 w-10"></th>
                                 </tr>
@@ -613,16 +606,6 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                     <tr key={p.tempId} className="bg-white">
                                         <td className="px-3 py-2 font-mono text-xs text-gray-600">{p.codigo.trim()}</td>
                                         <td className="px-3 py-2 text-gray-900">{p.descripcion}</td>
-                                        <td className="px-3 py-2">
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                step={1}
-                                                value={p.cantidad}
-                                                onChange={(e) => actualizarCantidadPractica(p.tempId, parseInt(e.target.value, 10) || 1)}
-                                                className="w-full text-center rounded border border-gray-200 px-1 py-0.5 text-sm"
-                                            />
-                                        </td>
                                         <td className="px-3 py-2">
                                             <div className="flex flex-col gap-1">
                                                 {p.requiereMatriculaEspecialista && (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, AlertCircle } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Trash2, Loader2 } from 'lucide-react'
 import { actualizarNumerosAutorizacionAction } from '@/modules/cirugia/actions'
 import { generarCodigoBarras } from '@/modules/orden/types'
 
@@ -150,6 +150,8 @@ export function PracticasAutorizacionSection({
         )
     )
     const [guardando, setGuardando] = useState(false)
+    const [eliminandoUid, setEliminandoUid] = useState<string | null>(null)
+    const [eliminadas, setEliminadas] = useState<Set<string>>(new Set())
     const [error, setError] = useState<string | null>(null)
     const [exito, setExito] = useState(false)
 
@@ -163,8 +165,9 @@ export function PracticasAutorizacionSection({
         })
     }, [entradasConEstado])
 
-    const pendientes = entradasConEstado.filter((p) => !p.numeroConfirmado)
-    const autorizadas = entradasConEstado.filter((p) => p.numeroConfirmado)
+    const entradasVisibles = entradasConEstado.filter((p) => !eliminadas.has(p.uid))
+    const pendientes = entradasVisibles.filter((p) => !p.numeroConfirmado)
+    const autorizadas = entradasVisibles.filter((p) => p.numeroConfirmado)
 
     const construirActualizaciones = () =>
         entradas
@@ -203,6 +206,41 @@ export function PracticasAutorizacionSection({
         }
     }
 
+    const handleEliminar = async (entrada: EntradaAutorizacion) => {
+        if (!('practicaId' in entrada.actualizacion)) {
+            setError('Solo se pueden eliminar prácticas base sin orden asociada')
+            return
+        }
+
+        const confirmar = window.confirm('¿Eliminar práctica no autorizada? Esta acción no se puede deshacer.')
+        if (!confirmar) return
+
+        try {
+            setError(null)
+            setEliminandoUid(entrada.uid)
+
+            const res = await fetch(`/api/cirugia/${cirugiaId}/practicas/${entrada.actualizacion.practicaId}`, {
+                method: 'DELETE',
+            })
+            const json = await res.json()
+            if (!res.ok) {
+                setError(json.error ?? 'No se pudo eliminar la práctica')
+                return
+            }
+
+            setEliminadas((prev) => {
+                const next = new Set(prev)
+                next.add(entrada.uid)
+                return next
+            })
+            onActualizar?.()
+        } catch {
+            setError('Error de conexión al eliminar la práctica')
+        } finally {
+            setEliminandoUid(null)
+        }
+    }
+
     return (
         <div className="space-y-4">
             {error && (
@@ -235,21 +273,40 @@ export function PracticasAutorizacionSection({
                                         <p className="text-xs text-gray-500 mt-1">{p.etiqueta}</p>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            N° de autorización
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={numeros[p.uid] ?? ''}
-                                            onChange={(e) =>
-                                                setNumeros((prev) => ({
-                                                    ...prev,
-                                                    [p.uid]: e.target.value,
-                                                }))
-                                            }
-                                            placeholder="Ej: AUTH-2026-123456"
-                                            className="w-full rounded-md border border-amber-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                        />
+                                        <div className="flex items-end gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                    N° de autorización
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={numeros[p.uid] ?? ''}
+                                                    onChange={(e) =>
+                                                        setNumeros((prev) => ({
+                                                            ...prev,
+                                                            [p.uid]: e.target.value,
+                                                        }))
+                                                    }
+                                                    placeholder="Ej: AUTH-2026-123456"
+                                                    className="w-full rounded-md border border-amber-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                                />
+                                            </div>
+                                            {'practicaId' in p.actualizacion && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleEliminar(p)}
+                                                    disabled={eliminandoUid === p.uid}
+                                                    className="inline-flex h-10 items-center rounded-md border border-red-200 bg-red-50 px-3 text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                                    title="Eliminar práctica no autorizada"
+                                                >
+                                                    {eliminandoUid === p.uid ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="h-4 w-4" />
+                                                    )}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

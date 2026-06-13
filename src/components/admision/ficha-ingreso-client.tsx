@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
 import { updateIngresoAction } from '@/modules/admision/actions'
-import { ChevronRight, User, Pencil, FileText, Printer, Save, X } from 'lucide-react'
+import { ChevronRight, User, Pencil, FileText, Printer, Save, X, Trash2, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { formatearFecha, formatearFechaHora, calcularEdad } from '@/lib/utils'
 import { AdmisionEditForm } from './admision-edit-form'
@@ -83,6 +83,7 @@ export function FichaIngresoClient({
     const [filtroPracticas, setFiltroPracticas] = useState('')
     const [paginaPendientes, setPaginaPendientes] = useState(1)
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
+    const [eliminandoPracticaId, setEliminandoPracticaId] = useState<number | null>(null)
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
 
     const practicasPendientesFiltradas = terminoFiltroPracticas
@@ -187,6 +188,28 @@ export function FichaIngresoClient({
         const hh = String(date.getHours()).padStart(2, '0')
         const mm = String(date.getMinutes()).padStart(2, '0')
         return `${y}-${m}-${d}T${hh}:${mm}`
+    }
+
+    const handleEliminarPracticaPendiente = async (practicaId: number) => {
+        const confirmar = window.confirm('¿Eliminar práctica no autorizada? Esta acción no se puede deshacer.')
+        if (!confirmar) return
+
+        setEliminandoPracticaId(practicaId)
+        try {
+            const res = await fetch(`/api/internacion/${ingreso.id}/practicas/${practicaId}`, {
+                method: 'DELETE',
+            })
+            const json = await res.json()
+            if (!res.ok) {
+                window.alert(json.error ?? 'No se pudo eliminar la práctica')
+                return
+            }
+            router.refresh()
+        } catch {
+            window.alert('Error de conexión al eliminar la práctica')
+        } finally {
+            setEliminandoPracticaId(null)
+        }
     }
 
     // For select fields (e.g., profesionales), you may want to fetch options here if needed
@@ -816,9 +839,9 @@ export function FichaIngresoClient({
                                                     <tr className="text-left text-xs text-gray-400 uppercase tracking-wider">
                                                         <th className="pb-2 pr-4">Código</th>
                                                         <th className="pb-2 pr-4">Descripción</th>
-                                                        <th className="pb-2 pr-4 text-right">Cant.</th>
                                                         <th className="pb-2 pr-4">Fecha</th>
                                                         <th className="pb-2">N° Autorización</th>
+                                                        {puedeModificar && <th className="pb-2 pl-4 text-right">Acciones</th>}
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-100">
@@ -834,13 +857,27 @@ export function FichaIngresoClient({
                                                             <td className="py-2 pr-4 text-gray-700">
                                                                 {p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()}
                                                             </td>
-                                                            <td className="py-2 pr-4 text-right text-gray-700">
-                                                                {Number(p.cantidad)}
-                                                            </td>
                                                             <td className="py-2 pr-4 text-gray-500">
                                                                 {formatearFechaHora(p.fecha)}
                                                             </td>
                                                             <td className="py-2 text-gray-700">{p.numeroAutorizacion ?? '-'}</td>
+                                                            {puedeModificar && (
+                                                                <td className="py-2 pl-4 text-right">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => void handleEliminarPracticaPendiente(p.id)}
+                                                                        disabled={eliminandoPracticaId === p.id}
+                                                                        className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                                                        title="Eliminar práctica no autorizada"
+                                                                    >
+                                                                        {eliminandoPracticaId === p.id ? (
+                                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                        ) : (
+                                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                                        )}
+                                                                    </button>
+                                                                </td>
+                                                            )}
                                                         </tr>
                                                     )})}
                                                 </tbody>
@@ -893,7 +930,6 @@ export function FichaIngresoClient({
                                                     <tr className="text-left text-xs text-emerald-700 uppercase tracking-wider">
                                                         <th className="pb-2 pr-4 pt-2">Código</th>
                                                         <th className="pb-2 pr-4 pt-2">Descripción</th>
-                                                        <th className="pb-2 pr-4 pt-2 text-right">Cant.</th>
                                                         <th className="pb-2 pr-4 pt-2">Fecha</th>
                                                         <th className="pb-2 pt-2">Orden</th>
                                                     </tr>
@@ -947,9 +983,6 @@ export function FichaIngresoClient({
                                                             </td>
                                                             <td className="py-2 pr-4 text-emerald-900">
                                                                 {p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()}
-                                                            </td>
-                                                            <td className="py-2 pr-4 text-right text-emerald-900">
-                                                                {Number(p.cantidad)}
                                                             </td>
                                                             <td className="py-2 pr-4 text-emerald-800">
                                                                 {formatearFechaHora(p.fecha)}

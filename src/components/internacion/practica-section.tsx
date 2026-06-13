@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import {
@@ -77,7 +77,6 @@ export function PracticaSection({
     })
 
     // Campos del form
-    const [cantidad, setCantidad] = useState('1')
     const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 16))
     const [numeroAutorizacion, setNumeroAutorizacion] = useState('')
     const [matriculaEspecialista, setMatriculaEspecialista] = useState(
@@ -88,6 +87,7 @@ export function PracticaSection({
     )
 
     const [guardando, setGuardando] = useState(false)
+    const [eliminandoId, setEliminandoId] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -135,7 +135,6 @@ export function PracticaSection({
         setResultados([])
         setPracticaSeleccionada(null)
         setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
-        setCantidad('1')
         setFecha(new Date().toISOString().slice(0, 16))
         setNumeroAutorizacion('')
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
@@ -147,10 +146,6 @@ export function PracticaSection({
         setError(null)
         if (!practicaSeleccionada && !busqueda.trim()) {
             return setError('Seleccioná una práctica del nomenclador o escribí un código')
-        }
-        const cantNum = parseFloat(cantidad)
-        if (isNaN(cantNum) || cantNum <= 0) {
-            return setError('La cantidad debe ser mayor a 0')
         }
         if ((practicaSeleccionada?.valorEspecialista != null) && !matriculaEspecialista.trim()) {
             return setError('Ingrese matrícula para honorario especialista')
@@ -167,7 +162,7 @@ export function PracticaSection({
             codigoPractica: practicaSeleccionada?.codigo ?? busqueda.trim().slice(0, 8).toUpperCase(),
             descripcionPractica: practicaSeleccionada?.descripcion ?? busqueda.trim(),
             fecha: new Date(fecha).toISOString(),
-            cantidad: cantNum,
+            cantidad: 1,
             numeroAutorizacion: numeroAutorizacion.trim() || null,
             matriculaEspecialista:
                 requiereEspecialista && matriculaEspecialista.trim()
@@ -213,6 +208,31 @@ export function PracticaSection({
             setError('Error de conexión')
         } finally {
             setGuardando(false)
+        }
+    }
+
+    const handleEliminarPractica = async (practicaId: number) => {
+        const confirmar = window.confirm('¿Eliminar práctica no autorizada? Esta acción no se puede deshacer.')
+        if (!confirmar) return
+
+        setError(null)
+        setEliminandoId(practicaId)
+        try {
+            const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaId}`, {
+                method: 'DELETE',
+            })
+            const json = await res.json()
+            if (!res.ok) {
+                setError(json.error ?? 'No se pudo eliminar la práctica')
+                return
+            }
+
+            setPracticas((prev) => prev.filter((p) => p.id !== practicaId))
+            router.refresh()
+        } catch {
+            setError('Error de conexión al eliminar la práctica')
+        } finally {
+            setEliminandoId(null)
         }
     }
 
@@ -411,25 +431,14 @@ export function PracticaSection({
                                 />
                             )}
 
-                            {/* Fecha y cantidad */}
-                            <div className="grid grid-cols-2 gap-3">
+                            {/* Fecha */}
+                            <div className="grid grid-cols-1 gap-3">
                                 <div>
                                     <label className="block text-xs text-gray-500 mb-1">Fecha y hora</label>
                                     <input
                                         type="datetime-local"
                                         value={fecha}
                                         onChange={(e) => setFecha(e.target.value)}
-                                        className="his-input text-sm w-full"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Cantidad</label>
-                                    <input
-                                        type="number"
-                                        min="0.25"
-                                        step="0.25"
-                                        value={cantidad}
-                                        onChange={(e) => setCantidad(e.target.value)}
                                         className="his-input text-sm w-full"
                                     />
                                 </div>
@@ -554,7 +563,6 @@ export function PracticaSection({
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-1 text-gray-500 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
-                                                    <span>Cant: {p.cantidad}</span>
                                                     {p.numeroAutorizacion && <span>Aut: {p.numeroAutorizacion}</span>}
                                                     <span
                                                         className={`px-1.5 py-0.5 rounded ${p.facturable
@@ -566,9 +574,26 @@ export function PracticaSection({
                                                     </span>
                                                 </div>
                                             </div>
-                                            {p.estado && p.estado !== 'A' && (
-                                                <span className="text-gray-400 shrink-0">{p.estado}</span>
-                                            )}
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {puedeCrear && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleEliminarPractica(p.id)}
+                                                        disabled={eliminandoId === p.id}
+                                                        className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                                        title="Eliminar práctica no autorizada"
+                                                    >
+                                                        {eliminandoId === p.id ? (
+                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        )}
+                                                    </button>
+                                                )}
+                                                {p.estado && p.estado !== 'A' && (
+                                                    <span className="text-gray-400">{p.estado}</span>
+                                                )}
+                                            </div>
                                         </div>
                                     ))
                                 )}
@@ -669,7 +694,6 @@ export function PracticaSection({
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-1 text-emerald-700 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
-                                                    <span>Cant: {p.cantidad}</span>
                                                     {ordenesOrdenadas.map((orden) => (
                                                             <Link
                                                                 key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}

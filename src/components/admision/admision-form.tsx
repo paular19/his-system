@@ -485,8 +485,9 @@ export function AdmisionForm({
         observaciones: observaciones || null,
         practicas: practicasNormalizadas.length > 0 ? practicasNormalizadas.map((p) => ({
           ...p,
+          cantidad: 1,
           grupoOrden: null,
-          importeTotal: Number((calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) * p.cantidad).toFixed(2)),
+          importeTotal: Number((calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) * 1).toFixed(2)),
           matriculaEspecialista: p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
           matriculaAnestesista: p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
         })) : undefined,
@@ -957,22 +958,6 @@ export function AdmisionForm({
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
                         <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <label className="text-xs text-gray-500">Cant.</label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={p.cantidad}
-                            onChange={(e) =>
-                              setPracticas((prev) =>
-                                prev.map((x) =>
-                                  x.tempId === p.tempId ? { ...x, cantidad: Math.max(1, parseInt(e.target.value) || 1) } : x
-                                )
-                              )
-                            }
-                            className="w-14 rounded border border-gray-300 px-2 py-1 text-xs text-center"
-                          />
-                        </div>
                         {p.requiereMatriculaEspecialista && (
                           <div className="flex items-center gap-1 shrink-0">
                             <label className="text-xs text-gray-500">Mat. HE</label>

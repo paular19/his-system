@@ -386,7 +386,6 @@ export function FacturacionPanel() {
     const [npComponentes, setNpComponentes] = useState<ComponenteSeleccion>({
         especialista: 0, ayudante: 0, anestesista: 0, gastos: 0,
     })
-    const [nuevaPracticaCantidad, setNuevaPracticaCantidad] = useState('1')
     const [nuevaPracticaFecha, setNuevaPracticaFecha] = useState(() => toDateInput(new Date()))
     const [nuevaPracticaAutorizacion, setNuevaPracticaAutorizacion] = useState('')
     const npDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -821,7 +820,7 @@ export function FacturacionPanel() {
                     convenioId: contexto.ingreso.obraSocialId ?? 0,
                     codigoPractica,
                     descripcionPractica,
-                    cantidad: Number(nuevaPracticaCantidad || 1),
+                    cantidad: 1,
                     fecha: new Date(nuevaPracticaFecha).toISOString(),
                     numeroAutorizacion: nuevaPracticaAutorizacion.trim() || null,
                     importeBaseUnitario,
@@ -834,7 +833,6 @@ export function FacturacionPanel() {
             setNpResultados([])
             setNpSeleccionada(null)
             setNpComponentes({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
-            setNuevaPracticaCantidad('1')
             setNuevaPracticaAutorizacion('')
             setExpandNuevaPractica(false)
             setMensaje('Práctica agregada')
@@ -1641,10 +1639,9 @@ export function FacturacionPanel() {
                                                 />
                                             )}
 
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <input value={nuevaPracticaCantidad} onChange={(e) => setNuevaPracticaCantidad(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Cantidad" type="number" min="0.25" step="0.25" />
+                                            <div className="grid grid-cols-1 gap-2">
                                                 <input value={nuevaPracticaAutorizacion} onChange={(e) => setNuevaPracticaAutorizacion(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Nro autorización" />
-                                                <input type="datetime-local" value={nuevaPracticaFecha} onChange={(e) => setNuevaPracticaFecha(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm col-span-2" />
+                                                <input type="datetime-local" value={nuevaPracticaFecha} onChange={(e) => setNuevaPracticaFecha(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" />
                                             </div>
                                             <button onClick={crearPractica} disabled={guardandoPractica || (!npSeleccionada && !npBusqueda.trim())} className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoPractica ? 'Guardando...' : 'Guardar práctica'}</button>
                                         </>

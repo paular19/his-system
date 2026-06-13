@@ -70,6 +70,11 @@ function resolverFechaReferencia(fechaReferencia?: Date): Date {
   return fechaReferencia ?? new Date()
 }
 
+function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
+  const normalized = value?.trim() ?? ''
+  return normalized.length > 0 ? normalized : null
+}
+
 function ingresoActivoParaMapa(fechaIngreso: Date | null | undefined, fechaReferencia: Date): boolean {
   if (!fechaIngreso) return false
   return claveDiaArgentina(fechaIngreso) <= claveDiaArgentina(fechaReferencia)
@@ -815,6 +820,125 @@ export async function crearPractica(
       }))
       : [],
   } as PracticaItem
+}
+
+export async function eliminarPracticaNoAutorizada(
+  ingresoId: number,
+  practicaId: number,
+  usuario: string
+): Promise<{ id: number; ingresoId: number; codigoPractica: string }> {
+  return prisma.$transaction(async (tx) => {
+    const practica = await tx.practica.findFirst({
+      where: {
+        id: practicaId,
+        ingresoId,
+        OR: [{ estado: 'A' }, { estado: null }],
+      },
+      select: {
+        id: true,
+        ingresoId: true,
+        codigoPractica: true,
+        numeroAutorizacion: true,
+        puestoNumero: true,
+        ordenNumero: true,
+        ordenPractica: {
+          where: {
+            orden: {
+              NOT: { estado: 'X' },
+            },
+          },
+          select: {
+            puestoNumero: true,
+            ordenNumero: true,
+            item: true,
+          },
+        },
+      },
+    })
+
+    if (!practica) {
+      throw new Error('Práctica no encontrada')
+    }
+
+    if ((practica.ordenPractica?.length ?? 0) > 0) {
+      throw new Error('No se puede eliminar una práctica que ya tiene una orden/autorización asociada')
+    }
+
+    // Fallback legacy: práctica con punteros a orden activa aunque no tenga vínculo explícito.
+    if (
+      practica.puestoNumero != null &&
+      practica.ordenNumero != null &&
+      Number(practica.puestoNumero) > 0
+    ) {
+      const ordenActiva = await tx.orden.findFirst({
+        where: {
+          ingresoId,
+          puestoNumero: Number(practica.puestoNumero),
+          numero: Number(practica.ordenNumero),
+          NOT: { estado: 'X' },
+        },
+        select: { puestoNumero: true },
+      })
+
+      if (ordenActiva) {
+        throw new Error('No se puede eliminar una práctica que ya tiene una orden/autorización asociada')
+      }
+    }
+
+    if (normalizarNumeroAutorizacion(practica.numeroAutorizacion)) {
+      throw new Error('No se puede eliminar una práctica con número de autorización cargado')
+    }
+
+    const usuarioRegistro = usuario.trim().slice(0, 10) || 'SISTEMA'
+    await tx.practica.update({
+      where: { id: practica.id },
+      data: {
+        estado: 'X',
+        fechaUsuario: new Date(),
+        usuarioRegistro,
+      },
+    })
+
+    // Si la práctica pertenece a una cirugía programada vinculada, eliminar también una práctica espejo pendiente.
+    const codigoPracticaTrim = practica.codigoPractica.trim()
+    if (codigoPracticaTrim.length > 0) {
+      const cirugia = await tx.cirugiaProgramada.findFirst({
+        where: {
+          internacionId: ingresoId,
+          practicas: {
+            some: {
+              codigo: { startsWith: codigoPracticaTrim },
+              numeroAutorizacion: null,
+            },
+          },
+        },
+        orderBy: { id: 'desc' },
+        select: {
+          id: true,
+          practicas: {
+            where: {
+              codigo: { startsWith: codigoPracticaTrim },
+              numeroAutorizacion: null,
+            },
+            orderBy: { id: 'desc' },
+            take: 1,
+            select: { id: true },
+          },
+        },
+      })
+
+      const practicaCirugiaId = cirugia?.practicas?.[0]?.id
+      if (practicaCirugiaId) {
+        await tx.cirugiaPractica.delete({ where: { id: practicaCirugiaId } })
+      }
+    }
+
+    return {
+      id: practica.id,
+      ingresoId: practica.ingresoId,
+      codigoPractica: codigoPracticaTrim,
+    }
+  }, { timeout: 30000, maxWait: 10000 })
 }
 
 export async function crearCirugiaUrgencia(

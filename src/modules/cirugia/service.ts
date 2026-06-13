@@ -45,6 +45,10 @@ export async function actualizarNumerosAutorizacionPracticas(
     return repo.actualizarNumerosAutorizacionPracticas(cirugiaId, actualizaciones)
 }
 
+export async function eliminarPracticaCirugiaNoAutorizada(cirugiaId: number, practicaId: number) {
+    return repo.eliminarPracticaCirugiaNoAutorizada(cirugiaId, practicaId)
+}
+
 export async function obtenerCamasDisponibles(fechaCirugia: string, sector?: string) {
     return repo.obtenerCamasDisponibles(fechaCirugia, sector)
 }

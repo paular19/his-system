@@ -95,6 +95,27 @@ export async function crearIngreso(
   const usuarioNormalizado = usuarioAlta.slice(0, 10)
 
   return prisma.$transaction(async (tx) => {
+    // Serializa por paciente para evitar dobles altas concurrentes
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${paciente.id})`
+
+    const ingresoActivoExistente = await tx.ingreso.findFirst({
+      where: {
+        pacienteId: paciente.id,
+        estado: 'A',
+      },
+      select: {
+        id: true,
+        tipoIngresoCodigo: true,
+        numeroIngreso: true,
+      },
+    })
+
+    if (ingresoActivoExistente) {
+      throw new Error(
+        `Ya existe un ingreso activo para este paciente (ID ${ingresoActivoExistente.id}, ${ingresoActivoExistente.tipoIngresoCodigo}-${ingresoActivoExistente.numeroIngreso}).`
+      )
+    }
+
     // Incrementar el contador atómicamente; el valor devuelto es el NUEVO valor
     const tipoIngreso = await tx.tipoIngreso.update({
       where: { codigo: data.tipoIngresoCodigo },

@@ -88,3 +88,17 @@ export async function actualizarNumerosAutorizacionAction(
 
     return service.actualizarNumerosAutorizacionPracticas(cirugiaId, actualizaciones)
 }
+
+export async function eliminarPracticaCirugiaNoAutorizadaAction(cirugiaId: number, practicaId: number) {
+    const usuario = await getUsuarioSesion()
+    const puedeEliminar =
+        tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'CREAR') ||
+        tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')
+
+    if (!puedeEliminar) {
+        throw new Error('Sin permisos para eliminar prácticas')
+    }
+
+    return service.eliminarPracticaCirugiaNoAutorizada(cirugiaId, practicaId)
+}

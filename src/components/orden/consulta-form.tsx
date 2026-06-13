@@ -179,6 +179,21 @@ function inferirSeleccionDesdeImporte(
   return porDefecto
 }
 
+function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
+  const normalized = value?.trim() ?? ''
+  return normalized.length > 0 ? normalized : null
+}
+
+function esPracticaPendienteParaNuevaOrden(
+  practica: AdmisionOrdenContexto['practicas'][number]
+): boolean {
+  const tieneOrdenActiva = (practica.ordenPractica?.length ?? 0) > 0
+  if (tieneOrdenActiva) return false
+
+  // Casos heredados sin vínculo de orden pero con autorización manual cargada.
+  return normalizarNumeroAutorizacion(practica.numeroAutorizacion) == null
+}
+
 export function ConsultaForm({
   obraSociales,
   profesionales,
@@ -210,7 +225,8 @@ export function ConsultaForm({
   const [modoGeneracion, setModoGeneracion] = useState<'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'>(modoInicial)
   const [tituloOrden, setTituloOrden] = useState('')
   const [estrategiaOrden, setEstrategiaOrden] = useState<EstrategiaOrden>('ESTANDAR')
-  const practicasPendientesIniciales = admisionInicial?.practicas ?? []
+  const practicasPendientesIniciales =
+    (admisionInicial?.practicas ?? []).filter(esPracticaPendienteParaNuevaOrden)
   const [practicas, setPracticas] = useState<ItemPractica[]>(
     practicasPendientesIniciales.map((p, idx) => {
       const matriculasDefault = resolverMatriculasDefault(

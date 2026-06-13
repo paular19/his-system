@@ -44,14 +44,17 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
   let pacienteInicial: PacienteResumen | null = null
   const q = params.q?.trim() ?? ''
   const ingresoId = params.ingresoId ? parseInt(params.ingresoId, 10) : NaN
+  const tieneIngresoId = Number.isFinite(ingresoId) && ingresoId > 0
   const modoInicial = params.modo === 'AGRUPADA' ? 'AGRUPADA' : params.modo === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'MASIVA'
 
   const [admisiones, admisionSeleccionada] = await Promise.all([
     q.length >= 2 ? buscarAdmisionesActivasPorPaciente(q) : Promise.resolve([]),
-    Number.isFinite(ingresoId) && ingresoId > 0
+    tieneIngresoId
       ? obtenerContextoAdmisionParaOrden(ingresoId)
       : Promise.resolve(null),
   ])
+
+  const mostrarBusquedaAdmision = !tieneIngresoId || !admisionSeleccionada
 
   if (!admisionSeleccionada && params.pacienteId) {
     const pacienteId = parseInt(params.pacienteId, 10)
@@ -107,49 +110,53 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
         </nav>
 
         <section className="space-y-3">
-          <form className="flex gap-2" method="GET">
-            <input
-              name="q"
-              defaultValue={q}
-              placeholder="Buscar admisión: paciente, obra social o DNI"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="submit"
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Buscar
-            </button>
-          </form>
+          {mostrarBusquedaAdmision && (
+            <>
+              <form className="flex gap-2" method="GET">
+                <input
+                  name="q"
+                  defaultValue={q}
+                  placeholder="Buscar admisión: paciente, obra social o DNI"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="submit"
+                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  Buscar
+                </button>
+              </form>
 
-          {q.length >= 2 && (
-            <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
-              {admisiones.length === 0 ? (
-                <p className="px-3 py-2 text-sm text-gray-500">Sin admisiones activas para esa búsqueda.</p>
-              ) : (
-                admisiones.map((adm) => {
-                  const seleccionada = admisionSeleccionada?.id === adm.id
-                  const nombrePaciente = adm.paciente?.nombreCompleto ?? adm.nombre ?? 'Sin nombre'
-                  return (
-                    <Link
-                      key={adm.id}
-                      href={`/dashboard/ambulatorio/nueva?q=${encodeURIComponent(q)}&ingresoId=${adm.id}`}
-                      className={`block px-3 py-2 text-sm hover:bg-gray-50 ${seleccionada ? 'bg-blue-50' : 'bg-white'}`}
-                    >
-                      <p className="font-medium text-gray-900">
-                        {adm.tipoIngresoCodigo}-{adm.numeroIngreso} · {nombrePaciente}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        DNI: {adm.paciente?.numeroDocumento ?? '-'} · Ingreso:{' '}
-                        {adm.fechaIngreso
-                          ? new Date(adm.fechaIngreso).toLocaleString('es-AR')
-                          : 'Sin fecha'}
-                      </p>
-                    </Link>
-                  )
-                })
+              {q.length >= 2 && (
+                <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
+                  {admisiones.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-gray-500">Sin admisiones activas para esa búsqueda.</p>
+                  ) : (
+                    admisiones.map((adm) => {
+                      const seleccionada = admisionSeleccionada?.id === adm.id
+                      const nombrePaciente = adm.paciente?.nombreCompleto ?? adm.nombre ?? 'Sin nombre'
+                      return (
+                        <Link
+                          key={adm.id}
+                          href={`/dashboard/ambulatorio/nueva?q=${encodeURIComponent(q)}&ingresoId=${adm.id}`}
+                          className={`block px-3 py-2 text-sm hover:bg-gray-50 ${seleccionada ? 'bg-blue-50' : 'bg-white'}`}
+                        >
+                          <p className="font-medium text-gray-900">
+                            {adm.tipoIngresoCodigo}-{adm.numeroIngreso} · {nombrePaciente}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            DNI: {adm.paciente?.numeroDocumento ?? '-'} · Ingreso:{' '}
+                            {adm.fechaIngreso
+                              ? new Date(adm.fechaIngreso).toLocaleString('es-AR')
+                              : 'Sin fecha'}
+                          </p>
+                        </Link>
+                      )
+                    })
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
 
           {admisionSeleccionada && (
@@ -157,11 +164,19 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
               ✓ Admisión {admisionSeleccionada.tipoIngresoCodigo}-{admisionSeleccionada.numeroIngreso} seleccionada
             </p>
           )}
+
+          {tieneIngresoId && !admisionSeleccionada && (
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              No se pudo cargar la admisión indicada (ID {ingresoId}). Buscá y seleccioná una admisión para continuar.
+            </div>
+          )}
         </section>
 
         {!admisionSeleccionada ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Buscá y seleccioná una admisión para cargar la autorización.
+            {tieneIngresoId
+              ? 'No se encontró la admisión solicitada para iniciar la autorización.'
+              : 'Buscá y seleccioná una admisión para cargar la autorización.'}
           </div>
         ) : (
           <ConsultaForm

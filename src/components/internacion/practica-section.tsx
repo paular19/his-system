@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, Trash2, AlertTriangle } from 'lucide-react'
+import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import {
@@ -87,13 +87,10 @@ export function PracticaSection({
     )
 
     const [guardando, setGuardando] = useState(false)
-    const [eliminandoId, setEliminandoId] = useState<number | null>(null)
+    const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [practicaPendienteEliminar, setPracticaPendienteEliminar] = useState<{
-        id: number
-        codigo: string
-        descripcion: string
-    } | null>(null)
+    const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
+    const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -216,37 +213,86 @@ export function PracticaSection({
         }
     }
 
-    const solicitarEliminarPractica = (practica: PracticaItem) => {
-        setError(null)
-        setPracticaPendienteEliminar({
-            id: practica.id,
-            codigo: practica.codigoPractica.trim(),
-            descripcion: practica.descripcionPractica ?? practica.codigoPractica.trim(),
+    const alternarSeleccionPractica = (practicaId: number, checked: boolean) => {
+        setPracticasSeleccionadas((prev) => {
+            if (checked) {
+                if (prev.includes(practicaId)) return prev
+                return [...prev, practicaId]
+            }
+            return prev.filter((id) => id !== practicaId)
         })
     }
 
-    const handleEliminarPractica = async () => {
-        if (!practicaPendienteEliminar) return
+    const alternarSeleccionTodas = (ids: number[], checked: boolean) => {
+        if (!checked) {
+            setPracticasSeleccionadas((prev) => prev.filter((id) => !ids.includes(id)))
+            return
+        }
+
+        setPracticasSeleccionadas((prev) => {
+            const next = new Set(prev)
+            for (const id of ids) {
+                next.add(id)
+            }
+            return Array.from(next)
+        })
+    }
+
+    const handleEliminarPracticasSeleccionadas = async () => {
+        if (practicasSeleccionadas.length === 0) return
 
         setError(null)
-        setEliminandoId(practicaPendienteEliminar.id)
+        setEliminandoPracticas(true)
         try {
-            const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaPendienteEliminar.id}`, {
-                method: 'DELETE',
-            })
-            const json = await res.json()
-            if (!res.ok) {
-                setError(json.error ?? 'No se pudo eliminar la práctica')
-                return
+            const resultados = await Promise.all(
+                practicasSeleccionadas.map(async (practicaId) => {
+                    try {
+                        const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaId}`, {
+                            method: 'DELETE',
+                        })
+                        const json = await res.json().catch(() => null)
+                        if (!res.ok) {
+                            return {
+                                practicaId,
+                                ok: false,
+                                error: json?.error ?? 'No se pudo eliminar la práctica',
+                            }
+                        }
+
+                        return { practicaId, ok: true as const }
+                    } catch {
+                        return {
+                            practicaId,
+                            ok: false,
+                            error: 'Error de conexión al eliminar la práctica',
+                        }
+                    }
+                })
+            )
+
+            const exitosas = resultados.filter((r) => r.ok).map((r) => r.practicaId)
+            const fallidas = resultados.filter((r) => !r.ok)
+
+            if (fallidas.length > 0) {
+                const errorPrincipal = fallidas[0]?.error ?? 'No se pudieron eliminar algunas prácticas'
+                setError(
+                    exitosas.length > 0
+                        ? `Se eliminaron ${exitosas.length} prácticas y ${fallidas.length} fallaron. ${errorPrincipal}`
+                        : errorPrincipal
+                )
             }
 
-            setPracticas((prev) => prev.filter((p) => p.id !== practicaPendienteEliminar.id))
-            setPracticaPendienteEliminar(null)
-            router.refresh()
-        } catch {
-            setError('Error de conexión al eliminar la práctica')
+            if (exitosas.length > 0) {
+                setPracticas((prev) => prev.filter((p) => !exitosas.includes(p.id)))
+                setPracticasSeleccionadas((prev) => prev.filter((id) => !exitosas.includes(id)))
+                router.refresh()
+            }
+
+            if (fallidas.length === 0) {
+                setConfirmarEliminacionSeleccionadas(false)
+            }
         } finally {
-            setEliminandoId(null)
+            setEliminandoPracticas(false)
         }
     }
 
@@ -263,6 +309,10 @@ export function PracticaSection({
     const practicasAutorizadas = practicas.filter((p) => (p.ordenPractica?.length ?? 0) > 0)
     const mostrarBotonGenerar = puedeCrear && practicas.length > 0
     const botonGenerarHabilitado = practicasPendientes.length > 0
+
+    useEffect(() => {
+        setPracticasSeleccionadas((prev) => prev.filter((id) => practicas.some((p) => p.id === id && (p.ordenPractica?.length ?? 0) === 0)))
+    }, [practicas])
 
     const terminoFiltroLista = useMemo(() => normalizarBusquedaLista(filtroLista), [filtroLista])
 
@@ -306,6 +356,11 @@ export function PracticaSection({
         const desde = (paginaPendientesActual - 1) * PRACTICAS_LISTA_POR_PAGINA
         return practicasPendientesFiltradas.slice(desde, desde + PRACTICAS_LISTA_POR_PAGINA)
     }, [paginaPendientesActual, practicasPendientesFiltradas])
+
+    const idsPendientesFiltradas = practicasPendientesFiltradas.map((p) => p.id)
+    const seleccionadasFiltradas = practicasPendientesFiltradas.filter((p) => practicasSeleccionadas.includes(p.id))
+    const todasFiltradasSeleccionadas =
+        idsPendientesFiltradas.length > 0 && idsPendientesFiltradas.every((id) => practicasSeleccionadas.includes(id))
 
     const practicasAutorizadasPaginadas = useMemo(() => {
         const desde = (paginaAutorizadasActual - 1) * PRACTICAS_LISTA_POR_PAGINA
@@ -558,36 +613,69 @@ export function PracticaSection({
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
                                     Pendientes de autorización ({practicasPendientesFiltradas.length})
                                 </p>
-                                {practicaPendienteEliminar && (
+                                {puedeCrear && practicasPendientesFiltradas.length > 0 && (
+                                    <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs flex flex-wrap items-center gap-3">
+                                        <label className="inline-flex items-center gap-2 text-amber-900">
+                                            <input
+                                                type="checkbox"
+                                                checked={todasFiltradasSeleccionadas}
+                                                onChange={(e) => alternarSeleccionTodas(idsPendientesFiltradas, e.target.checked)}
+                                                disabled={eliminandoPracticas}
+                                                className="h-4 w-4 rounded border-amber-300 text-amber-700 focus:ring-amber-500"
+                                            />
+                                            Seleccionar todas (filtro actual)
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (practicasSeleccionadas.length === 0) return
+                                                setError(null)
+                                                setConfirmarEliminacionSeleccionadas(true)
+                                            }}
+                                            disabled={eliminandoPracticas || practicasSeleccionadas.length === 0}
+                                            className="inline-flex items-center rounded-md border border-red-200 bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                        >
+                                            Eliminar seleccionadas ({practicasSeleccionadas.length})
+                                        </button>
+                                    </div>
+                                )}
+                                {confirmarEliminacionSeleccionadas && practicasSeleccionadas.length > 0 && (
                                     <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs">
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div className="flex items-start gap-2 text-amber-900">
                                                 <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                                                 <div>
-                                                    <p className="text-sm font-semibold">¿Eliminar práctica no autorizada?</p>
-                                                    <p className="text-xs text-amber-800">
-                                                        {practicaPendienteEliminar.codigo} · {practicaPendienteEliminar.descripcion}
+                                                    <p className="text-sm font-semibold">
+                                                        ¿Eliminar {practicasSeleccionadas.length} práctica(s) no autorizada(s)?
                                                     </p>
+                                                    {seleccionadasFiltradas.slice(0, 3).map((p) => (
+                                                        <p key={p.id} className="text-xs text-amber-800">
+                                                            {p.codigoPractica.trim()} · {p.descripcionPractica ?? p.codigoPractica.trim()}
+                                                        </p>
+                                                    ))}
+                                                    {practicasSeleccionadas.length > 3 && (
+                                                        <p className="text-xs text-amber-800">... y {practicasSeleccionadas.length - 3} más</p>
+                                                    )}
                                                     <p className="text-xs text-amber-700 mt-1">Esta acción no se puede deshacer.</p>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => setPracticaPendienteEliminar(null)}
-                                                    disabled={eliminandoId === practicaPendienteEliminar.id}
+                                                    onClick={() => setConfirmarEliminacionSeleccionadas(false)}
+                                                    disabled={eliminandoPracticas}
                                                     className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                                                 >
                                                     Cancelar
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => void handleEliminarPractica()}
-                                                    disabled={eliminandoId === practicaPendienteEliminar.id}
+                                                    onClick={() => void handleEliminarPracticasSeleccionadas()}
+                                                    disabled={eliminandoPracticas}
                                                     className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
                                                 >
-                                                    {eliminandoId === practicaPendienteEliminar.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                                                    {eliminandoId === practicaPendienteEliminar.id ? 'Eliminando...' : 'Eliminar'}
+                                                    {eliminandoPracticas && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                                    {eliminandoPracticas ? 'Eliminando...' : 'Eliminar'}
                                                 </button>
                                             </div>
                                         </div>
@@ -601,6 +689,15 @@ export function PracticaSection({
                                             key={p.id}
                                             className="flex items-start justify-between gap-3 text-xs border rounded-lg p-2.5 bg-white hover:bg-amber-50/40"
                                         >
+                                            {puedeCrear && (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={practicasSeleccionadas.includes(p.id)}
+                                                    onChange={(e) => alternarSeleccionPractica(p.id, e.target.checked)}
+                                                    disabled={eliminandoPracticas}
+                                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-700 focus:ring-amber-500"
+                                                />
+                                            )}
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <span className="font-mono text-gray-400 shrink-0">
@@ -624,21 +721,6 @@ export function PracticaSection({
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
-                                                {puedeCrear && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => solicitarEliminarPractica(p)}
-                                                        disabled={eliminandoId === p.id}
-                                                        className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700 hover:bg-red-100 disabled:opacity-50"
-                                                        title="Eliminar práctica no autorizada"
-                                                    >
-                                                        {eliminandoId === p.id ? (
-                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                        ) : (
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        )}
-                                                    </button>
-                                                )}
                                                 {p.estado && p.estado !== 'A' && (
                                                     <span className="text-gray-400">{p.estado}</span>
                                                 )}

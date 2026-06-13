@@ -634,8 +634,10 @@ export function PracticaSection({
                                                             return a.item - b.item
                                                         })
                                                         .map((orden) => (
-                                                            <span
+                                                            <Link
                                                                 key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
+                                                                href={`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`}
+                                                                title={`Ver orden ${formatearNumeroOrden(orden.puestoNumero, orden.ordenNumero, orden.item)} en Autorizaciones`}
                                                                 className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900"
                                                             >
                                                                 {formatearNumeroOrden(
@@ -646,7 +648,7 @@ export function PracticaSection({
                                                                 {orden.numeroAutorizacion
                                                                     ? ` · ${orden.numeroAutorizacion}`
                                                                     : ' · falta N° de autorización'}
-                                                            </span>
+                                                            </Link>
                                                         ))}
                                                 </div>
                                             </div>

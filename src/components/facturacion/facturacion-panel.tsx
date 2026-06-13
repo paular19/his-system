@@ -1958,13 +1958,14 @@ export function FacturacionPanel() {
                                                                                         ) : (
                                                                                             <div className="flex flex-wrap gap-1">
                                                                                                 {autorizacionesVinculadasOrdenadas.map((aut) => (
-                                                                                                    <span
+                                                                                                    <Link
                                                                                                         key={`${p.uid}:${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`}
-                                                                                                        className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800"
+                                                                                                        href={`/dashboard/ambulatorio/${aut.ordenPuestoNumero}/${aut.ordenNumero}?item=${aut.ordenItem}`}
+                                                                                                        className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800 hover:bg-blue-200"
                                                                                                         title={`Orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · Item ${aut.ordenItem}`}
                                                                                                     >
                                                                                                         {formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · {aut.numeroAutorizacion ?? 'S/A'}{aut.incluyeCodigo ? ` [${aut.incluyeCodigo}]` : ''}
-                                                                                                    </span>
+                                                                                                    </Link>
                                                                                                 ))}
                                                                                             </div>
                                                                                         )

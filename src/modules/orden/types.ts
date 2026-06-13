@@ -64,6 +64,11 @@ export type OrdenListItem = {
   fechaEmision: Date
   estado: string
   cantidadItems: number
+  practicas: Array<{
+    item: number
+    codigoPractica: string
+    descripcionPractica: string
+  }>
   numeroAutorizacion: string | null
 }
 

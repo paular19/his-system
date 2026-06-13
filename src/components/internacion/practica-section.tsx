@@ -541,17 +541,7 @@ export function PracticaSection({
                                     practicasPendientesPaginadas.map((p) => (
                                         <div
                                             key={p.id}
-                                            role="button"
-                                            tabIndex={0}
-                                            onClick={() => router.push(`/dashboard/ambulatorio/nueva?ingresoId=${ingresoId}`)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault()
-                                                    router.push(`/dashboard/ambulatorio/nueva?ingresoId=${ingresoId}`)
-                                                }
-                                            }}
-                                            title="Ir a Autorizaciones para generar orden"
-                                            className="flex items-start justify-between gap-3 text-xs border rounded-lg p-2.5 bg-white cursor-pointer hover:bg-amber-50/40"
+                                            className="flex items-start justify-between gap-3 text-xs border rounded-lg p-2.5 bg-white hover:bg-amber-50/40"
                                         >
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2 flex-wrap">
@@ -626,10 +616,23 @@ export function PracticaSection({
                                             }
                                             return a.item - b.item
                                         })
-                                        const ordenPrincipal = ordenesOrdenadas[0]
-                                        const destinoAutorizada = ordenPrincipal
-                                            ? `/dashboard/ambulatorio/${ordenPrincipal.puestoNumero}/${ordenPrincipal.ordenNumero}?item=${ordenPrincipal.item}`
-                                            : null
+                                        const ordenesUnicas = Array.from(
+                                            new Map(
+                                                ordenesOrdenadas.map((orden) => [
+                                                    `${orden.puestoNumero}-${orden.ordenNumero}`,
+                                                    orden,
+                                                ])
+                                            ).values()
+                                        )
+                                        const destinoAutorizada = ordenesUnicas.length === 0
+                                            ? null
+                                            : ordenesUnicas.length === 1
+                                                ? `/dashboard/ambulatorio/${ordenesUnicas[0]!.puestoNumero}/${ordenesUnicas[0]!.ordenNumero}?item=${ordenesUnicas[0]!.item}`
+                                                : `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(
+                                                    ordenesUnicas
+                                                        .map((orden) => `${orden.puestoNumero}-${orden.ordenNumero}`)
+                                                        .join(',')
+                                                )}`
 
                                         return (
                                         <div
@@ -646,7 +649,13 @@ export function PracticaSection({
                                                     router.push(destinoAutorizada)
                                                 }
                                             }}
-                                            title={destinoAutorizada ? 'Ir a la orden autorizada' : undefined}
+                                            title={
+                                                !destinoAutorizada
+                                                    ? undefined
+                                                    : ordenesUnicas.length > 1
+                                                        ? 'Ver todas las órdenes autorizadas'
+                                                        : 'Ir a la orden autorizada'
+                                            }
                                             className={`flex items-start justify-between gap-3 text-xs border border-emerald-200 rounded-lg p-2.5 bg-emerald-50/40 ${destinoAutorizada ? 'cursor-pointer hover:bg-emerald-100/40' : ''}`}
                                         >
                                             <div className="min-w-0 flex-1">

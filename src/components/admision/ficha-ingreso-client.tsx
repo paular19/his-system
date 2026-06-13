@@ -823,13 +823,10 @@ export function FichaIngresoClient({
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-100">
                                                     {practicasPendientesPaginadas.map((p) => {
-                                                        const destinoPendiente = `/dashboard/ambulatorio/nueva?ingresoId=${ingreso.id}`
                                                         return (
                                                         <tr
                                                             key={p.id}
-                                                            onClick={() => router.push(destinoPendiente)}
-                                                            className="cursor-pointer hover:bg-amber-50/40"
-                                                            title="Ir a Autorizaciones para generar orden"
+                                                            className="hover:bg-amber-50/40"
                                                         >
                                                             <td className="py-2 pr-4 font-mono text-xs text-gray-700">
                                                                 {p.codigoPractica.trim()}
@@ -912,10 +909,23 @@ export function FichaIngresoClient({
                                                             }
                                                             return a.item - b.item
                                                         })
-                                                        const ordenPrincipal = ordenesOrdenadas[0]
-                                                        const destinoAutorizada = ordenPrincipal
-                                                            ? `/dashboard/ambulatorio/${ordenPrincipal.puestoNumero}/${ordenPrincipal.ordenNumero}?item=${ordenPrincipal.item}`
-                                                            : null
+                                                        const ordenesUnicas = Array.from(
+                                                            new Map(
+                                                                ordenesOrdenadas.map((orden) => [
+                                                                    `${orden.puestoNumero}-${orden.ordenNumero}`,
+                                                                    orden,
+                                                                ])
+                                                            ).values()
+                                                        )
+                                                        const destinoAutorizada = ordenesUnicas.length === 0
+                                                            ? null
+                                                            : ordenesUnicas.length === 1
+                                                                ? `/dashboard/ambulatorio/${ordenesUnicas[0]!.puestoNumero}/${ordenesUnicas[0]!.ordenNumero}?item=${ordenesUnicas[0]!.item}`
+                                                                : `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(
+                                                                    ordenesUnicas
+                                                                        .map((orden) => `${orden.puestoNumero}-${orden.ordenNumero}`)
+                                                                        .join(',')
+                                                                )}`
 
                                                         return (
                                                         <tr
@@ -924,7 +934,13 @@ export function FichaIngresoClient({
                                                                 if (destinoAutorizada) router.push(destinoAutorizada)
                                                             }}
                                                             className={destinoAutorizada ? 'cursor-pointer hover:bg-emerald-100/40' : undefined}
-                                                            title={destinoAutorizada ? 'Ir a la orden autorizada' : undefined}
+                                                            title={
+                                                                !destinoAutorizada
+                                                                    ? undefined
+                                                                    : ordenesUnicas.length > 1
+                                                                        ? 'Ver todas las órdenes autorizadas'
+                                                                        : 'Ir a la orden autorizada'
+                                                            }
                                                         >
                                                             <td className="py-2 pr-4 font-mono text-xs text-emerald-900">
                                                                 {p.codigoPractica.trim()}

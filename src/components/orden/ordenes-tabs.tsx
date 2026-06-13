@@ -111,7 +111,20 @@ function FilaOrden({
                 <td className="px-4 py-3 text-gray-500">
                     {new Date(orden.fechaEmision).toLocaleDateString('es-AR')}
                 </td>
-                <td className="px-4 py-3 text-center text-gray-600">{orden.cantidadItems}</td>
+                <td className="px-4 py-3 text-gray-600">
+                    <div className="space-y-1">
+                        {orden.practicas.slice(0, 2).map((practica) => (
+                            <div key={`${orden.puestoNumero}-${orden.numero}-${practica.item}`} className="leading-tight">
+                                <p className="font-mono text-[11px] text-gray-700">{practica.codigoPractica}</p>
+                                <p className="text-xs text-gray-500">{practica.descripcionPractica}</p>
+                            </div>
+                        ))}
+                        {orden.practicas.length > 2 && (
+                            <p className="text-[11px] text-gray-400">+{orden.practicas.length - 2} más</p>
+                        )}
+                        <p className="text-[11px] text-gray-400">{orden.cantidadItems} práctica{orden.cantidadItems !== 1 ? 's' : ''}</p>
+                    </div>
+                </td>
                 <td className="px-4 py-3 min-w-55">
                     {editando ? (
                         <div className="flex items-center gap-1">
@@ -360,7 +373,7 @@ export function OrdenesTabs({
                                 <th className="px-4 py-3 text-left">Obra Social</th>
                                 <th className="px-4 py-3 text-left">Coseguro</th>
                                 <th className="px-4 py-3 text-left">Fecha</th>
-                                <th className="px-4 py-3 text-center">Prácticas</th>
+                                <th className="px-4 py-3 text-left">Prácticas</th>
                                 <th className="px-4 py-3 text-left">N° Autorización OS</th>
                                 <th className="px-4 py-3"></th>
                             </tr>

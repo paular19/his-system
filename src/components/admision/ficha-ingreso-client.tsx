@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
@@ -63,6 +64,7 @@ export function FichaIngresoClient({
     puedeAgregarDiagnostico,
     puedeGenerarAutorizacion,
 }: FichaIngresoClientProps) {
+    const router = useRouter()
     const [isEditing, setIsEditing] = useState(false)
     const edad = ingreso.fechaNacimiento ? calcularEdad(ingreso.fechaNacimiento) : null
     const observacionesLimpias = limpiarObservacionesAdmision(ingreso.observaciones)
@@ -820,8 +822,15 @@ export function FichaIngresoClient({
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-100">
-                                                    {practicasPendientesPaginadas.map((p) => (
-                                                        <tr key={p.id}>
+                                                    {practicasPendientesPaginadas.map((p) => {
+                                                        const destinoPendiente = `/dashboard/ambulatorio/nueva?ingresoId=${ingreso.id}`
+                                                        return (
+                                                        <tr
+                                                            key={p.id}
+                                                            onClick={() => router.push(destinoPendiente)}
+                                                            className="cursor-pointer hover:bg-amber-50/40"
+                                                            title="Ir a Autorizaciones para generar orden"
+                                                        >
                                                             <td className="py-2 pr-4 font-mono text-xs text-gray-700">
                                                                 {p.codigoPractica.trim()}
                                                             </td>
@@ -836,7 +845,7 @@ export function FichaIngresoClient({
                                                             </td>
                                                             <td className="py-2 text-gray-700">{p.numeroAutorizacion ?? '-'}</td>
                                                         </tr>
-                                                    ))}
+                                                    )})}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -893,8 +902,30 @@ export function FichaIngresoClient({
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-emerald-100">
-                                                    {practicasAutorizadasPaginadas.map((p) => (
-                                                        <tr key={p.id}>
+                                                    {practicasAutorizadasPaginadas.map((p) => {
+                                                        const ordenesOrdenadas = [...p.ordenPractica].sort((a, b) => {
+                                                            if (a.puestoNumero !== b.puestoNumero) {
+                                                                return a.puestoNumero - b.puestoNumero
+                                                            }
+                                                            if (a.ordenNumero !== b.ordenNumero) {
+                                                                return a.ordenNumero - b.ordenNumero
+                                                            }
+                                                            return a.item - b.item
+                                                        })
+                                                        const ordenPrincipal = ordenesOrdenadas[0]
+                                                        const destinoAutorizada = ordenPrincipal
+                                                            ? `/dashboard/ambulatorio/${ordenPrincipal.puestoNumero}/${ordenPrincipal.ordenNumero}?item=${ordenPrincipal.item}`
+                                                            : null
+
+                                                        return (
+                                                        <tr
+                                                            key={p.id}
+                                                            onClick={() => {
+                                                                if (destinoAutorizada) router.push(destinoAutorizada)
+                                                            }}
+                                                            className={destinoAutorizada ? 'cursor-pointer hover:bg-emerald-100/40' : undefined}
+                                                            title={destinoAutorizada ? 'Ir a la orden autorizada' : undefined}
+                                                        >
                                                             <td className="py-2 pr-4 font-mono text-xs text-emerald-900">
                                                                 {p.codigoPractica.trim()}
                                                             </td>
@@ -909,22 +940,13 @@ export function FichaIngresoClient({
                                                             </td>
                                                             <td className="py-2 text-emerald-900">
                                                                 <div className="flex flex-wrap gap-1">
-                                                                    {[...p.ordenPractica]
-                                                                        .sort((a, b) => {
-                                                                            if (a.puestoNumero !== b.puestoNumero) {
-                                                                                return a.puestoNumero - b.puestoNumero
-                                                                            }
-                                                                            if (a.ordenNumero !== b.ordenNumero) {
-                                                                                return a.ordenNumero - b.ordenNumero
-                                                                            }
-                                                                            return a.item - b.item
-                                                                        })
-                                                                        .map((orden) => (
+                                                                    {ordenesOrdenadas.map((orden) => (
                                                                             <Link
                                                                                 key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
                                                                                 href={`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`}
+                                                                                onClick={(e) => e.stopPropagation()}
                                                                                 title={`Ver orden ${formatearNumeroOrden(orden.puestoNumero, orden.ordenNumero, orden.item)} en Autorizaciones`}
-                                                                                className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900"
+                                                                                className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
                                                                             >
                                                                                 {formatearNumeroOrden(
                                                                                     orden.puestoNumero,
@@ -939,7 +961,7 @@ export function FichaIngresoClient({
                                                                 </div>
                                                             </td>
                                                         </tr>
-                                                    ))}
+                                                    )})}
                                                 </tbody>
                                             </table>
                                         </div>

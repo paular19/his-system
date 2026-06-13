@@ -541,7 +541,17 @@ export function PracticaSection({
                                     practicasPendientesPaginadas.map((p) => (
                                         <div
                                             key={p.id}
-                                            className="flex items-start justify-between gap-3 text-xs border rounded-lg p-2.5 bg-white"
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => router.push(`/dashboard/ambulatorio/nueva?ingresoId=${ingresoId}`)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault()
+                                                    router.push(`/dashboard/ambulatorio/nueva?ingresoId=${ingresoId}`)
+                                                }
+                                            }}
+                                            title="Ir a Autorizaciones para generar orden"
+                                            className="flex items-start justify-between gap-3 text-xs border rounded-lg p-2.5 bg-white cursor-pointer hover:bg-amber-50/40"
                                         >
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2 flex-wrap">
@@ -606,10 +616,38 @@ export function PracticaSection({
                                 {practicasAutorizadasFiltradas.length === 0 ? (
                                     <p className="text-xs text-gray-400">No hay prácticas autorizadas.</p>
                                 ) : (
-                                    practicasAutorizadasPaginadas.map((p) => (
+                                    practicasAutorizadasPaginadas.map((p) => {
+                                        const ordenesOrdenadas = [...p.ordenPractica].sort((a, b) => {
+                                            if (a.puestoNumero !== b.puestoNumero) {
+                                                return a.puestoNumero - b.puestoNumero
+                                            }
+                                            if (a.ordenNumero !== b.ordenNumero) {
+                                                return a.ordenNumero - b.ordenNumero
+                                            }
+                                            return a.item - b.item
+                                        })
+                                        const ordenPrincipal = ordenesOrdenadas[0]
+                                        const destinoAutorizada = ordenPrincipal
+                                            ? `/dashboard/ambulatorio/${ordenPrincipal.puestoNumero}/${ordenPrincipal.ordenNumero}?item=${ordenPrincipal.item}`
+                                            : null
+
+                                        return (
                                         <div
                                             key={p.id}
-                                            className="flex items-start justify-between gap-3 text-xs border border-emerald-200 rounded-lg p-2.5 bg-emerald-50/40"
+                                            role={destinoAutorizada ? 'button' : undefined}
+                                            tabIndex={destinoAutorizada ? 0 : undefined}
+                                            onClick={() => {
+                                                if (destinoAutorizada) router.push(destinoAutorizada)
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (!destinoAutorizada) return
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault()
+                                                    router.push(destinoAutorizada)
+                                                }
+                                            }}
+                                            title={destinoAutorizada ? 'Ir a la orden autorizada' : undefined}
+                                            className={`flex items-start justify-between gap-3 text-xs border border-emerald-200 rounded-lg p-2.5 bg-emerald-50/40 ${destinoAutorizada ? 'cursor-pointer hover:bg-emerald-100/40' : ''}`}
                                         >
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2 flex-wrap">
@@ -623,22 +661,13 @@ export function PracticaSection({
                                                 <div className="flex items-center gap-3 mt-1 text-emerald-700 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
                                                     <span>Cant: {p.cantidad}</span>
-                                                    {[...p.ordenPractica]
-                                                        .sort((a, b) => {
-                                                            if (a.puestoNumero !== b.puestoNumero) {
-                                                                return a.puestoNumero - b.puestoNumero
-                                                            }
-                                                            if (a.ordenNumero !== b.ordenNumero) {
-                                                                return a.ordenNumero - b.ordenNumero
-                                                            }
-                                                            return a.item - b.item
-                                                        })
-                                                        .map((orden) => (
+                                                    {ordenesOrdenadas.map((orden) => (
                                                             <Link
                                                                 key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
                                                                 href={`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`}
+                                                                onClick={(e) => e.stopPropagation()}
                                                                 title={`Ver orden ${formatearNumeroOrden(orden.puestoNumero, orden.ordenNumero, orden.item)} en Autorizaciones`}
-                                                                className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900"
+                                                                className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900 hover:bg-emerald-200"
                                                             >
                                                                 {formatearNumeroOrden(
                                                                     orden.puestoNumero,
@@ -653,7 +682,7 @@ export function PracticaSection({
                                                 </div>
                                             </div>
                                         </div>
-                                    ))
+                                    )})
                                 )}
                                 {practicasAutorizadasFiltradas.length > PRACTICAS_LISTA_POR_PAGINA && (
                                     <div className="flex items-center justify-between gap-2">

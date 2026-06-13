@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
 import { updateIngresoAction } from '@/modules/admision/actions'
-import { ChevronRight, User, Pencil, FileText, Printer, Save, X, Trash2, Loader2 } from 'lucide-react'
+import { ChevronRight, User, Pencil, FileText, Printer, Save, X, Trash2, Loader2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { formatearFecha, formatearFechaHora, calcularEdad } from '@/lib/utils'
 import { AdmisionEditForm } from './admision-edit-form'
@@ -84,6 +84,12 @@ export function FichaIngresoClient({
     const [paginaPendientes, setPaginaPendientes] = useState(1)
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
     const [eliminandoPracticaId, setEliminandoPracticaId] = useState<number | null>(null)
+    const [practicaPendienteEliminar, setPracticaPendienteEliminar] = useState<{
+        id: number
+        codigo: string
+        descripcion: string
+    } | null>(null)
+    const [errorEliminarPractica, setErrorEliminarPractica] = useState<string | null>(null)
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
 
     const practicasPendientesFiltradas = terminoFiltroPracticas
@@ -190,23 +196,37 @@ export function FichaIngresoClient({
         return `${y}-${m}-${d}T${hh}:${mm}`
     }
 
-    const handleEliminarPracticaPendiente = async (practicaId: number) => {
-        const confirmar = window.confirm('¿Eliminar práctica no autorizada? Esta acción no se puede deshacer.')
-        if (!confirmar) return
+    const solicitarEliminarPracticaPendiente = (practica: {
+        id: number
+        codigoPractica: string
+        nomencladorPractica?: { descripcion?: string | null } | null
+    }) => {
+        setErrorEliminarPractica(null)
+        setPracticaPendienteEliminar({
+            id: practica.id,
+            codigo: practica.codigoPractica.trim(),
+            descripcion: practica.nomencladorPractica?.descripcion ?? practica.codigoPractica.trim(),
+        })
+    }
 
-        setEliminandoPracticaId(practicaId)
+    const confirmarEliminarPracticaPendiente = async () => {
+        if (!practicaPendienteEliminar) return
+
+        setErrorEliminarPractica(null)
+        setEliminandoPracticaId(practicaPendienteEliminar.id)
         try {
-            const res = await fetch(`/api/internacion/${ingreso.id}/practicas/${practicaId}`, {
+            const res = await fetch(`/api/internacion/${ingreso.id}/practicas/${practicaPendienteEliminar.id}`, {
                 method: 'DELETE',
             })
             const json = await res.json()
             if (!res.ok) {
-                window.alert(json.error ?? 'No se pudo eliminar la práctica')
+                setErrorEliminarPractica(json.error ?? 'No se pudo eliminar la práctica')
                 return
             }
+            setPracticaPendienteEliminar(null)
             router.refresh()
         } catch {
-            window.alert('Error de conexión al eliminar la práctica')
+            setErrorEliminarPractica('Error de conexión al eliminar la práctica')
         } finally {
             setEliminandoPracticaId(null)
         }
@@ -825,6 +845,47 @@ export function FichaIngresoClient({
                                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
                                     Pendientes de autorización ({practicasPendientesFiltradas.length})
                                 </p>
+                                {errorEliminarPractica && (
+                                    <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
+                                        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                                        <span>{errorEliminarPractica}</span>
+                                    </div>
+                                )}
+                                {practicaPendienteEliminar && (
+                                    <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div className="flex items-start gap-2 text-amber-900">
+                                                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                                                <div>
+                                                    <p className="text-sm font-semibold">¿Eliminar práctica no autorizada?</p>
+                                                    <p className="text-xs text-amber-800">
+                                                        {practicaPendienteEliminar.codigo} · {practicaPendienteEliminar.descripcion}
+                                                    </p>
+                                                    <p className="text-xs text-amber-700 mt-1">Esta acción no se puede deshacer.</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPracticaPendienteEliminar(null)}
+                                                    disabled={eliminandoPracticaId === practicaPendienteEliminar.id}
+                                                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void confirmarEliminarPracticaPendiente()}
+                                                    disabled={eliminandoPracticaId === practicaPendienteEliminar.id}
+                                                    className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                                >
+                                                    {eliminandoPracticaId === practicaPendienteEliminar.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                                    {eliminandoPracticaId === practicaPendienteEliminar.id ? 'Eliminando...' : 'Eliminar'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 {practicasPendientesFiltradas.length === 0 ? (
                                     <p className="text-sm text-gray-400">
                                         {practicasPendientes.length === 0
@@ -865,7 +926,7 @@ export function FichaIngresoClient({
                                                                 <td className="py-2 pl-4 text-right">
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => void handleEliminarPracticaPendiente(p.id)}
+                                                                        onClick={() => solicitarEliminarPracticaPendiente(p)}
                                                                         disabled={eliminandoPracticaId === p.id}
                                                                         className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700 hover:bg-red-100 disabled:opacity-50"
                                                                         title="Eliminar práctica no autorizada"

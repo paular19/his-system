@@ -152,6 +152,7 @@ export function PracticasAutorizacionSection({
     const [guardando, setGuardando] = useState(false)
     const [eliminandoUid, setEliminandoUid] = useState<string | null>(null)
     const [eliminadas, setEliminadas] = useState<Set<string>>(new Set())
+    const [pendienteEliminar, setPendienteEliminar] = useState<EntradaAutorizacion | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [exito, setExito] = useState(false)
 
@@ -206,20 +207,29 @@ export function PracticasAutorizacionSection({
         }
     }
 
-    const handleEliminar = async (entrada: EntradaAutorizacion) => {
+    const solicitarEliminar = (entrada: EntradaAutorizacion) => {
         if (!('practicaId' in entrada.actualizacion)) {
             setError('Solo se pueden eliminar prácticas base sin orden asociada')
             return
         }
 
-        const confirmar = window.confirm('¿Eliminar práctica no autorizada? Esta acción no se puede deshacer.')
-        if (!confirmar) return
+        setError(null)
+        setPendienteEliminar(entrada)
+    }
+
+    const handleEliminar = async () => {
+        if (!pendienteEliminar) return
+
+        if (!('practicaId' in pendienteEliminar.actualizacion)) {
+            setError('Solo se pueden eliminar prácticas base sin orden asociada')
+            return
+        }
 
         try {
             setError(null)
-            setEliminandoUid(entrada.uid)
+            setEliminandoUid(pendienteEliminar.uid)
 
-            const res = await fetch(`/api/cirugia/${cirugiaId}/practicas/${entrada.actualizacion.practicaId}`, {
+            const res = await fetch(`/api/cirugia/${cirugiaId}/practicas/${pendienteEliminar.actualizacion.practicaId}`, {
                 method: 'DELETE',
             })
             const json = await res.json()
@@ -230,9 +240,10 @@ export function PracticasAutorizacionSection({
 
             setEliminadas((prev) => {
                 const next = new Set(prev)
-                next.add(entrada.uid)
+                next.add(pendienteEliminar.uid)
                 return next
             })
+            setPendienteEliminar(null)
             onActualizar?.()
         } catch {
             setError('Error de conexión al eliminar la práctica')
@@ -262,6 +273,41 @@ export function PracticasAutorizacionSection({
                         <AlertCircle className="h-4 w-4" />
                         Pendientes de autorización
                     </h4>
+                    {pendienteEliminar && (
+                        <div className="mb-3 rounded-md border border-amber-300 bg-white/70 p-3 text-xs">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-start gap-2 text-amber-900">
+                                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-sm font-semibold">¿Eliminar práctica no autorizada?</p>
+                                        <p className="text-xs text-amber-800">
+                                            {pendienteEliminar.codigo} · {pendienteEliminar.descripcion}
+                                        </p>
+                                        <p className="text-xs text-amber-700 mt-1">Esta acción no se puede deshacer.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPendienteEliminar(null)}
+                                        disabled={eliminandoUid === pendienteEliminar.uid}
+                                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleEliminar()}
+                                        disabled={eliminandoUid === pendienteEliminar.uid}
+                                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                    >
+                                        {eliminandoUid === pendienteEliminar.uid && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                        {eliminandoUid === pendienteEliminar.uid ? 'Eliminando...' : 'Eliminar'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <div className="divide-y">
                         {pendientes.map((p) => (
                             <div key={p.uid} className="py-3 first:pt-0 last:pb-0">
@@ -294,7 +340,7 @@ export function PracticasAutorizacionSection({
                                             {'practicaId' in p.actualizacion && (
                                                 <button
                                                     type="button"
-                                                    onClick={() => void handleEliminar(p)}
+                                                    onClick={() => solicitarEliminar(p)}
                                                     disabled={eliminandoUid === p.uid}
                                                     className="inline-flex h-10 items-center rounded-md border border-red-200 bg-red-50 px-3 text-red-700 hover:bg-red-100 disabled:opacity-50"
                                                     title="Eliminar práctica no autorizada"

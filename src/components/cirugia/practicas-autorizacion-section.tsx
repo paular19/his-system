@@ -5,6 +5,8 @@ import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { actualizarNumerosAutorizacionAction } from '@/modules/cirugia/actions'
 import { generarCodigoBarras } from '@/modules/orden/types'
 
+const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
+
 interface Practica {
     id: number
     codigo: string
@@ -244,9 +246,10 @@ export function PracticasAutorizacionSection({
     }
 
     const handleEliminarSeleccionadas = async () => {
-        if (pendientesSeleccionadas.length === 0) return
+        const seleccionActual = [...pendientesSeleccionadas]
+        if (seleccionActual.length === 0) return
 
-        const entradasSeleccionadas = pendientesEliminables.filter((p) => pendientesSeleccionadas.includes(p.uid))
+        const entradasSeleccionadas = pendientesEliminables.filter((p) => seleccionActual.includes(p.uid))
         if (entradasSeleccionadas.length === 0) {
             setError('Seleccione prácticas base para eliminar')
             return
@@ -256,53 +259,49 @@ export function PracticasAutorizacionSection({
             setError(null)
             setEliminandoPracticas(true)
 
-            const resultados: Array<
-                | { uid: string; ok: true }
-                | { uid: string; ok: false; error: string }
-            > = []
-
-            for (const entrada of entradasSeleccionadas) {
-                if (!('practicaId' in entrada.actualizacion)) {
-                    resultados.push({
-                        uid: entrada.uid,
-                        ok: false,
-                        error: 'Solo se pueden eliminar prácticas base sin orden asociada',
-                    })
-                    continue
-                }
-
-                let timeoutId: ReturnType<typeof setTimeout> | null = null
-                try {
-                    const controller = new AbortController()
-                    timeoutId = setTimeout(() => controller.abort(), 20000)
-                    const res = await fetch(`/api/cirugia/${cirugiaId}/practicas/${entrada.actualizacion.practicaId}`, {
-                        method: 'DELETE',
-                        signal: controller.signal,
-                    })
-                    const json = await res.json().catch(() => null)
-                    if (!res.ok) {
-                        resultados.push({
+            const resultados = await Promise.all(
+                entradasSeleccionadas.map(async (entrada) => {
+                    if (!('practicaId' in entrada.actualizacion)) {
+                        return {
                             uid: entrada.uid,
-                            ok: false,
-                            error: json?.error ?? 'No se pudo eliminar la práctica',
-                        })
-                        continue
+                            ok: false as const,
+                            error: 'Solo se pueden eliminar prácticas base sin orden asociada',
+                        }
                     }
 
-                    resultados.push({ uid: entrada.uid, ok: true })
-                } catch (err) {
-                    resultados.push({
-                        uid: entrada.uid,
-                        ok: false,
-                        error:
-                            err instanceof DOMException && err.name === 'AbortError'
-                                ? 'Tiempo de espera agotado al eliminar la práctica'
-                                : 'Error de conexión al eliminar la práctica',
-                    })
-                } finally {
-                    if (timeoutId) clearTimeout(timeoutId)
-                }
-            }
+                    let timeoutId: ReturnType<typeof setTimeout> | null = null
+                    try {
+                        const controller = new AbortController()
+                        timeoutId = setTimeout(() => controller.abort(), TIMEOUT_ELIMINAR_PRACTICA_MS)
+                        const res = await fetch(`/api/cirugia/${cirugiaId}/practicas/${entrada.actualizacion.practicaId}`, {
+                            method: 'DELETE',
+                            signal: controller.signal,
+                            cache: 'no-store',
+                        })
+                        const json = await res.json().catch(() => null)
+                        if (!res.ok) {
+                            return {
+                                uid: entrada.uid,
+                                ok: false as const,
+                                error: json?.error ?? 'No se pudo eliminar la práctica',
+                            }
+                        }
+
+                        return { uid: entrada.uid, ok: true as const }
+                    } catch (err) {
+                        return {
+                            uid: entrada.uid,
+                            ok: false as const,
+                            error:
+                                err instanceof DOMException && err.name === 'AbortError'
+                                    ? 'Tiempo de espera agotado al eliminar la práctica'
+                                    : 'Error de conexión al eliminar la práctica',
+                        }
+                    } finally {
+                        if (timeoutId) clearTimeout(timeoutId)
+                    }
+                })
+            )
 
             const exitosas = resultados.filter((r) => r.ok).map((r) => r.uid)
             const fallidas = resultados.filter((r) => !r.ok)

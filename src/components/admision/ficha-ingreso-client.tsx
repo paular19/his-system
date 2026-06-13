@@ -37,6 +37,7 @@ const BADGE_ESTADO: Record<string, string> = {
 }
 
 const PRACTICAS_POR_PAGINA = 12
+const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
 
 function normalizarTexto(value: string | null | undefined): string {
     return (value ?? '')
@@ -233,49 +234,47 @@ export function FichaIngresoClient({
     }
 
     const confirmarEliminarSeleccionadas = async () => {
-        if (practicasSeleccionadas.length === 0) return
+        const seleccionActual = [...practicasSeleccionadas]
+        if (seleccionActual.length === 0) return
 
         setErrorEliminarPractica(null)
         setEliminandoPracticas(true)
         try {
-            const resultados: Array<
-                | { practicaId: number; ok: true }
-                | { practicaId: number; ok: false; error: string }
-            > = []
-
-            for (const practicaId of practicasSeleccionadas) {
-                let timeoutId: ReturnType<typeof setTimeout> | null = null
-                try {
-                    const controller = new AbortController()
-                    timeoutId = setTimeout(() => controller.abort(), 20000)
-                    const res = await fetch(`/api/internacion/${ingreso.id}/practicas/${practicaId}`, {
-                        method: 'DELETE',
-                        signal: controller.signal,
-                    })
-                    const json = await res.json().catch(() => null)
-                    if (!res.ok) {
-                        resultados.push({
-                            practicaId,
-                            ok: false,
-                            error: json?.error ?? 'No se pudo eliminar la práctica',
+            const resultados = await Promise.all(
+                seleccionActual.map(async (practicaId) => {
+                    let timeoutId: ReturnType<typeof setTimeout> | null = null
+                    try {
+                        const controller = new AbortController()
+                        timeoutId = setTimeout(() => controller.abort(), TIMEOUT_ELIMINAR_PRACTICA_MS)
+                        const res = await fetch(`/api/internacion/${ingreso.id}/practicas/${practicaId}`, {
+                            method: 'DELETE',
+                            signal: controller.signal,
+                            cache: 'no-store',
                         })
-                        continue
-                    }
+                        const json = await res.json().catch(() => null)
+                        if (!res.ok) {
+                            return {
+                                practicaId,
+                                ok: false as const,
+                                error: json?.error ?? 'No se pudo eliminar la práctica',
+                            }
+                        }
 
-                    resultados.push({ practicaId, ok: true })
-                } catch (err) {
-                    resultados.push({
-                        practicaId,
-                        ok: false,
-                        error:
-                            err instanceof DOMException && err.name === 'AbortError'
-                                ? 'Tiempo de espera agotado al eliminar la práctica'
-                                : 'Error de conexión al eliminar la práctica',
-                    })
-                } finally {
-                    if (timeoutId) clearTimeout(timeoutId)
-                }
-            }
+                        return { practicaId, ok: true as const }
+                    } catch (err) {
+                        return {
+                            practicaId,
+                            ok: false as const,
+                            error:
+                                err instanceof DOMException && err.name === 'AbortError'
+                                    ? 'Tiempo de espera agotado al eliminar la práctica'
+                                    : 'Error de conexión al eliminar la práctica',
+                        }
+                    } finally {
+                        if (timeoutId) clearTimeout(timeoutId)
+                    }
+                })
+            )
 
             const exitosas = resultados.filter((r) => r.ok).map((r) => r.practicaId)
             const fallidas = resultados.filter((r) => !r.ok)

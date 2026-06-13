@@ -250,9 +250,13 @@ export function PracticaSection({
             > = []
 
             for (const practicaId of practicasSeleccionadas) {
+                let timeoutId: ReturnType<typeof setTimeout> | null = null
                 try {
+                    const controller = new AbortController()
+                    timeoutId = setTimeout(() => controller.abort(), 20000)
                     const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaId}`, {
                         method: 'DELETE',
+                        signal: controller.signal,
                     })
                     const json = await res.json().catch(() => null)
                     if (!res.ok) {
@@ -265,12 +269,17 @@ export function PracticaSection({
                     }
 
                     resultados.push({ practicaId, ok: true })
-                } catch {
+                } catch (err) {
                     resultados.push({
                         practicaId,
                         ok: false,
-                        error: 'Error de conexión al eliminar la práctica',
+                        error:
+                            err instanceof DOMException && err.name === 'AbortError'
+                                ? 'Tiempo de espera agotado al eliminar la práctica'
+                                : 'Error de conexión al eliminar la práctica',
                     })
+                } finally {
+                    if (timeoutId) clearTimeout(timeoutId)
                 }
             }
 

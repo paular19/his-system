@@ -74,12 +74,13 @@ export function FichaIngresoClient({
     const [cardLoading, setCardLoading] = useState(false)
     const [cardError, setCardError] = useState<string | null>(null)
     const [cardValues, setCardValues] = useState<any>({})
+    const [practicasIngreso, setPracticasIngreso] = useState(ingreso.practicas)
     const estadoIngreso = (ingreso.estado ?? '').trim().toUpperCase()
     const ingresoHabilitadoAutorizacion = estadoIngreso === 'A' || estadoIngreso === 'P'
-    const tienePracticas = ingreso.practicas.length > 0
-    const practicasPendientes = ingreso.practicas.filter((p) => (p.ordenPractica?.length ?? 0) === 0)
+    const tienePracticas = practicasIngreso.length > 0
+    const practicasPendientes = practicasIngreso.filter((p) => (p.ordenPractica?.length ?? 0) === 0)
     const tienePracticasPendientes = practicasPendientes.length > 0
-    const practicasAutorizadas = ingreso.practicas.filter((p) => (p.ordenPractica?.length ?? 0) > 0)
+    const practicasAutorizadas = practicasIngreso.filter((p) => (p.ordenPractica?.length ?? 0) > 0)
     const [filtroPracticas, setFiltroPracticas] = useState('')
     const [paginaPendientes, setPaginaPendientes] = useState(1)
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
@@ -143,6 +144,10 @@ export function FichaIngresoClient({
         setPaginaPendientes(1)
         setPaginaAutorizadas(1)
     }, [filtroPracticas])
+
+    useEffect(() => {
+        setPracticasIngreso(ingreso.practicas)
+    }, [ingreso.practicas])
 
     useEffect(() => {
         setPaginaPendientes((prev) => Math.min(prev, totalPaginasPendientes))
@@ -239,9 +244,13 @@ export function FichaIngresoClient({
             > = []
 
             for (const practicaId of practicasSeleccionadas) {
+                let timeoutId: ReturnType<typeof setTimeout> | null = null
                 try {
+                    const controller = new AbortController()
+                    timeoutId = setTimeout(() => controller.abort(), 20000)
                     const res = await fetch(`/api/internacion/${ingreso.id}/practicas/${practicaId}`, {
                         method: 'DELETE',
+                        signal: controller.signal,
                     })
                     const json = await res.json().catch(() => null)
                     if (!res.ok) {
@@ -254,12 +263,17 @@ export function FichaIngresoClient({
                     }
 
                     resultados.push({ practicaId, ok: true })
-                } catch {
+                } catch (err) {
                     resultados.push({
                         practicaId,
                         ok: false,
-                        error: 'Error de conexión al eliminar la práctica',
+                        error:
+                            err instanceof DOMException && err.name === 'AbortError'
+                                ? 'Tiempo de espera agotado al eliminar la práctica'
+                                : 'Error de conexión al eliminar la práctica',
                     })
+                } finally {
+                    if (timeoutId) clearTimeout(timeoutId)
                 }
             }
 
@@ -276,6 +290,7 @@ export function FichaIngresoClient({
             }
 
             if (exitosas.length > 0) {
+                setPracticasIngreso((prev) => prev.filter((p) => !exitosas.includes(p.id)))
                 setPracticasSeleccionadas((prev) => prev.filter((id) => !exitosas.includes(id)))
                 router.refresh()
             }
@@ -877,7 +892,7 @@ export function FichaIngresoClient({
                             }}
                             onCancel={() => setEditingCard(null)}
                         />
-                    ) : ingreso.practicas.length === 0 ? (
+                    ) : practicasIngreso.length === 0 ? (
                         <p className="text-sm text-gray-400">
                             Sin prácticas registradas para esta admisión.
                         </p>
@@ -893,7 +908,7 @@ export function FichaIngresoClient({
                                 />
                                 <p className="text-xs text-gray-500">
                                     {practicasPendientesFiltradas.length + practicasAutorizadasFiltradas.length}
-                                    {' '}de {ingreso.practicas.length}
+                                    {' '}de {practicasIngreso.length}
                                 </p>
                             </div>
 

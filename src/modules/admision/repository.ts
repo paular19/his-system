@@ -394,12 +394,14 @@ export async function buscarIngresos(
       where.OR = [
         { numeroIngreso: num },
         { nombre: { contains: q, mode: 'insensitive' } },
+        { obraSocial: { nombre: { contains: q, mode: 'insensitive' } } },
         { paciente: { numeroDocumento: num } },
         { paciente: { historiaClinica: num } },
       ]
     } else {
       where.OR = [
         { nombre: { contains: q, mode: 'insensitive' } },
+        { obraSocial: { nombre: { contains: q, mode: 'insensitive' } } },
         { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' } } },
         { paciente: { apellido: { contains: q, mode: 'insensitive' } } },
       ]

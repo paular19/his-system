@@ -111,7 +111,7 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
             <input
               name="q"
               defaultValue={q}
-              placeholder="Buscar admisión: nombre o DNI del paciente"
+              placeholder="Buscar admisión: paciente, obra social o DNI"
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button

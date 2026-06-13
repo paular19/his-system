@@ -676,9 +676,11 @@ export async function buscarAdmisionesActivasPorPaciente(query: string): Promise
         { numeroIngreso: parseInt(q, 10) },
         { paciente: { numeroDocumento: parseInt(q, 10) } },
         { nombre: { contains: q, mode: 'insensitive' } },
+        { obraSocial: { nombre: { contains: q, mode: 'insensitive' } } },
       ]
       : [
         { nombre: { contains: q, mode: 'insensitive' } },
+        { obraSocial: { nombre: { contains: q, mode: 'insensitive' } } },
         { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' } } },
       ],
   }

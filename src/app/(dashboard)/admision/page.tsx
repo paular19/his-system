@@ -141,7 +141,7 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
               <input
                 name="q"
                 defaultValue={params.q}
-                placeholder="Buscar por paciente, nro. ingreso..."
+                placeholder="Buscar por paciente, obra social o nro. ingreso..."
                 className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>

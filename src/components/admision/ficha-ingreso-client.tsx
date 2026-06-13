@@ -252,6 +252,10 @@ export function FichaIngresoClient({
                             cache: 'no-store',
                         })
                         const json = await res.json().catch(() => null)
+                        if (res.status === 404) {
+                            // Si ya no existe en backend (por carrera o estado previo), tratamos como eliminado.
+                            return { practicaId, ok: true as const }
+                        }
                         if (!res.ok) {
                             return {
                                 practicaId,

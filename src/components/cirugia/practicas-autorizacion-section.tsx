@@ -279,6 +279,10 @@ export function PracticasAutorizacionSection({
                             cache: 'no-store',
                         })
                         const json = await res.json().catch(() => null)
+                        if (res.status === 404) {
+                            // Si ya no existe en backend (por carrera o estado previo), tratamos como eliminada.
+                            return { uid: entrada.uid, ok: true as const }
+                        }
                         if (!res.ok) {
                             return {
                                 uid: entrada.uid,

@@ -832,11 +832,11 @@ export async function eliminarPracticaNoAutorizada(
       where: {
         id: practicaId,
         ingresoId,
-        OR: [{ estado: 'A' }, { estado: null }],
       },
       select: {
         id: true,
         ingresoId: true,
+        estado: true,
         codigoPractica: true,
         numeroAutorizacion: true,
         puestoNumero: true,
@@ -858,6 +858,18 @@ export async function eliminarPracticaNoAutorizada(
 
     if (!practica) {
       throw new Error('Práctica no encontrada')
+    }
+
+    const estadoActual = (practica.estado ?? '').trim().toUpperCase()
+    const codigoPracticaTrim = practica.codigoPractica.trim()
+
+    // Idempotencia: si ya fue anulada anteriormente, devolver OK para que la UI se sincronice.
+    if (estadoActual === 'X') {
+      return {
+        id: practica.id,
+        ingresoId: practica.ingresoId,
+        codigoPractica: codigoPracticaTrim,
+      }
     }
 
     if ((practica.ordenPractica?.length ?? 0) > 0) {
@@ -897,7 +909,6 @@ export async function eliminarPracticaNoAutorizada(
     })
 
     // Si la práctica pertenece a una cirugía programada vinculada, eliminar también una práctica espejo pendiente.
-    const codigoPracticaTrim = practica.codigoPractica.trim()
     if (codigoPracticaTrim.length > 0) {
       const cirugia = await tx.cirugiaProgramada.findFirst({
         where: {

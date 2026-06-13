@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react'
@@ -32,6 +32,15 @@ const formatoMoneda = new Intl.NumberFormat('es-AR', {
 })
 
 const MATRICULA_ANESTESISTA_DEFAULT = 6
+const PRACTICAS_LISTA_POR_PAGINA = 8
+
+function normalizarBusquedaLista(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+}
 
 interface PracticaSectionProps {
     ingresoId: number
@@ -52,6 +61,9 @@ export function PracticaSection({
     const [practicas, setPracticas] = useState<PracticaItem[]>(practicasIniciales)
     const [mostrarForm, setMostrarForm] = useState(false)
     const [expandido, setExpandido] = useState(true)
+    const [filtroLista, setFiltroLista] = useState('')
+    const [paginaPendientes, setPaginaPendientes] = useState(1)
+    const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
 
     // Búsqueda nomenclador
     const [busqueda, setBusqueda] = useState('')
@@ -217,6 +229,59 @@ export function PracticaSection({
     const practicasAutorizadas = practicas.filter((p) => (p.ordenPractica?.length ?? 0) > 0)
     const mostrarBotonGenerar = puedeCrear && practicas.length > 0
     const botonGenerarHabilitado = practicasPendientes.length > 0
+
+    const terminoFiltroLista = useMemo(() => normalizarBusquedaLista(filtroLista), [filtroLista])
+
+    const practicasPendientesFiltradas = useMemo(() => {
+        if (!terminoFiltroLista) return practicasPendientes
+        return practicasPendientes.filter((p) => {
+            const codigo = normalizarBusquedaLista(p.codigoPractica)
+            const descripcion = normalizarBusquedaLista(p.descripcionPractica ?? '')
+            const autorizacion = normalizarBusquedaLista(p.numeroAutorizacion ?? '')
+            return (
+                codigo.includes(terminoFiltroLista) ||
+                descripcion.includes(terminoFiltroLista) ||
+                autorizacion.includes(terminoFiltroLista)
+            )
+        })
+    }, [practicasPendientes, terminoFiltroLista])
+
+    const practicasAutorizadasFiltradas = useMemo(() => {
+        if (!terminoFiltroLista) return practicasAutorizadas
+        return practicasAutorizadas.filter((p) => {
+            const codigo = normalizarBusquedaLista(p.codigoPractica)
+            const descripcion = normalizarBusquedaLista(p.descripcionPractica ?? '')
+            const autorizaciones = (p.ordenPractica ?? [])
+                .map((orden) => `${orden.numeroAutorizacion ?? ''} ${orden.puestoNumero}-${orden.ordenNumero}`)
+                .join(' ')
+            const textoOrdenes = normalizarBusquedaLista(autorizaciones)
+            return (
+                codigo.includes(terminoFiltroLista) ||
+                descripcion.includes(terminoFiltroLista) ||
+                textoOrdenes.includes(terminoFiltroLista)
+            )
+        })
+    }, [practicasAutorizadas, terminoFiltroLista])
+
+    const totalPaginasPendientes = Math.max(1, Math.ceil(practicasPendientesFiltradas.length / PRACTICAS_LISTA_POR_PAGINA))
+    const totalPaginasAutorizadas = Math.max(1, Math.ceil(practicasAutorizadasFiltradas.length / PRACTICAS_LISTA_POR_PAGINA))
+    const paginaPendientesActual = Math.min(paginaPendientes, totalPaginasPendientes)
+    const paginaAutorizadasActual = Math.min(paginaAutorizadas, totalPaginasAutorizadas)
+
+    const practicasPendientesPaginadas = useMemo(() => {
+        const desde = (paginaPendientesActual - 1) * PRACTICAS_LISTA_POR_PAGINA
+        return practicasPendientesFiltradas.slice(desde, desde + PRACTICAS_LISTA_POR_PAGINA)
+    }, [paginaPendientesActual, practicasPendientesFiltradas])
+
+    const practicasAutorizadasPaginadas = useMemo(() => {
+        const desde = (paginaAutorizadasActual - 1) * PRACTICAS_LISTA_POR_PAGINA
+        return practicasAutorizadasFiltradas.slice(desde, desde + PRACTICAS_LISTA_POR_PAGINA)
+    }, [paginaAutorizadasActual, practicasAutorizadasFiltradas])
+
+    useEffect(() => {
+        setPaginaPendientes(1)
+        setPaginaAutorizadas(1)
+    }, [filtroLista])
 
     return (
         <div className="his-card">
@@ -451,14 +516,29 @@ export function PracticaSection({
                         </p>
                     ) : (
                         <div className="space-y-4">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="relative flex-1 max-w-sm">
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        value={filtroLista}
+                                        onChange={(e) => setFiltroLista(e.target.value)}
+                                        placeholder="Filtrar prácticas por código, descripción o autorización..."
+                                        className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                    {practicasPendientesFiltradas.length + practicasAutorizadasFiltradas.length} de {practicas.length}
+                                </p>
+                            </div>
                             <div className="space-y-2">
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                                    Pendientes de autorización ({practicasPendientes.length})
+                                    Pendientes de autorización ({practicasPendientesFiltradas.length})
                                 </p>
-                                {practicasPendientes.length === 0 ? (
+                                {practicasPendientesFiltradas.length === 0 ? (
                                     <p className="text-xs text-gray-400">No hay prácticas pendientes.</p>
                                 ) : (
-                                    practicasPendientes.map((p) => (
+                                    practicasPendientesPaginadas.map((p) => (
                                         <div
                                             key={p.id}
                                             className="flex items-start justify-between gap-3 text-xs border rounded-lg p-2.5 bg-white"
@@ -492,16 +572,41 @@ export function PracticaSection({
                                         </div>
                                     ))
                                 )}
+                                {practicasPendientesFiltradas.length > PRACTICAS_LISTA_POR_PAGINA && (
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-xs text-gray-500">
+                                            Página {paginaPendientesActual} de {totalPaginasPendientes}
+                                        </p>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPaginaPendientes((prev) => Math.max(1, prev - 1))}
+                                                disabled={paginaPendientesActual <= 1}
+                                                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                            >
+                                                Anterior
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPaginaPendientes((prev) => Math.min(totalPaginasPendientes, prev + 1))}
+                                                disabled={paginaPendientesActual >= totalPaginasPendientes}
+                                                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                            >
+                                                Siguiente
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-2">
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                    Ya autorizadas ({practicasAutorizadas.length})
+                                    Ya autorizadas ({practicasAutorizadasFiltradas.length})
                                 </p>
-                                {practicasAutorizadas.length === 0 ? (
+                                {practicasAutorizadasFiltradas.length === 0 ? (
                                     <p className="text-xs text-gray-400">No hay prácticas autorizadas.</p>
                                 ) : (
-                                    practicasAutorizadas.map((p) => (
+                                    practicasAutorizadasPaginadas.map((p) => (
                                         <div
                                             key={p.id}
                                             className="flex items-start justify-between gap-3 text-xs border border-emerald-200 rounded-lg p-2.5 bg-emerald-50/40"
@@ -547,6 +652,31 @@ export function PracticaSection({
                                             </div>
                                         </div>
                                     ))
+                                )}
+                                {practicasAutorizadasFiltradas.length > PRACTICAS_LISTA_POR_PAGINA && (
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-xs text-gray-500">
+                                            Página {paginaAutorizadasActual} de {totalPaginasAutorizadas}
+                                        </p>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPaginaAutorizadas((prev) => Math.max(1, prev - 1))}
+                                                disabled={paginaAutorizadasActual <= 1}
+                                                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                            >
+                                                Anterior
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPaginaAutorizadas((prev) => Math.min(totalPaginasAutorizadas, prev + 1))}
+                                                disabled={paginaAutorizadasActual >= totalPaginasAutorizadas}
+                                                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                            >
+                                                Siguiente
+                                            </button>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         </div>

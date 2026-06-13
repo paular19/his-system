@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Search, Loader2 } from 'lucide-react'
 import { BuscarPaciente } from './buscar-paciente'
@@ -89,7 +89,16 @@ function esNombreIPSS(nombre: string): boolean {
   return tokens.includes('IPSS') || tokens.includes('IPS')
 }
 
+function normalizarBusqueda(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
+const PRACTICAS_POR_PAGINA = 6
 
 function crearTempId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
@@ -162,6 +171,8 @@ export function AdmisionForm({
   // Búsqueda de prácticas
   const [buscandoPractica, setBuscandoPractica] = useState(false)
   const [terminoBusquedaPractica, setTerminoBusquedaPractica] = useState('')
+  const [terminoFiltroPracticas, setTerminoFiltroPracticas] = useState('')
+  const [paginaPracticas, setPaginaPracticas] = useState(1)
   const [resultadosPractica, setResultadosPractica] = useState<Array<{
     convenioId: number
     codigo: string
@@ -187,6 +198,25 @@ export function AdmisionForm({
   const etiquetaBusquedaPractica = subtipoAdmisionCodigo === 'CUR' || subtipoAdmisionCodigo === 'SUT'
     ? 'Buscar código de práctica...'
     : 'Buscar práctica en nomenclador...'
+
+  const practicasFiltradas = useMemo(() => {
+    const termino = normalizarBusqueda(terminoFiltroPracticas)
+    if (!termino) return practicas
+
+    return practicas.filter((p) => {
+      const codigo = normalizarBusqueda(p.codigo)
+      const descripcion = normalizarBusqueda(p.descripcion)
+      return codigo.includes(termino) || descripcion.includes(termino)
+    })
+  }, [practicas, terminoFiltroPracticas])
+
+  const totalPaginasPracticas = Math.max(1, Math.ceil(practicasFiltradas.length / PRACTICAS_POR_PAGINA))
+  const paginaPracticasActual = Math.min(paginaPracticas, totalPaginasPracticas)
+
+  const practicasPaginadas = useMemo(() => {
+    const desde = (paginaPracticasActual - 1) * PRACTICAS_POR_PAGINA
+    return practicasFiltradas.slice(desde, desde + PRACTICAS_POR_PAGINA)
+  }, [paginaPracticasActual, practicasFiltradas])
 
   const obtenerProfesionalSeleccionadoId = () => {
     if (subtiposTurnoPractica.includes(subtipoAdmisionCodigo)) {
@@ -250,6 +280,10 @@ export function AdmisionForm({
 
     return () => clearTimeout(timer)
   }, [terminoBusquedaPractica, obraSocialId])
+
+  useEffect(() => {
+    setPaginaPracticas(1)
+  }, [terminoFiltroPracticas])
 
   useEffect(() => {
     let activo = true
@@ -902,8 +936,23 @@ export function AdmisionForm({
             )}
             {practicas.length > 0 ? (
               <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={terminoFiltroPracticas}
+                      onChange={(e) => setTerminoFiltroPracticas(e.target.value)}
+                      placeholder="Filtrar prácticas agregadas..."
+                      className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {practicasFiltradas.length} de {practicas.length}
+                  </p>
+                </div>
                 <div className="divide-y border rounded-md">
-                  {practicas.map((p) => (
+                  {practicasPaginadas.map((p) => (
                     <div key={p.tempId} className="px-3 py-3 space-y-3">
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
@@ -982,6 +1031,31 @@ export function AdmisionForm({
                     </div>
                   ))}
                 </div>
+                {practicasFiltradas.length > PRACTICAS_POR_PAGINA && (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-gray-500">
+                      Página {paginaPracticasActual} de {totalPaginasPracticas}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPaginaPracticas((prev) => Math.max(1, prev - 1))}
+                        disabled={paginaPracticasActual <= 1}
+                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        Anterior
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaginaPracticas((prev) => Math.min(totalPaginasPracticas, prev + 1))}
+                        disabled={paginaPracticasActual >= totalPaginasPracticas}
+                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        Siguiente
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-xs text-gray-400">No se han agregado prácticas.</p>

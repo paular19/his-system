@@ -91,6 +91,14 @@ function formatOrderNumber(puestoNumero: number | null | undefined, ordenNumero:
     return `${puestoNumero.toString().padStart(4, '0')}-${ordenNumero.toString().padStart(8, '0')}`
 }
 
+function normalizarTextoBusqueda(value: string | null | undefined): string {
+    return (value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+}
+
 function calcularRecargosDiferencial(diferenciales: PrestacionFacturableItem['diferenciales'] | null | undefined): {
     especialista: number
     gastos: number
@@ -284,6 +292,7 @@ function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Re
 }
 
 const MATRICULA_AYUDANTE_DEFAULT = 995
+const PRESTACIONES_POR_PAGINA_DEFAULT = 12
 
 function incluyeSoloAyudante(incluyeCodigo: string | null | undefined): boolean {
     const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
@@ -395,6 +404,9 @@ export function FacturacionPanel() {
     const [detallePrestacionesExpand, setDetallePrestacionesExpand] = useState<Record<string, boolean>>({})
     const [guardandoRowUid, setGuardandoRowUid] = useState<string | null>(null)
     const [ordenesExpand, setOrdenesExpand] = useState<Record<string, boolean>>({})
+    const [filtroPrestaciones, setFiltroPrestaciones] = useState('')
+    const [paginaPrestaciones, setPaginaPrestaciones] = useState(1)
+    const [porPaginaPrestaciones, setPorPaginaPrestaciones] = useState(PRESTACIONES_POR_PAGINA_DEFAULT)
     const [anulando, setAnulando] = useState<string | null>(null)
     const [guardandoDiferencialCirugiaId, setGuardandoDiferencialCirugiaId] = useState<number | null>(null)
     const [mostrarImportadorNomenclador, setMostrarImportadorNomenclador] = useState(false)
@@ -500,6 +512,39 @@ export function FacturacionPanel() {
             return true
         })
     }, [contexto])
+
+    const prestacionesNoOrdenadasFiltradas = useMemo(() => {
+        const termino = normalizarTextoBusqueda(filtroPrestaciones)
+        if (!termino) return prestacionesNoOrdenadas
+
+        return prestacionesNoOrdenadas.filter((p) => {
+            const codigo = normalizarTextoBusqueda(p.codigoPractica)
+            const descripcion = normalizarTextoBusqueda(p.descripcion)
+            const autorizacion = normalizarTextoBusqueda(p.numeroAutorizacion)
+            const tipo = normalizarTextoBusqueda(p.tipo)
+            const autorizacionesVinculadas = normalizarTextoBusqueda(
+                (p.autorizacionesVinculadas ?? [])
+                    .map((aut) => `${aut.numeroAutorizacion ?? ''} ${aut.ordenPuestoNumero}-${aut.ordenNumero}`)
+                    .join(' ')
+            )
+
+            return (
+                codigo.includes(termino) ||
+                descripcion.includes(termino) ||
+                autorizacion.includes(termino) ||
+                tipo.includes(termino) ||
+                autorizacionesVinculadas.includes(termino)
+            )
+        })
+    }, [filtroPrestaciones, prestacionesNoOrdenadas])
+
+    const totalPaginasPrestaciones = Math.max(1, Math.ceil(prestacionesNoOrdenadasFiltradas.length / porPaginaPrestaciones))
+    const paginaPrestacionesActual = Math.min(paginaPrestaciones, totalPaginasPrestaciones)
+
+    const prestacionesNoOrdenadasPaginadas = useMemo(() => {
+        const desde = (paginaPrestacionesActual - 1) * porPaginaPrestaciones
+        return prestacionesNoOrdenadasFiltradas.slice(desde, desde + porPaginaPrestaciones)
+    }, [paginaPrestacionesActual, porPaginaPrestaciones, prestacionesNoOrdenadasFiltradas])
 
     const cirugiasEditables = useMemo(() => {
         if (!contexto) return []
@@ -1223,6 +1268,10 @@ export function FacturacionPanel() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedIngresoId])
 
+    useEffect(() => {
+        setPaginaPrestaciones(1)
+    }, [filtroPrestaciones, porPaginaPrestaciones, selectedIngresoId])
+
     return (
         <div className="p-6 space-y-4">
             <div className="his-card p-4 md:p-5">
@@ -1663,6 +1712,33 @@ export function FacturacionPanel() {
                                     </div>
                                 </div>
 
+                                <div className="border-b px-4 py-3 bg-white">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <div className="relative min-w-60 flex-1">
+                                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                            <input
+                                                type="text"
+                                                value={filtroPrestaciones}
+                                                onChange={(e) => setFiltroPrestaciones(e.target.value)}
+                                                placeholder="Filtrar prestaciones pendientes..."
+                                                className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                        <select
+                                            value={porPaginaPrestaciones}
+                                            onChange={(e) => setPorPaginaPrestaciones(Number.parseInt(e.target.value, 10) || PRESTACIONES_POR_PAGINA_DEFAULT)}
+                                            className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-700"
+                                        >
+                                            <option value={8}>8 por página</option>
+                                            <option value={12}>12 por página</option>
+                                            <option value={20}>20 por página</option>
+                                        </select>
+                                        <p className="text-xs text-gray-500 whitespace-nowrap">
+                                            {prestacionesNoOrdenadasFiltradas.length} de {prestacionesNoOrdenadas.length} pendientes
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <div className="overflow-hidden">
                                     <table className="w-full table-fixed text-sm">
                                         <thead>
@@ -1678,7 +1754,7 @@ export function FacturacionPanel() {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
-                                            {prestacionesNoOrdenadas.map((p) => {
+                                            {prestacionesNoOrdenadasPaginadas.map((p) => {
                                                 const draft = editRows[p.uid] ?? buildEditState(p)
                                                 const filaEnEdicion = Boolean(rowEditMode[p.uid])
                                                 const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
@@ -2007,6 +2083,14 @@ export function FacturacionPanel() {
                                                 )
                                             })}
 
+                                            {prestacionesNoOrdenadasFiltradas.length === 0 && prestacionesNoOrdenadas.length > 0 && (
+                                                <tr>
+                                                    <td colSpan={8} className="px-3 py-4 text-center text-xs text-gray-500">
+                                                        No hay prestaciones pendientes para el filtro aplicado.
+                                                    </td>
+                                                </tr>
+                                            )}
+
                                             {ordenesConItems.map((orden) => {
                                                 const expand = ordenesExpand[orden.key] ?? true
                                                 return (
@@ -2182,7 +2266,30 @@ export function FacturacionPanel() {
                                     </table>
                                 </div>
 
-                                <div className="px-4 py-2 border-t text-xs text-gray-500">Seleccionables para facturar: {prestacionesSeleccionables.length} · Seleccionadas: {prestacionesSeleccionadas.length}</div>
+                                <div className="px-4 py-2 border-t text-xs text-gray-500 flex flex-wrap items-center justify-between gap-2">
+                                    <span>Seleccionables para facturar: {prestacionesSeleccionables.length} · Seleccionadas: {prestacionesSeleccionadas.length}</span>
+                                    {prestacionesNoOrdenadasFiltradas.length > porPaginaPrestaciones && (
+                                        <span className="inline-flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPaginaPrestaciones((prev) => Math.max(1, prev - 1))}
+                                                disabled={paginaPrestacionesActual <= 1}
+                                                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                            >
+                                                Anterior
+                                            </button>
+                                            <span className="text-xs text-gray-600">Página {paginaPrestacionesActual} de {totalPaginasPrestaciones}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPaginaPrestaciones((prev) => Math.min(totalPaginasPrestaciones, prev + 1))}
+                                                disabled={paginaPrestacionesActual >= totalPaginasPrestaciones}
+                                                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                            >
+                                                Siguiente
+                                            </button>
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         </>
                     )}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
@@ -33,6 +33,16 @@ const BADGE_ESTADO: Record<string, string> = {
     E: 'his-badge-inactivo',
     P: 'his-badge-urgente',
     X: 'his-badge-inactivo',
+}
+
+const PRACTICAS_POR_PAGINA = 12
+
+function normalizarTexto(value: string | null | undefined): string {
+    return (value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
 }
 
 function DataItem({ label, value }: { label: string; value?: string | null }) {
@@ -68,6 +78,74 @@ export function FichaIngresoClient({
     const practicasPendientes = ingreso.practicas.filter((p) => (p.ordenPractica?.length ?? 0) === 0)
     const tienePracticasPendientes = practicasPendientes.length > 0
     const practicasAutorizadas = ingreso.practicas.filter((p) => (p.ordenPractica?.length ?? 0) > 0)
+    const [filtroPracticas, setFiltroPracticas] = useState('')
+    const [paginaPendientes, setPaginaPendientes] = useState(1)
+    const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
+    const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
+
+    const practicasPendientesFiltradas = terminoFiltroPracticas
+        ? practicasPendientes.filter((p) => {
+            const codigo = normalizarTexto(p.codigoPractica)
+            const descripcion = normalizarTexto(p.nomencladorPractica?.descripcion)
+            const numeroAutorizacion = normalizarTexto(p.numeroAutorizacion)
+            return (
+                codigo.includes(terminoFiltroPracticas) ||
+                descripcion.includes(terminoFiltroPracticas) ||
+                numeroAutorizacion.includes(terminoFiltroPracticas)
+            )
+        })
+        : practicasPendientes
+
+    const practicasAutorizadasFiltradas = terminoFiltroPracticas
+        ? practicasAutorizadas.filter((p) => {
+            const codigo = normalizarTexto(p.codigoPractica)
+            const descripcion = normalizarTexto(p.nomencladorPractica?.descripcion)
+            const numeroAutorizacion = normalizarTexto(p.numeroAutorizacion)
+            const autorizacionesOrden = (p.ordenPractica ?? [])
+                .map((orden) => normalizarTexto(orden.numeroAutorizacion))
+                .join(' ')
+            return (
+                codigo.includes(terminoFiltroPracticas) ||
+                descripcion.includes(terminoFiltroPracticas) ||
+                numeroAutorizacion.includes(terminoFiltroPracticas) ||
+                autorizacionesOrden.includes(terminoFiltroPracticas)
+            )
+        })
+        : practicasAutorizadas
+
+    const totalPaginasPendientes = Math.max(
+        1,
+        Math.ceil(practicasPendientesFiltradas.length / PRACTICAS_POR_PAGINA)
+    )
+    const totalPaginasAutorizadas = Math.max(
+        1,
+        Math.ceil(practicasAutorizadasFiltradas.length / PRACTICAS_POR_PAGINA)
+    )
+    const paginaPendientesActual = Math.min(paginaPendientes, totalPaginasPendientes)
+    const paginaAutorizadasActual = Math.min(paginaAutorizadas, totalPaginasAutorizadas)
+
+    const practicasPendientesPaginadas = practicasPendientesFiltradas.slice(
+        (paginaPendientesActual - 1) * PRACTICAS_POR_PAGINA,
+        paginaPendientesActual * PRACTICAS_POR_PAGINA
+    )
+    const practicasAutorizadasPaginadas = practicasAutorizadasFiltradas.slice(
+        (paginaAutorizadasActual - 1) * PRACTICAS_POR_PAGINA,
+        paginaAutorizadasActual * PRACTICAS_POR_PAGINA
+    )
+
+    useEffect(() => {
+        setPaginaPendientes(1)
+        setPaginaAutorizadas(1)
+    }, [filtroPracticas])
+
+    useEffect(() => {
+        setPaginaPendientes((prev) => Math.min(prev, totalPaginasPendientes))
+    }, [totalPaginasPendientes])
+
+    useEffect(() => {
+        setPaginaAutorizadas((prev) => Math.min(prev, totalPaginasAutorizadas))
+    }, [totalPaginasAutorizadas])
+
     const profesionalTratanteNombre = ingreso.profesionalTratante?.nombre
         ?? ingreso.evoluciones?.[0]?.profesional?.nombre
         ?? ingreso.profesionalTratanteFallback?.nombre
@@ -704,114 +782,190 @@ export function FichaIngresoClient({
                         </p>
                     ) : (
                         <div className="space-y-5">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <input
+                                    type="text"
+                                    value={filtroPracticas}
+                                    onChange={(e) => setFiltroPracticas(e.target.value)}
+                                    placeholder="Filtrar por código, descripción o autorización..."
+                                    className="w-full sm:max-w-sm rounded-md border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <p className="text-xs text-gray-500">
+                                    {practicasPendientesFiltradas.length + practicasAutorizadasFiltradas.length}
+                                    {' '}de {ingreso.practicas.length}
+                                </p>
+                            </div>
+
                             <div>
                                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                                    Pendientes de autorización ({practicasPendientes.length})
+                                    Pendientes de autorización ({practicasPendientesFiltradas.length})
                                 </p>
-                                {practicasPendientes.length === 0 ? (
-                                    <p className="text-sm text-gray-400">No hay prácticas pendientes.</p>
+                                {practicasPendientesFiltradas.length === 0 ? (
+                                    <p className="text-sm text-gray-400">
+                                        {practicasPendientes.length === 0
+                                            ? 'No hay prácticas pendientes.'
+                                            : 'No hay prácticas pendientes para este filtro.'}
+                                    </p>
                                 ) : (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                            <thead>
-                                                <tr className="text-left text-xs text-gray-400 uppercase tracking-wider">
-                                                    <th className="pb-2 pr-4">Código</th>
-                                                    <th className="pb-2 pr-4">Descripción</th>
-                                                    <th className="pb-2 pr-4 text-right">Cant.</th>
-                                                    <th className="pb-2 pr-4">Fecha</th>
-                                                    <th className="pb-2">N° Autorización</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {practicasPendientes.map((p) => (
-                                                    <tr key={p.id}>
-                                                        <td className="py-2 pr-4 font-mono text-xs text-gray-700">
-                                                            {p.codigoPractica.trim()}
-                                                        </td>
-                                                        <td className="py-2 pr-4 text-gray-700">
-                                                            {p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()}
-                                                        </td>
-                                                        <td className="py-2 pr-4 text-right text-gray-700">
-                                                            {Number(p.cantidad)}
-                                                        </td>
-                                                        <td className="py-2 pr-4 text-gray-500">
-                                                            {formatearFechaHora(p.fecha)}
-                                                        </td>
-                                                        <td className="py-2 text-gray-700">{p.numeroAutorizacion ?? '-'}</td>
+                                    <div className="space-y-2">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="text-left text-xs text-gray-400 uppercase tracking-wider">
+                                                        <th className="pb-2 pr-4">Código</th>
+                                                        <th className="pb-2 pr-4">Descripción</th>
+                                                        <th className="pb-2 pr-4 text-right">Cant.</th>
+                                                        <th className="pb-2 pr-4">Fecha</th>
+                                                        <th className="pb-2">N° Autorización</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {practicasPendientesPaginadas.map((p) => (
+                                                        <tr key={p.id}>
+                                                            <td className="py-2 pr-4 font-mono text-xs text-gray-700">
+                                                                {p.codigoPractica.trim()}
+                                                            </td>
+                                                            <td className="py-2 pr-4 text-gray-700">
+                                                                {p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()}
+                                                            </td>
+                                                            <td className="py-2 pr-4 text-right text-gray-700">
+                                                                {Number(p.cantidad)}
+                                                            </td>
+                                                            <td className="py-2 pr-4 text-gray-500">
+                                                                {formatearFechaHora(p.fecha)}
+                                                            </td>
+                                                            <td className="py-2 text-gray-700">{p.numeroAutorizacion ?? '-'}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {practicasPendientesFiltradas.length > PRACTICAS_POR_PAGINA && (
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-xs text-gray-500">
+                                                    Página {paginaPendientesActual} de {totalPaginasPendientes}
+                                                </p>
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPaginaPendientes((prev) => Math.max(1, prev - 1))}
+                                                        disabled={paginaPendientesActual <= 1}
+                                                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                    >
+                                                        Anterior
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPaginaPendientes((prev) => Math.min(totalPaginasPendientes, prev + 1))}
+                                                        disabled={paginaPendientesActual >= totalPaginasPendientes}
+                                                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                    >
+                                                        Siguiente
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
 
                             <div>
                                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                    Ya autorizadas ({practicasAutorizadas.length})
+                                    Ya autorizadas ({practicasAutorizadasFiltradas.length})
                                 </p>
-                                {practicasAutorizadas.length === 0 ? (
-                                    <p className="text-sm text-gray-400">No hay prácticas autorizadas.</p>
+                                {practicasAutorizadasFiltradas.length === 0 ? (
+                                    <p className="text-sm text-gray-400">
+                                        {practicasAutorizadas.length === 0
+                                            ? 'No hay prácticas autorizadas.'
+                                            : 'No hay prácticas autorizadas para este filtro.'}
+                                    </p>
                                 ) : (
-                                    <div className="overflow-x-auto rounded-md border border-emerald-200 bg-emerald-50/40 px-2">
-                                        <table className="w-full text-sm">
-                                            <thead>
-                                                <tr className="text-left text-xs text-emerald-700 uppercase tracking-wider">
-                                                    <th className="pb-2 pr-4 pt-2">Código</th>
-                                                    <th className="pb-2 pr-4 pt-2">Descripción</th>
-                                                    <th className="pb-2 pr-4 pt-2 text-right">Cant.</th>
-                                                    <th className="pb-2 pr-4 pt-2">Fecha</th>
-                                                    <th className="pb-2 pt-2">Orden</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-emerald-100">
-                                                {practicasAutorizadas.map((p) => (
-                                                    <tr key={p.id}>
-                                                        <td className="py-2 pr-4 font-mono text-xs text-emerald-900">
-                                                            {p.codigoPractica.trim()}
-                                                        </td>
-                                                        <td className="py-2 pr-4 text-emerald-900">
-                                                            {p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()}
-                                                        </td>
-                                                        <td className="py-2 pr-4 text-right text-emerald-900">
-                                                            {Number(p.cantidad)}
-                                                        </td>
-                                                        <td className="py-2 pr-4 text-emerald-800">
-                                                            {formatearFechaHora(p.fecha)}
-                                                        </td>
-                                                        <td className="py-2 text-emerald-900">
-                                                            <div className="flex flex-wrap gap-1">
-                                                                {[...p.ordenPractica]
-                                                                    .sort((a, b) => {
-                                                                        if (a.puestoNumero !== b.puestoNumero) {
-                                                                            return a.puestoNumero - b.puestoNumero
-                                                                        }
-                                                                        if (a.ordenNumero !== b.ordenNumero) {
-                                                                            return a.ordenNumero - b.ordenNumero
-                                                                        }
-                                                                        return a.item - b.item
-                                                                    })
-                                                                    .map((orden) => (
-                                                                        <span
-                                                                            key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
-                                                                            className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900"
-                                                                        >
-                                                                            {formatearNumeroOrden(
-                                                                                orden.puestoNumero,
-                                                                                orden.ordenNumero,
-                                                                                orden.item
-                                                                            )}
-                                                                            {orden.numeroAutorizacion
-                                                                                ? ` · ${orden.numeroAutorizacion}`
-                                                                                : ' · falta N° de autorización'}
-                                                                        </span>
-                                                                    ))}
-                                                            </div>
-                                                        </td>
+                                    <div className="space-y-2">
+                                        <div className="overflow-x-auto rounded-md border border-emerald-200 bg-emerald-50/40 px-2">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="text-left text-xs text-emerald-700 uppercase tracking-wider">
+                                                        <th className="pb-2 pr-4 pt-2">Código</th>
+                                                        <th className="pb-2 pr-4 pt-2">Descripción</th>
+                                                        <th className="pb-2 pr-4 pt-2 text-right">Cant.</th>
+                                                        <th className="pb-2 pr-4 pt-2">Fecha</th>
+                                                        <th className="pb-2 pt-2">Orden</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody className="divide-y divide-emerald-100">
+                                                    {practicasAutorizadasPaginadas.map((p) => (
+                                                        <tr key={p.id}>
+                                                            <td className="py-2 pr-4 font-mono text-xs text-emerald-900">
+                                                                {p.codigoPractica.trim()}
+                                                            </td>
+                                                            <td className="py-2 pr-4 text-emerald-900">
+                                                                {p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()}
+                                                            </td>
+                                                            <td className="py-2 pr-4 text-right text-emerald-900">
+                                                                {Number(p.cantidad)}
+                                                            </td>
+                                                            <td className="py-2 pr-4 text-emerald-800">
+                                                                {formatearFechaHora(p.fecha)}
+                                                            </td>
+                                                            <td className="py-2 text-emerald-900">
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {[...p.ordenPractica]
+                                                                        .sort((a, b) => {
+                                                                            if (a.puestoNumero !== b.puestoNumero) {
+                                                                                return a.puestoNumero - b.puestoNumero
+                                                                            }
+                                                                            if (a.ordenNumero !== b.ordenNumero) {
+                                                                                return a.ordenNumero - b.ordenNumero
+                                                                            }
+                                                                            return a.item - b.item
+                                                                        })
+                                                                        .map((orden) => (
+                                                                            <span
+                                                                                key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
+                                                                                className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900"
+                                                                            >
+                                                                                {formatearNumeroOrden(
+                                                                                    orden.puestoNumero,
+                                                                                    orden.ordenNumero,
+                                                                                    orden.item
+                                                                                )}
+                                                                                {orden.numeroAutorizacion
+                                                                                    ? ` · ${orden.numeroAutorizacion}`
+                                                                                    : ' · falta N° de autorización'}
+                                                                            </span>
+                                                                        ))}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {practicasAutorizadasFiltradas.length > PRACTICAS_POR_PAGINA && (
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-xs text-gray-500">
+                                                    Página {paginaAutorizadasActual} de {totalPaginasAutorizadas}
+                                                </p>
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPaginaAutorizadas((prev) => Math.max(1, prev - 1))}
+                                                        disabled={paginaAutorizadasActual <= 1}
+                                                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                    >
+                                                        Anterior
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPaginaAutorizadas((prev) => Math.min(totalPaginasAutorizadas, prev + 1))}
+                                                        disabled={paginaAutorizadasActual >= totalPaginasAutorizadas}
+                                                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                    >
+                                                        Siguiente
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

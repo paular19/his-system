@@ -743,6 +743,12 @@ export async function crearPractica(
   const codigo = data.codigoPractica.padEnd(8).slice(0, 8)
   const cantidad = Number(data.cantidad)
 
+  // Preserve the exact component/subitem value chosen in UI when available.
+  const importeBaseUnitario =
+    data.importeBaseUnitario != null && Number.isFinite(Number(data.importeBaseUnitario))
+      ? Number(data.importeBaseUnitario)
+      : null
+
   // Look up price from nomenclador
   const ingreso = await prisma.ingreso.findUnique({
     where: { id: data.ingresoId },
@@ -754,7 +760,9 @@ export async function crearPractica(
   })
 
   let importeTotal: number | null = null
-  if (ingreso) {
+  if (importeBaseUnitario != null && importeBaseUnitario > 0) {
+    importeTotal = importeBaseUnitario * cantidad
+  } else if (ingreso) {
     const regla = resolverReglaFacturacion(
       ingreso.obraSocial?.nombre,
       Boolean(ingreso.obraSocialCoseguroId)

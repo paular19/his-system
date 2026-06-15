@@ -790,6 +790,7 @@ export async function obtenerContextoAdmisionParaOrden(
         where: {
           ingresoId,
           OR: [{ estado: 'A' }, { estado: null }],
+          facturable: true,
         },
         orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
         select: {
@@ -799,6 +800,8 @@ export async function obtenerContextoAdmisionParaOrden(
           cantidad: true,
           fecha: true,
           numeroAutorizacion: true,
+          facturable: true,
+          estado: true,
           puestoNumero: true,
           ordenNumero: true,
           ordenItem: true,
@@ -1009,6 +1012,8 @@ export async function obtenerContextoAdmisionParaOrden(
           convenioId: p.convenioId,
           codigoPractica: p.codigoPractica.trim(),
           descripcionPractica: nomenclador?.descripcion ?? p.codigoPractica.trim(),
+          facturable: p.facturable,
+          estado: p.estado,
           grupoOrden: p.ordenItem != null && Number(p.ordenItem) > 0 ? Number(p.ordenItem) : 1,
           cantidad: Number(p.cantidad),
           fecha: p.fecha,

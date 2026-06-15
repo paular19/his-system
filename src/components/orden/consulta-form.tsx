@@ -187,6 +187,10 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
 function esPracticaPendienteParaNuevaOrden(
   practica: AdmisionOrdenContexto['practicas'][number]
 ): boolean {
+  const estado = (practica.estado ?? '').trim().toUpperCase()
+  if (estado === 'X') return false
+  if (!practica.facturable) return false
+
   const tieneOrdenActiva = (practica.ordenPractica?.length ?? 0) > 0
   if (tieneOrdenActiva) return false
 

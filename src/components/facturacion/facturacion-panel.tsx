@@ -1865,6 +1865,34 @@ export function FacturacionPanel() {
                                                         {detalleAbierto && (
                                                             <tr className="bg-slate-50">
                                                                 <td colSpan={8} className="px-4 py-3">
+                                                                    <div className="mb-3 flex items-center justify-between gap-2">
+                                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Detalle de prestación</p>
+                                                                        {filaEnEdicion ? (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <button
+                                                                                    onClick={() => guardarPrestacion(p)}
+                                                                                    disabled={guardandoRowUid === p.uid}
+                                                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                                                >
+                                                                                    {guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => cancelarEdicionFila(p)}
+                                                                                    disabled={guardandoRowUid === p.uid}
+                                                                                    className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                                                                                >
+                                                                                    Cancelar
+                                                                                </button>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <button
+                                                                                onClick={() => habilitarEdicionFila(p)}
+                                                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                            >
+                                                                                Editar
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
                                                                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                                                                         <div className="rounded-md border border-slate-200 bg-white p-2">
                                                                             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Datos de prestación</p>
@@ -2154,6 +2182,34 @@ export function FacturacionPanel() {
                                                                     {detalleAbierto && (
                                                                         <tr className="bg-slate-50">
                                                                             <td colSpan={8} className="px-4 py-3">
+                                                                                <div className="mb-3 flex items-center justify-between gap-2">
+                                                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Detalle de prestación</p>
+                                                                                    {filaEnEdicion ? (
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <button
+                                                                                                onClick={() => guardarPrestacion(p)}
+                                                                                                disabled={guardandoRowUid === p.uid}
+                                                                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                                                            >
+                                                                                                {guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}
+                                                                                            </button>
+                                                                                            <button
+                                                                                                onClick={() => cancelarEdicionFila(p)}
+                                                                                                disabled={guardandoRowUid === p.uid}
+                                                                                                className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                                                                                            >
+                                                                                                Cancelar
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <button
+                                                                                            onClick={() => habilitarEdicionFila(p)}
+                                                                                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                                        >
+                                                                                            Editar
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
                                                                                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                                                                                     <div className="rounded-md border border-slate-200 bg-white p-2">
                                                                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Datos de prestación</p>

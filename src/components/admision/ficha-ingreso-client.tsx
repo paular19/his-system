@@ -47,6 +47,10 @@ function normalizarTexto(value: string | null | undefined): string {
         .trim()
 }
 
+function numeroAutorizacionValida(value: string | null | undefined): boolean {
+    return (value?.trim().length ?? 0) > 0
+}
+
 function DataItem({ label, value }: { label: string; value?: string | null }) {
     if (!value) return null
     return (
@@ -79,9 +83,13 @@ export function FichaIngresoClient({
     const estadoIngreso = (ingreso.estado ?? '').trim().toUpperCase()
     const ingresoHabilitadoAutorizacion = estadoIngreso === 'A' || estadoIngreso === 'P'
     const tienePracticas = practicasIngreso.length > 0
-    const practicasPendientes = practicasIngreso.filter((p) => (p.ordenPractica?.length ?? 0) === 0)
+    const practicasPendientes = practicasIngreso.filter(
+        (p) => (p.ordenPractica?.length ?? 0) === 0 && !numeroAutorizacionValida(p.numeroAutorizacion)
+    )
     const tienePracticasPendientes = practicasPendientes.length > 0
-    const practicasAutorizadas = practicasIngreso.filter((p) => (p.ordenPractica?.length ?? 0) > 0)
+    const practicasAutorizadas = practicasIngreso.filter(
+        (p) => (p.ordenPractica?.length ?? 0) > 0 || numeroAutorizacionValida(p.numeroAutorizacion)
+    )
     const [filtroPracticas, setFiltroPracticas] = useState('')
     const [paginaPendientes, setPaginaPendientes] = useState(1)
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)

@@ -431,7 +431,10 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
       orderBy: { fecha: 'desc' },
     }),
     prisma.practica.findMany({
-      where: { ingresoId: id },
+      where: {
+        ingresoId: id,
+        OR: [{ estado: 'A' }, { estado: null }],
+      },
       select: {
         id: true,
         ingresoId: true,

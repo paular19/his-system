@@ -43,6 +43,14 @@ function normalizarBusquedaLista(value: string): string {
         .trim()
 }
 
+function numeroAutorizacionValida(value: string | null | undefined): boolean {
+    return (value?.trim().length ?? 0) > 0
+}
+
+function practicaActiva(estado: string | null | undefined): boolean {
+    return (estado?.trim().toUpperCase() ?? 'A') !== 'X'
+}
+
 interface PracticaSectionProps {
     ingresoId: number
     convenioId: number | null
@@ -321,8 +329,13 @@ export function PracticaSection({
             minute: '2-digit',
         })
 
-    const practicasPendientes = practicas.filter((p) => (p.ordenPractica?.length ?? 0) === 0)
-    const practicasAutorizadas = practicas.filter((p) => (p.ordenPractica?.length ?? 0) > 0)
+    const practicasVigentes = practicas.filter((p) => practicaActiva(p.estado))
+    const practicasPendientes = practicasVigentes.filter(
+        (p) => (p.ordenPractica?.length ?? 0) === 0 && !numeroAutorizacionValida(p.numeroAutorizacion)
+    )
+    const practicasAutorizadas = practicasVigentes.filter(
+        (p) => (p.ordenPractica?.length ?? 0) > 0 || numeroAutorizacionValida(p.numeroAutorizacion)
+    )
     const mostrarBotonGenerar = puedeCrear && practicas.length > 0
     const botonGenerarHabilitado = practicasPendientes.length > 0
 

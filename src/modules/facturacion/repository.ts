@@ -1177,6 +1177,16 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     const autorizacionPorOrdenItem = new Map<string, string | null>()
     const incluyeCodigoPorOrdenItem = new Map<string, string | null>()
     const puestoPorNumeroOrden = new Map<number, number>()
+    const autorizacionesVinculadasPorPractica = new Map<
+        number,
+        Array<{
+            ordenPuestoNumero: number
+            ordenNumero: number
+            ordenItem: number
+            numeroAutorizacion: string | null
+            incluyeCodigo: string | null
+        }>
+    >()
     const ordenVinculadaPorPractica = new Map<
         number,
         {
@@ -1306,18 +1316,38 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
             if (!practicaIdAsociada) continue
 
+            const numeroAutorizacionVinculo = resolverNumeroAutorizacionOrdenItem(
+                it.numeroAutorizacion,
+                o.numeroAutorizacion,
+                o.puestoNumero,
+                o.numero,
+                it.item
+            )
+            const incluyeCodigoVinculo = normalizarIncluyeCodigo(it.modulo)
+
+            const vinculadasActuales = autorizacionesVinculadasPorPractica.get(practicaIdAsociada) ?? []
+            if (!vinculadasActuales.some(
+                (v) =>
+                    v.ordenPuestoNumero === o.puestoNumero &&
+                    v.ordenNumero === o.numero &&
+                    v.ordenItem === it.item
+            )) {
+                vinculadasActuales.push({
+                    ordenPuestoNumero: o.puestoNumero,
+                    ordenNumero: o.numero,
+                    ordenItem: it.item,
+                    numeroAutorizacion: numeroAutorizacionVinculo,
+                    incluyeCodigo: incluyeCodigoVinculo,
+                })
+                autorizacionesVinculadasPorPractica.set(practicaIdAsociada, vinculadasActuales)
+            }
+
             const nuevoVinculo = {
                 puestoNumero: o.puestoNumero,
                 numero: o.numero,
                 item: it.item,
-                incluyeCodigo: normalizarIncluyeCodigo(it.modulo),
-                numeroAutorizacion: resolverNumeroAutorizacionOrdenItem(
-                    it.numeroAutorizacion,
-                    o.numeroAutorizacion,
-                    o.puestoNumero,
-                    o.numero,
-                    it.item
-                ),
+                incluyeCodigo: incluyeCodigoVinculo,
+                numeroAutorizacion: numeroAutorizacionVinculo,
                 estado: o.estado,
                 matriculaEspecialista: (() => {
                     const incluye = desglosarIncluyeCodigo(it.modulo)
@@ -1427,6 +1457,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         // Buscar si esta práctica pertenece a una cirugía programada
         const clavePractica = `${normalizarCodigoPracticaFacturacion(p.codigoPractica)}:${Number(p.cantidad)}:${fechaClave(p.fecha)}`
         const diferencialCirugia = cirugiaPracticas.get(clavePractica) ?? null
+        const autorizacionesVinculadas = [...(autorizacionesVinculadasPorPractica.get(p.id) ?? [])]
+            .sort((a, b) => {
+                if (a.ordenPuestoNumero !== b.ordenPuestoNumero) return a.ordenPuestoNumero - b.ordenPuestoNumero
+                if (a.ordenNumero !== b.ordenNumero) return a.ordenNumero - b.ordenNumero
+                return a.ordenItem - b.ordenItem
+            })
         const esPracticaBaseDobleCirugia = Boolean(
             diferencialCirugia?.diferenciales?.dobleCirugia &&
             diferencialCirugia.diferenciales.practicaBaseId != null &&
@@ -1567,6 +1603,9 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     )
                 )
                 : (p.numeroAutorizacion?.trim() || null),
+            autorizacionesVinculadas: autorizacionesVinculadas.length > 0
+                ? autorizacionesVinculadas
+                : undefined,
             origen: {
                 ingresoId: ingreso.id,
                 practicaId: p.id,

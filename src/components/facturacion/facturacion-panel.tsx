@@ -154,6 +154,18 @@ function tieneNumeroAutorizacionValido(numeroAutorizacion: string | null | undef
     return typeof numeroAutorizacion === 'string' && numeroAutorizacion.trim().length > 0
 }
 
+function practicaTieneOrdenGenerada(p: PrestacionFacturableItem): boolean {
+    return p.tipo === 'PRACTICA' && !p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0
+}
+
+function practicaTieneAutorizacionConOrden(p: PrestacionFacturableItem): boolean {
+    if (!practicaTieneOrdenGenerada(p)) return false
+    return (
+        tieneNumeroAutorizacionValido(p.numeroAutorizacion) ||
+        (p.autorizacionesVinculadas ?? []).some((aut) => tieneNumeroAutorizacionValido(aut.numeroAutorizacion))
+    )
+}
+
 function tieneDesglose(d: { valorEspecialista: number | null, valorAyudante: number | null, valorAnestesista: number | null, valorGastos: number | null }): boolean {
     return d.valorEspecialista !== null || d.valorAyudante !== null || d.valorAnestesista !== null || d.valorGastos !== null
 }
@@ -452,7 +464,8 @@ export function FacturacionPanel() {
                 p.codigoPractica &&
                 p.convenioId !== null &&
                 !p.facturada &&
-                tieneNumeroAutorizacionValido(p.numeroAutorizacion)
+                practicaTieneOrdenGenerada(p) &&
+                practicaTieneAutorizacionConOrden(p)
         )
     }, [contexto])
 
@@ -960,7 +973,8 @@ export function FacturacionPanel() {
                         p.codigoPractica &&
                         p.convenioId !== null &&
                         !p.facturada &&
-                        tieneNumeroAutorizacionValido(p.numeroAutorizacion)
+                        practicaTieneOrdenGenerada(p) &&
+                        practicaTieneAutorizacionConOrden(p)
                 )
                 .map((p) => {
                     const draft = editRows[p.uid]
@@ -995,7 +1009,7 @@ export function FacturacionPanel() {
                     }
                 })
 
-            if (prestaciones.length === 0) throw new Error('No hay prácticas pendientes con autorización para facturar')
+            if (prestaciones.length === 0) throw new Error('No hay prácticas pendientes con orden y autorización para facturar')
 
             const res = await fetch('/api/facturacion/ordenes/cargar', {
                 method: 'POST',
@@ -1768,6 +1782,12 @@ export function FacturacionPanel() {
                                                         })
                                                         : []
                                                 const tieneAutorizacionesVinculadas = autorizacionesVinculadasOrdenadas.length > 0
+                                                const tieneOrdenGenerada = practicaTieneOrdenGenerada(p)
+                                                const tieneAutorizacionConOrden = practicaTieneAutorizacionConOrden(p)
+                                                const practicaSinOrdenVinculada =
+                                                    p.tipo === 'PRACTICA' &&
+                                                    !p.facturada &&
+                                                    !tieneAutorizacionesVinculadas
                                                 const draftAutorizacionesVinculadas =
                                                     editAutorizacionesVinculadas[p.uid] ?? buildAutorizacionesVinculadasEditState(p)
                                                 const desgloseSelector = obtenerDesgloseSelector(p)
@@ -1775,7 +1795,8 @@ export function FacturacionPanel() {
                                                     p.tipo === 'PRACTICA' &&
                                                     !p.facturada &&
                                                     Boolean(p.codigoPractica && p.convenioId !== null) &&
-                                                    tieneNumeroAutorizacionValido(p.numeroAutorizacion)
+                                                    tieneOrdenGenerada &&
+                                                    tieneAutorizacionConOrden
                                                 const yaFacturada = p.tipo === 'PRACTICA' && p.facturada
                                                 const tieneComponentes = p.tipo === 'PRACTICA' && !p.facturada && desgloseSelector != null && tieneDesglose(desgloseSelector)
                                                 const mostrarSelectorComponentes = p.tipo === 'PRACTICA' && !p.facturada
@@ -1817,7 +1838,9 @@ export function FacturacionPanel() {
                                                                                 Cirugía
                                                                             </span>
                                                                         )}
-                                                                        <span className="text-[11px] font-medium text-amber-700">Sin autorización</span>
+                                                                        <span className="text-[11px] font-medium text-amber-700">
+                                                                            {practicaSinOrdenVinculada ? 'Sin orden generada' : 'Sin autorización'}
+                                                                        </span>
                                                                     </div>
                                                                 )}
                                                             </td>
@@ -1995,7 +2018,17 @@ export function FacturacionPanel() {
                                                                                             </div>
                                                                                         )
                                                                                     ) : (
-                                                                                        <span className="text-[11px] text-gray-400">Sin órdenes vinculadas</span>
+                                                                                        <div className="space-y-2">
+                                                                                            <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+                                                                                                Sin orden vinculada. Primero generá la orden; luego podrás cargar el número de autorización.
+                                                                                            </div>
+                                                                                            <input
+                                                                                                value={draft.numeroAutorizacion}
+                                                                                                disabled
+                                                                                                placeholder="Nro autorización (requiere orden)"
+                                                                                                className="w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                            />
+                                                                                        </div>
                                                                                     )
                                                                                 ) : (
                                                                                     <input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />

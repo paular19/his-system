@@ -60,6 +60,7 @@ export function AutorizacionPrint({
     const nombreFallbackPorMatricula = (matricula: number): string => {
       if (matricula === 6) return 'ASOSIACION ANESTESISTA'
       if (matricula === 9110) return 'CLINICA SAN RAFAEL'
+      if (matricula === 9995) return 'GASTOS INTERNACION'
       if (matricula === 995) return 'PROFESIONAL AYUDANTE'
       return 'PROFESIONAL'
     }
@@ -127,6 +128,8 @@ export function AutorizacionPrint({
         ? 'ASOSIACION ANESTESISTA'
         : item.efectorMatricula === 9110
           ? 'CLINICA SAN RAFAEL'
+          : item.efectorMatricula === 9995
+            ? 'GASTOS INTERNACION'
           : 'PROFESIONAL'
       return { nombre, matricula: item.efectorMatricula }
     }

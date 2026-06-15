@@ -14,6 +14,7 @@ const PUESTO_NUMERO = 1 // Número de puesto fijo (configurable a futuro)
 const EFECTOR_FALLBACK_POR_MATRICULA: Record<number, string> = {
   6: 'ASOSIACION ANESTESISTA',
   9110: 'CLINICA SAN RAFAEL',
+  9995: 'GASTOS INTERNACION',
 }
 
 async function resolverTipoOrdenCodigo(

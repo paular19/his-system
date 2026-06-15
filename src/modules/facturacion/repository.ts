@@ -33,6 +33,8 @@ import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './difer
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 const NOMBRE_MATRICULA_9110_DEFAULT = 'CLINICA SAN RAFAEL'
+const MATRICULA_GASTOS_INTERNACION_DEFAULT = 9995
+const NOMBRE_MATRICULA_9995_DEFAULT = 'GASTOS INTERNACION'
 const MATRICULA_ANESTESISTA_INT_DEFAULT = 6
 const MATRICULA_AYUDANTE_INT_DEFAULT = 995
 const NOMBRE_MATRICULA_6_DEFAULT = 'ASOSIACION ANESTESISTA'
@@ -170,6 +172,7 @@ function combinarMatricula(
     // Prefer real interviniente matriculas over known fallback defaults.
     const defaults = new Set([
         MATRICULA_AMBULATORIO_DEFAULT,
+        MATRICULA_GASTOS_INTERNACION_DEFAULT,
         MATRICULA_AYUDANTE_INT_DEFAULT,
         MATRICULA_ANESTESISTA_INT_DEFAULT,
     ])
@@ -203,12 +206,23 @@ function esTituloPatologia(titularModular: string | null | undefined): boolean {
     return normalizarTextoComparacion(titularModular).includes('PATOLOG')
 }
 
+function esIngresoInternacion(tipoIngresoCodigo: string | null | undefined): boolean {
+    return (tipoIngresoCodigo ?? '').trim().toUpperCase() === 'INT'
+}
+
+function resolverMatriculaGastoPorTipoIngreso(tipoIngresoCodigo: string | null | undefined): number {
+    return esIngresoInternacion(tipoIngresoCodigo)
+        ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+        : MATRICULA_AMBULATORIO_DEFAULT
+}
+
 function resolverNombreEfectorFallback(params: {
     titularModular: string | null | undefined
     descripcionPatologia: string | null | undefined
     matricula: number
 }): string {
     if (params.matricula === MATRICULA_AMBULATORIO_DEFAULT) return NOMBRE_MATRICULA_9110_DEFAULT
+    if (params.matricula === MATRICULA_GASTOS_INTERNACION_DEFAULT) return NOMBRE_MATRICULA_9995_DEFAULT
     if (esTituloAnestesista(params.titularModular)) return 'ASOSIACION ANESTESISTA'
     if (esTituloPatologia(params.titularModular) && (params.descripcionPatologia ?? '').trim().length > 0) {
         return (params.descripcionPatologia ?? '').trim()
@@ -1119,10 +1133,22 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         matriculasProfesionales.add(MATRICULA_AYUDANTE_INT_DEFAULT)
     }
 
+    if (!matriculasProfesionales.has(MATRICULA_GASTOS_INTERNACION_DEFAULT)) {
+        profesionalesExtra.push({
+            id: profesionalExtraId,
+            nombre: NOMBRE_MATRICULA_9995_DEFAULT,
+            matricula: MATRICULA_GASTOS_INTERNACION_DEFAULT,
+        })
+        profesionalExtraId -= 1
+        matriculasProfesionales.add(MATRICULA_GASTOS_INTERNACION_DEFAULT)
+    }
+
     const profesionales = [...profesionalesBase, ...profesionalesExtra]
         .map((profesional) => (
             profesional.matricula === MATRICULA_AMBULATORIO_DEFAULT
                 ? { ...profesional, nombre: NOMBRE_MATRICULA_9110_DEFAULT }
+                : profesional.matricula === MATRICULA_GASTOS_INTERNACION_DEFAULT
+                    ? { ...profesional, nombre: NOMBRE_MATRICULA_9995_DEFAULT }
                 : profesional.matricula === MATRICULA_ANESTESISTA_INT_DEFAULT
                     ? { ...profesional, nombre: NOMBRE_MATRICULA_6_DEFAULT }
                     : profesional.matricula === MATRICULA_AYUDANTE_INT_DEFAULT
@@ -1296,7 +1322,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 matriculaEspecialista: (() => {
                     const incluye = desglosarIncluyeCodigo(it.modulo)
                     const esGasto = esSeleccionSoloGastos(incluye) || (!incluye && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
-                    if (esGasto) return MATRICULA_AMBULATORIO_DEFAULT
+                    if (esGasto) return resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                     const incluyeSoloAyudante = Boolean(
                         incluye &&
                         incluye.ayudantes > 0 &&
@@ -1325,7 +1351,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 matriculaAnestesista: (() => {
                     const incluye = desglosarIncluyeCodigo(it.modulo)
                     const esGasto = esSeleccionSoloGastos(incluye) || (!incluye && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
-                    if (esGasto) return MATRICULA_AMBULATORIO_DEFAULT
+                    if (esGasto) return resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                     const tieneHA = Boolean(incluye?.anestesista)
                     const tituloAnestesista = esTituloAnestesista(it.titularModular)
                     const matriculaDesdeEfector =
@@ -1489,8 +1515,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const descripcionBase = p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()
         const incluyeSeleccion = incluyeSeleccionPractica
         const esGastoPractica = esSeleccionSoloGastos(incluyeSeleccion) || (!incluyeSeleccion && descripcionEsGasto(descripcionBase))
-        const matriculaEspecialistaFinal = esGastoPractica ? MATRICULA_AMBULATORIO_DEFAULT : matriculaEspecialista
-        const matriculaAnestesistaFinal = esGastoPractica ? MATRICULA_AMBULATORIO_DEFAULT : matriculaAnestesista
+        const matriculaEspecialistaFinal = esGastoPractica
+            ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+            : matriculaEspecialista
+        const matriculaAnestesistaFinal = esGastoPractica
+            ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+            : matriculaAnestesista
         const diferencialesPractica = diferencialCirugia
             ? {
                 ...diferencialCirugia.diferenciales,
@@ -1636,7 +1666,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         ? MATRICULA_AYUDANTE_INT_DEFAULT
                         : null
             const matriculaEspecialistaItem = esGastoItem
-                ? MATRICULA_AMBULATORIO_DEFAULT
+                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                 : (incluyeSoloAyudante
                     ? MATRICULA_AYUDANTE_INT_DEFAULT
                     : (matriculaEspecialistaEfector ?? it.practica?.matriculaEspecialista ?? fallbackAyudanteDefault))
@@ -1660,7 +1690,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     ? MATRICULA_ANESTESISTA_INT_DEFAULT
                     : (tituloAnestesista ? MATRICULA_ANESTESISTA_INT_DEFAULT : null)
             const matriculaAnestesistaItem = esGastoItem
-                ? MATRICULA_AMBULATORIO_DEFAULT
+                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                 : (matriculaAnestesistaEfector ?? it.practica?.matriculaAnestesista ?? fallbackAnestesistaDefault)
             const diferencialesOrdenItem =
                 it.practicaId != null ? (diferencialesPorPracticaId.get(it.practicaId) ?? null) : null

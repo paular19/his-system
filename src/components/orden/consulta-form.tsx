@@ -63,6 +63,7 @@ const formatoMoneda = new Intl.NumberFormat('es-AR', {
   minimumFractionDigits: 2,
 })
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
+const MATRICULA_GASTOS_INTERNACION_DEFAULT = 9995
 const MATRICULA_ANESTESISTA_INT_DEFAULT = 6
 const MATRICULA_AYUDANTE_DEFAULT = 995
 
@@ -214,6 +215,7 @@ export function ConsultaForm({
       profesionales.some((profesional) => profesional.id === profesionalTratanteAdmision.id)
       ? profesionalTratanteAdmision
       : null
+  const esInternacionContexto = (admisionInicial?.tipoIngresoCodigo ?? '').trim().toUpperCase() === 'INT'
   const matriculaEspecialistaInternacionDefault =
     profesionalTratanteDisponible?.matricula ?? profesionales.find((profesional) => profesional.matricula)?.matricula ?? null
 
@@ -654,7 +656,12 @@ export function ConsultaForm({
   const resolverEfectorMatricula = (
     p: ItemPractica,
     tipo: 'HE' | 'HA' | 'AGRUPADO',
-    opciones?: { incluyeEspecialista?: boolean; incluyeAnestesista?: boolean; incluyeAyudante?: boolean }
+    opciones?: {
+      incluyeEspecialista?: boolean
+      incluyeAnestesista?: boolean
+      incluyeAyudante?: boolean
+      incluyeGastos?: boolean
+    }
   ): number | undefined => {
     const tituloAplicado = getTituloAplicadoPractica(p._key)
 
@@ -673,6 +680,11 @@ export function ConsultaForm({
     if (opciones?.incluyeEspecialista) return p.matriculaEspecialista ?? undefined
     if (opciones?.incluyeAnestesista) return p.matriculaAnestesista ?? undefined
     if (opciones?.incluyeAyudante) return MATRICULA_AYUDANTE_DEFAULT
+    if (opciones?.incluyeGastos) {
+      return esInternacionContexto
+        ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+        : MATRICULA_AMBULATORIO_DEFAULT
+    }
     return undefined
   }
 
@@ -801,6 +813,7 @@ export function ConsultaForm({
                 incluyeEspecialista: agrupados.includes('especialista'),
                 incluyeAnestesista: agrupados.includes('anestesista'),
                 incluyeAyudante: agrupados.includes('ayudante'),
+                incluyeGastos: agrupados.includes('gastos'),
               }),
               importeTotal: importeAgrupado,
             })
@@ -815,7 +828,7 @@ export function ConsultaForm({
               cantidad: baseCantidad,
               tipoFacturacion: 'D',
               incluyeCodigo: 'GA',
-              efectorMatricula: resolverEfectorMatricula(p, 'AGRUPADO'),
+              efectorMatricula: resolverEfectorMatricula(p, 'AGRUPADO', { incluyeGastos: true }),
               importeTotal: Number(d.valorGastos) * baseCantidad,
             })
           }
@@ -911,7 +924,7 @@ export function ConsultaForm({
             cantidad: baseCantidad,
             tipoFacturacion: 'D',
             incluyeCodigo: 'GA',
-            efectorMatricula: resolverEfectorMatricula(p, 'AGRUPADO'),
+            efectorMatricula: resolverEfectorMatricula(p, 'AGRUPADO', { incluyeGastos: true }),
             importeTotal: Number(d.valorGastos) * baseCantidad,
           })
         }

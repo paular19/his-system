@@ -141,6 +141,7 @@ export type AdmisionOrdenContexto = {
     descripcionPractica: string
     facturable: boolean
     estado: string | null
+    tieneOrdenActivaPorCodigo: boolean
     grupoOrden: number | null
     cantidad: number
     fecha: Date

@@ -874,6 +874,12 @@ export async function obtenerContextoAdmisionParaOrden(
       items: itemsPorOrden.get(`${orden.puestoNumero}:${orden.numero}`) ?? [],
     }))
 
+    const codigosEnOrdenActiva = new Set(
+      ordenes.flatMap((orden) =>
+        orden.items.map((item) => `${item.convenioId}:${item.codigoPractica.trim()}`)
+      )
+    )
+
     const ordenPracticaPorPracticaId = new Map<
       number,
       Array<{
@@ -1014,6 +1020,9 @@ export async function obtenerContextoAdmisionParaOrden(
           descripcionPractica: nomenclador?.descripcion ?? p.codigoPractica.trim(),
           facturable: p.facturable,
           estado: p.estado,
+          tieneOrdenActivaPorCodigo: codigosEnOrdenActiva.has(
+            `${p.convenioId}:${p.codigoPractica.trim()}`
+          ),
           grupoOrden: p.ordenItem != null && Number(p.ordenItem) > 0 ? Number(p.ordenItem) : 1,
           cantidad: Number(p.cantidad),
           fecha: p.fecha,

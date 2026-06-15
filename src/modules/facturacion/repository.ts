@@ -3316,11 +3316,19 @@ export async function obtenerOrdenesAutorizadasIngreso(
             descripcion: true,
             numeroAutorizacion: true,
             importeTotal: true,
+            profesional: {
+                select: {
+                    id: true,
+                    nombre: true,
+                    matricula: true,
+                },
+            },
             items: {
                 select: {
                     item: true,
                     fecha: true,
                     codigoPractica: true,
+                    modulo: true,
                     cantidad: true,
                     numeroAutorizacion: true,
                     importeTotal: true,
@@ -3343,6 +3351,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
                     item: it.item,
                     fecha: it.fecha,
                     codigoPractica: it.codigoPractica,
+                    modulo: it.modulo?.trim() || null,
                     descripcion: it.nomencladorPractica?.descripcion ?? null,
                     cantidad: Number(it.cantidad),
                     numeroAutorizacion: resolverNumeroAutorizacion(it.numeroAutorizacion, o.numeroAutorizacion),
@@ -3356,6 +3365,13 @@ export async function obtenerOrdenesAutorizadasIngreso(
                 descripcion: o.descripcion,
                 numeroAutorizacion: o.numeroAutorizacion,
                 importeTotal: Number(o.importeTotal ?? 0),
+                profesional: o.profesional
+                    ? {
+                        id: o.profesional.id,
+                        nombre: o.profesional.nombre,
+                        matricula: o.profesional.matricula,
+                    }
+                    : null,
                 items,
             }
         })

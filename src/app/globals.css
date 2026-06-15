@@ -154,4 +154,13 @@
     white-space: nowrap !important;
     font-variant-numeric: tabular-nums;
   }
+
+  .lote-detalle-print-root > * {
+    display: none !important;
+  }
+
+  .lote-detalle-print-root > .print\:block,
+  .lote-detalle-print-root > [class*="print:block"] {
+    display: block !important;
+  }
 }

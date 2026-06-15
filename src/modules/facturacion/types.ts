@@ -221,10 +221,16 @@ export interface OrdenAutorizadaLote {
     descripcion: string | null
     numeroAutorizacion: string | null
     importeTotal: number
+    profesional: {
+        id: number
+        nombre: string
+        matricula: number | null
+    } | null
     items: Array<{
         item: number
         fecha: Date
         codigoPractica: string
+        modulo: string | null
         descripcion: string | null
         cantidad: number
         numeroAutorizacion: string | null

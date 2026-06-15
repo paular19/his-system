@@ -27,6 +27,82 @@ function formatPeriodo(periodo: string) {
     return `${meses[parseInt(mes, 10) - 1]} ${anio}`
 }
 
+function desglosarImportesPorCodigo(
+    codigoRaw: string,
+    moduloRaw: string | null | undefined,
+    profesionalRaw: string | null | undefined,
+    importeTotal: number
+) {
+    const codigo = normalizarTexto(codigoRaw)
+    const modulo = normalizarTexto(moduloRaw)
+    const profesional = normalizarTexto(profesionalRaw)
+
+    if (modulo.includes('A1') || modulo.includes('A2') || modulo.includes('A3')) {
+        return {
+            importeEspecialista: null,
+            importeAyudante: importeTotal,
+            importeAnestesista: null,
+            importeGastos: null,
+        }
+    }
+    if (modulo.includes('HE')) {
+        return {
+            importeEspecialista: importeTotal,
+            importeAyudante: null,
+            importeAnestesista: null,
+            importeGastos: null,
+        }
+    }
+    if (modulo.includes('HA') || profesional.includes('ANEST')) {
+        return {
+            importeEspecialista: null,
+            importeAyudante: null,
+            importeAnestesista: importeTotal,
+            importeGastos: null,
+        }
+    }
+    if (modulo.includes('GA') || profesional.includes('CLINICA SAN RAFAEL')) {
+        return {
+            importeEspecialista: null,
+            importeAyudante: null,
+            importeAnestesista: null,
+            importeGastos: importeTotal,
+        }
+    }
+
+    if (codigo.includes('A1') || codigo.includes('A2') || codigo.includes('A3')) {
+        return {
+            importeEspecialista: null,
+            importeAyudante: importeTotal,
+            importeAnestesista: null,
+            importeGastos: null,
+        }
+    }
+    if (codigo.includes('HA')) {
+        return {
+            importeEspecialista: null,
+            importeAyudante: null,
+            importeAnestesista: importeTotal,
+            importeGastos: null,
+        }
+    }
+    if (codigo.includes('GA')) {
+        return {
+            importeEspecialista: null,
+            importeAyudante: null,
+            importeAnestesista: null,
+            importeGastos: importeTotal,
+        }
+    }
+
+    return {
+        importeEspecialista: importeTotal,
+        importeAyudante: 0,
+        importeAnestesista: 0,
+        importeGastos: 0,
+    }
+}
+
 function normalizarTexto(value: string | null | undefined): string {
     return (value ?? '')
         .normalize('NFD')
@@ -94,6 +170,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const [filtroMedico, setFiltroMedico] = useState('')
     const [filtroMatricula, setFiltroMatricula] = useState('')
     const printRef = useRef<HTMLDivElement>(null)
+    const [ordenesPorIngreso, setOrdenesPorIngreso] = useState<Record<number, OrdenAutorizadaLote[]>>({})
 
     const cargar = useCallback(async () => {
         setLoading(true)
@@ -148,6 +225,52 @@ export function LoteDetallePage({ loteId }: Props) {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filtroMedico, filtroMatricula, lote?.periodo])
+
+    useEffect(() => {
+        if (!lote || lote.origen === 'IPS_TXT') {
+            setOrdenesPorIngreso({})
+            return
+        }
+
+        const loteActual = lote
+
+        let cancelado = false
+
+        async function cargarDetalleImpresion() {
+            const spBase = new URLSearchParams()
+            if (filtroMedico.trim()) spBase.set('medico', filtroMedico.trim())
+            if (filtroMatricula.trim()) spBase.set('matricula', filtroMatricula.trim())
+            if (loteActual.periodo) spBase.set('periodo', loteActual.periodo)
+
+            const resultados = await Promise.all(
+                loteActual.items.map(async (item) => {
+                    const sp = new URLSearchParams(spBase.toString())
+                    const res = await fetch(`/api/facturacion/lotes/ingreso/${item.ingresoId}/ordenes?${sp.toString()}`)
+                    const json = await res.json()
+                    return {
+                        ingresoId: item.ingresoId,
+                        ordenes: (res.ok && json.ok ? (json.data ?? []) : []) as OrdenAutorizadaLote[],
+                    }
+                })
+            )
+
+            if (cancelado) return
+
+            const next: Record<number, OrdenAutorizadaLote[]> = {}
+            for (const resultado of resultados) {
+                next[resultado.ingresoId] = resultado.ordenes
+            }
+            setOrdenesPorIngreso(next)
+        }
+
+        cargarDetalleImpresion().catch(() => {
+            if (!cancelado) setOrdenesPorIngreso({})
+        })
+
+        return () => {
+            cancelado = true
+        }
+    }, [lote, filtroMedico, filtroMatricula])
 
     async function toggleItem(item: LoteFacturacionItemDetalle) {
         const res = await fetch(`/api/facturacion/lotes/${loteId}/items/${item.id}`, {
@@ -279,10 +402,47 @@ export function LoteDetallePage({ loteId }: Props) {
         ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + (it.importePromedi ?? it.impTotal), 0)
         : itemsIncluidos.reduce((s, it) => s + it.importeTotal, 0)
 
+    const detalleParaImpresion = !esIPSTxt
+        ? lote.items.map((item) => {
+            const ordenesIngreso = ordenesPorIngreso[item.ingresoId] ?? []
+            const lineas = ordenesIngreso.flatMap((orden) =>
+                orden.items.map((linea) => {
+                    const desglose = desglosarImportesPorCodigo(
+                        linea.codigoPractica,
+                        linea.modulo,
+                        orden.profesional?.nombre,
+                        linea.importeTotal
+                    )
+                    return {
+                        fecha: linea.fecha,
+                        numeroAutorizacion: linea.numeroAutorizacion,
+                        profesional: orden.profesional?.nombre ?? null,
+                        codigoPractica: linea.codigoPractica,
+                        cantidad: linea.cantidad,
+                        importeEspecialista: desglose.importeEspecialista,
+                        importeAyudante: desglose.importeAyudante,
+                        importeAnestesista: desglose.importeAnestesista,
+                        importeGastos: desglose.importeGastos,
+                        importeTotal: linea.importeTotal,
+                    }
+                })
+            )
+
+            return {
+                ingresoId: item.ingresoId,
+                numeroIngreso: item.ingreso.numeroIngreso,
+                paciente: item.paciente?.nombreCompleto ?? item.ingreso.nombre ?? '-',
+                numeroAfiliado: item.ingreso.numeroAfiliado,
+                totalIngreso: lineas.reduce((acc, it) => acc + it.importeTotal, 0),
+                lineas,
+            }
+        })
+        : []
+
     return (
-        <div className="p-6 space-y-5 print:p-0">
+        <div className="p-6 space-y-5 print:p-0 lote-detalle-print-root">
             {/* Encabezado */}
-            <div className={`bg-white rounded-lg border border-gray-200 p-5 print:border-0 print:shadow-none ${esIPSTxt ? 'print:hidden' : ''}`}>
+            <div className={`bg-white rounded-lg border border-gray-200 p-5 print:hidden ${esIPSTxt ? 'print:hidden' : ''}`}>
                 <div className="flex items-start justify-between flex-wrap gap-4">
                     <div className="space-y-1">
                         <div className="flex items-center gap-3">
@@ -374,7 +534,7 @@ export function LoteDetallePage({ loteId }: Props) {
                     </div>
                 </div>
 
-                <div className="mt-3 space-y-1 text-sm text-gray-600">
+                <div className="mt-3 space-y-1 text-sm text-gray-600 print:hidden">
                     {lote.concepto && <div><strong>Concepto:</strong> {lote.concepto}</div>}
                     {lote.descripcion && <div><strong>Descripción:</strong> {lote.descripcion}</div>}
                     {esPendiente && !esIPSTxt && editandoPracticas && (
@@ -385,7 +545,7 @@ export function LoteDetallePage({ loteId }: Props) {
                 </div>
 
                 {/* Resumen numérico */}
-                <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4 text-sm">
+                <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4 text-sm print:hidden">
                     <div className="text-center">
                         <div className="text-2xl font-bold text-blue-700">
                             {esIPSTxt ? (lote.itemsIPSTxt?.length ?? 0) : lote.items.length}
@@ -715,11 +875,9 @@ export function LoteDetallePage({ loteId }: Props) {
             )}
 
             {/* Vista de impresión oculta */}
-            {!esIPSTxt && (
-                <div ref={printRef} className="hidden print:block">
-                    <LoteResumenPrint lote={lote} totalIncluido={totalIncluido} />
+            <div ref={printRef} className="hidden print:block">
+                <LoteResumenPrint lote={lote} totalIncluido={totalIncluido} detalleIngresos={detalleParaImpresion} />
                 </div>
-            )}
 
             {mostrarConfirmPromedi && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 print:hidden">

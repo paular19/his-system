@@ -87,6 +87,7 @@ export function PracticaSection({
 
     // Campos del form
     const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 16))
+    const [cantidad, setCantidad] = useState('1')
     const [numeroAutorizacion, setNumeroAutorizacion] = useState('')
     const [matriculaEspecialista, setMatriculaEspecialista] = useState(
         matriculaTratanteDefault ? String(matriculaTratanteDefault) : ''
@@ -147,6 +148,7 @@ export function PracticaSection({
         setPracticaSeleccionada(null)
         setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
         setFecha(new Date().toISOString().slice(0, 16))
+        setCantidad('1')
         setNumeroAutorizacion('')
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
         setMatriculaAnestesista(String(MATRICULA_ANESTESISTA_DEFAULT))
@@ -165,6 +167,11 @@ export function PracticaSection({
             return setError('Ingrese matrícula para honorario anestesista')
         }
 
+        const cantidadNumerica = Number.parseInt(cantidad, 10)
+        if (!Number.isFinite(cantidadNumerica) || cantidadNumerica < 1) {
+            return setError('Ingrese una cantidad válida (mínimo 1)')
+        }
+
         const requiereEspecialista = practicaSeleccionada?.valorEspecialista != null
         const requiereAnestesista = practicaSeleccionada?.valorAnestesista != null
 
@@ -173,7 +180,7 @@ export function PracticaSection({
             codigoPractica: practicaSeleccionada?.codigo ?? busqueda.trim().slice(0, 8).toUpperCase(),
             descripcionPractica: practicaSeleccionada?.descripcion ?? busqueda.trim(),
             fecha: new Date(fecha).toISOString(),
-            cantidad: 1,
+            cantidad: cantidadNumerica,
             numeroAutorizacion: numeroAutorizacion.trim() || null,
             matriculaEspecialista:
                 requiereEspecialista && matriculaEspecialista.trim()
@@ -530,13 +537,24 @@ export function PracticaSection({
                             )}
 
                             {/* Fecha */}
-                            <div className="grid grid-cols-1 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs text-gray-500 mb-1">Fecha y hora</label>
                                     <input
                                         type="datetime-local"
                                         value={fecha}
                                         onChange={(e) => setFecha(e.target.value)}
+                                        className="his-input text-sm w-full"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Cantidad</label>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        step={1}
+                                        value={cantidad}
+                                        onChange={(e) => setCantidad(e.target.value)}
                                         className="his-input text-sm w-full"
                                     />
                                 </div>
@@ -738,6 +756,7 @@ export function PracticaSection({
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-1 text-gray-500 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
+                                                    <span>Cant: {p.cantidad}</span>
                                                     {p.numeroAutorizacion && <span>Aut: {p.numeroAutorizacion}</span>}
                                                     <span
                                                         className={`px-1.5 py-0.5 rounded ${p.facturable
@@ -854,6 +873,7 @@ export function PracticaSection({
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-1 text-emerald-700 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
+                                                    <span>Cant: {p.cantidad}</span>
                                                     {ordenesOrdenadas.map((orden) => (
                                                             <Link
                                                                 key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}

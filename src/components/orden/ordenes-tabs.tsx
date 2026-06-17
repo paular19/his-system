@@ -27,12 +27,14 @@ interface OrdenesTabsProps {
 function FilaOrden({
     orden,
     puedeModificar,
+    permitirEdicion,
     onConfirmada,
     onAnulada,
     mostrarAnular,
 }: {
     orden: OrdenListItem
     puedeModificar: boolean
+    permitirEdicion: boolean
     onConfirmada?: (puestoNumero: number, numero: number) => void
     onAnulada?: (puestoNumero: number, numero: number) => void
     mostrarAnular?: boolean
@@ -160,10 +162,21 @@ function FilaOrden({
                             {error && <span className="text-xs text-red-600">{error}</span>}
                         </div>
                     ) : orden.numeroAutorizacion ? (
-                        <span className="font-mono text-xs text-green-700 font-semibold">
-                            {orden.numeroAutorizacion}
-                        </span>
-                    ) : puedeModificar ? (
+                        <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-green-700 font-semibold">
+                                {orden.numeroAutorizacion}
+                            </span>
+                            {puedeModificar && permitirEdicion && (
+                                <button
+                                    onClick={iniciarEdicion}
+                                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 border border-blue-200"
+                                >
+                                    <Pencil className="h-3 w-3" />
+                                    Editar
+                                </button>
+                            )}
+                        </div>
+                    ) : puedeModificar && permitirEdicion ? (
                         <button
                             onClick={iniciarEdicion}
                             className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 border border-blue-200"
@@ -384,6 +397,7 @@ export function OrdenesTabs({
                                     key={`${orden.puestoNumero}-${orden.numero}`}
                                     orden={orden}
                                     puedeModificar={puedeModificar}
+                                    permitirEdicion={tabActual !== 'anuladas'}
                                     onConfirmada={tabActual === 'pendientes' ? handleConfirmada : undefined}
                                     onAnulada={tabActual === 'pendientes' ? handleAnulada : undefined}
                                     mostrarAnular={tabActual === 'pendientes'}

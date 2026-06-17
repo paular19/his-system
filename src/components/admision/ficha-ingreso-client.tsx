@@ -81,7 +81,7 @@ export function FichaIngresoClient({
     const [cardValues, setCardValues] = useState<any>({})
     const [practicasIngreso, setPracticasIngreso] = useState(ingreso.practicas)
     const estadoIngreso = (ingreso.estado ?? '').trim().toUpperCase()
-    const ingresoHabilitadoAutorizacion = estadoIngreso === 'A' || estadoIngreso === 'P'
+    const ingresoHabilitadoAutorizacion = estadoIngreso !== 'X'
     const tienePracticas = practicasIngreso.length > 0
     const practicasPendientes = practicasIngreso.filter(
         (p) => (p.ordenPractica?.length ?? 0) === 0 && !numeroAutorizacionValida(p.numeroAutorizacion)
@@ -179,7 +179,7 @@ export function FichaIngresoClient({
         ?? ingreso.profesionalTratanteFallback?.matricula
         ?? null
     const motivoBotonAutorizacionDeshabilitado = !ingresoHabilitadoAutorizacion
-        ? 'No disponible para ingresos egresados o anulados'
+        ? 'No disponible para ingresos anulados'
         : !tienePracticas
             ? 'No hay prácticas cargadas en la admisión'
             : !tienePracticasPendientes

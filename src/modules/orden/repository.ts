@@ -680,7 +680,7 @@ export async function buscarAdmisionesActivasPorPaciente(query: string): Promise
 
   const esNumerico = /^\d+$/.test(q)
   const where: Prisma.IngresoWhereInput = {
-    estado: { in: ['A', 'E'] },
+    estado: { in: ['A', 'P', 'E'] },
     OR: esNumerico
       ? [
         { numeroIngreso: parseInt(q, 10) },

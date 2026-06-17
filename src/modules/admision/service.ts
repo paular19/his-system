@@ -61,6 +61,12 @@ function esSubtipoPracticaAmbulatoria(subtipo: string | null | undefined): boole
   return SUBTIPOS_PRACTICA_AMBULATORIA.has(subtipo.trim().toUpperCase())
 }
 
+function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
+  const numero = value?.trim() ?? ''
+  if (!numero) return null
+  return numero.slice(0, 50)
+}
+
 // ============================================
 // SERVICIO ADMISIÓN
 // Lógica de negocio + auditoría
@@ -228,7 +234,7 @@ export async function crearIngreso(
           convenioValorId: 0,
           fecha: ahora,
           cantidad: p.cantidad,
-          numeroAutorizacion: null,
+          numeroAutorizacion: normalizarNumeroAutorizacion(p.numeroAutorizacion),
           matriculaEspecialista: p.matriculaEspecialista ?? null,
           matriculaAnestesista: p.matriculaAnestesista ?? null,
           obraSocialId: dataParaCrear.obraSocialId ?? null,
@@ -616,7 +622,7 @@ export async function actualizarIngreso(
           convenioValorId: 0,
           fecha: ahoraEdit,
           cantidad: p.cantidad,
-          numeroAutorizacion: null,
+          numeroAutorizacion: normalizarNumeroAutorizacion(p.numeroAutorizacion),
           matriculaEspecialista: p.matriculaEspecialista ?? null,
           matriculaAnestesista: p.matriculaAnestesista ?? null,
           obraSocialId,

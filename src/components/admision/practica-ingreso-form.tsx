@@ -33,6 +33,7 @@ interface PracticaIngresoItem {
     convenioId: number
     codigo: string
     descripcion: string
+    numeroAutorizacion: string
     cantidad: number
     desglose: ComponenteValores
     seleccionComponentes: ComponenteSeleccion
@@ -49,6 +50,7 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
     const [busquedaTermino, setBusquedaTermino] = useState('')
     const [resultados, setResultados] = useState<PracticaBusquedaItem[]>([])
     const [practicas, setPracticas] = useState<PracticaIngresoItem[]>([])
+    const permiteNumeroAutorizacionManual = ingreso.tipoIngresoCodigo === 'AMB'
 
     const buscarPractica = async (termino: string) => {
         if (termino.trim().length < 2) {
@@ -113,6 +115,7 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                 convenioId: practica.convenioId,
                 codigo: practica.codigo,
                 descripcion: practica.descripcion,
+                numeroAutorizacion: '',
                 cantidad: 1,
                 desglose: {
                     valorEspecialista: practica.valorEspecialista ?? null,
@@ -157,6 +160,9 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                         convenioId: p.convenioId,
                         codigo: p.codigo.trim(),
                         descripcion: p.descripcion,
+                        numeroAutorizacion: permiteNumeroAutorizacionManual
+                            ? (p.numeroAutorizacion.trim() || null)
+                            : null,
                         matriculaEspecialista: p.matriculaEspecialista,
                         matriculaAnestesista: p.matriculaAnestesista,
                         importeTotal: Number((
@@ -264,6 +270,27 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                                                 placeholder="Cant."
                                             />
                                         </div>
+                                        {permiteNumeroAutorizacionManual && (
+                                            <input
+                                                type="text"
+                                                value={p.numeroAutorizacion}
+                                                onChange={(e) => {
+                                                    const value = e.target.value.slice(0, 50)
+                                                    setPracticas((prev) =>
+                                                        prev.map((x) =>
+                                                            x._key === p._key
+                                                                ? {
+                                                                    ...x,
+                                                                    numeroAutorizacion: value,
+                                                                }
+                                                                : x
+                                                        )
+                                                    )
+                                                }}
+                                                className="w-36 rounded border border-gray-300 px-2 py-1 text-xs"
+                                                placeholder="N° Autorización"
+                                            />
+                                        )}
                                         {p.requiereMatriculaEspecialista && (
                                             <input
                                                 type="number"

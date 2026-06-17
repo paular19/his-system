@@ -83,6 +83,7 @@ export function FichaIngresoClient({
     const estadoIngreso = (ingreso.estado ?? '').trim().toUpperCase()
     const ingresoHabilitadoAutorizacion = estadoIngreso !== 'X'
     const tienePracticas = practicasIngreso.length > 0
+    const puedeIngresarFlujoAutorizacion = ingresoHabilitadoAutorizacion && tienePracticas
     const practicasPendientes = practicasIngreso.filter(
         (p) => (p.ordenPractica?.length ?? 0) === 0 && !numeroAutorizacionValida(p.numeroAutorizacion)
     )
@@ -182,9 +183,7 @@ export function FichaIngresoClient({
         ? 'No disponible para ingresos anulados'
         : !tienePracticas
             ? 'No hay prácticas cargadas en la admisión'
-            : !tienePracticasPendientes
-                ? 'No hay prácticas pendientes de autorización'
-                : ''
+            : ''
     const esPracticaAmbulatoria =
         ingreso.tipoIngresoCodigo === 'AMB' &&
         ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
@@ -870,7 +869,7 @@ export function FichaIngresoClient({
                                 </button>
                             )}
                             {puedeGenerarAutorizacion && (
-                                ingresoHabilitadoAutorizacion && tienePracticasPendientes ? (
+                                puedeIngresarFlujoAutorizacion ? (
                                     <Link
                                         href={`/dashboard/ambulatorio/nueva?ingresoId=${ingreso.id}`}
                                         className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"

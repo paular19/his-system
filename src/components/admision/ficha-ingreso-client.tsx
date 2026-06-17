@@ -870,13 +870,16 @@ export function FichaIngresoClient({
                             )}
                             {puedeGenerarAutorizacion && (
                                 puedeIngresarFlujoAutorizacion ? (
-                                    <Link
-                                        href={`/dashboard/ambulatorio/nueva?ingresoId=${ingreso.id}`}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            window.location.assign(`/dashboard/ambulatorio/nueva?ingresoId=${ingreso.id}`)
+                                        }}
                                         className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
                                     >
                                         <Save className="h-4 w-4" />
                                         Generar autorización
-                                    </Link>
+                                    </button>
                                 ) : (
                                     <button
                                         type="button"

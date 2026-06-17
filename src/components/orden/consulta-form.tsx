@@ -42,6 +42,7 @@ type ItemPractica = OrdenPracticaItemInput & {
   practicaId?: number | null
   descripcionPractica: string
   _key: string
+  fecha?: Date | string | null
   grupoOrden: number
   valorUnitario: number | null
   desglose?: {
@@ -246,6 +247,7 @@ export function ConsultaForm({
       return {
         _key: `ingreso-${p.id}-${idx}`,
         practicaId: p.id,
+        fecha: p.fecha,
         convenioId: p.convenioId,
         codigoPractica: p.codigoPractica.trim().slice(0, 8),
         descripcionPractica: p.descripcionPractica,
@@ -442,6 +444,7 @@ export function ConsultaForm({
     setPracticas((prev) => {
       const nueva: ItemPractica = {
         _key: `${practica.convenioId}-${practica.codigo}-${Date.now()}`,
+        fecha: new Date(),
         convenioId: practica.convenioId,
         codigoPractica: practica.codigo,
         descripcionPractica: practica.descripcion,
@@ -478,6 +481,7 @@ export function ConsultaForm({
     setPracticas((prev) => {
       const nueva: ItemPractica = {
         _key: `${practicaPendiente.convenioId}-${practicaPendiente.codigo}-${Date.now()}`,
+        fecha: new Date(),
         convenioId: practicaPendiente.convenioId,
         codigoPractica: practicaPendiente.codigo,
         descripcionPractica: practicaPendiente.descripcion,
@@ -519,6 +523,7 @@ export function ConsultaForm({
     setPracticas((prev) => {
       const nueva: ItemPractica = {
         _key: `manual-${Date.now()}`,
+        fecha: new Date(),
         convenioId: convenioDefecto,
         codigoPractica: busquedaPractica.trim().slice(0, 8).toUpperCase(),
         descripcionPractica: busquedaPractica.trim(),
@@ -580,6 +585,7 @@ export function ConsultaForm({
       return [
         {
           _key: key,
+          fecha: med.fechaInicio,
           convenioId: convenioDefecto,
           codigoPractica: `MED${med.id}`.slice(0, 8).toUpperCase(),
           descripcionPractica: `MEDICACION: ${med.nombre}`,
@@ -886,6 +892,7 @@ export function ConsultaForm({
           }]).map((it) => ({
             ...it,
             practicaId: p.practicaId,
+            fecha: p.fecha ? new Date(p.fecha) : undefined,
             grupoOrden: p.grupoOrden,
             titularModular: getTituloAplicadoPractica(p._key),
             ...getDatosPatologiaPractica(p._key),
@@ -904,6 +911,7 @@ export function ConsultaForm({
           }].map((it) => ({
             ...it,
             practicaId: p.practicaId,
+            fecha: p.fecha ? new Date(p.fecha) : undefined,
             grupoOrden: p.grupoOrden,
             titularModular: getTituloAplicadoPractica(p._key),
             ...getDatosPatologiaPractica(p._key),
@@ -983,6 +991,7 @@ export function ConsultaForm({
           }].map((it) => ({
             ...it,
             practicaId: p.practicaId,
+            fecha: p.fecha ? new Date(p.fecha) : undefined,
             grupoOrden: p.grupoOrden,
             titularModular: getTituloAplicadoPractica(p._key),
             ...getDatosPatologiaPractica(p._key),
@@ -992,6 +1001,7 @@ export function ConsultaForm({
         return componentes.map((it) => ({
           ...it,
           practicaId: p.practicaId,
+          fecha: p.fecha ? new Date(p.fecha) : undefined,
           grupoOrden: p.grupoOrden,
           titularModular: getTituloAplicadoPractica(p._key),
           ...getDatosPatologiaPractica(p._key),

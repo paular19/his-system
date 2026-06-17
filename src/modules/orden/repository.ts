@@ -272,6 +272,12 @@ export async function crearOrdenInterna(
     })
     const numero = (ultimo?.numero ?? 0) + 1
     const totalOrden = data.items.reduce((sum, item) => sum + Number(item.importeTotal ?? 0), 0)
+    const fechasItems = data.items
+      .map((item) => item.fecha)
+      .filter((fecha): fecha is Date => fecha instanceof Date)
+    const fechaOrden = fechasItems.length > 0
+      ? new Date(Math.min(...fechasItems.map((fecha) => fecha.getTime())))
+      : new Date()
 
     const orden = await tx.orden.create({
       data: {
@@ -290,30 +296,33 @@ export async function crearOrdenInterna(
         descripcionPatologia: data.descripcionPatologia ?? null,
         titularModular: data.titularModular ?? null,
         imprimirPorDuplicado: data.imprimirPorDuplicado ?? false,
-        fechaEmision: new Date(),
-        fechaPedido: new Date(),
+        fechaEmision: fechaOrden,
+        fechaPedido: fechaOrden,
         importeTotal: totalOrden,
         estado: 'A',
         fechaEstado: new Date(),
         usuarioRegistro,
         items: {
-          create: data.items.map((item, idx) => ({
-            item: idx + 1,
-            practicaId: item.practicaId ?? null,
-            convenioId: item.convenioId,
-            codigoPractica: item.codigoPractica.trim().slice(0, 8),
-            cantidad: item.cantidad,
-            tipoFacturacion: item.tipoFacturacion ?? 'H',
-            modulo: normalizarIncluyeCodigo(item.incluyeCodigo),
-            titularModular: item.titularModular ?? null,
-            imprimirPorDuplicado: item.imprimirPorDuplicado ?? false,
-            efectorMatricula: item.efectorMatricula ?? null,
-            importeTotal: item.importeTotal ?? null,
-            porcentajeCargoPac: item.porcentajeCargoPac ?? null,
-            fecha: new Date(),
-            numeroAutorizacion:
-              item.numeroAutorizacion?.trim() || generarCodigoBarras(PUESTO_NUMERO, numero, idx + 1),
-          })),
+          create: data.items.map((item, idx) => {
+            const fechaItem = item.fecha instanceof Date ? item.fecha : fechaOrden
+            return {
+              item: idx + 1,
+              practicaId: item.practicaId ?? null,
+              convenioId: item.convenioId,
+              codigoPractica: item.codigoPractica.trim().slice(0, 8),
+              cantidad: item.cantidad,
+              tipoFacturacion: item.tipoFacturacion ?? 'H',
+              modulo: normalizarIncluyeCodigo(item.incluyeCodigo),
+              titularModular: item.titularModular ?? null,
+              imprimirPorDuplicado: item.imprimirPorDuplicado ?? false,
+              efectorMatricula: item.efectorMatricula ?? null,
+              importeTotal: item.importeTotal ?? null,
+              porcentajeCargoPac: item.porcentajeCargoPac ?? null,
+              fecha: fechaItem,
+              numeroAutorizacion:
+                item.numeroAutorizacion?.trim() || generarCodigoBarras(PUESTO_NUMERO, numero, idx + 1),
+            }
+          }),
         },
       },
       include: {

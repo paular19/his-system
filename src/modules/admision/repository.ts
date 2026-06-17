@@ -155,6 +155,25 @@ export async function crearIngreso(
       })
     }
 
+    const obraSocialId = data.obraSocialId ?? null
+    const planId = data.obraSocialId && data.planId ? data.planId : null
+
+    if (obraSocialId && planId) {
+      const planValido = await tx.planObraSocial.findUnique({
+        where: {
+          obraSocialId_id: {
+            obraSocialId,
+            id: planId,
+          },
+        },
+        select: { id: true },
+      })
+
+      if (!planValido) {
+        throw new Error('El plan seleccionado no pertenece a la obra social seleccionada')
+      }
+    }
+
     const ingreso = await tx.ingreso.create({
       data: {
         tipoIngresoCodigo: data.tipoIngresoCodigo,
@@ -171,9 +190,9 @@ export async function crearIngreso(
         profesionalTratanteId: data.profesionalTratanteId ?? null,
         camaId: data.camaId ?? null,
         sedeId: data.sedeId ?? null,
-        // Asegurar que ambos obraSocialId y planId estén presentes o ambos null
-        obraSocialId: data.obraSocialId ?? null,
-        planId: (data.obraSocialId && data.planId) ? data.planId : null,
+        // Asegurar plan consistente con la obra social seleccionada
+        obraSocialId,
+        planId,
         numeroAfiliado: data.numeroAfiliado ?? null,
         obraSocialCoseguroId: data.obraSocialCoseguroId ?? null,
         planCoseguroId: data.planCoseguroId ?? null,

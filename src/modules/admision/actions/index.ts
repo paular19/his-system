@@ -28,14 +28,31 @@ import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 
 export async function createIngresoAction(
   data: CrearIngresoInput
-): Promise<{ id: number }> {
+): Promise<{ id: number } | { error: string }> {
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'CREAR')) {
-    throw new Error('Sin permisos para crear ingresos')
+    return { error: 'Sin permisos para crear ingresos' }
   }
-  const validado = CrearIngresoSchema.parse(data)
-  const ingreso = await service.crearIngreso(validado, usuario.codigoUsuario)
-  return { id: ingreso.id }
+
+  const validado = CrearIngresoSchema.safeParse(data)
+  if (!validado.success) {
+    return {
+      error: validado.error.errors[0]?.message ?? 'Datos invalidos para crear el ingreso',
+    }
+  }
+
+  try {
+    const ingreso = await service.crearIngreso(validado.data, usuario.codigoUsuario)
+    return { id: ingreso.id }
+  } catch (error) {
+    console.error('[ADMISION] Error creando ingreso desde server action', error)
+    return {
+      error:
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : 'No se pudo crear el ingreso',
+    }
+  }
 }
 
 export async function updateIngresoAction(

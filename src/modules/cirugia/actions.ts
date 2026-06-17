@@ -29,7 +29,7 @@ export async function crearCirugiaProgramadaAction(data: CrearCirugiaProgramadaI
 
     const validado = CrearCirugiaProgramadaSchema.parse(data)
 
-    const ingreso = await createIngresoAction({
+    const ingresoResult = await createIngresoAction({
         pacienteId: validado.pacienteId,
         tipoIngresoCodigo: 'INT',
         subtipoAdmisionCodigo: 'PRG',
@@ -62,6 +62,12 @@ export async function crearCirugiaProgramadaAction(data: CrearCirugiaProgramadaI
             observaciones: d.observaciones ?? null,
         })),
     })
+
+    if ('error' in ingresoResult) {
+        throw new Error(ingresoResult.error)
+    }
+
+    const ingreso = ingresoResult
 
     const cirugia = await service.crearCirugiaProgramada({
         pacienteId: validado.pacienteId,

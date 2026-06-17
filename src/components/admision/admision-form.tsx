@@ -527,6 +527,11 @@ export function AdmisionForm({
       }
 
       const result = await createIngresoAction(body)
+      if ('error' in result) {
+        setError(result.error)
+        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
 
       router.push(`/dashboard/admision/${result.id}`)
       router.refresh()

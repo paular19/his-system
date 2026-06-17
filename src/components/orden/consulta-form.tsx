@@ -201,6 +201,27 @@ function esPracticaPendienteParaNuevaOrden(
   return normalizarNumeroAutorizacion(practica.numeroAutorizacion) == null
 }
 
+function expandirPracticasPorCantidad(
+  practicas: AdmisionOrdenContexto['practicas']
+): AdmisionOrdenContexto['practicas'] {
+  return practicas.flatMap((practica) => {
+    const cantidad = Number.isFinite(Number(practica.cantidad)) && Number(practica.cantidad) > 0
+      ? Math.floor(Number(practica.cantidad))
+      : 1
+    const importeTotalOriginal = practica.importeTotal != null ? Number(practica.importeTotal) : null
+    const importeUnitario =
+      importeTotalOriginal != null && cantidad > 0
+        ? Number((importeTotalOriginal / cantidad).toFixed(2))
+        : importeTotalOriginal
+
+    return Array.from({ length: cantidad }, () => ({
+      ...practica,
+      cantidad: 1,
+      importeTotal: importeUnitario,
+    }))
+  })
+}
+
 export function ConsultaForm({
   obraSociales,
   profesionales,
@@ -233,8 +254,9 @@ export function ConsultaForm({
   const [modoGeneracion, setModoGeneracion] = useState<'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'>(modoInicial)
   const [tituloOrden, setTituloOrden] = useState('')
   const [estrategiaOrden, setEstrategiaOrden] = useState<EstrategiaOrden>('ESTANDAR')
-  const practicasPendientesIniciales =
+  const practicasPendientesIniciales = expandirPracticasPorCantidad(
     (admisionInicial?.practicas ?? []).filter(esPracticaPendienteParaNuevaOrden)
+  )
   const [practicas, setPracticas] = useState<ItemPractica[]>(
     practicasPendientesIniciales.map((p, idx) => {
       const matriculasDefault = resolverMatriculasDefault(

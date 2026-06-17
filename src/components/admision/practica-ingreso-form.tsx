@@ -28,22 +28,27 @@ interface PracticaBusquedaItem {
     valorGastos?: number | null
 }
 
+interface PracticaIngresoItem {
+    _key: string
+    convenioId: number
+    codigo: string
+    descripcion: string
+    cantidad: number
+    desglose: ComponenteValores
+    seleccionComponentes: ComponenteSeleccion
+    requiereMatriculaEspecialista: boolean
+    requiereMatriculaAnestesista: boolean
+    matriculaEspecialista: number | null
+    matriculaAnestesista: number | null
+}
+
 export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIngresoFormProps) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const [buscandoPractica, setBuscandoPractica] = useState(false)
     const [busquedaTermino, setBusquedaTermino] = useState('')
     const [resultados, setResultados] = useState<PracticaBusquedaItem[]>([])
-    const [practicaSeleccionada, setPracticaSeleccionada] = useState<PracticaBusquedaItem | null>(null)
-    const [seleccionComponentes, setSeleccionComponentes] = useState<ComponenteSeleccion>({
-        especialista: 0,
-        ayudante: 0,
-        anestesista: 0,
-        gastos: 0,
-    })
-
-    // Remove formData.cantidad and switch to a list of practices like surgery
-    const [practicas, setPracticas] = useState<any[]>([])
+    const [practicas, setPracticas] = useState<PracticaIngresoItem[]>([])
 
     const buscarPractica = async (termino: string) => {
         if (termino.trim().length < 2) {
@@ -108,6 +113,7 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                 convenioId: practica.convenioId,
                 codigo: practica.codigo,
                 descripcion: practica.descripcion,
+                cantidad: 1,
                 desglose: {
                     valorEspecialista: practica.valorEspecialista ?? null,
                     valorAyudante: practica.valorAyudante ?? null,
@@ -136,10 +142,6 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
         setPracticas((prev) => prev.filter((x) => x._key !== key))
     }
 
-    const cancelarSeleccion = () => {
-        // No-op: legacy, can be removed
-    }
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (practicas.length === 0) {
@@ -151,13 +153,16 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
             try {
                 await updateIngresoAction(ingreso.id, {
                     practicasAgregar: practicas.map((p) => ({
+                        cantidad: Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1,
                         convenioId: p.convenioId,
                         codigo: p.codigo.trim(),
                         descripcion: p.descripcion,
-                        cantidad: 1,
                         matriculaEspecialista: p.matriculaEspecialista,
                         matriculaAnestesista: p.matriculaAnestesista,
-                        importeTotal: Number((calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) * 1).toFixed(2)),
+                        importeTotal: Number((
+                            calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
+                            * (Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1)
+                        ).toFixed(2)),
                     })),
                 })
                 setPracticas([])
@@ -235,6 +240,30 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                                     <div className="flex items-center gap-3">
                                         <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
                                         <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <label className="text-xs text-gray-500">Cant.</label>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                value={p.cantidad}
+                                                onChange={(e) => {
+                                                    const value = Number.parseInt(e.target.value, 10)
+                                                    const cantidad = Number.isFinite(value) && value > 0 ? value : 1
+                                                    setPracticas((prev) =>
+                                                        prev.map((x) =>
+                                                            x._key === p._key
+                                                                ? {
+                                                                    ...x,
+                                                                    cantidad,
+                                                                }
+                                                                : x
+                                                        )
+                                                    )
+                                                }}
+                                                className="w-16 rounded border border-gray-300 px-2 py-1 text-xs"
+                                                placeholder="Cant."
+                                            />
+                                        </div>
                                         {p.requiereMatriculaEspecialista && (
                                             <input
                                                 type="number"

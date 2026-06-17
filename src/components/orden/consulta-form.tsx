@@ -201,24 +201,17 @@ function esPracticaPendienteParaNuevaOrden(
   return normalizarNumeroAutorizacion(practica.numeroAutorizacion) == null
 }
 
-function expandirPracticasPorCantidad(
+function normalizarPracticasPorCantidad(
   practicas: AdmisionOrdenContexto['practicas']
 ): AdmisionOrdenContexto['practicas'] {
-  return practicas.flatMap((practica) => {
+  return practicas.map((practica) => {
     const cantidad = Number.isFinite(Number(practica.cantidad)) && Number(practica.cantidad) > 0
       ? Math.floor(Number(practica.cantidad))
       : 1
-    const importeTotalOriginal = practica.importeTotal != null ? Number(practica.importeTotal) : null
-    const importeUnitario =
-      importeTotalOriginal != null && cantidad > 0
-        ? Number((importeTotalOriginal / cantidad).toFixed(2))
-        : importeTotalOriginal
-
-    return Array.from({ length: cantidad }, () => ({
+    return {
       ...practica,
-      cantidad: 1,
-      importeTotal: importeUnitario,
-    }))
+      cantidad,
+    }
   })
 }
 
@@ -254,7 +247,7 @@ export function ConsultaForm({
   const [modoGeneracion, setModoGeneracion] = useState<'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'>(modoInicial)
   const [tituloOrden, setTituloOrden] = useState('')
   const [estrategiaOrden, setEstrategiaOrden] = useState<EstrategiaOrden>('ESTANDAR')
-  const practicasPendientesIniciales = expandirPracticasPorCantidad(
+  const practicasPendientesIniciales = normalizarPracticasPorCantidad(
     (admisionInicial?.practicas ?? []).filter(esPracticaPendienteParaNuevaOrden)
   )
   const [practicas, setPracticas] = useState<ItemPractica[]>(
@@ -1361,6 +1354,7 @@ export function ConsultaForm({
                     <th className="px-3 py-2 text-left">Código</th>
                     <th className="px-3 py-2 text-left">Práctica</th>
                     <th className="px-3 py-2 text-left">Subitem</th>
+                    <th className="px-3 py-2 text-center w-24">Cant.</th>
                     <th className="px-3 py-2 text-center w-20">Grupo</th>
                     <th className="px-3 py-2 text-right w-28">Precio</th>
                     <th className="px-3 py-2 w-10"></th>
@@ -1417,6 +1411,19 @@ export function ConsultaForm({
                       </td>
                       <td className="px-3 py-2 text-xs text-gray-700">
                         {obtenerSubitemsSeleccionados(p).join(' + ')}
+                      </td>
+                      <td className="px-3 py-2 text-center text-gray-600">
+                        <input
+                          type="number"
+                          min={1}
+                          value={p.cantidad}
+                          onChange={(e) => {
+                            const cantidad = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                            actualizarCantidad(p._key, cantidad)
+                          }}
+                          className="w-16 rounded border border-gray-200 px-2 py-1 text-xs text-center"
+                          title="Cantidad"
+                        />
                       </td>
                       <td className="px-3 py-2 text-center text-gray-600">
                         <input

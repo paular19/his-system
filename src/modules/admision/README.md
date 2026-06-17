@@ -56,7 +56,7 @@ Regla general: UI/API -> `service` -> `repository` -> DB
 2. Si llega `subtipoAdmisionCodigo`, debe existir en `SubtipoAdmision`.
 3. Si llega `planId`, debe llegar `obraSocialId`.
 4. El `numeroIngreso` se genera de forma atomica incrementando `TipoIngreso.proximoNumero`.
-5. No se permite mas de un `Ingreso` activo (`estado = A`) por paciente. El control se hace dentro de transaccion y con lock por paciente para cubrir concurrencia.
+5. No se permite mas de una `Internacion` activa (`tipoIngresoCodigo = INT`, `estado = A`) por paciente. Los ingresos ambulatorios no bloquean nuevas admisiones. El control se hace dentro de transaccion y con lock por paciente para cubrir concurrencia.
 6. Si `tipoIngresoCodigo === INT`, se crea `InformeHospitalizacion` automaticamente.
 7. Si `tipoIngresoCodigo === AMB` y el subtipo esta habilitado, se crea `InformeAmbulatorio`.
 8. Si llegan practicas al crear ingreso, se persisten como entidades reales (`Practica`).

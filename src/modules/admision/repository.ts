@@ -98,10 +98,11 @@ export async function crearIngreso(
     // Serializa por paciente para evitar dobles altas concurrentes
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${paciente.id})`
 
-    const ingresoActivoExistente = await tx.ingreso.findFirst({
+    const internacionActivaExistente = await tx.ingreso.findFirst({
       where: {
         pacienteId: paciente.id,
         estado: 'A',
+        tipoIngresoCodigo: 'INT',
       },
       select: {
         id: true,
@@ -110,9 +111,9 @@ export async function crearIngreso(
       },
     })
 
-    if (ingresoActivoExistente) {
+    if (internacionActivaExistente) {
       throw new Error(
-        `Ya existe un ingreso activo para este paciente (ID ${ingresoActivoExistente.id}, ${ingresoActivoExistente.tipoIngresoCodigo}-${ingresoActivoExistente.numeroIngreso}).`
+        `Ya existe una internacion activa para este paciente (ID ${internacionActivaExistente.id}, ${internacionActivaExistente.tipoIngresoCodigo}-${internacionActivaExistente.numeroIngreso}).`
       )
     }
 

@@ -1136,7 +1136,7 @@ export function FichaIngresoClient({
                                                         <tr
                                                             key={p.id}
                                                             onClick={() => {
-                                                                if (destinoAutorizada) router.push(destinoAutorizada)
+                                                                if (destinoAutorizada) window.location.assign(destinoAutorizada)
                                                             }}
                                                             className={destinoAutorizada ? 'cursor-pointer hover:bg-emerald-100/40' : undefined}
                                                             title={
@@ -1164,7 +1164,7 @@ export function FichaIngresoClient({
                                                                                 type="button"
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation()
-                                                                                    router.push(`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`)
+                                                                                    window.location.assign(`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`)
                                                                                 }}
                                                                                 title={`Ver orden ${formatearNumeroOrden(orden.puestoNumero, orden.ordenNumero, orden.item)} en Autorizaciones`}
                                                                                 className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"

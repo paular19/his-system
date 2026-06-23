@@ -1159,10 +1159,13 @@ export function FichaIngresoClient({
                                                             <td className="py-2 text-emerald-900">
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {ordenesOrdenadas.map((orden) => (
-                                                                            <Link
+                                                                            <button
                                                                                 key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
-                                                                                href={`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`}
-                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation()
+                                                                                    router.push(`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`)
+                                                                                }}
                                                                                 title={`Ver orden ${formatearNumeroOrden(orden.puestoNumero, orden.ordenNumero, orden.item)} en Autorizaciones`}
                                                                                 className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
                                                                             >
@@ -1174,7 +1177,7 @@ export function FichaIngresoClient({
                                                                                 {orden.numeroAutorizacion
                                                                                     ? ` · ${orden.numeroAutorizacion}`
                                                                                     : ' · falta N° de autorización'}
-                                                                            </Link>
+                                                                            </button>
                                                                         ))}
                                                                 </div>
                                                             </td>

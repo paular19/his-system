@@ -1122,8 +1122,11 @@ export function FichaIngresoClient({
                                                                 ])
                                                             ).values()
                                                         )
+                                                        const numeroAutorizacionPractica = (p.numeroAutorizacion ?? '').trim()
                                                         const destinoAutorizada = ordenesUnicas.length === 0
-                                                            ? null
+                                                            ? (numeroAutorizacionPractica
+                                                                ? `/dashboard/ambulatorio?tab=confirmadas&q=${encodeURIComponent(numeroAutorizacionPractica)}`
+                                                                : null)
                                                             : ordenesUnicas.length === 1
                                                                 ? `/dashboard/ambulatorio/${ordenesUnicas[0]!.puestoNumero}/${ordenesUnicas[0]!.ordenNumero}?item=${ordenesUnicas[0]!.item}`
                                                                 : `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(
@@ -1144,7 +1147,9 @@ export function FichaIngresoClient({
                                                                     ? undefined
                                                                     : ordenesUnicas.length > 1
                                                                         ? 'Ver todas las órdenes autorizadas'
-                                                                        : 'Ir a la orden autorizada'
+                                                                        : ordenesUnicas.length === 1
+                                                                            ? 'Ir a la orden autorizada'
+                                                                            : 'Buscar autorización en Ambulatorio'
                                                             }
                                                         >
                                                             <td className="py-2 pr-4 font-mono text-xs text-emerald-900">
@@ -1158,14 +1163,12 @@ export function FichaIngresoClient({
                                                             </td>
                                                             <td className="py-2 text-emerald-900">
                                                                 <div className="flex flex-wrap gap-1">
-                                                                    {ordenesOrdenadas.map((orden) => (
-                                                                            <button
+                                                                    {ordenesOrdenadas.length > 0 ? (
+                                                                        ordenesOrdenadas.map((orden) => (
+                                                                            <a
                                                                                 key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
-                                                                                type="button"
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation()
-                                                                                    window.location.assign(`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`)
-                                                                                }}
+                                                                                href={`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`}
+                                                                                onClick={(e) => e.stopPropagation()}
                                                                                 title={`Ver orden ${formatearNumeroOrden(orden.puestoNumero, orden.ordenNumero, orden.item)} en Autorizaciones`}
                                                                                 className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
                                                                             >
@@ -1177,8 +1180,18 @@ export function FichaIngresoClient({
                                                                                 {orden.numeroAutorizacion
                                                                                     ? ` · ${orden.numeroAutorizacion}`
                                                                                     : ' · falta N° de autorización'}
-                                                                            </button>
-                                                                        ))}
+                                                                            </a>
+                                                                        ))
+                                                                    ) : numeroAutorizacionPractica ? (
+                                                                        <a
+                                                                            href={`/dashboard/ambulatorio?tab=confirmadas&q=${encodeURIComponent(numeroAutorizacionPractica)}`}
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            title={`Buscar autorización ${numeroAutorizacionPractica} en Ambulatorio`}
+                                                                            className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
+                                                                        >
+                                                                            Aut. {numeroAutorizacionPractica}
+                                                                        </a>
+                                                                    ) : null}
                                                                 </div>
                                                             </td>
                                                         </tr>

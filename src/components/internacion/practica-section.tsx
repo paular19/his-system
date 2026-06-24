@@ -34,6 +34,11 @@ const formatoMoneda = new Intl.NumberFormat('es-AR', {
 const MATRICULA_ANESTESISTA_DEFAULT = 6
 const PRACTICAS_LISTA_POR_PAGINA = 8
 const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
+const CANTIDAD_PRACTICA_MAX = 20
+const CANTIDAD_PRACTICA_OPCIONES = Array.from(
+    { length: CANTIDAD_PRACTICA_MAX },
+    (_, index) => String(index + 1)
+)
 
 function normalizarBusquedaLista(value: string): string {
     return value
@@ -549,14 +554,17 @@ export function PracticaSection({
                                 </div>
                                 <div>
                                     <label className="block text-xs text-gray-500 mb-1">Cantidad</label>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        step={1}
+                                    <select
                                         value={cantidad}
                                         onChange={(e) => setCantidad(e.target.value)}
                                         className="his-input text-sm w-full"
-                                    />
+                                    >
+                                        {CANTIDAD_PRACTICA_OPCIONES.map((opcion) => (
+                                            <option key={opcion} value={opcion}>
+                                                {opcion}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
 

@@ -243,6 +243,19 @@ export function CirugiaUrgenciaSection({
         setTerminoBusquedaPractica('')
     }
 
+    const actualizarCantidadPractica = (key: string, value: string) => {
+        setPracticas((prev) =>
+            prev.map((x) => {
+                if (x._key !== key) return x
+                const parsed = Number.parseInt(value, 10)
+                return {
+                    ...x,
+                    cantidad: Number.isFinite(parsed) && parsed > 0 ? parsed : 1,
+                }
+            })
+        )
+    }
+
     const quitarPractica = (key: string) => {
         setPracticas((prev) => prev.filter((x) => x._key !== key))
     }
@@ -309,11 +322,11 @@ export function CirugiaUrgenciaSection({
                         convenioId: p.convenioId,
                         codigo: p.codigo,
                         descripcion: p.descripcion,
-                        cantidad: 1,
+                        cantidad: p.cantidad,
                         importeTotal: Number(
                             (
                                 calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) *
-                                1
+                                p.cantidad
                             ).toFixed(2)
                         ),
                         matriculaEspecialista:
@@ -545,6 +558,17 @@ export function CirugiaUrgenciaSection({
                                                     <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
                                                     <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
 
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        step={1}
+                                                        value={p.cantidad}
+                                                        onChange={(e) => actualizarCantidadPractica(p._key, e.target.value)}
+                                                        className="w-20 rounded border border-gray-300 px-2 py-1 text-xs"
+                                                        title="Cantidad"
+                                                        aria-label="Cantidad"
+                                                    />
+
                                                     {p.requiereMatriculaEspecialista && (
                                                         <input
                                                             type="number"
@@ -753,7 +777,7 @@ export function CirugiaUrgenciaSection({
                                         <ul className="text-xs text-gray-700 space-y-1">
                                             {c.practicas.map((p) => (
                                                 <li key={p.id}>
-                                                    {p.codigo} - {p.descripcion}
+                                                    {p.codigo} - {p.descripcion} · Cant: {p.cantidad}
                                                 </li>
                                             ))}
                                         </ul>

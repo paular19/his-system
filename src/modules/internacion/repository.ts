@@ -323,6 +323,7 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
       fechaEgreso: true,
       estado: true,
       descripcionPatologia: true,
+      observaciones: true,
       numeroAfiliado: true,
       paciente: {
         select: {

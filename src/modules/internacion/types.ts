@@ -120,6 +120,7 @@ export interface InternacionDetalle {
   fechaEgreso: Date | null
   estado: string | null
   descripcionPatologia: string | null
+  observaciones: string | null
 
   paciente: {
     id: number

@@ -230,6 +230,27 @@ function resolverNombreEfectorFallback(params: {
     return `PROFESIONAL MAT ${params.matricula}`
 }
 
+function resolverProfesionalLote(params: {
+    tipoIngresoCodigo: string | null | undefined
+    profesional: { id: number; nombre: string; matricula: number | null } | null
+    efectorMatriculas: Array<number | null | undefined>
+}): { id: number; nombre: string; matricula: number | null } | null {
+    const esAmbulatorio = !esIngresoInternacion(params.tipoIngresoCodigo)
+    const tieneMatricula9110 = params.efectorMatriculas.some(
+        (matricula) => matricula === MATRICULA_AMBULATORIO_DEFAULT
+    )
+
+    if (esAmbulatorio && tieneMatricula9110) {
+        return {
+            id: params.profesional?.id ?? -MATRICULA_AMBULATORIO_DEFAULT,
+            nombre: NOMBRE_MATRICULA_9110_DEFAULT,
+            matricula: MATRICULA_AMBULATORIO_DEFAULT,
+        }
+    }
+
+    return params.profesional
+}
+
 function aplicarIncluyeCodigoADesglose(
     desglose: DesgloseValores,
     incluyeCodigo: string | null | undefined,
@@ -2890,6 +2911,7 @@ export async function buscarPracticasFacturadasProfesionalEnLotes(
                 select: {
                     item: true,
                     codigoPractica: true,
+                    efectorMatricula: true,
                     cantidad: true,
                     numeroAutorizacion: true,
                     importeTotal: true,
@@ -2921,9 +2943,21 @@ export async function buscarPracticasFacturadasProfesionalEnLotes(
 
             for (const orden of ordenesIngreso) {
                 const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
-                for (const it of orden.items) {
-                    const numeroAutorizacion = resolverNumeroAutorizacion(it.numeroAutorizacion, orden.numeroAutorizacion)
-                    if (!ordenConAutorizacion && !tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
+                const itemsAutorizados = orden.items
+                    .map((it) => ({
+                        item: it,
+                        numeroAutorizacion: resolverNumeroAutorizacion(it.numeroAutorizacion, orden.numeroAutorizacion),
+                    }))
+                    .filter((it) => ordenConAutorizacion || tieneNumeroAutorizacionValido(it.numeroAutorizacion))
+
+                const profesionalLote = resolverProfesionalLote({
+                    tipoIngresoCodigo: ingreso.tipoIngresoCodigo,
+                    profesional: orden.profesional,
+                    efectorMatriculas: itemsAutorizados.map((it) => it.item.efectorMatricula),
+                })
+
+                for (const autorizado of itemsAutorizados) {
+                    const it = autorizado.item
 
                     filas.push({
                         loteId: lote.id,
@@ -2937,7 +2971,7 @@ export async function buscarPracticasFacturadasProfesionalEnLotes(
                         tipoIngresoCodigo: ingreso.tipoIngresoCodigo,
                         numeroIngreso: ingreso.numeroIngreso,
                         paciente: ingreso.paciente,
-                        profesional: orden.profesional,
+                        profesional: profesionalLote,
                         ordenPuestoNumero: orden.puestoNumero,
                         ordenNumero: orden.numero,
                         ordenFechaEmision: orden.fechaEmision,
@@ -2945,7 +2979,7 @@ export async function buscarPracticasFacturadasProfesionalEnLotes(
                         codigoPractica: it.codigoPractica.trim(),
                         descripcionPractica: it.nomencladorPractica?.descripcion ?? null,
                         cantidad: Number(it.cantidad),
-                        numeroAutorizacion,
+                        numeroAutorizacion: autorizado.numeroAutorizacion,
                         importeTotal: Number(it.importeTotal ?? 0),
                     })
                 }
@@ -3286,6 +3320,11 @@ export async function obtenerOrdenesAutorizadasIngreso(
     ingresoId: number,
     filtros?: { medico?: string; matricula?: number; periodo?: string }
 ): Promise<OrdenAutorizadaLote[]> {
+    const ingreso = await prisma.ingreso.findUnique({
+        where: { id: ingresoId },
+        select: { tipoIngresoCodigo: true },
+    })
+
     const especialistaWhere = buildEspecialistaOrdenWhere({
         medico: filtros?.medico,
         matricula: filtros?.matricula,
@@ -3329,6 +3368,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
                     fecha: true,
                     codigoPractica: true,
                     modulo: true,
+                    efectorMatricula: true,
                     cantidad: true,
                     numeroAutorizacion: true,
                     importeTotal: true,
@@ -3340,7 +3380,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
 
     return ordenes
         .map((o) => {
-            const items = o.items
+            const itemsConEfector = o.items
                 .filter(
                     (it) =>
                         tieneNumeroAutorizacionValido(
@@ -3352,11 +3392,26 @@ export async function obtenerOrdenesAutorizadasIngreso(
                     fecha: it.fecha,
                     codigoPractica: it.codigoPractica,
                     modulo: it.modulo?.trim() || null,
+                    efectorMatricula: it.efectorMatricula,
                     descripcion: it.nomencladorPractica?.descripcion ?? null,
                     cantidad: Number(it.cantidad),
                     numeroAutorizacion: resolverNumeroAutorizacion(it.numeroAutorizacion, o.numeroAutorizacion),
                     importeTotal: Number(it.importeTotal ?? 0),
                 }))
+
+            const profesionalLote = resolverProfesionalLote({
+                tipoIngresoCodigo: ingreso?.tipoIngresoCodigo,
+                profesional: o.profesional
+                    ? {
+                        id: o.profesional.id,
+                        nombre: o.profesional.nombre,
+                        matricula: o.profesional.matricula,
+                    }
+                    : null,
+                efectorMatriculas: itemsConEfector.map((it) => it.efectorMatricula),
+            })
+
+            const items = itemsConEfector.map(({ efectorMatricula: _efectorMatricula, ...it }) => it)
 
             return {
                 puestoNumero: o.puestoNumero,
@@ -3365,13 +3420,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
                 descripcion: o.descripcion,
                 numeroAutorizacion: o.numeroAutorizacion,
                 importeTotal: Number(o.importeTotal ?? 0),
-                profesional: o.profesional
-                    ? {
-                        id: o.profesional.id,
-                        nombre: o.profesional.nombre,
-                        matricula: o.profesional.matricula,
-                    }
-                    : null,
+                profesional: profesionalLote,
                 items,
             }
         })

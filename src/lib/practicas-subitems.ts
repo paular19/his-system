@@ -14,18 +14,35 @@ export type ComponenteSeleccionSubitem = {
   gastos: number
 }
 
+function normalizarCantidadSeleccion(cantidad: number, maximo?: number): number {
+  if (!Number.isFinite(cantidad) || cantidad <= 0) return 0
+  const normalizada = Math.floor(cantidad)
+  return typeof maximo === 'number' ? Math.min(normalizada, maximo) : normalizada
+}
+
 export function obtenerSubitemsSeleccionados(
   valores: ComponenteValoresSubitem,
   seleccion: ComponenteSeleccionSubitem
 ): SubitemCodigo[] {
   const subitems: SubitemCodigo[] = []
 
-  if (seleccion.gastos > 0 && valores.valorGastos != null) subitems.push('GA')
-  if (seleccion.especialista > 0 && valores.valorEspecialista != null) subitems.push('HE')
-  if (seleccion.anestesista > 0 && valores.valorAnestesista != null) subitems.push('HA')
+  if (valores.valorGastos != null) {
+    const cantidadGastos = normalizarCantidadSeleccion(seleccion.gastos)
+    for (let i = 0; i < cantidadGastos; i += 1) subitems.push('GA')
+  }
+
+  if (valores.valorEspecialista != null) {
+    const cantidadEspecialista = normalizarCantidadSeleccion(seleccion.especialista)
+    for (let i = 0; i < cantidadEspecialista; i += 1) subitems.push('HE')
+  }
+
+  if (valores.valorAnestesista != null) {
+    const cantidadAnestesista = normalizarCantidadSeleccion(seleccion.anestesista)
+    for (let i = 0; i < cantidadAnestesista; i += 1) subitems.push('HA')
+  }
 
   if (seleccion.ayudante > 0 && valores.valorAyudante != null) {
-    const cantidadAyudantes = Math.min(seleccion.ayudante, 3)
+    const cantidadAyudantes = normalizarCantidadSeleccion(seleccion.ayudante, 3)
     for (let i = 1; i <= cantidadAyudantes; i += 1) {
       subitems.push((`A${i}`) as SubitemCodigo)
     }

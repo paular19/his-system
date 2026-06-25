@@ -219,10 +219,10 @@ function parseIncluyeCodigoSeleccion(incluyeCodigo: string | null | undefined): 
     if (parts.length === 0) return null
 
     return {
-        especialista: parts.includes('HE') ? 1 : 0,
+        especialista: parts.filter((part) => part === 'HE').length,
         ayudante: Math.min(3, parts.filter((part) => /^A[1-3]$/.test(part)).length),
-        anestesista: parts.includes('HA') ? 1 : 0,
-        gastos: parts.includes('GA') ? 1 : 0,
+        anestesista: parts.filter((part) => part === 'HA').length,
+        gastos: parts.filter((part) => part === 'GA').length,
     }
 }
 
@@ -265,11 +265,28 @@ function construirIncluyeCodigoDesdeSeleccion(
     }
 
     const codigos: string[] = []
-    if (seleccion.gastos > 0 && gasDisp) codigos.push('GA')
-    if (seleccion.especialista > 0 && espDisp) codigos.push('HE')
-    if (seleccion.anestesista > 0 && aneDisp) codigos.push('HA')
+    if (gasDisp) {
+        const cantidadGastos = Number.isFinite(seleccion.gastos) && seleccion.gastos > 0
+            ? Math.floor(seleccion.gastos)
+            : 0
+        for (let i = 0; i < cantidadGastos; i += 1) codigos.push('GA')
+    }
+    if (espDisp) {
+        const cantidadEspecialista = Number.isFinite(seleccion.especialista) && seleccion.especialista > 0
+            ? Math.floor(seleccion.especialista)
+            : 0
+        for (let i = 0; i < cantidadEspecialista; i += 1) codigos.push('HE')
+    }
+    if (aneDisp) {
+        const cantidadAnestesista = Number.isFinite(seleccion.anestesista) && seleccion.anestesista > 0
+            ? Math.floor(seleccion.anestesista)
+            : 0
+        for (let i = 0; i < cantidadAnestesista; i += 1) codigos.push('HA')
+    }
     if (seleccion.ayudante > 0 && ayuDisp) {
-        const cantidadAyudantes = Math.min(seleccion.ayudante, 3)
+        const cantidadAyudantes = Number.isFinite(seleccion.ayudante) && seleccion.ayudante > 0
+            ? Math.min(Math.floor(seleccion.ayudante), 3)
+            : 0
         for (let i = 1; i <= cantidadAyudantes; i += 1) {
             codigos.push(`A${i}`)
         }

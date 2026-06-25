@@ -15,7 +15,7 @@ export interface ComponenteValores {
     valorTotal: number | null
 }
 
-// Each field: 0 = not selected, 1 = selected once, 2+ = multiple (only ayudante supports >1)
+// Each field: 0 = not selected, 1 = selected once, 2+ = selected multiple times
 export interface ComponenteSeleccion {
     especialista: number
     ayudante: number
@@ -55,11 +55,14 @@ export function seleccionPorDefecto(valores: ComponenteValores): ComponenteSelec
 /** Build a short description suffix like " [Esp + 2×Ayu + Gto]" */
 export function descripcionComponentes(seleccion: ComponenteSeleccion): string {
     const parts: string[] = []
-    if (seleccion.especialista > 0) parts.push('Esp')
+    if (seleccion.especialista === 1) parts.push('Esp')
+    else if (seleccion.especialista > 1) parts.push(`${seleccion.especialista}×Esp`)
     if (seleccion.ayudante === 1) parts.push('Ayu')
     else if (seleccion.ayudante > 1) parts.push(`${seleccion.ayudante}×Ayu`)
-    if (seleccion.anestesista > 0) parts.push('Ane')
-    if (seleccion.gastos > 0) parts.push('Gto')
+    if (seleccion.anestesista === 1) parts.push('Ane')
+    else if (seleccion.anestesista > 1) parts.push(`${seleccion.anestesista}×Ane`)
+    if (seleccion.gastos === 1) parts.push('Gto')
+    else if (seleccion.gastos > 1) parts.push(`${seleccion.gastos}×Gto`)
     if (parts.length === 0) return ''
     return ` [${parts.join(' + ')}]`
 }
@@ -87,9 +90,72 @@ export function ComponenteSelector({
     // Siempre mostrar el selector, aunque sea para selection manual sin valores
     const total = calcularTotalSeleccionado(valores, seleccion)
 
-    const toggleBool = (key: 'especialista' | 'anestesista' | 'gastos') => {
+    const normalizarCantidad = (cantidad: number, maximo: number): number => {
+        if (!Number.isFinite(cantidad) || cantidad <= 0) return 0
+        return Math.min(maximo, Math.floor(cantidad))
+    }
+
+    const cambiarCantidad = (key: keyof ComponenteSeleccion, maximo: number, cantidad: number) => {
         if (disabled) return
-        onChange({ ...seleccion, [key]: seleccion[key] > 0 ? 0 : 1 })
+        onChange({ ...seleccion, [key]: normalizarCantidad(cantidad, maximo) })
+    }
+
+    const toggleCantidad = (key: keyof ComponenteSeleccion, maximo: number) => {
+        const actual = normalizarCantidad(seleccion[key], maximo)
+        cambiarCantidad(key, maximo, actual > 0 ? 0 : 1)
+    }
+
+    const renderFilaComponente = (
+        key: keyof ComponenteSeleccion,
+        label: string,
+        valor: number | null,
+        maximo: number
+    ) => {
+        const cantidad = normalizarCantidad(seleccion[key], maximo)
+        const activo = cantidad > 0
+        const puedeSumar = cantidad < maximo
+        const importe = valor != null
+            ? (cantidad > 1 ? valor * cantidad : valor)
+            : null
+
+        return (
+            <div className={`flex items-center justify-between gap-2 ${disabled ? 'opacity-60' : ''}`}>
+                <span className="flex items-center gap-1.5 min-w-0">
+                    <input
+                        type="checkbox"
+                        checked={activo}
+                        onChange={() => toggleCantidad(key, maximo)}
+                        disabled={disabled}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className={`text-xs truncate ${activo ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
+                        {label}
+                    </span>
+                    {activo && (
+                        <span className="flex items-center gap-0.5 ml-1">
+                            <button
+                                type="button"
+                                onClick={() => cambiarCantidad(key, maximo, cantidad - 1)}
+                                className="w-4 h-4 rounded text-[10px] bg-gray-200 hover:bg-gray-300 flex items-center justify-center leading-none"
+                                disabled={disabled}
+                            >−</button>
+                            <span className="text-xs font-semibold w-4 text-center">{cantidad}</span>
+                            <button
+                                type="button"
+                                onClick={() => cambiarCantidad(key, maximo, cantidad + 1)}
+                                className="w-4 h-4 rounded text-[10px] bg-gray-200 hover:bg-gray-300 flex items-center justify-center leading-none"
+                                disabled={disabled || !puedeSumar}
+                            >+</button>
+                        </span>
+                    )}
+                </span>
+                {importe != null && (
+                    <span className={`text-xs font-mono shrink-0 ${activo ? 'text-gray-700' : 'text-gray-400'}`}>
+                        {fmt.format(importe)}
+                    </span>
+                )}
+            </div>
+        )
     }
 
     return (
@@ -108,108 +174,10 @@ export function ComponenteSelector({
                 </p>
             )}
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                {/* Especialista */}
-                <label className={`flex items-center justify-between gap-2 cursor-pointer select-none ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                    <span className="flex items-center gap-1.5 min-w-0">
-                        <input
-                            type="checkbox"
-                            checked={seleccion.especialista > 0}
-                            onChange={() => toggleBool('especialista')}
-                            disabled={disabled}
-                            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className={`text-xs truncate ${seleccion.especialista > 0 ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
-                            Especialista
-                        </span>
-                    </span>
-                    {valores.valorEspecialista != null && (
-                        <span className={`text-xs font-mono shrink-0 ${seleccion.especialista > 0 ? 'text-gray-700' : 'text-gray-400'}`}>
-                            {fmt.format(valores.valorEspecialista)}
-                        </span>
-                    )}
-                </label>
-
-                {/* Ayudante — con contador */}
-                <div className={`flex items-center justify-between gap-2 ${disabled ? 'opacity-60' : ''}`}>
-                    <span className="flex items-center gap-1.5 min-w-0">
-                        <input
-                            type="checkbox"
-                            checked={seleccion.ayudante > 0}
-                            onChange={() => onChange({ ...seleccion, ayudante: seleccion.ayudante > 0 ? 0 : 1 })}
-                            disabled={disabled}
-                            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className={`text-xs ${seleccion.ayudante > 0 ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
-                            Ayudante
-                        </span>
-                        {seleccion.ayudante > 0 && (
-                            <span className="flex items-center gap-0.5 ml-1">
-                                <button
-                                    type="button"
-                                    onClick={() => !disabled && onChange({ ...seleccion, ayudante: Math.max(1, seleccion.ayudante - 1) })}
-                                    className="w-4 h-4 rounded text-[10px] bg-gray-200 hover:bg-gray-300 flex items-center justify-center leading-none"
-                                    disabled={disabled}
-                                >−</button>
-                                <span className="text-xs font-semibold w-4 text-center">{seleccion.ayudante}</span>
-                                <button
-                                    type="button"
-                                    onClick={() => !disabled && onChange({ ...seleccion, ayudante: seleccion.ayudante + 1 })}
-                                    className="w-4 h-4 rounded text-[10px] bg-gray-200 hover:bg-gray-300 flex items-center justify-center leading-none"
-                                    disabled={disabled}
-                                >+</button>
-                            </span>
-                        )}
-                    </span>
-                    {valores.valorAyudante != null && (
-                        <span className={`text-xs font-mono shrink-0 ${seleccion.ayudante > 0 ? 'text-gray-700' : 'text-gray-400'}`}>
-                            {seleccion.ayudante > 1
-                                ? fmt.format(valores.valorAyudante * seleccion.ayudante)
-                                : fmt.format(valores.valorAyudante)}
-                        </span>
-                    )}
-                </div>
-
-                {/* Anestesista */}
-                <label className={`flex items-center justify-between gap-2 cursor-pointer select-none ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                    <span className="flex items-center gap-1.5 min-w-0">
-                        <input
-                            type="checkbox"
-                            checked={seleccion.anestesista > 0}
-                            onChange={() => toggleBool('anestesista')}
-                            disabled={disabled}
-                            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className={`text-xs truncate ${seleccion.anestesista > 0 ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
-                            Anestesista
-                        </span>
-                    </span>
-                    {valores.valorAnestesista != null && (
-                        <span className={`text-xs font-mono shrink-0 ${seleccion.anestesista > 0 ? 'text-gray-700' : 'text-gray-400'}`}>
-                            {fmt.format(valores.valorAnestesista)}
-                        </span>
-                    )}
-                </label>
-
-                {/* Gastos */}
-                <label className={`flex items-center justify-between gap-2 cursor-pointer select-none ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                    <span className="flex items-center gap-1.5 min-w-0">
-                        <input
-                            type="checkbox"
-                            checked={seleccion.gastos > 0}
-                            onChange={() => toggleBool('gastos')}
-                            disabled={disabled}
-                            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className={`text-xs truncate ${seleccion.gastos > 0 ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
-                            Gastos
-                        </span>
-                    </span>
-                    {valores.valorGastos != null && (
-                        <span className={`text-xs font-mono shrink-0 ${seleccion.gastos > 0 ? 'text-gray-700' : 'text-gray-400'}`}>
-                            {fmt.format(valores.valorGastos)}
-                        </span>
-                    )}
-                </label>
+                {renderFilaComponente('especialista', 'Especialista', valores.valorEspecialista, 99)}
+                {renderFilaComponente('ayudante', 'Ayudante', valores.valorAyudante, 3)}
+                {renderFilaComponente('anestesista', 'Anestesista', valores.valorAnestesista, 99)}
+                {renderFilaComponente('gastos', 'Gastos', valores.valorGastos, 99)}
             </div>
             <div className="flex justify-between items-center pt-1 border-t border-blue-100">
                 <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Total seleccionado</span>

@@ -143,9 +143,21 @@ function valorPorSubitem(
 
 function obtenerCodigosSubitemSeleccionados(seleccion: ComponenteSeleccion): SubitemCodigo[] {
   const subitems: SubitemCodigo[] = []
-  if (seleccion.gastos > 0) subitems.push('GA')
-  if (seleccion.especialista > 0) subitems.push('HE')
-  if (seleccion.anestesista > 0) subitems.push('HA')
+
+  const cantidadGastos = Number.isFinite(seleccion.gastos) && seleccion.gastos > 0
+    ? Math.floor(seleccion.gastos)
+    : 0
+  for (let i = 0; i < cantidadGastos; i += 1) subitems.push('GA')
+
+  const cantidadEspecialista = Number.isFinite(seleccion.especialista) && seleccion.especialista > 0
+    ? Math.floor(seleccion.especialista)
+    : 0
+  for (let i = 0; i < cantidadEspecialista; i += 1) subitems.push('HE')
+
+  const cantidadAnestesista = Number.isFinite(seleccion.anestesista) && seleccion.anestesista > 0
+    ? Math.floor(seleccion.anestesista)
+    : 0
+  for (let i = 0; i < cantidadAnestesista; i += 1) subitems.push('HA')
 
   if (seleccion.ayudante > 0) {
     const cantidadAyudantes = Math.min(seleccion.ayudante, 3)

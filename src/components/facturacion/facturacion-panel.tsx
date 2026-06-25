@@ -812,6 +812,7 @@ export function FacturacionPanel() {
         try {
             const codigoPractica = npSeleccionada?.codigo ?? npBusqueda.trim().slice(0, 8).toUpperCase()
             const descripcionPractica = npSeleccionada?.descripcion ?? npBusqueda.trim()
+            const convenioPractica = npSeleccionada?.convenioId ?? contexto.ingreso.obraSocialId ?? 0
 
             let importeBaseUnitario: number | null = null
             if (npSeleccionada) {
@@ -855,7 +856,7 @@ export function FacturacionPanel() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         ingresoId: contexto.ingreso.id,
-                        convenioId: contexto.ingreso.obraSocialId ?? 0,
+                        convenioId: convenioPractica,
                         codigoPractica,
                         descripcionPractica,
                         cantidad: 1,

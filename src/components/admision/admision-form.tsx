@@ -15,6 +15,12 @@ import {
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import type { PacienteResumen } from '@/modules/admision/types'
 import { formatearFechaCalendario } from '@/lib/utils'
+import {
+  esSubitemAnestesista,
+  esSubitemEspecialista,
+  obtenerSubitemsSeleccionados,
+  valorUnitarioPorSubitem,
+} from '@/lib/practicas-subitems'
 
 interface ItemPractica {
   tempId: string
@@ -461,6 +467,55 @@ export function AdmisionForm({
           : p.matriculaAnestesista,
     }))
 
+    const practicasExpandida = practicasNormalizadas.flatMap((p) => {
+      const cantidadNormalizada = Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1
+      const subitems = obtenerSubitemsSeleccionados(
+        {
+          valorEspecialista: p.desglose.valorEspecialista,
+          valorAyudante: p.desglose.valorAyudante,
+          valorAnestesista: p.desglose.valorAnestesista,
+          valorGastos: p.desglose.valorGastos,
+        },
+        p.seleccionComponentes
+      )
+
+      if (subitems.length === 0) {
+        return [{
+          convenioId: p.convenioId,
+          codigo: p.codigo,
+          descripcion: p.descripcion,
+          cantidad: cantidadNormalizada,
+          grupoOrden: null,
+          importeTotal: Number((
+            calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
+            * cantidadNormalizada
+          ).toFixed(2)),
+          matriculaEspecialista: p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
+          matriculaAnestesista: p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
+        }]
+      }
+
+      return subitems.map((subitem) => {
+        const valorUnitario = valorUnitarioPorSubitem(subitem, {
+          valorEspecialista: p.desglose.valorEspecialista,
+          valorAyudante: p.desglose.valorAyudante,
+          valorAnestesista: p.desglose.valorAnestesista,
+          valorGastos: p.desglose.valorGastos,
+        })
+
+        return {
+          convenioId: p.convenioId,
+          codigo: p.codigo,
+          descripcion: p.descripcion,
+          cantidad: cantidadNormalizada,
+          grupoOrden: null,
+          importeTotal: Number(((valorUnitario ?? 0) * cantidadNormalizada).toFixed(2)),
+          matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
+          matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
+        }
+      })
+    })
+
     setPracticas(practicasNormalizadas)
 
     setGuardando(true)
@@ -484,17 +539,7 @@ export function AdmisionForm({
         numeroAfiliado: numeroAfiliado || null,
         descripcionPatologia: descripcionPatologia || null,
         observaciones: observaciones || null,
-        practicas: practicasNormalizadas.length > 0 ? practicasNormalizadas.map((p) => ({
-          ...p,
-          cantidad: Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1,
-          grupoOrden: null,
-          importeTotal: Number((
-            calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
-            * (Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1)
-          ).toFixed(2)),
-          matriculaEspecialista: p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
-          matriculaAnestesista: p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
-        })) : undefined,
+        practicas: practicasExpandida.length > 0 ? practicasExpandida : undefined,
         medicaciones: mostrarMedicacion && medicaciones.length > 0
           ? medicaciones.map((m) => ({
             nombre: m.nombre,

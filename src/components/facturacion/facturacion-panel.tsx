@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/componente-selector'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { resumenDiferenciales } from '@/modules/facturacion/diferenciales'
+import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/practicas-subitems'
 
 interface NomencladorItem {
     convenioId: number
@@ -825,22 +826,47 @@ export function FacturacionPanel() {
                 importeBaseUnitario = t > 0 ? t : null
             }
 
-            const res = await fetch('/api/facturacion/prestaciones/practicas', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ingresoId: contexto.ingreso.id,
-                    convenioId: contexto.ingreso.obraSocialId ?? 0,
-                    codigoPractica,
-                    descripcionPractica,
-                    cantidad: 1,
-                    fecha: new Date(nuevaPracticaFecha).toISOString(),
-                    numeroAutorizacion: nuevaPracticaAutorizacion.trim() || null,
-                    importeBaseUnitario,
-                }),
-            })
-            const json = (await res.json()) as ApiResponse<{ id: number }>
-            if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo crear la practica')
+            const subitemsSeleccionados = npSeleccionada
+                ? obtenerSubitemsSeleccionados(
+                    {
+                        valorEspecialista: npSeleccionada.valorEspecialista,
+                        valorAyudante: npSeleccionada.valorAyudante,
+                        valorAnestesista: npSeleccionada.valorAnestesista,
+                        valorGastos: npSeleccionada.valorGastos,
+                    },
+                    npComponentes
+                )
+                : []
+
+            const importesPorEntrada = subitemsSeleccionados.length > 0 && npSeleccionada
+                ? subitemsSeleccionados.map((subitem) =>
+                    valorUnitarioPorSubitem(subitem, {
+                        valorEspecialista: npSeleccionada.valorEspecialista,
+                        valorAyudante: npSeleccionada.valorAyudante,
+                        valorAnestesista: npSeleccionada.valorAnestesista,
+                        valorGastos: npSeleccionada.valorGastos,
+                    })
+                )
+                : [importeBaseUnitario]
+
+            for (const importeEntrada of importesPorEntrada) {
+                const res = await fetch('/api/facturacion/prestaciones/practicas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ingresoId: contexto.ingreso.id,
+                        convenioId: contexto.ingreso.obraSocialId ?? 0,
+                        codigoPractica,
+                        descripcionPractica,
+                        cantidad: 1,
+                        fecha: new Date(nuevaPracticaFecha).toISOString(),
+                        numeroAutorizacion: nuevaPracticaAutorizacion.trim() || null,
+                        importeBaseUnitario: importeEntrada,
+                    }),
+                })
+                const json = (await res.json()) as ApiResponse<{ id: number }>
+                if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo crear la practica')
+            }
 
             setNpBusqueda('')
             setNpResultados([])

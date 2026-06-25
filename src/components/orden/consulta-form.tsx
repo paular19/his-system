@@ -12,7 +12,6 @@ import {
   ComponenteSelector,
   type ComponenteValores,
   type ComponenteSeleccion,
-  calcularTotalSeleccionado,
   seleccionPorDefecto,
 } from '@/components/ui/componente-selector'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
@@ -39,6 +38,8 @@ interface ConsultaFormProps {
   modoInicial?: 'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'
 }
 
+type SubitemCodigo = 'GA' | 'HE' | 'HA' | 'A1' | 'A2' | 'A3'
+
 type ItemPractica = OrdenPracticaItemInput & {
   practicaId?: number | null
   descripcionPractica: string
@@ -55,6 +56,7 @@ type ItemPractica = OrdenPracticaItemInput & {
   seleccionComponentes?: ComponenteSeleccion
   matriculaEspecialista?: number | null
   matriculaAnestesista?: number | null
+  subitemCodigo?: SubitemCodigo
 }
 
 type EstrategiaOrden = 'ESTANDAR' | 'MODULARIDAD' | 'GRUPALIDAD'
@@ -96,6 +98,63 @@ function siguienteGrupoOrden(items: Array<{ grupoOrden: number }>): number {
     return Math.max(max, grupo)
   }, 0)
   return maxGrupo + 1
+}
+
+function crearSeleccionPorSubitem(codigo: SubitemCodigo): ComponenteSeleccion {
+  return {
+    especialista: codigo === 'HE' ? 1 : 0,
+    ayudante: codigo.startsWith('A') ? 1 : 0,
+    anestesista: codigo === 'HA' ? 1 : 0,
+    gastos: codigo === 'GA' ? 1 : 0,
+  }
+}
+
+function crearDesglosePorSubitem(
+  codigo: SubitemCodigo,
+  valores: {
+    valorEspecialista: number | null
+    valorAyudante: number | null
+    valorAnestesista: number | null
+    valorGastos: number | null
+  }
+): ItemPractica['desglose'] {
+  return {
+    valorEspecialista: codigo === 'HE' ? valores.valorEspecialista : null,
+    valorAyudante: codigo.startsWith('A') ? valores.valorAyudante : null,
+    valorAnestesista: codigo === 'HA' ? valores.valorAnestesista : null,
+    valorGastos: codigo === 'GA' ? valores.valorGastos : null,
+  }
+}
+
+function valorPorSubitem(
+  codigo: SubitemCodigo,
+  valores: {
+    valorEspecialista: number | null
+    valorAyudante: number | null
+    valorAnestesista: number | null
+    valorGastos: number | null
+  }
+): number | null {
+  if (codigo === 'HE') return valores.valorEspecialista
+  if (codigo === 'HA') return valores.valorAnestesista
+  if (codigo === 'GA') return valores.valorGastos
+  return valores.valorAyudante
+}
+
+function obtenerCodigosSubitemSeleccionados(seleccion: ComponenteSeleccion): SubitemCodigo[] {
+  const subitems: SubitemCodigo[] = []
+  if (seleccion.gastos > 0) subitems.push('GA')
+  if (seleccion.especialista > 0) subitems.push('HE')
+  if (seleccion.anestesista > 0) subitems.push('HA')
+
+  if (seleccion.ayudante > 0) {
+    const cantidadAyudantes = Math.min(seleccion.ayudante, 3)
+    for (let i = 1; i <= cantidadAyudantes; i += 1) {
+      subitems.push((`A${i}`) as SubitemCodigo)
+    }
+  }
+
+  return subitems
 }
 
 function inferirSeleccionDesdeImporte(
@@ -326,6 +385,8 @@ export function ConsultaForm({
   const esEstrategiaGrupal = estrategiaOrden === 'GRUPALIDAD'
 
   const obtenerSubitemsSeleccionados = (p: ItemPractica): string[] => {
+    if (p.subitemCodigo) return [p.subitemCodigo]
+
     const sel = p.seleccionComponentes
     const d = p.desglose
     if (!sel || !d) return ['COMPLETA']
@@ -479,45 +540,56 @@ export function ConsultaForm({
 
   const confirmarPracticaPendiente = () => {
     if (!practicaPendiente) return
-    const vals: ComponenteValores = {
+    const valsPracticaPendiente: ComponenteValores = {
       valorEspecialista: practicaPendiente.valorEspecialista,
       valorAyudante: practicaPendiente.valorAyudante,
       valorAnestesista: practicaPendiente.valorAnestesista,
       valorGastos: practicaPendiente.valorGastos,
       valorTotal: practicaPendiente.valor,
     }
-    const valorSeleccionado = calcularTotalSeleccionado(vals, pendienteSeleccion)
+    const subitemsSeleccionados = obtenerCodigosSubitemSeleccionados(pendienteSeleccion)
     const matriculasDefault = resolverMatriculasDefault(
       admisionInicial?.tipoIngresoCodigo,
       null,
       null,
       matriculaEspecialistaInternacionDefault
     )
+
+    if (subitemsSeleccionados.length === 0) {
+      setError('Seleccioná al menos un componente para agregar la práctica')
+      return
+    }
+
     setPracticas((prev) => {
-      const nueva: ItemPractica = {
-        _key: `${practicaPendiente.convenioId}-${practicaPendiente.codigo}-${Date.now()}`,
-        fecha: new Date(),
-        convenioId: practicaPendiente.convenioId,
-        codigoPractica: practicaPendiente.codigo,
-        descripcionPractica: practicaPendiente.descripcion,
-        grupoOrden: esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1,
-        cantidad: 1,
-        tipoFacturacion: 'H',
-        importeTotal: valorSeleccionado > 0 ? valorSeleccionado : undefined,
-        valorUnitario: valorSeleccionado > 0 ? valorSeleccionado : null,
-        desglose: {
-          valorEspecialista: practicaPendiente.valorEspecialista,
-          valorAyudante: practicaPendiente.valorAyudante,
-          valorAnestesista: practicaPendiente.valorAnestesista,
-          valorGastos: practicaPendiente.valorGastos,
-        },
-        seleccionComponentes: pendienteSeleccion,
-        matriculaEspecialista: matriculasDefault.matriculaEspecialista,
-        matriculaAnestesista: matriculasDefault.matriculaAnestesista,
-      }
-      return [...prev, nueva]
+      const primerGrupoDisponible = esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1
+
+      const nuevasPracticas = subitemsSeleccionados.map((subitemCodigo, idx) => {
+        const valorComponente = valorPorSubitem(subitemCodigo, valsPracticaPendiente)
+
+        return {
+          _key: `${practicaPendiente.convenioId}-${practicaPendiente.codigo}-${subitemCodigo}-${Date.now()}-${idx}`,
+          fecha: new Date(),
+          convenioId: practicaPendiente.convenioId,
+          codigoPractica: practicaPendiente.codigo,
+          descripcionPractica: practicaPendiente.descripcion,
+          grupoOrden: esEstrategiaGrupal ? primerGrupoDisponible + idx : 1,
+          cantidad: 1,
+          tipoFacturacion: subitemCodigo === 'GA' ? 'D' : 'H',
+          importeTotal: valorComponente != null && valorComponente > 0 ? valorComponente : undefined,
+          valorUnitario: valorComponente != null && valorComponente > 0 ? valorComponente : null,
+          desglose: crearDesglosePorSubitem(subitemCodigo, valsPracticaPendiente),
+          seleccionComponentes: crearSeleccionPorSubitem(subitemCodigo),
+          matriculaEspecialista: matriculasDefault.matriculaEspecialista,
+          matriculaAnestesista: matriculasDefault.matriculaAnestesista,
+          subitemCodigo,
+        } satisfies ItemPractica
+      })
+
+      return [...prev, ...nuevasPracticas]
     })
+
     setPracticaPendiente(null)
+    setError(null)
     setBusquedaPractica('')
   }
 
@@ -762,6 +834,38 @@ export function ConsultaForm({
         nombrePatologia?: string | null
         matriculaPatologia?: number | null
       }> = practicas.flatMap((p) => {
+        const baseCantidad = Number(p.cantidad) > 0 ? Number(p.cantidad) : 1
+
+        if (p.subitemCodigo) {
+          const tipoFacturacion = p.subitemCodigo === 'GA' ? 'D' : 'H'
+          const efectorMatricula =
+            p.subitemCodigo === 'HE'
+              ? resolverEfectorMatricula(p, 'HE')
+              : p.subitemCodigo === 'HA'
+                ? resolverEfectorMatricula(p, 'HA')
+                : p.subitemCodigo === 'GA'
+                  ? resolverEfectorMatricula(p, 'AGRUPADO', { incluyeGastos: true })
+                  : MATRICULA_AYUDANTE_DEFAULT
+
+          return [{
+            convenioId: p.convenioId,
+            codigoPractica: p.codigoPractica,
+            descripcionPractica: p.descripcionPractica,
+            cantidad: baseCantidad,
+            tipoFacturacion,
+            incluyeCodigo: p.subitemCodigo,
+            efectorMatricula,
+            importeTotal: p.valorUnitario != null ? p.valorUnitario * baseCantidad : p.importeTotal,
+          }].map((it) => ({
+            ...it,
+            practicaId: p.practicaId,
+            fecha: p.fecha ? new Date(p.fecha) : undefined,
+            grupoOrden: p.grupoOrden,
+            titularModular: getTituloAplicadoPractica(p._key),
+            ...getDatosPatologiaPractica(p._key),
+          }))
+        }
+
         const hasDesglose = Boolean(
           p.desglose && (
             p.desglose.valorEspecialista != null ||
@@ -776,24 +880,39 @@ export function ConsultaForm({
           const componentes: OrdenPracticaItemInput[] = []
           const sel = p.seleccionComponentes
           const d = p.desglose
-          const baseCantidad = Number(p.cantidad) > 0 ? Number(p.cantidad) : 1
           const grouped = getGroupedComponents(p._key)
 
           // Crear mapeo de componentes disponibles
-          const componentesDisponibles: Record<string, { codigo: 'GA' | 'HE' | 'HA' | 'A1' | 'A2' | 'A3'; valor: number; count: number }> = {}
+          const componentesDisponibles: Record<string, { codigos: SubitemCodigo[]; valor: number }> = {}
 
           if (sel.gastos > 0 && d?.valorGastos != null) {
-            componentesDisponibles['gastos'] = { codigo: 'GA', valor: Number(d.valorGastos) * baseCantidad, count: 1 }
+            componentesDisponibles['gastos'] = {
+              codigos: ['GA'],
+              valor: Number(d.valorGastos) * baseCantidad,
+            }
           }
+
           if (sel.especialista > 0 && d?.valorEspecialista != null) {
-            componentesDisponibles['especialista'] = { codigo: 'HE', valor: Number(d.valorEspecialista) * baseCantidad, count: 1 }
+            componentesDisponibles['especialista'] = {
+              codigos: ['HE'],
+              valor: Number(d.valorEspecialista) * baseCantidad,
+            }
           }
+
           if (sel.anestesista > 0 && d?.valorAnestesista != null) {
-            componentesDisponibles['anestesista'] = { codigo: 'HA', valor: Number(d.valorAnestesista) * baseCantidad, count: 1 }
+            componentesDisponibles['anestesista'] = {
+              codigos: ['HA'],
+              valor: Number(d.valorAnestesista) * baseCantidad,
+            }
           }
+
           if (sel.ayudante > 0 && d?.valorAyudante != null) {
             const cantidadAyudantes = Math.min(sel.ayudante, 3)
-            componentesDisponibles['ayudante'] = { codigo: 'A1', valor: Number(d.valorAyudante) * baseCantidad, count: cantidadAyudantes }
+            const codigosAyudante = Array.from({ length: cantidadAyudantes }, (_, idx) => (`A${idx + 1}`) as SubitemCodigo)
+            componentesDisponibles['ayudante'] = {
+              codigos: codigosAyudante,
+              valor: Number(d.valorAyudante) * baseCantidad * cantidadAyudantes,
+            }
           }
 
           // Separar componentes en agrupados y no agrupados
@@ -817,7 +936,7 @@ export function ConsultaForm({
 
             agrupados.forEach((comp) => {
               const compData = componentesDisponibles[comp]!
-              incluyCodigos.push(compData.codigo)
+              incluyCodigos.push(...compData.codigos)
               importeAgrupado += compData.valor
             })
 
@@ -937,7 +1056,6 @@ export function ConsultaForm({
         const componentes: OrdenPracticaItemInput[] = []
         const sel = p.seleccionComponentes
         const d = p.desglose
-        const baseCantidad = Number(p.cantidad) > 0 ? Number(p.cantidad) : 1
 
         if (sel.gastos > 0 && d?.valorGastos != null) {
           componentes.push({

@@ -11,6 +11,12 @@ import {
     type ComponenteSeleccion,
     type ComponenteValores,
 } from '@/components/ui/componente-selector'
+import {
+    esSubitemAnestesista,
+    esSubitemEspecialista,
+    obtenerSubitemsSeleccionados,
+    valorUnitarioPorSubitem,
+} from '@/lib/practicas-subitems'
 
 interface PracticaIngresoFormProps {
     ingreso: IngresoDetalle
@@ -154,22 +160,61 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
         setError(null)
         startTransition(async () => {
             try {
+                const practicasExpandida = practicas.flatMap((p) => {
+                    const cantidadNormalizada = Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1
+                    const subitems = obtenerSubitemsSeleccionados(
+                        {
+                            valorEspecialista: p.desglose.valorEspecialista,
+                            valorAyudante: p.desglose.valorAyudante,
+                            valorAnestesista: p.desglose.valorAnestesista,
+                            valorGastos: p.desglose.valorGastos,
+                        },
+                        p.seleccionComponentes
+                    )
+
+                    if (subitems.length === 0) {
+                        return [{
+                            cantidad: cantidadNormalizada,
+                            convenioId: p.convenioId,
+                            codigo: p.codigo.trim(),
+                            descripcion: p.descripcion,
+                            numeroAutorizacion: permiteNumeroAutorizacionManual
+                                ? (p.numeroAutorizacion.trim() || null)
+                                : null,
+                            matriculaEspecialista: p.matriculaEspecialista,
+                            matriculaAnestesista: p.matriculaAnestesista,
+                            importeTotal: Number((
+                                calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
+                                * cantidadNormalizada
+                            ).toFixed(2)),
+                        }]
+                    }
+
+                    return subitems.map((subitem) => {
+                        const valorUnitario = valorUnitarioPorSubitem(subitem, {
+                            valorEspecialista: p.desglose.valorEspecialista,
+                            valorAyudante: p.desglose.valorAyudante,
+                            valorAnestesista: p.desglose.valorAnestesista,
+                            valorGastos: p.desglose.valorGastos,
+                        })
+
+                        return {
+                            cantidad: cantidadNormalizada,
+                            convenioId: p.convenioId,
+                            codigo: p.codigo.trim(),
+                            descripcion: p.descripcion,
+                            numeroAutorizacion: permiteNumeroAutorizacionManual
+                                ? (p.numeroAutorizacion.trim() || null)
+                                : null,
+                            matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
+                            matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
+                            importeTotal: Number(((valorUnitario ?? 0) * cantidadNormalizada).toFixed(2)),
+                        }
+                    })
+                })
+
                 await updateIngresoAction(ingreso.id, {
-                    practicasAgregar: practicas.map((p) => ({
-                        cantidad: Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1,
-                        convenioId: p.convenioId,
-                        codigo: p.codigo.trim(),
-                        descripcion: p.descripcion,
-                        numeroAutorizacion: permiteNumeroAutorizacionManual
-                            ? (p.numeroAutorizacion.trim() || null)
-                            : null,
-                        matriculaEspecialista: p.matriculaEspecialista,
-                        matriculaAnestesista: p.matriculaAnestesista,
-                        importeTotal: Number((
-                            calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
-                            * (Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1)
-                        ).toFixed(2)),
-                    })),
+                    practicasAgregar: practicasExpandida,
                 })
                 setPracticas([])
                 onSuccess()

@@ -12,6 +12,12 @@ import {
     type ComponenteSeleccion,
     type ComponenteValores,
 } from '@/components/ui/componente-selector'
+import {
+    esSubitemAnestesista,
+    esSubitemEspecialista,
+    obtenerSubitemsSeleccionados,
+    valorUnitarioPorSubitem,
+} from '@/lib/practicas-subitems'
 import type { PacienteResumen } from '@/modules/admision/types'
 import { formatearFechaCalendario } from '@/lib/utils'
 
@@ -300,6 +306,50 @@ export function CirugiaProgramadaForm({
         setGuardando(true)
 
         try {
+            const practicasExpandida = practicas.flatMap((p) => {
+                const cantidadNormalizada = Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1
+                const subitems = obtenerSubitemsSeleccionados(
+                    {
+                        valorEspecialista: p.desglose.valorEspecialista,
+                        valorAyudante: p.desglose.valorAyudante,
+                        valorAnestesista: p.desglose.valorAnestesista,
+                        valorGastos: p.desglose.valorGastos,
+                    },
+                    p.seleccionComponentes
+                )
+
+                if (subitems.length === 0) {
+                    return [{
+                        convenioId: p.convenioId,
+                        codigo: p.codigo,
+                        descripcion: p.descripcion,
+                        cantidad: cantidadNormalizada,
+                        importeTotal: Number((calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) * cantidadNormalizada).toFixed(2)),
+                        matriculaEspecialista: p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
+                        matriculaAnestesista: p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
+                    }]
+                }
+
+                return subitems.map((subitem) => {
+                    const valorUnitario = valorUnitarioPorSubitem(subitem, {
+                        valorEspecialista: p.desglose.valorEspecialista,
+                        valorAyudante: p.desglose.valorAyudante,
+                        valorAnestesista: p.desglose.valorAnestesista,
+                        valorGastos: p.desglose.valorGastos,
+                    })
+
+                    return {
+                        convenioId: p.convenioId,
+                        codigo: p.codigo,
+                        descripcion: p.descripcion,
+                        cantidad: cantidadNormalizada,
+                        importeTotal: Number(((valorUnitario ?? 0) * cantidadNormalizada).toFixed(2)),
+                        matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
+                        matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
+                    }
+                })
+            })
+
             const result = await crearCirugiaProgramadaAction({
                 pacienteId: paciente.id,
                 fechaCirugia,
@@ -314,15 +364,7 @@ export function CirugiaProgramadaForm({
                 diagnostico: diagnostico || null,
                 observaciones: observaciones || null,
                 camaId: null,
-                practicas: practicas.map((p) => ({
-                    convenioId: p.convenioId,
-                    codigo: p.codigo,
-                    descripcion: p.descripcion,
-                    cantidad: 1,
-                    importeTotal: Number((calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) * 1).toFixed(2)),
-                    matriculaEspecialista: p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
-                    matriculaAnestesista: p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
-                })),
+                practicas: practicasExpandida,
                 medicaciones: medicaciones.length > 0
                     ? medicaciones.map((m) => ({
                         nombre: m.nombre,

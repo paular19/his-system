@@ -13,6 +13,12 @@ import {
     calcularTotalSeleccionado,
     seleccionPorDefecto,
 } from '@/components/ui/componente-selector'
+import {
+    esSubitemAnestesista,
+    esSubitemEspecialista,
+    obtenerSubitemsSeleccionados,
+    valorUnitarioPorSubitem,
+} from '@/lib/practicas-subitems'
 
 interface NomencladorItem {
     convenioId: number
@@ -211,19 +217,59 @@ export function PracticaSection({
                 : null,
         }
 
+        const subitemsSeleccionados = practicaSeleccionada
+            ? obtenerSubitemsSeleccionados(
+                {
+                    valorEspecialista: practicaSeleccionada.valorEspecialista,
+                    valorAyudante: practicaSeleccionada.valorAyudante,
+                    valorAnestesista: practicaSeleccionada.valorAnestesista,
+                    valorGastos: practicaSeleccionada.valorGastos,
+                },
+                componenteSeleccion
+            )
+            : []
+
+        const entradasCrear = subitemsSeleccionados.length > 0 && practicaSeleccionada
+            ? subitemsSeleccionados.map((subitem) => {
+                const valorUnitario = valorUnitarioPorSubitem(subitem, {
+                    valorEspecialista: practicaSeleccionada.valorEspecialista,
+                    valorAyudante: practicaSeleccionada.valorAyudante,
+                    valorAnestesista: practicaSeleccionada.valorAnestesista,
+                    valorGastos: practicaSeleccionada.valorGastos,
+                })
+
+                return {
+                    ...body,
+                    importeBaseUnitario: valorUnitario,
+                    matriculaEspecialista: esSubitemEspecialista(subitem) ? body.matriculaEspecialista : null,
+                    matriculaAnestesista: esSubitemAnestesista(subitem) ? body.matriculaAnestesista : null,
+                }
+            })
+            : [body]
+
         setGuardando(true)
         try {
-            const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            })
-            const json = await res.json()
-            if (!res.ok) {
-                setError(json.error ?? 'Error al registrar la práctica')
-                return
+            const practicasCreadas: PracticaItem[] = []
+
+            for (const entrada of entradasCrear) {
+                const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(entrada),
+                })
+                const json = await res.json()
+                if (!res.ok) {
+                    if (practicasCreadas.length > 0) {
+                        setPracticas((prev) => [...practicasCreadas, ...prev])
+                        router.refresh()
+                    }
+                    setError(json.error ?? 'Error al registrar la práctica')
+                    return
+                }
+                practicasCreadas.push(json.data)
             }
-            setPracticas((prev) => [json.data, ...prev])
+
+            setPracticas((prev) => [...practicasCreadas, ...prev])
             router.refresh()
             limpiarForm()
             setMostrarForm(false)

@@ -11,6 +11,12 @@ import {
     type ComponenteSeleccion,
     type ComponenteValores,
 } from '@/components/ui/componente-selector'
+import {
+    esSubitemAnestesista,
+    esSubitemEspecialista,
+    obtenerSubitemsSeleccionados,
+    valorUnitarioPorSubitem,
+} from '@/lib/practicas-subitems'
 
 type OpcionObraSocial = {
     id: number
@@ -301,6 +307,57 @@ export function CirugiaUrgenciaSection({
         setGuardando(true)
 
         try {
+            const practicasExpandida = practicas.flatMap((p) => {
+                const cantidadNormalizada = Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1
+                const subitems = obtenerSubitemsSeleccionados(
+                    {
+                        valorEspecialista: p.desglose.valorEspecialista,
+                        valorAyudante: p.desglose.valorAyudante,
+                        valorAnestesista: p.desglose.valorAnestesista,
+                        valorGastos: p.desglose.valorGastos,
+                    },
+                    p.seleccionComponentes
+                )
+
+                if (subitems.length === 0) {
+                    return [{
+                        convenioId: p.convenioId,
+                        codigo: p.codigo,
+                        descripcion: p.descripcion,
+                        cantidad: cantidadNormalizada,
+                        importeTotal: Number(
+                            (
+                                calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) *
+                                cantidadNormalizada
+                            ).toFixed(2)
+                        ),
+                        matriculaEspecialista:
+                            p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
+                        matriculaAnestesista:
+                            p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
+                    }]
+                }
+
+                return subitems.map((subitem) => {
+                    const valorUnitario = valorUnitarioPorSubitem(subitem, {
+                        valorEspecialista: p.desglose.valorEspecialista,
+                        valorAyudante: p.desglose.valorAyudante,
+                        valorAnestesista: p.desglose.valorAnestesista,
+                        valorGastos: p.desglose.valorGastos,
+                    })
+
+                    return {
+                        convenioId: p.convenioId,
+                        codigo: p.codigo,
+                        descripcion: p.descripcion,
+                        cantidad: cantidadNormalizada,
+                        importeTotal: Number(((valorUnitario ?? 0) * cantidadNormalizada).toFixed(2)),
+                        matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
+                        matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
+                    }
+                })
+            })
+
             const res = await fetch(`/api/internacion/${ingresoId}/cirugia-urgencia`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -318,22 +375,7 @@ export function CirugiaUrgenciaSection({
                     numeroAfiliado: numeroAfiliado || null,
                     diagnostico: diagnostico || null,
                     observaciones: observaciones || null,
-                    practicas: practicas.map((p) => ({
-                        convenioId: p.convenioId,
-                        codigo: p.codigo,
-                        descripcion: p.descripcion,
-                        cantidad: p.cantidad,
-                        importeTotal: Number(
-                            (
-                                calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) *
-                                p.cantidad
-                            ).toFixed(2)
-                        ),
-                        matriculaEspecialista:
-                            p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
-                        matriculaAnestesista:
-                            p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
-                    })),
+                    practicas: practicasExpandida,
                     diferenciales: {
                         esFeriado,
                         esNocturna,

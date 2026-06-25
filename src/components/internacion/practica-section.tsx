@@ -240,6 +240,7 @@ export function PracticaSection({
 
                 return {
                     ...body,
+                    cantidad: 1,
                     importeBaseUnitario: valorUnitario,
                     matriculaEspecialista: esSubitemEspecialista(subitem) ? body.matriculaEspecialista : null,
                     matriculaAnestesista: esSubitemAnestesista(subitem) ? body.matriculaAnestesista : null,

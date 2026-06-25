@@ -507,9 +507,9 @@ export function AdmisionForm({
           convenioId: p.convenioId,
           codigo: p.codigo,
           descripcion: p.descripcion,
-          cantidad: cantidadNormalizada,
+          cantidad: 1,
           grupoOrden: null,
-          importeTotal: Number(((valorUnitario ?? 0) * cantidadNormalizada).toFixed(2)),
+          importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
           matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
           matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
         }

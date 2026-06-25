@@ -199,7 +199,7 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                         })
 
                         return {
-                            cantidad: cantidadNormalizada,
+                            cantidad: 1,
                             convenioId: p.convenioId,
                             codigo: p.codigo.trim(),
                             descripcion: p.descripcion,
@@ -208,7 +208,7 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                                 : null,
                             matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
                             matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
-                            importeTotal: Number(((valorUnitario ?? 0) * cantidadNormalizada).toFixed(2)),
+                            importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
                         }
                     })
                 })

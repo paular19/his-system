@@ -342,8 +342,8 @@ export function CirugiaProgramadaForm({
                         convenioId: p.convenioId,
                         codigo: p.codigo,
                         descripcion: p.descripcion,
-                        cantidad: cantidadNormalizada,
-                        importeTotal: Number(((valorUnitario ?? 0) * cantidadNormalizada).toFixed(2)),
+                        cantidad: 1,
+                        importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
                         matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
                         matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
                     }

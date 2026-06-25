@@ -103,6 +103,18 @@ function desglosarImportesPorCodigo(
     }
 }
 
+function sumarImporteNullable(actual: number | null, siguiente: number | null): number | null {
+    if (siguiente === null) return actual
+    if (actual === null) return siguiente
+    return actual + siguiente
+}
+
+function fechaToGroupingKey(value: Date | string): string {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return String(value)
+    return date.toISOString()
+}
+
 function normalizarTexto(value: string | null | undefined): string {
     return (value ?? '')
         .normalize('NFD')
@@ -150,6 +162,48 @@ function buildOrdenItemEditState(item: OrdenAutorizadaLote['items'][number]): Or
         numeroAutorizacion: item.numeroAutorizacion ?? '',
         importeTotal: String(item.importeTotal ?? 0),
     }
+}
+
+type OrdenItemAgrupadoTabla = {
+    key: string
+    fecha: Date
+    codigoPractica: string
+    descripcion: string | null
+    cantidad: number
+    numeroAutorizacion: string | null
+    importeTotal: number
+}
+
+function agruparItemsOrdenParaTabla(items: OrdenAutorizadaLote['items']): OrdenItemAgrupadoTabla[] {
+    const agrupados = new Map<string, OrdenItemAgrupadoTabla>()
+
+    for (const item of items) {
+        const key = [
+            fechaToGroupingKey(item.fecha),
+            (item.codigoPractica ?? '').trim(),
+            item.numeroAutorizacion ?? '',
+            item.descripcion ?? '',
+        ].join('|')
+
+        const existente = agrupados.get(key)
+        if (!existente) {
+            agrupados.set(key, {
+                key,
+                fecha: item.fecha,
+                codigoPractica: item.codigoPractica,
+                descripcion: item.descripcion,
+                cantidad: item.cantidad,
+                numeroAutorizacion: item.numeroAutorizacion,
+                importeTotal: item.importeTotal,
+            })
+            continue
+        }
+
+        existente.importeTotal += item.importeTotal
+        existente.cantidad = Math.max(existente.cantidad, item.cantidad)
+    }
+
+    return Array.from(agrupados.values())
 }
 
 export function LoteDetallePage({ loteId }: Props) {
@@ -405,7 +459,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const detalleParaImpresion = !esIPSTxt
         ? lote.items.map((item) => {
             const ordenesIngreso = ordenesPorIngreso[item.ingresoId] ?? []
-            const lineas = ordenesIngreso.flatMap((orden) =>
+            const lineasBase = ordenesIngreso.flatMap((orden) =>
                 orden.items.map((linea) => {
                     const desglose = desglosarImportesPorCodigo(
                         linea.codigoPractica,
@@ -414,6 +468,7 @@ export function LoteDetallePage({ loteId }: Props) {
                         linea.importeTotal
                     )
                     return {
+                        ordenNumero: orden.numero,
                         fecha: linea.fecha,
                         numeroAutorizacion: linea.numeroAutorizacion,
                         profesional: orden.profesional?.nombre ?? null,
@@ -426,6 +481,47 @@ export function LoteDetallePage({ loteId }: Props) {
                         importeTotal: linea.importeTotal,
                     }
                 })
+            )
+
+            const lineas = Array.from(
+                lineasBase
+                    .reduce((acc, linea) => {
+                        const key = [
+                            linea.ordenNumero,
+                            fechaToGroupingKey(linea.fecha),
+                            linea.numeroAutorizacion ?? '',
+                            linea.profesional ?? '',
+                            linea.codigoPractica,
+                        ].join('|')
+
+                        const existente = acc.get(key)
+                        if (!existente) {
+                            acc.set(key, { ...linea })
+                            return acc
+                        }
+
+                        existente.importeEspecialista = sumarImporteNullable(
+                            existente.importeEspecialista,
+                            linea.importeEspecialista
+                        )
+                        existente.importeAyudante = sumarImporteNullable(
+                            existente.importeAyudante,
+                            linea.importeAyudante
+                        )
+                        existente.importeAnestesista = sumarImporteNullable(
+                            existente.importeAnestesista,
+                            linea.importeAnestesista
+                        )
+                        existente.importeGastos = sumarImporteNullable(
+                            existente.importeGastos,
+                            linea.importeGastos
+                        )
+                        existente.importeTotal += linea.importeTotal
+                        existente.cantidad = Math.max(existente.cantidad, linea.cantidad)
+
+                        return acc
+                    }, new Map<string, (typeof lineasBase)[number]>())
+                    .values()
             )
 
             return {
@@ -760,49 +856,37 @@ export function LoteDetallePage({ loteId }: Props) {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-50">
-                                                    {orden.items.map((it) => {
-                                                        const key = keyOrdenItem(orden.puestoNumero, orden.numero, it.item)
-                                                        const draft = editItems[key] ?? buildOrdenItemEditState(it)
-                                                        const guardando = guardandoItemKey === key
+                                                    {esPendiente && editandoPracticas ? (
+                                                        orden.items.map((it) => {
+                                                            const key = keyOrdenItem(orden.puestoNumero, orden.numero, it.item)
+                                                            const draft = editItems[key] ?? buildOrdenItemEditState(it)
+                                                            const guardando = guardandoItemKey === key
 
-                                                        return (
-                                                            <tr key={it.item}>
-                                                                <td className="px-4 py-1.5 text-gray-600">
-                                                                    {esPendiente && editandoPracticas ? (
+                                                            return (
+                                                                <tr key={it.item}>
+                                                                    <td className="px-4 py-1.5 text-gray-600">
                                                                         <input
                                                                             type="datetime-local"
                                                                             value={draft.fecha}
                                                                             onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, fecha: e.target.value } }))}
                                                                             className="w-44 rounded border border-gray-300 px-2 py-1"
                                                                         />
-                                                                    ) : (
-                                                                        new Date(it.fecha).toLocaleString('es-AR')
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-1.5 font-mono">
-                                                                    {esPendiente && editandoPracticas ? (
+                                                                    </td>
+                                                                    <td className="px-4 py-1.5 font-mono">
                                                                         <input
                                                                             value={draft.codigoPractica}
                                                                             onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, codigoPractica: e.target.value } }))}
                                                                             className="w-24 rounded border border-gray-300 px-2 py-1"
                                                                         />
-                                                                    ) : (
-                                                                        it.codigoPractica
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-1.5 text-gray-600">
-                                                                    {esPendiente && editandoPracticas ? (
+                                                                    </td>
+                                                                    <td className="px-4 py-1.5 text-gray-600">
                                                                         <input
                                                                             value={draft.descripcion}
                                                                             onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, descripcion: e.target.value } }))}
                                                                             className="w-full rounded border border-gray-300 px-2 py-1"
                                                                         />
-                                                                    ) : (
-                                                                        it.descripcion ?? '-'
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-1.5 text-center">
-                                                                    {esPendiente && editandoPracticas ? (
+                                                                    </td>
+                                                                    <td className="px-4 py-1.5 text-center">
                                                                         <input
                                                                             type="number"
                                                                             min={0.01}
@@ -811,23 +895,15 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                             onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, cantidad: e.target.value } }))}
                                                                             className="w-20 rounded border border-gray-300 px-2 py-1 text-center"
                                                                         />
-                                                                    ) : (
-                                                                        it.cantidad
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-1.5 text-blue-600">
-                                                                    {esPendiente && editandoPracticas ? (
+                                                                    </td>
+                                                                    <td className="px-4 py-1.5 text-blue-600">
                                                                         <input
                                                                             value={draft.numeroAutorizacion}
                                                                             onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, numeroAutorizacion: e.target.value } }))}
                                                                             className="w-32 rounded border border-gray-300 px-2 py-1 text-gray-700"
                                                                         />
-                                                                    ) : (
-                                                                        it.numeroAutorizacion ?? '—'
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-1.5 text-right">
-                                                                    {esPendiente && editandoPracticas ? (
+                                                                    </td>
+                                                                    <td className="px-4 py-1.5 text-right">
                                                                         <input
                                                                             type="number"
                                                                             min={0}
@@ -836,11 +912,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                             onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, importeTotal: e.target.value } }))}
                                                                             className="w-28 rounded border border-gray-300 px-2 py-1 text-right"
                                                                         />
-                                                                    ) : (
-                                                                        formatMonto(it.importeTotal)
-                                                                    )}
-                                                                </td>
-                                                                {esPendiente && editandoPracticas && (
+                                                                    </td>
                                                                     <td className="px-4 py-1.5 text-right">
                                                                         <div className="flex justify-end gap-1">
                                                                             <button
@@ -859,10 +931,21 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                             </button>
                                                                         </div>
                                                                     </td>
-                                                                )}
+                                                                </tr>
+                                                            )
+                                                        })
+                                                    ) : (
+                                                        agruparItemsOrdenParaTabla(orden.items).map((it) => (
+                                                            <tr key={it.key}>
+                                                                <td className="px-4 py-1.5 text-gray-600">{new Date(it.fecha).toLocaleString('es-AR')}</td>
+                                                                <td className="px-4 py-1.5 font-mono">{it.codigoPractica}</td>
+                                                                <td className="px-4 py-1.5 text-gray-600">{it.descripcion ?? '-'}</td>
+                                                                <td className="px-4 py-1.5 text-center">{it.cantidad}</td>
+                                                                <td className="px-4 py-1.5 text-blue-600">{it.numeroAutorizacion ?? '—'}</td>
+                                                                <td className="px-4 py-1.5 text-right">{formatMonto(it.importeTotal)}</td>
                                                             </tr>
-                                                        )
-                                                    })}
+                                                        ))
+                                                    )}
                                                 </tbody>
                                             </table>
                                         </div>

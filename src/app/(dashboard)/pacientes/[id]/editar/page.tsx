@@ -6,6 +6,7 @@ import { obtenerPaciente } from '@/modules/pacientes/service'
 import { PacienteForm } from '@/components/pacientes/paciente-form'
 import { prisma } from '@/lib/db'
 import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
+import { fechaCalendarioAInput } from '@/lib/utils'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -76,7 +77,7 @@ export default async function EditarPacientePage({ params }: PageProps) {
     numeroDocumento: paciente.numeroDocumento ?? undefined,
     // fechaNacimiento: Date → YYYY-MM-DD para input type="date"
     fechaNacimiento: paciente.fechaNacimiento
-      ? paciente.fechaNacimiento.toISOString().split('T')[0]
+      ? fechaCalendarioAInput(paciente.fechaNacimiento)
       : undefined,
     sexo: paciente.sexo ?? undefined,
     estadoCivil: paciente.estadoCivil ?? undefined,

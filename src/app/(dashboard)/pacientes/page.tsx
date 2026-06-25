@@ -3,7 +3,7 @@ import { getUsuarioSesion } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
 import { buscarPacientes } from '@/modules/pacientes/service'
-import { formatearFecha, calcularEdad } from '@/lib/utils'
+import { formatearFecha, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import Link from 'next/link'
 import { Plus, Search, User } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -201,7 +201,7 @@ export default async function PacientesPage({ searchParams }: PageProps) {
                       <span className="text-gray-700">{contactoPrincipal}</span>
                       <span className="text-gray-400">Nacimiento</span>
                       <span className="text-gray-700">
-                        {formatearFecha(paciente.fechaNacimiento)}
+                        {formatearFechaCalendario(paciente.fechaNacimiento)}
                         {edad !== null && <span className="text-gray-400"> ({edad} años)</span>}
                       </span>
                       <span className="text-gray-400">HC</span>
@@ -265,7 +265,7 @@ export default async function PacientesPage({ searchParams }: PageProps) {
                           <div className="text-xs text-gray-400 line-clamp-2">{paciente.domicilio ?? '-'}</div>
                         </td>
                         <td className="px-2 py-2.5 text-gray-600 align-top">
-                          {formatearFecha(paciente.fechaNacimiento)}
+                          {formatearFechaCalendario(paciente.fechaNacimiento)}
                           {edad !== null && (
                             <span className="ml-1 text-xs text-gray-400">({edad} años)</span>
                           )}

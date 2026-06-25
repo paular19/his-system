@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { Printer } from 'lucide-react'
+import { formatearFechaCalendario } from '@/lib/utils'
 
 type PacientePrintData = {
     id: number
@@ -221,7 +222,7 @@ export function PacienteHospitalizacionPrint({ paciente, ingresos }: PacienteHos
                         <div><strong>Nombre:</strong> {paciente.nombreCompleto}</div>
                         <div><strong>HC:</strong> {paciente.historiaClinica ?? '-'}</div>
                         <div><strong>Documento:</strong> {(paciente.tipoDocumento ?? '-')} {paciente.numeroDocumento ?? ''}</div>
-                        <div><strong>Fecha nacimiento:</strong> {fmtFecha(paciente.fechaNacimiento)}</div>
+                        <div><strong>Fecha nacimiento:</strong> {formatearFechaCalendario(paciente.fechaNacimiento)}</div>
                         <div><strong>Sexo:</strong> {labelSexo(paciente.sexo)}</div>
                         <div><strong>Estado civil:</strong> {labelEstadoCivil(paciente.estadoCivil)}</div>
                         <div><strong>Domicilio:</strong> {paciente.domicilio ?? '-'}</div>

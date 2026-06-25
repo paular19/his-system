@@ -13,6 +13,7 @@ import {
     type ComponenteValores,
 } from '@/components/ui/componente-selector'
 import type { PacienteResumen } from '@/modules/admision/types'
+import { formatearFechaCalendario } from '@/lib/utils'
 
 interface ObraSocialOption {
     id: number
@@ -381,7 +382,7 @@ export function CirugiaProgramadaForm({
                         {paciente.fechaNacimiento && (
                             <div>
                                 <span className="text-gray-400">Fecha nac.:</span>{' '}
-                                {new Date(paciente.fechaNacimiento).toLocaleDateString('es-AR')}
+                                {formatearFechaCalendario(paciente.fechaNacimiento)}
                             </div>
                         )}
                         {paciente.sexo && (

@@ -4,7 +4,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { obtenerPaciente } from '@/modules/pacientes/service'
 import { prisma } from '@/lib/db'
-import { formatearFecha, calcularEdad } from '@/lib/utils'
+import { formatearFecha, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import Link from 'next/link'
 import { ChevronRight, Pencil, ClipboardList } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -217,7 +217,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
               label="Fecha de Nacimiento"
               value={
                 paciente.fechaNacimiento
-                  ? `${formatearFecha(paciente.fechaNacimiento)} (${edad} años)`
+                  ? `${formatearFechaCalendario(paciente.fechaNacimiento)} (${edad} años)`
                   : null
               }
             />

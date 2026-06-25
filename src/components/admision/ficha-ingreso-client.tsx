@@ -8,7 +8,7 @@ import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
 import { updateIngresoAction } from '@/modules/admision/actions'
 import { ChevronRight, User, Pencil, FileText, Printer, Save, X, Loader2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
-import { formatearFecha, formatearFechaHora, calcularEdad } from '@/lib/utils'
+import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import { AdmisionEditForm } from './admision-edit-form'
 import { FichaAdmisionPrint } from './ficha-admision-print'
 import { PracticaIngresoForm } from './practica-ingreso-form'
@@ -71,7 +71,8 @@ export function FichaIngresoClient({
 }: FichaIngresoClientProps) {
     const router = useRouter()
     const [isEditing, setIsEditing] = useState(false)
-    const edad = ingreso.fechaNacimiento ? calcularEdad(ingreso.fechaNacimiento) : null
+    const fechaNacimientoPaciente = ingreso.paciente?.fechaNacimiento ?? ingreso.fechaNacimiento
+    const edad = fechaNacimientoPaciente ? calcularEdad(fechaNacimientoPaciente) : null
     const observacionesLimpias = limpiarObservacionesAdmision(ingreso.observaciones)
 
     // Inline edit state for each card
@@ -392,8 +393,8 @@ export function FichaIngresoClient({
                         <DataItem
                             label="Fecha de Nacimiento"
                             value={
-                                ingreso.fechaNacimiento
-                                    ? `${formatearFecha(ingreso.fechaNacimiento)}${edad !== null ? ` (${edad} años)` : ''}`
+                                fechaNacimientoPaciente
+                                    ? `${formatearFechaCalendario(fechaNacimientoPaciente)}${edad !== null ? ` (${edad} años)` : ''}`
                                     : null
                             }
                         />

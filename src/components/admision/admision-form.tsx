@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/componente-selector'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import type { PacienteResumen } from '@/modules/admision/types'
+import { formatearFechaCalendario } from '@/lib/utils'
 
 interface ItemPractica {
   tempId: string
@@ -566,7 +567,7 @@ export function AdmisionForm({
           <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1.5 text-xs text-gray-600">
             {paciente.fechaNacimiento && (
               <div>
-                <span className="text-gray-400">Fecha nac.:</span> {new Date(paciente.fechaNacimiento).toLocaleDateString('es-AR')}
+                <span className="text-gray-400">Fecha nac.:</span> {formatearFechaCalendario(paciente.fechaNacimiento)}
               </div>
             )}
             {paciente.sexo && (

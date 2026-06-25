@@ -127,6 +127,7 @@ export async function actualizarPaciente(
       nombre: true,
       obraSocialId: true,
       obraSocialCoseguroId: true,
+      fechaNacimiento: true,
     },
   })
 
@@ -178,20 +179,38 @@ export async function actualizarPaciente(
     updateData.obraSocialCoseguroId = obraSocialCoseguroFinal
   }
 
-  // Registrar en historial antes de actualizar
-  await prisma.pacienteHistorial.create({
-    data: {
-      pacienteId: id,
-      tipoCambio: 'M',
-      usuarioCambio: usuarioModificacion,
-      fechaCambio: new Date(),
-    },
-  })
+  const fechaNacimientoFinal =
+    data.fechaNacimiento !== undefined
+      ? (data.fechaNacimiento ?? null)
+      : pacienteActual.fechaNacimiento
 
-  return prisma.paciente.update({
-    where: { id },
-    data: updateData,
-    include: incluirRelaciones,
+  return prisma.$transaction(async (tx) => {
+    // Registrar en historial antes de actualizar
+    await tx.pacienteHistorial.create({
+      data: {
+        pacienteId: id,
+        tipoCambio: 'M',
+        usuarioCambio: usuarioModificacion,
+        fechaCambio: new Date(),
+      },
+    })
+
+    const actualizado = await tx.paciente.update({
+      where: { id },
+      data: updateData,
+      include: incluirRelaciones,
+    })
+
+    if (data.fechaNacimiento !== undefined) {
+      await tx.ingreso.updateMany({
+        where: { pacienteId: id },
+        data: {
+          fechaNacimiento: fechaNacimientoFinal,
+        },
+      })
+    }
+
+    return actualizado
   })
 }
 

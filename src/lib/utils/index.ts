@@ -5,6 +5,46 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+type FechaValor = Date | string | null | undefined
+
+function parseFecha(fecha: FechaValor): Date | null {
+  if (!fecha) return null
+  const d = typeof fecha === 'string' ? new Date(fecha) : fecha
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function partesFechaUTC(fecha: FechaValor): { year: number; month: number; day: number } | null {
+  const d = parseFecha(fecha)
+  if (!d) return null
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth() + 1,
+    day: d.getUTCDate(),
+  }
+}
+
+/**
+ * Formatea fechas de calendario (sin hora) evitando corrimientos por zona horaria.
+ */
+export function formatearFechaCalendario(fecha: FechaValor): string {
+  const partes = partesFechaUTC(fecha)
+  if (!partes) return '-'
+  const day = String(partes.day).padStart(2, '0')
+  const month = String(partes.month).padStart(2, '0')
+  return `${day}/${month}/${partes.year}`
+}
+
+/**
+ * Convierte una fecha a YYYY-MM-DD para inputs type="date" sin corrimiento horario.
+ */
+export function fechaCalendarioAInput(fecha: FechaValor): string {
+  const partes = partesFechaUTC(fecha)
+  if (!partes) return ''
+  const month = String(partes.month).padStart(2, '0')
+  const day = String(partes.day).padStart(2, '0')
+  return `${partes.year}-${month}-${day}`
+}
+
 /**
  * Formatea una fecha al formato local argentino (DD/MM/YYYY).
  */
@@ -49,12 +89,12 @@ export function formatearMoneda(valor: number | string | null | undefined): stri
  * Calcula la edad en años a partir de la fecha de nacimiento.
  */
 export function calcularEdad(fechaNacimiento: Date | string | null | undefined): number | null {
-  if (!fechaNacimiento) return null
-  const dob = typeof fechaNacimiento === 'string' ? new Date(fechaNacimiento) : fechaNacimiento
+  const partesNacimiento = partesFechaUTC(fechaNacimiento)
+  if (!partesNacimiento) return null
   const today = new Date()
-  let edad = today.getFullYear() - dob.getFullYear()
-  const m = today.getMonth() - dob.getMonth()
-  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+  let edad = today.getFullYear() - partesNacimiento.year
+  const m = today.getMonth() + 1 - partesNacimiento.month
+  if (m < 0 || (m === 0 && today.getDate() < partesNacimiento.day)) {
     edad--
   }
   return edad

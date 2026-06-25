@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { formatearFecha, formatearFechaHora, calcularEdad } from '@/lib/utils'
+import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import type { IngresoDetalle } from '@/modules/admision/types'
 import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 
@@ -10,7 +10,8 @@ interface FichaAdmisionPrintProps {
 }
 
 export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
-    const edad = ingreso.fechaNacimiento ? calcularEdad(ingreso.fechaNacimiento) : null
+    const fechaNacimientoPaciente = ingreso.paciente?.fechaNacimiento ?? ingreso.fechaNacimiento
+    const edad = fechaNacimientoPaciente ? calcularEdad(fechaNacimientoPaciente) : null
     const observacionesLimpias = limpiarObservacionesAdmision(ingreso.observaciones)
     const profesionalTratanteNombre = ingreso.profesionalTratante?.nombre
         ?? ingreso.evoluciones?.[0]?.profesional?.nombre
@@ -182,7 +183,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                             <div className="flex justify-between">
                                 <dt className="text-gray-600">Fecha de Nacimiento:</dt>
                                 <dd className="font-medium">
-                                    {ingreso.fechaNacimiento ? formatearFecha(ingreso.fechaNacimiento) : '—'}
+                                    {fechaNacimientoPaciente ? formatearFechaCalendario(fechaNacimientoPaciente) : '—'}
                                 </dd>
                             </div>
                             <div className="flex justify-between">

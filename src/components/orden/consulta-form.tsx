@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/componente-selector'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
+import { formatearFechaCalendario } from '@/lib/utils'
 
 interface ObraSocialItem {
   id: number
@@ -1103,7 +1104,7 @@ export function ConsultaForm({
               {admisionInicial.paciente.fechaNacimiento && (
                 <span>
                   <span className="text-gray-400 mr-1">Nac.:</span>
-                  {new Date(admisionInicial.paciente.fechaNacimiento).toLocaleDateString('es-AR')}
+                  {formatearFechaCalendario(admisionInicial.paciente.fechaNacimiento)}
                 </span>
               )}
               {admisionInicial.paciente.sexo && (

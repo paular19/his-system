@@ -368,6 +368,16 @@ export function AutorizacionPrint({
           body > * { display: none !important; }
           .print-doc { display: block !important; }
           nav, header, aside { display: none !important; }
+
+          .autorizacion-pagina {
+            margin-bottom: 0 !important;
+            page-break-inside: avoid;
+            break-inside: avoid-page;
+          }
+
+          .autorizacion-pagina:not(:last-child) {
+            margin-bottom: 0 !important;
+          }
         }
 
         .print-doc {
@@ -379,7 +389,13 @@ export function AutorizacionPrint({
         .autorizacion-pagina {
           border: 1px solid #ccc;
           margin-bottom: 12px;
+          page-break-after: auto;
+          break-after: auto;
+        }
+
+        .autorizacion-pagina:not(:last-child) {
           page-break-after: always;
+          break-after: page;
         }
 
         .autorizacion-frente {

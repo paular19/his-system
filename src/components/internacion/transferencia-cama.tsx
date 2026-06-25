@@ -15,6 +15,16 @@ const MOTIVOS_EGRESO = [
     { codigo: 'FU', descripcion: 'Fuga' },
 ]
 
+function ahoraLocalDateTimeInput(): string {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    const hh = String(now.getHours()).padStart(2, '0')
+    const mm = String(now.getMinutes()).padStart(2, '0')
+    return `${y}-${m}-${d}T${hh}:${mm}`
+}
+
 interface TransferenciaCamaProps {
     ingresoId: number
     camaActual: { id: number; identificador: string; sector: string; estado: string } | null
@@ -48,6 +58,7 @@ export function TransferenciaCama({
     const [camaDestinoId, setCamaDestinoId] = useState('')
     const [motivo, setMotivo] = useState('')
     const [profesionalId, setProfesionalId] = useState('')
+    const [fechaTransferencia, setFechaTransferencia] = useState(() => ahoraLocalDateTimeInput())
     const [mostrarAlta, setMostrarAlta] = useState(false)
     const [fechaEgreso, setFechaEgreso] = useState(() => new Date().toISOString().slice(0, 16))
     const [motivoEgresoCodigo, setMotivoEgresoCodigo] = useState('')
@@ -69,6 +80,7 @@ export function TransferenciaCama({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     camaDestinoId: parseInt(camaDestinoId),
+                    fecha: fechaTransferencia || undefined,
                     motivo: motivo || null,
                     profesionalId: profesionalId ? parseInt(profesionalId) : null,
                 }),
@@ -77,7 +89,7 @@ export function TransferenciaCama({
             const { data } = await res.json()
             setTransferencias([{ ...data, fecha: new Date(data.fecha) }, ...transferencias])
             setCama(data.camaDestino)
-            setCamaDestinoId(''); setMotivo(''); setProfesionalId('')
+            setCamaDestinoId(''); setMotivo(''); setProfesionalId(''); setFechaTransferencia(ahoraLocalDateTimeInput())
             setMostrarFormulario(false)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -266,6 +278,18 @@ export function TransferenciaCama({
                                 onChange={setProfesionalId}
                                 placeholderOption="— Sin asignar —"
                                 selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Fecha y hora del cambio <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="datetime-local"
+                                required
+                                value={fechaTransferencia}
+                                onChange={(e) => setFechaTransferencia(e.target.value)}
+                                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
                             />
                         </div>
                         <div className="sm:col-span-2">

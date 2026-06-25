@@ -1,5 +1,36 @@
 import { z } from 'zod'
 
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/
+const DATETIME_LOCAL_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/
+const DATETIME_WITH_TZ_REGEX =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/
+
+function parseFechaArgentina(value: unknown): unknown {
+  if (value === undefined || value === null) return value
+
+  if (typeof value === 'string') {
+    const raw = value.trim()
+    if (!raw) return undefined
+
+    if (DATE_ONLY_REGEX.test(raw)) {
+      return new Date(`${raw}T12:00:00-03:00`)
+    }
+
+    if (DATETIME_LOCAL_REGEX.test(raw)) {
+      const normalizado = raw.length === 16 ? `${raw}:00` : raw
+      return new Date(`${normalizado}-03:00`)
+    }
+
+    if (DATETIME_WITH_TZ_REGEX.test(raw)) {
+      return new Date(raw)
+    }
+
+    return new Date(raw)
+  }
+
+  return value
+}
+
 export const ActualizarCamaSchema = z.object({
   estado: z.enum(['DISPONIBLE', 'OCUPADA', 'RESERVADA', 'MANTENIMIENTO']),
   observaciones: z.string().max(500).trim().optional().nullable(),
@@ -101,6 +132,7 @@ export type ActualizarDescartableInput = z.infer<typeof ActualizarDescartableSch
 export const TransferirCamaSchema = z.object({
   ingresoId: z.number().int().positive(),
   camaDestinoId: z.number().int().positive(),
+  fecha: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
   motivo: z.string().max(500).trim().optional().nullable(),
   profesionalId: z.number().int().positive().optional().nullable(),
   reservarCama: z.boolean().optional().default(false),

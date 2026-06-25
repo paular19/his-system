@@ -1304,7 +1304,7 @@ export async function transferirCama(
         ingresoId: data.ingresoId,
         camaOrigenId: ingreso.camaId ?? null,
         camaDestinoId: data.camaDestinoId,
-        fecha: new Date(),
+        fecha: data.fecha ?? new Date(),
         motivo: data.motivo ?? null,
         profesionalId: data.profesionalId ?? null,
         usuario: usuario.slice(0, 10),

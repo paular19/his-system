@@ -8,6 +8,12 @@ import { ChevronRight, FileText } from 'lucide-react'
 import type { Metadata } from 'next'
 import { PrintButton } from '@/components/ui/print-button'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
+import {
+  diferenciaDiasCalendarioArgentina,
+  formatearFechaArgentina,
+  formatearFechaHoraArgentina,
+} from '@/lib/utils/argentina-date'
+import { calcularEdad } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Informe de Hospitalización' }
 
@@ -78,26 +84,29 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
   const cirugia = ingreso.cirugiasProgramadas[0] ?? null
 
   const fmt = (d: Date | null | undefined) =>
-    d ? new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+    formatearFechaHoraArgentina(d, {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   const fmtDate = (d: Date | null | undefined) =>
-    d ? new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: 'numeric' }) : '—'
+    formatearFechaArgentina(d, { day: 'numeric', month: 'numeric', year: 'numeric' })
   const fmtHora = (h: string | null | undefined) => (h && h.trim() ? h : '—')
 
   const diasEstancia = () => {
     if (!ingreso.fechaIngreso) return '—'
-    const fin = ingreso.fechaEgreso ?? new Date()
-    const dias = Math.floor((fin.getTime() - ingreso.fechaIngreso.getTime()) / 86_400_000)
+    const dias = diferenciaDiasCalendarioArgentina(ingreso.fechaIngreso, ingreso.fechaEgreso ?? new Date())
+    if (dias === null) return '—'
     return `${Math.max(0, dias)} días`
   }
 
   const edad = () => {
     const fn = ingreso.paciente?.fechaNacimiento
     if (!fn) return ingreso.edad ? `${ingreso.edad} años` : '—'
-    const hoy = new Date()
-    const nac = new Date(fn)
-    let a = hoy.getFullYear() - nac.getFullYear()
-    if (hoy < new Date(hoy.getFullYear(), nac.getMonth(), nac.getDate())) a--
-    return `${a} años`
+    const a = calcularEdad(fn)
+    return a === null ? '—' : `${a} años`
   }
 
   const estadoLabel = (e: string | null) => {

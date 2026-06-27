@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { LoteFacturacionListItem, LotePracticaFacturadaProfesionalItem } from '@/modules/facturacion/types'
 import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Skeleton } from '@/components/ui/skeleton'
+import { fechaAInputLocal, periodoAInputLocal } from '@/lib/utils/argentina-date'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
 
@@ -465,8 +466,8 @@ interface CrearLoteModalProps {
 }
 
 function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
-    const hoy = new Date().toISOString().slice(0, 10)
-    const periodoActual = new Date().toISOString().slice(0, 7)
+    const hoy = fechaAInputLocal()
+    const periodoActual = periodoAInputLocal()
 
     const [form, setForm] = useState({
         fecha: hoy,
@@ -829,8 +830,8 @@ function parsearTxtIPS(contenido: string): IPSTxtItem[] {
 }
 
 function CrearLoteIPSTxtModal({ onClose, onCreado }: CrearLoteIPSTxtModalProps) {
-    const hoy = new Date().toISOString().slice(0, 10)
-    const periodoActual = new Date().toISOString().slice(0, 7)
+    const hoy = fechaAInputLocal()
+    const periodoActual = periodoAInputLocal()
 
     const [form, setForm] = useState({ fecha: hoy, periodo: periodoActual, descripcion: '' })
     const [items, setItems] = useState<IPSTxtItem[]>([])

@@ -17,6 +17,7 @@ import {
     obtenerSubitemsSeleccionados,
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
+import { fechaAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 
 type OpcionObraSocial = {
     id: number
@@ -146,7 +147,7 @@ export function CirugiaUrgenciaSection({
     const [guardando, setGuardando] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const [fechaCirugia, setFechaCirugia] = useState(new Date().toISOString().slice(0, 10))
+    const [fechaCirugia, setFechaCirugia] = useState(fechaAInputLocal())
     const [horaCirugia, setHoraCirugia] = useState('')
     const [camaId, setCamaId] = useState('')
 
@@ -267,7 +268,7 @@ export function CirugiaUrgenciaSection({
     }
 
     const limpiarForm = () => {
-        setFechaCirugia(new Date().toISOString().slice(0, 10))
+        setFechaCirugia(fechaAInputLocal())
         setHoraCirugia('')
         setCamaId('')
         setDiagnostico('')
@@ -805,7 +806,7 @@ export function CirugiaUrgenciaSection({
                                 <div key={c.id} className="border rounded-lg p-3 bg-white">
                                     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                                         <p className="text-sm font-medium text-gray-900">
-                                            {new Date(c.fechaCirugia).toLocaleDateString('es-AR')} {c.horaCirugia ? `· ${c.horaCirugia}` : ''}
+                                            {formatearFechaArgentina(c.fechaCirugia)} {c.horaCirugia ? `· ${c.horaCirugia}` : ''}
                                         </p>
                                         <span className="text-xs text-gray-500">Cirugía #{c.id}</span>
                                     </div>

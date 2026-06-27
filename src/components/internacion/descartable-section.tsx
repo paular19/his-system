@@ -16,9 +16,7 @@ interface DescartableSectionProps {
 export function DescartableSection({
     ingresoId,
     descartables: descartablesIniciales,
-    profesionales,
     puedeCrear,
-    puedeModificar,
 }: DescartableSectionProps) {
     const [descartables, setDescartables] = useState(descartablesIniciales)
     const [mostrarFormulario, setMostrarFormulario] = useState(false)

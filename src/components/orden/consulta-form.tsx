@@ -17,6 +17,7 @@ import {
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 import { formatearFechaCalendario } from '@/lib/utils'
+import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
 
 interface ObraSocialItem {
   id: number
@@ -316,7 +317,7 @@ export function ConsultaForm({
   )
   const [diagnostico, setDiagnostico] = useState(admisionInicial?.descripcionPatologia ?? '')
   const [modoGeneracion, setModoGeneracion] = useState<'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'>(modoInicial)
-  const [tituloOrden, setTituloOrden] = useState('')
+  const [tituloOrden] = useState('')
   const [estrategiaOrden, setEstrategiaOrden] = useState<EstrategiaOrden>('ESTANDAR')
   const practicasPendientesIniciales = normalizarPracticasPorCantidad(
     (admisionInicial?.practicas ?? []).filter(esPracticaPendienteParaNuevaOrden)
@@ -958,7 +959,7 @@ export function ConsultaForm({
               descripcionPractica: p.descripcionPractica,
               cantidad: baseCantidad,
               tipoFacturacion: 'H',
-              incluyeCodigo: incluyCodigos.join('+') as any, // Múltiples códigos separados por +
+              incluyeCodigo: incluyCodigos.join('+'), // Múltiples códigos separados por +
               titularModular,
               imprimirPorDuplicado,
               efectorMatricula: resolverEfectorMatricula(p, 'AGRUPADO', {
@@ -1271,7 +1272,7 @@ export function ConsultaForm({
             <p className="text-xs text-blue-700 mt-1">
               Admisión {admisionInicial.tipoIngresoCodigo}-{admisionInicial.numeroIngreso}
               {admisionInicial.fechaIngreso &&
-                ` · ${new Date(admisionInicial.fechaIngreso).toLocaleDateString('es-AR')}`}
+                ` · ${formatearFechaArgentina(admisionInicial.fechaIngreso)}`}
             </p>
           </div>
         ) : (

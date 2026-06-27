@@ -6,6 +6,7 @@ import { ArrowRightLeft } from 'lucide-react'
 import type { TransferenciaItem, CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
+import { formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 const MOTIVOS_EGRESO = [
     { codigo: 'AL', descripcion: 'Alta medica' },
@@ -60,7 +61,7 @@ export function TransferenciaCama({
     const [profesionalId, setProfesionalId] = useState('')
     const [fechaTransferencia, setFechaTransferencia] = useState(() => ahoraLocalDateTimeInput())
     const [mostrarAlta, setMostrarAlta] = useState(false)
-    const [fechaEgreso, setFechaEgreso] = useState(() => new Date().toISOString().slice(0, 16))
+    const [fechaEgreso, setFechaEgreso] = useState(() => ahoraLocalDateTimeInput())
     const [motivoEgresoCodigo, setMotivoEgresoCodigo] = useState('')
     const [descripcionPatologiaDefinitiva, setDescripcionPatologiaDefinitiva] = useState('')
     const [altaGuardando, setAltaGuardando] = useState(false)
@@ -98,11 +99,7 @@ export function TransferenciaCama({
         }
     }
 
-    const fmt = (d: Date | string) =>
-        new Date(d).toLocaleString('es-AR', {
-            day: '2-digit', month: '2-digit', year: 'numeric',
-            hour: '2-digit', minute: '2-digit',
-        })
+    const fmt = (d: Date | string) => formatearFechaHoraArgentina(d)
 
     const registrarAlta = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()

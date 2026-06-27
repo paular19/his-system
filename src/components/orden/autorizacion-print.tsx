@@ -28,10 +28,6 @@ export function AutorizacionPrint({
     return incluye.includes('+')
   }
 
-  const esItemModular = (item: OrdenConItems['items'][number]): boolean => {
-    return Boolean(item.titularModular) || item.imprimirPorDuplicado || esItemModularAgrupado(item.incluyeCodigo)
-  }
-
   const esTituloPatologia = (item: OrdenConItems['items'][number]): boolean => {
     return (item.titularModular ?? '').toUpperCase().includes('PATOLOG')
   }

@@ -12,6 +12,7 @@ import {
   buscarAdmisionesActivasPorPaciente,
   obtenerContextoAdmisionParaOrden,
 } from '@/modules/orden/repository'
+import { formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 export const metadata: Metadata = { title: 'Nueva Autorización' }
 
@@ -146,9 +147,7 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
                           </p>
                           <p className="text-xs text-gray-500">
                             DNI: {adm.paciente?.numeroDocumento ?? '-'} · Ingreso:{' '}
-                            {adm.fechaIngreso
-                              ? new Date(adm.fechaIngreso).toLocaleString('es-AR')
-                              : 'Sin fecha'}
+                            {adm.fechaIngreso ? formatearFechaHoraArgentina(adm.fechaIngreso) : 'Sin fecha'}
                           </p>
                         </Link>
                       )

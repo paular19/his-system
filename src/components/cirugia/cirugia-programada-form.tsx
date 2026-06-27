@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, Trash2 } from 'lucide-react'
 import { BuscarPaciente } from '@/components/admision/buscar-paciente'
@@ -20,6 +20,7 @@ import {
 } from '@/lib/practicas-subitems'
 import type { PacienteResumen } from '@/modules/admision/types'
 import { formatearFechaCalendario } from '@/lib/utils'
+import { fechaAInputLocal } from '@/lib/utils/argentina-date'
 
 interface ObraSocialOption {
     id: number
@@ -97,7 +98,7 @@ export function CirugiaProgramadaForm({
     const [error, setError] = useState<string | null>(null)
 
     const [paciente, setPaciente] = useState<PacienteResumen | null>(null)
-    const [fechaCirugia, setFechaCirugia] = useState(new Date().toISOString().slice(0, 10))
+    const [fechaCirugia, setFechaCirugia] = useState(fechaAInputLocal())
 
     const [obraSocialId, setObraSocialId] = useState('')
     const [planId, setPlanId] = useState('')

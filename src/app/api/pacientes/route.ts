@@ -5,7 +5,6 @@ import { registrarAudit, extraerIP } from '@/lib/security/audit'
 import {
   apiOk,
   apiCreado,
-  apiNoAutorizado,
   apiForbidden,
   apiValidationError,
   manejarErrorApi,

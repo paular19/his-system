@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Plus, Save, X } from 'lucide-react'
+import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 
 type DiagnosticoItem = {
     id: number
@@ -34,7 +35,7 @@ export function DiagnosticosSection({
     const [editandoId, setEditandoId] = useState<number | null>(null)
     const [descripcion, setDescripcion] = useState('')
     const [observaciones, setObservaciones] = useState('')
-    const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 16))
+    const [fecha, setFecha] = useState(() => fechaHoraAInputLocal())
     const [estado, setEstado] = useState<'A' | 'I'>('A')
     const [guardando, setGuardando] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -43,7 +44,7 @@ export function DiagnosticosSection({
         setEditandoId(null)
         setDescripcion('')
         setObservaciones('')
-        setFecha(new Date().toISOString().slice(0, 16))
+        setFecha(fechaHoraAInputLocal())
         setEstado('A')
         setMostrarForm(false)
         setError(null)
@@ -53,7 +54,7 @@ export function DiagnosticosSection({
         setEditandoId(diagnostico.id)
         setDescripcion(diagnostico.descripcion ?? '')
         setObservaciones(diagnostico.observaciones ?? '')
-        setFecha(new Date(diagnostico.fecha).toISOString().slice(0, 16))
+        setFecha(fechaHoraAInputLocal(diagnostico.fecha))
         setEstado(diagnostico.estado === 'I' ? 'I' : 'A')
         setMostrarForm(true)
         setError(null)
@@ -126,7 +127,7 @@ export function DiagnosticosSection({
                             setEditandoId(null)
                             setDescripcion('')
                             setObservaciones('')
-                            setFecha(new Date().toISOString().slice(0, 16))
+                            setFecha(fechaHoraAInputLocal())
                             setEstado('A')
                             setMostrarForm((v) => !v)
                             setError(null)

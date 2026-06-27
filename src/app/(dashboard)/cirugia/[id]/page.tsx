@@ -6,6 +6,7 @@ import { PracticasAutorizacionSection } from '@/components/cirugia/practicas-aut
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import { generarCodigoBarras } from '@/modules/orden/types'
+import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
 
 export const metadata: Metadata = {
     title: 'Detalle Cirugia Programada',
@@ -141,7 +142,7 @@ export default async function CirugiaProgramadaDetallePage({ params }: CirugiaPr
                             <div className="space-y-1.5 text-sm">
                                 <p>
                                     <span className="text-gray-500">Fecha:</span>{' '}
-                                    {new Date(cirugia.fechaCirugia).toLocaleDateString('es-AR')}
+                                    {formatearFechaArgentina(cirugia.fechaCirugia)}
                                 </p>
                                 {cirugia.horaCirugia && (
                                     <p>

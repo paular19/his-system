@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Printer } from 'lucide-react'
 import { formatearFechaCalendario } from '@/lib/utils'
+import { formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 type PacientePrintData = {
     id: number
@@ -33,9 +34,9 @@ type IngresoPrintData = {
     fechaIngreso: Date | string | null
     fechaEgreso: Date | string | null
     fechaEgresoPrevista: Date | string | null
-    descripcionPatologia: string | null
-    descripcionPatologiaDefinitiva: string | null
-    observaciones: string | null
+    descripcionPatologia?: string | null
+    descripcionPatologiaDefinitiva?: string | null
+    observaciones?: string | null
     tipoIngreso: { descripcion: string | null } | null
     ingresoSubtipo: { subtipoAdmision: { descripcion: string | null } | null } | null
     profesionalGuardia: { nombre: string } | null
@@ -60,12 +61,12 @@ interface PacienteHospitalizacionPrintProps {
 
 function fmtFecha(v: Date | string | null | undefined) {
     if (!v) return '-'
-    return new Date(v).toLocaleDateString('es-AR')
+    return formatearFechaArgentina(v)
 }
 
 function fmtFechaHora(v: Date | string | null | undefined) {
     if (!v) return '-'
-    return new Date(v).toLocaleString('es-AR')
+    return formatearFechaHoraArgentina(v)
 }
 
 function labelSexo(sexo: string | null | undefined) {

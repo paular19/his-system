@@ -5,8 +5,12 @@ import React, { useState, useContext } from 'react';
 import { CirugiaContext } from './CirugiaForm';
 
 const AutorizacionCirugiaForm = () => {
-    const { numeroAutorizacion, setNumeroAutorizacion } = useContext(CirugiaContext);
+    const contexto = useContext(CirugiaContext);
     const [guardado, setGuardado] = useState(false);
+
+    if (!contexto) return null;
+
+    const { numeroAutorizacion, setNumeroAutorizacion } = contexto;
 
     const handleGuardar = () => {
         if (numeroAutorizacion.trim()) {

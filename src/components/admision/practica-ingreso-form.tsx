@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { Save, X, Loader2, Search } from 'lucide-react'
+import { X, Loader2, Search } from 'lucide-react'
 import { updateIngresoAction } from '@/modules/admision/actions'
 import type { IngresoDetalle } from '@/modules/admision/types'
 import {

@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { formatearFechaArgentina, formatearFechaHoraArgentina } from './argentina-date'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -50,12 +51,11 @@ export function fechaCalendarioAInput(fecha: FechaValor): string {
  */
 export function formatearFecha(fecha: Date | string | null | undefined): string {
   if (!fecha) return '-'
-  const d = typeof fecha === 'string' ? new Date(fecha) : fecha
-  return d.toLocaleDateString('es-AR', {
+  return formatearFechaArgentina(fecha, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
-  })
+  }).replace('—', '-')
 }
 
 /**
@@ -63,14 +63,13 @@ export function formatearFecha(fecha: Date | string | null | undefined): string 
  */
 export function formatearFechaHora(fecha: Date | string | null | undefined): string {
   if (!fecha) return '-'
-  const d = typeof fecha === 'string' ? new Date(fecha) : fecha
-  return d.toLocaleString('es-AR', {
+  return formatearFechaHoraArgentina(fecha, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  })
+  }).replace('—', '-')
 }
 
 /**

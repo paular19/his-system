@@ -6,6 +6,10 @@ import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { ChevronRight, History } from 'lucide-react'
 import type { Metadata } from 'next'
+import {
+  diferenciaDiasCalendarioArgentina,
+  formatearFechaArgentina,
+} from '@/lib/utils/argentina-date'
 
 export const metadata: Metadata = { title: 'Historial de Internaciones' }
 
@@ -59,8 +63,8 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
 
   const diasEstancia = (desde: Date | null, hasta: Date | null) => {
     if (!desde) return '—'
-    const fin = hasta ?? new Date()
-    const dias = Math.floor((fin.getTime() - desde.getTime()) / 86_400_000)
+    const dias = diferenciaDiasCalendarioArgentina(desde, hasta ?? new Date())
+    if (dias === null) return '—'
     return `${Math.max(0, dias)} d`
   }
 
@@ -152,13 +156,11 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
                           : '—'}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                        {ing.fechaIngreso
-                          ? new Date(ing.fechaIngreso).toLocaleDateString('es-AR')
-                          : '—'}
+                        {ing.fechaIngreso ? formatearFechaArgentina(ing.fechaIngreso) : '—'}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                         {ing.fechaEgreso
-                          ? new Date(ing.fechaEgreso).toLocaleDateString('es-AR')
+                          ? formatearFechaArgentina(ing.fechaEgreso)
                           : <span className="text-green-600 font-medium">En curso</span>}
                       </td>
                       <td className="px-4 py-3 text-center text-xs text-gray-600">

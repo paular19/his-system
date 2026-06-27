@@ -5,8 +5,6 @@ import { redirect, notFound } from 'next/navigation'
 import { obtenerIngreso } from '@/modules/admision/service'
 import type { Metadata } from 'next'
 import { FichaIngresoClient } from '@/components/admision/ficha-ingreso-client'
-import { FichaAdmisionPrint } from '@/components/admision/ficha-admision-print'
-import Link from 'next/link'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -65,27 +63,5 @@ export default async function FichaIngresoPage({ params }: PageProps) {
         puedeGenerarAutorizacion={puedeGenerarAutorizacion}
       />
     </>
-  )
-}
-
-function DataItem({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div>
-      <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</dt>
-      <dd className="mt-0.5 text-sm text-gray-900">{value ?? '-'}</dd>
-    </div>
-  )
-}
-
-// Inline client widget for adding a diagnosis — uses a hidden form + fetch
-function DiagnosticoInlineForm({ ingresoId }: { ingresoId: number }) {
-  // This is a server component; the actual interactive form is extracted to a client component
-  return (
-    <Link
-      href={`/dashboard/admision/${ingresoId}/diagnostico`}
-      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-    >
-      + Agregar diagnóstico
-    </Link>
   )
 }

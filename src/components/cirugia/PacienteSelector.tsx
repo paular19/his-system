@@ -3,11 +3,16 @@
 // Selector de paciente para cirugía programada
 import React, { useState, useContext } from 'react';
 import { CirugiaContext } from './CirugiaForm';
+import type { CirugiaPaciente } from './CirugiaForm';
 
 const PacienteSelector = () => {
-    const { paciente, setPaciente } = useContext(CirugiaContext);
+    const contexto = useContext(CirugiaContext);
     const [buscar, setBuscar] = useState('');
-    const [resultados, setResultados] = useState<any[]>([]);
+    const [resultados, setResultados] = useState<CirugiaPaciente[]>([]);
+
+    if (!contexto) return null;
+
+    const { paciente, setPaciente } = contexto;
 
     const handleBuscar = async (valor: string) => {
         setBuscar(valor);

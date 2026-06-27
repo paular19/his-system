@@ -23,7 +23,6 @@ const ESTADO_ICON: Record<string, React.ReactNode> = {
 export function MedicacionSection({
     ingresoId,
     medicaciones: medicacionesIniciales,
-    profesionales,
     puedeCrear,
     puedeModificar,
 }: MedicacionSectionProps) {

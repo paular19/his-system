@@ -2,7 +2,7 @@
 
 // Formulario para agregar prácticas del nomenclador
 import React, { useState, useContext } from 'react';
-import { z } from 'zod';
+import { ZodError } from 'zod';
 import { PracticaCirugiaSchema } from '@/modules/cirugia/schemas';
 import { CirugiaContext } from './CirugiaForm';
 
@@ -12,9 +12,13 @@ interface PracticaCirugia {
 }
 
 const PracticasCirugiaForm = () => {
-    const { practicas, setPracticas } = useContext(CirugiaContext);
+    const contexto = useContext(CirugiaContext);
     const [nueva, setNueva] = useState<PracticaCirugia>({ codigo: '', descripcion: '' });
     const [error, setError] = useState<string | null>(null);
+
+    if (!contexto) return null;
+
+    const { practicas, setPracticas } = contexto;
 
     const handleAdd = () => {
         try {
@@ -23,8 +27,12 @@ const PracticasCirugiaForm = () => {
             setPracticas([...practicas, practica]);
             setNueva({ codigo: '', descripcion: '' });
             setError(null);
-        } catch (e: any) {
-            setError(e.errors?.[0]?.message || 'Error en los datos');
+        } catch (e: unknown) {
+            if (e instanceof ZodError) {
+                setError(e.errors[0]?.message || 'Error en los datos');
+                return;
+            }
+            setError(e instanceof Error ? e.message : 'Error en los datos');
         }
     };
 

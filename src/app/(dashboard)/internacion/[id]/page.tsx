@@ -12,7 +12,6 @@ import { PracticaSection } from '@/components/internacion/practica-section'
 import { DiagnosticosSection } from '@/components/internacion/diagnosticos-section'
 import { TratanteSection } from '@/components/internacion/tratante-section'
 import { CirugiaUrgenciaSection } from '@/components/internacion/cirugia-urgencia-section'
-import { SECTOR_LABEL, ESTADO_CAMA_LABEL } from '@/modules/internacion/types'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
@@ -23,9 +22,14 @@ import {
     Calendar,
     FileText,
     Activity,
-    Printer,
 } from 'lucide-react'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
+import {
+    diferenciaDiasCalendarioArgentina,
+    formatearFechaArgentina,
+    formatearFechaHoraArgentina,
+} from '@/lib/utils/argentina-date'
+import { calcularEdad } from '@/lib/utils'
 
 interface PageProps {
     params: Promise<{ id: string }>
@@ -102,15 +106,21 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     }))
 
     const fmtDate = (d: Date | null | undefined) =>
-        d ? new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'
+        formatearFechaArgentina(d, { day: 'numeric', month: 'long', year: 'numeric' })
 
     const fmtDateTime = (d: Date | null | undefined) =>
-        d ? new Date(d).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+        formatearFechaHoraArgentina(d, {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        })
 
     const diasEstancia = () => {
         if (!detalle.fechaIngreso) return '—'
-        const fin = detalle.fechaEgreso ?? new Date()
-        const dias = Math.floor((fin.getTime() - new Date(detalle.fechaIngreso).getTime()) / 86_400_000)
+        const dias = diferenciaDiasCalendarioArgentina(detalle.fechaIngreso, detalle.fechaEgreso ?? new Date())
+        if (dias === null) return '—'
         return `${Math.max(0, dias)} días`
     }
 
@@ -122,11 +132,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const edad = () => {
         const fn = detalle.paciente?.fechaNacimiento
         if (!fn) return '—'
-        const hoy = new Date()
-        const nac = new Date(fn)
-        let a = hoy.getFullYear() - nac.getFullYear()
-        if (hoy < new Date(hoy.getFullYear(), nac.getMonth(), nac.getDate())) a--
-        return `${a} años`
+        const a = calcularEdad(fn)
+        return a === null ? '—' : `${a} años`
     }
 
     const camasDisponiblesConOcupante = camasDisponibles.map((c) => ({
@@ -282,7 +289,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                                 </span>
                                             </div>
                                             <p className="text-gray-400 mt-0.5">
-                                                {new Date(o.fechaEmision).toLocaleDateString('es-AR')} · {o.items.length} práctica(s)
+                                                {formatearFechaArgentina(o.fechaEmision)} · {o.items.length} práctica(s)
                                             </p>
                                         </div>
                                     ))}

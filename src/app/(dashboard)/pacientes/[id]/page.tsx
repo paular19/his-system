@@ -91,7 +91,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
       ...p,
       cantidad: Number(p.cantidad),
     })),
-  })) as any[]
+  }))
 
   const obraSocialPaciente = paciente.obraSocial ?? null
 

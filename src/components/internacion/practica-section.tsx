@@ -19,6 +19,7 @@ import {
     obtenerSubitemsSeleccionados,
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
+import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 
 interface NomencladorItem {
     convenioId: number
@@ -97,7 +98,7 @@ export function PracticaSection({
     })
 
     // Campos del form
-    const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 16))
+    const [fecha, setFecha] = useState(() => fechaHoraAInputLocal())
     const [cantidad, setCantidad] = useState('1')
     const [numeroAutorizacion, setNumeroAutorizacion] = useState('')
     const [matriculaEspecialista, setMatriculaEspecialista] = useState(
@@ -158,7 +159,7 @@ export function PracticaSection({
         setResultados([])
         setPracticaSeleccionada(null)
         setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
-        setFecha(new Date().toISOString().slice(0, 16))
+        setFecha(fechaHoraAInputLocal())
         setCantidad('1')
         setNumeroAutorizacion('')
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')

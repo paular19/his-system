@@ -4,7 +4,6 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { extraerIP } from '@/lib/security/audit'
 import {
   apiOk,
-  apiNoAutorizado,
   apiForbidden,
   apiNotFound,
   apiValidationError,

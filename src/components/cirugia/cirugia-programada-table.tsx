@@ -6,6 +6,7 @@ import type { CirugiaProgramadaListItem } from '@/modules/cirugia/types'
 import { PracticasAutorizacionSection } from '@/components/cirugia/practicas-autorizacion-section'
 import { ChevronDown, ChevronRight, Stethoscope } from 'lucide-react'
 import { Fragment } from 'react'
+import { claveDiaArgentina, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 
 interface CirugiaProgramadaTableProps {
     items: CirugiaProgramadaListItem[]
@@ -31,6 +32,8 @@ interface PreIngresoFormState {
 }
 
 function toLocalDateInput(value: Date | string): string {
+    const key = claveDiaArgentina(value)
+    if (key) return key
     const d = new Date(value)
     const y = d.getFullYear()
     const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -170,8 +173,8 @@ export function CirugiaProgramadaTable({ items }: CirugiaProgramadaTableProps) {
             return
         }
 
-        const fechaIngresoISO = new Date(`${form.fechaIngreso}T${form.horaIngreso}:00`).toISOString()
-        const fechaEgresoPrevistaISO = new Date(`${form.fechaEgresoPrevista}T00:00:00`).toISOString()
+        const fechaIngresoISO = new Date(`${form.fechaIngreso}T${form.horaIngreso}:00-03:00`).toISOString()
+        const fechaEgresoPrevistaISO = new Date(`${form.fechaEgresoPrevista}T12:00:00-03:00`).toISOString()
         const camaDestinoId = Number.parseInt(form.camaId, 10)
 
         if (!Number.isFinite(camaDestinoId) || camaDestinoId <= 0) {
@@ -280,7 +283,7 @@ export function CirugiaProgramadaTable({ items }: CirugiaProgramadaTableProps) {
                                     {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                 </td>
                                 <td className="px-4 py-3 text-gray-700">
-                                    {new Date(item.fechaCirugia).toLocaleDateString('es-AR')}
+                                    {formatearFechaArgentina(item.fechaCirugia)}
                                 </td>
                                 <td className="px-4 py-3 text-gray-700">{item.horaCirugia || '-'}</td>
                                 <td className="px-4 py-3">
@@ -394,7 +397,7 @@ export function CirugiaProgramadaTable({ items }: CirugiaProgramadaTableProps) {
                                             ) : item.internacionId ? (
                                                 <div className="mt-4 border-t pt-4">
                                                     <p className="text-xs text-amber-700">
-                                                        Esta cirugía está vinculada a un ingreso no tipificado como internación (INT), por eso no se puede abrir "Asignar cama" en esta fila.
+                                                        Esta cirugía está vinculada a un ingreso no tipificado como internación (INT), por eso no se puede abrir &quot;Asignar cama&quot; en esta fila.
                                                     </p>
                                                 </div>
                                             ) : null}

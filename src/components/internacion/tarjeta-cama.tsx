@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { BedDouble, User, Clock, Wrench } from 'lucide-react'
 import type { CamaConOcupante } from '@/modules/internacion/types'
+import { diferenciaDiasCalendarioArgentina } from '@/lib/utils/argentina-date'
 
 interface TarjetaCamaProps {
   cama: CamaConOcupante
@@ -29,8 +30,8 @@ const ESTADO_DOT: Record<string, string> = {
 
 function diasInternado(fechaIngreso: Date | null): string {
   if (!fechaIngreso) return ''
-  const dias = Math.floor((Date.now() - fechaIngreso.getTime()) / 86_400_000)
-  if (dias === 0) return 'Hoy'
+  const dias = diferenciaDiasCalendarioArgentina(fechaIngreso, new Date())
+  if (dias === null || dias <= 0) return 'Hoy'
   if (dias === 1) return '1 día'
   return `${dias} días`
 }

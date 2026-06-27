@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItemDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
 import { LoteResumenPrint } from './lote-resumen-print'
+import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 
 const ESTADO_LABEL: Record<string, { label: string; cls: string }> = {
     PEN: { label: 'Pendiente', cls: 'bg-yellow-100 text-yellow-800' },
@@ -146,7 +147,7 @@ function toDateTimeInput(value: Date | string | null | undefined): string {
     if (!value) return ''
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return ''
-    return date.toISOString().slice(0, 16)
+    return fechaHoraAInputLocal(date)
 }
 
 function keyOrdenItem(puestoNumero: number, ordenNumero: number, item: number): string {
@@ -218,7 +219,6 @@ export function LoteDetallePage({ loteId }: Props) {
     const [editandoPracticas, setEditandoPracticas] = useState(false)
     const [editItems, setEditItems] = useState<Record<string, OrdenItemEditState>>({})
     const [guardandoItemKey, setGuardandoItemKey] = useState<string | null>(null)
-    const [mostrarImpresion, setMostrarImpresion] = useState(false)
     const [mostrarConfirmPromedi, setMostrarConfirmPromedi] = useState(false)
     const [errorPromedi, setErrorPromedi] = useState('')
     const [filtroMedico, setFiltroMedico] = useState('')

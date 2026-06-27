@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { ArrowLeft, Search, History } from 'lucide-react'
 import type { Metadata } from 'next'
 import { PaginationControls } from '@/components/ui/pagination-controls'
+import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
 
 export const metadata: Metadata = { title: 'Historico de cirugias programadas' }
 
@@ -128,7 +129,7 @@ export default async function HistoricoCirugiaPage({ searchParams }: PageProps) 
                                         <tr key={item.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
                                             <td className="px-4 py-3 text-gray-700">
                                                 <Link href={`/dashboard/cirugia/${item.id}`} className="hover:underline">
-                                                    {new Date(item.fechaCirugia).toLocaleDateString('es-AR')}
+                                                    {formatearFechaArgentina(item.fechaCirugia)}
                                                 </Link>
                                             </td>
                                             <td className="px-4 py-3 text-gray-700">

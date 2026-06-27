@@ -22,6 +22,11 @@ import { InternacionFiltros } from '@/components/internacion/internacion-filtros
 import { InternacionFechaSelector } from '@/components/internacion/internacion-fecha-selector'
 import type { Metadata } from 'next'
 import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
+import {
+  claveDiaArgentina,
+  fechaDesdeClaveArgentina,
+  formatearFechaArgentina,
+} from '@/lib/utils/argentina-date'
 
 export const metadata: Metadata = { title: 'Internación — Mapa de Camas' }
 
@@ -33,26 +38,6 @@ interface PageProps {
   }>
 }
 
-const ARG_TIME_ZONE = 'America/Argentina/Buenos_Aires'
-
-function claveDiaArgentina(fecha: Date): string {
-  const partes = new Intl.DateTimeFormat('en-CA', {
-    timeZone: ARG_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(fecha)
-
-  const year = partes.find((p) => p.type === 'year')?.value ?? '0000'
-  const month = partes.find((p) => p.type === 'month')?.value ?? '01'
-  const day = partes.find((p) => p.type === 'day')?.value ?? '01'
-  return `${year}-${month}-${day}`
-}
-
-function fechaDesdeClaveArgentina(clave: string): Date {
-  return new Date(`${clave}T12:00:00-03:00`)
-}
-
 export default async function InternacionPage({ searchParams }: PageProps) {
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'INTERNACION', 'LEER')) redirect('/dashboard')
@@ -61,20 +46,18 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   const q = params.q?.trim() ?? ''
   const obraSocialId = params.obraSocialId ? Number(params.obraSocialId) : undefined
   const obraSocialIdFiltro = obraSocialId && Number.isFinite(obraSocialId) ? obraSocialId : undefined
-  const fechaHoyKey = claveDiaArgentina(new Date())
+  const fechaHoyKey = claveDiaArgentina(new Date()) ?? new Date().toISOString().slice(0, 10)
   const fechasDisponibles = Array.from({ length: 5 }, (_, idx) => {
     const fecha = new Date(Date.now() + idx * 86_400_000)
-    const key = claveDiaArgentina(fecha)
+    const key = claveDiaArgentina(fecha) ?? fechaHoyKey
     return {
       key,
-      labelCorta: fecha.toLocaleDateString('es-AR', {
-        timeZone: ARG_TIME_ZONE,
+      labelCorta: formatearFechaArgentina(fecha, {
         weekday: 'short',
         day: '2-digit',
         month: '2-digit',
       }),
-      labelLarga: fecha.toLocaleDateString('es-AR', {
-        timeZone: ARG_TIME_ZONE,
+      labelLarga: formatearFechaArgentina(fecha, {
         weekday: 'long',
         day: '2-digit',
         month: 'long',
@@ -90,7 +73,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   const fechaReferencia = fechaDesdeClaveArgentina(fechaSeleccionada)
   const fechaLabel =
     fechasDisponibles.find((f) => f.key === fechaSeleccionada)?.labelLarga ??
-    fechaReferencia.toLocaleDateString('es-AR', { timeZone: ARG_TIME_ZONE })
+    formatearFechaArgentina(fechaReferencia)
 
   const [mapa, internaciones, obrasSocialesRaw] = await Promise.all([
     obtenerMapaCamas(fechaReferencia),
@@ -343,7 +326,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                         {item.fechaIngreso ? (
                           <div className="flex items-center gap-1 text-gray-600">
                             <Calendar className="h-3.5 w-3.5" />
-                            {item.fechaIngreso.toLocaleDateString('es-AR')}
+                            {formatearFechaArgentina(item.fechaIngreso)}
                           </div>
                         ) : (
                           <span className="text-gray-400">—</span>
@@ -352,7 +335,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                       <td className="px-4 py-3 hidden lg:table-cell">
                         {item.fechaEgresoPrevista ? (
                           <span className="text-gray-600">
-                            {item.fechaEgresoPrevista.toLocaleDateString('es-AR')}
+                            {formatearFechaArgentina(item.fechaEgresoPrevista)}
                           </span>
                         ) : (
                           <span className="text-gray-400">—</span>

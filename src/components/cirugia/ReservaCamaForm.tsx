@@ -10,8 +10,12 @@ const camasMock = [
 ];
 
 const ReservaCamaForm = () => {
-    const { cama, setCama, fechaCirugia, setFechaCirugia } = useContext(CirugiaContext);
+    const contexto = useContext(CirugiaContext);
     const [guardado, setGuardado] = useState(false);
+
+    if (!contexto) return null;
+
+    const { cama, setCama, fechaCirugia, setFechaCirugia } = contexto;
 
     const handleGuardar = () => {
         if (cama && fechaCirugia) {
@@ -24,7 +28,7 @@ const ReservaCamaForm = () => {
         <div className="his-card p-4 mb-4">
             <h3 className="text-base font-semibold mb-2">Reserva de cama</h3>
             <div className="flex gap-2 mb-2">
-                <select value={cama?.id || ''} onChange={e => setCama(camasMock.find(c => c.id === Number(e.target.value)))} className="border rounded px-2 py-1 text-sm">
+                <select value={cama?.id || ''} onChange={e => setCama(camasMock.find(c => c.id === Number(e.target.value)) ?? null)} className="border rounded px-2 py-1 text-sm">
                     <option value="">Seleccionar cama</option>
                     {camasMock.map(cama => (
                         <option key={cama.id} value={cama.id}>{cama.identificador} - {cama.sector}</option>

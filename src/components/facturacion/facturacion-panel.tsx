@@ -15,6 +15,7 @@ import {
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { resumenDiferenciales } from '@/modules/facturacion/diferenciales'
 import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/practicas-subitems'
+import { fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 interface NomencladorItem {
     convenioId: number
@@ -76,7 +77,7 @@ function toDateInput(value: Date | string | null | undefined): string {
     if (!value) return ''
     const d = new Date(value)
     if (Number.isNaN(d.getTime())) return ''
-    return d.toISOString().slice(0, 16)
+    return fechaHoraAInputLocal(d)
 }
 
 function formatCurrency(value: number): string {
@@ -1476,8 +1477,8 @@ export function FacturacionPanel() {
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Convenio / Plan</span><div className="font-medium text-gray-900">{contexto.plan?.descripcion ?? '—'}</div></div>
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Coseguro</span><div className="font-medium text-gray-900">{contexto.obraSocialCoseguro?.nombre ?? 'Sin coseguro'}</div></div>
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Número afiliado</span>{editandoFicha ? (<input value={formNumeroAfiliado} onChange={(e) => setFormNumeroAfiliado(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1" />) : (<div className="font-medium text-gray-900">{formNumeroAfiliado || '—'}</div>)}</div>
-                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Ficha de ingreso</span><div className="font-medium text-gray-900">{contexto.ingreso.fechaIngreso ? new Date(contexto.ingreso.fechaIngreso).toLocaleString('es-AR') : '—'}</div></div>
-                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50 md:col-span-2"><span className="text-gray-500 text-xs">Ficha de egreso</span><div className="font-medium text-gray-900">{contexto.ingreso.fechaEgreso ? new Date(contexto.ingreso.fechaEgreso).toLocaleString('es-AR') : '—'}</div></div>
+                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Ficha de ingreso</span><div className="font-medium text-gray-900">{formatearFechaHoraArgentina(contexto.ingreso.fechaIngreso)}</div></div>
+                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50 md:col-span-2"><span className="text-gray-500 text-xs">Ficha de egreso</span><div className="font-medium text-gray-900">{formatearFechaHoraArgentina(contexto.ingreso.fechaEgreso)}</div></div>
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50 md:col-span-2"><span className="text-gray-500 text-xs">Regla de facturación aplicada</span><div className="font-medium text-gray-900">{contexto.reglaFacturacion.descripcion}</div></div>
                                 </div>
                             </div>

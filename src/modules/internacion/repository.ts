@@ -745,7 +745,7 @@ export async function crearPractica(
   usuario: string
 ): Promise<PracticaItem> {
   const codigo = data.codigoPractica.padEnd(8).slice(0, 8)
-  const cantidad = Number(data.cantidad)
+  const cantidad = 1
 
   // Preserve the exact component/subitem value chosen in UI when available.
   const importeBaseUnitario =

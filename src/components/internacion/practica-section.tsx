@@ -41,11 +41,6 @@ const formatoMoneda = new Intl.NumberFormat('es-AR', {
 const MATRICULA_ANESTESISTA_DEFAULT = 6
 const PRACTICAS_LISTA_POR_PAGINA = 8
 const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
-const CANTIDAD_PRACTICA_MAX = 20
-const CANTIDAD_PRACTICA_OPCIONES = Array.from(
-    { length: CANTIDAD_PRACTICA_MAX },
-    (_, index) => String(index + 1)
-)
 
 function normalizarBusquedaLista(value: string): string {
     return value
@@ -99,7 +94,6 @@ export function PracticaSection({
 
     // Campos del form
     const [fecha, setFecha] = useState(() => fechaHoraAInputLocal())
-    const [cantidad, setCantidad] = useState('1')
     const [numeroAutorizacion, setNumeroAutorizacion] = useState('')
     const [matriculaEspecialista, setMatriculaEspecialista] = useState(
         matriculaTratanteDefault ? String(matriculaTratanteDefault) : ''
@@ -160,7 +154,6 @@ export function PracticaSection({
         setPracticaSeleccionada(null)
         setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
         setFecha(fechaHoraAInputLocal())
-        setCantidad('1')
         setNumeroAutorizacion('')
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
         setMatriculaAnestesista(String(MATRICULA_ANESTESISTA_DEFAULT))
@@ -179,11 +172,6 @@ export function PracticaSection({
             return setError('Ingrese matrícula para honorario anestesista')
         }
 
-        const cantidadNumerica = Number.parseInt(cantidad, 10)
-        if (!Number.isFinite(cantidadNumerica) || cantidadNumerica < 1) {
-            return setError('Ingrese una cantidad válida (mínimo 1)')
-        }
-
         const requiereEspecialista = practicaSeleccionada?.valorEspecialista != null
         const requiereAnestesista = practicaSeleccionada?.valorAnestesista != null
 
@@ -192,7 +180,7 @@ export function PracticaSection({
             codigoPractica: practicaSeleccionada?.codigo ?? busqueda.trim().slice(0, 8).toUpperCase(),
             descripcionPractica: practicaSeleccionada?.descripcion ?? busqueda.trim(),
             fecha: new Date(fecha).toISOString(),
-            cantidad: cantidadNumerica,
+            cantidad: 1,
             numeroAutorizacion: numeroAutorizacion.trim() || null,
             matriculaEspecialista:
                 requiereEspecialista && matriculaEspecialista.trim()
@@ -523,6 +511,9 @@ export function PracticaSection({
                             <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
                                 Nueva práctica
                             </p>
+                            <p className="text-[11px] text-blue-800 bg-blue-100/70 border border-blue-200 rounded-md px-2.5 py-1.5">
+                                La cantidad general está deshabilitada. Cada registro se carga como un ítem individual.
+                            </p>
 
                             {/* Búsqueda nomenclador */}
                             <div className="relative">
@@ -590,7 +581,7 @@ export function PracticaSection({
                             )}
 
                             {/* Fecha */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 gap-3">
                                 <div>
                                     <label className="block text-xs text-gray-500 mb-1">Fecha y hora</label>
                                     <input
@@ -599,20 +590,6 @@ export function PracticaSection({
                                         onChange={(e) => setFecha(e.target.value)}
                                         className="his-input text-sm w-full"
                                     />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Cantidad</label>
-                                    <select
-                                        value={cantidad}
-                                        onChange={(e) => setCantidad(e.target.value)}
-                                        className="his-input text-sm w-full"
-                                    >
-                                        {CANTIDAD_PRACTICA_OPCIONES.map((opcion) => (
-                                            <option key={opcion} value={opcion}>
-                                                {opcion}
-                                            </option>
-                                        ))}
-                                    </select>
                                 </div>
                             </div>
 

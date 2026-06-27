@@ -10,6 +10,7 @@ import type { OrdenPracticaItemInput } from '@/modules/orden/schemas'
 import type { AdmisionOrdenContexto, NomencladorPracticaItem } from '@/modules/orden/types'
 import {
   ComponenteSelector,
+  calcularTotalSeleccionado,
   type ComponenteValores,
   type ComponenteSeleccion,
   seleccionPorDefecto,
@@ -99,47 +100,6 @@ function siguienteGrupoOrden(items: Array<{ grupoOrden: number }>): number {
     return Math.max(max, grupo)
   }, 0)
   return maxGrupo + 1
-}
-
-function crearSeleccionPorSubitem(codigo: SubitemCodigo): ComponenteSeleccion {
-  return {
-    especialista: codigo === 'HE' ? 1 : 0,
-    ayudante: codigo.startsWith('A') ? 1 : 0,
-    anestesista: codigo === 'HA' ? 1 : 0,
-    gastos: codigo === 'GA' ? 1 : 0,
-  }
-}
-
-function crearDesglosePorSubitem(
-  codigo: SubitemCodigo,
-  valores: {
-    valorEspecialista: number | null
-    valorAyudante: number | null
-    valorAnestesista: number | null
-    valorGastos: number | null
-  }
-): ItemPractica['desglose'] {
-  return {
-    valorEspecialista: codigo === 'HE' ? valores.valorEspecialista : null,
-    valorAyudante: codigo.startsWith('A') ? valores.valorAyudante : null,
-    valorAnestesista: codigo === 'HA' ? valores.valorAnestesista : null,
-    valorGastos: codigo === 'GA' ? valores.valorGastos : null,
-  }
-}
-
-function valorPorSubitem(
-  codigo: SubitemCodigo,
-  valores: {
-    valorEspecialista: number | null
-    valorAyudante: number | null
-    valorAnestesista: number | null
-    valorGastos: number | null
-  }
-): number | null {
-  if (codigo === 'HE') return valores.valorEspecialista
-  if (codigo === 'HA') return valores.valorAnestesista
-  if (codigo === 'GA') return valores.valorGastos
-  return valores.valorAyudante
 }
 
 function obtenerCodigosSubitemSeleccionados(seleccion: ComponenteSeleccion): SubitemCodigo[] {
@@ -319,6 +279,7 @@ export function ConsultaForm({
   const [modoGeneracion, setModoGeneracion] = useState<'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'>(modoInicial)
   const [tituloOrden] = useState('')
   const [estrategiaOrden, setEstrategiaOrden] = useState<EstrategiaOrden>('ESTANDAR')
+  const [desagruparSubitems, setDesagruparSubitems] = useState(false)
   const practicasPendientesIniciales = normalizarPracticasPorCantidad(
     (admisionInicial?.practicas ?? []).filter(esPracticaPendienteParaNuevaOrden)
   )
@@ -487,8 +448,8 @@ export function ConsultaForm({
       return
     }
 
-    if (esEstrategiaEstandar && modoGeneracion !== 'INDIVIDUAL') {
-      setModoGeneracion('INDIVIDUAL')
+    if (esEstrategiaEstandar && modoGeneracion !== 'MASIVA') {
+      setModoGeneracion('MASIVA')
     }
   }, [esEstrategiaEstandar, esEstrategiaGrupal, modoGeneracion])
 
@@ -574,31 +535,32 @@ export function ConsultaForm({
     }
 
     setPracticas((prev) => {
-      const primerGrupoDisponible = esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1
+      const grupoOrden = esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1
+      const totalSeleccionado = calcularTotalSeleccionado(valsPracticaPendiente, pendienteSeleccion)
+      const soloGastos = subitemsSeleccionados.every((codigo) => codigo === 'GA')
+      const nuevaPractica: ItemPractica = {
+        _key: `${practicaPendiente.convenioId}-${practicaPendiente.codigo}-${Date.now()}`,
+        fecha: new Date(),
+        convenioId: practicaPendiente.convenioId,
+        codigoPractica: practicaPendiente.codigo,
+        descripcionPractica: practicaPendiente.descripcion,
+        grupoOrden,
+        cantidad: 1,
+        tipoFacturacion: soloGastos ? 'D' : 'H',
+        importeTotal: totalSeleccionado > 0 ? totalSeleccionado : undefined,
+        valorUnitario: totalSeleccionado > 0 ? totalSeleccionado : null,
+        desglose: {
+          valorEspecialista: practicaPendiente.valorEspecialista,
+          valorAyudante: practicaPendiente.valorAyudante,
+          valorAnestesista: practicaPendiente.valorAnestesista,
+          valorGastos: practicaPendiente.valorGastos,
+        },
+        seleccionComponentes: pendienteSeleccion,
+        matriculaEspecialista: matriculasDefault.matriculaEspecialista,
+        matriculaAnestesista: matriculasDefault.matriculaAnestesista,
+      }
 
-      const nuevasPracticas = subitemsSeleccionados.map((subitemCodigo, idx) => {
-        const valorComponente = valorPorSubitem(subitemCodigo, valsPracticaPendiente)
-
-        return {
-          _key: `${practicaPendiente.convenioId}-${practicaPendiente.codigo}-${subitemCodigo}-${Date.now()}-${idx}`,
-          fecha: new Date(),
-          convenioId: practicaPendiente.convenioId,
-          codigoPractica: practicaPendiente.codigo,
-          descripcionPractica: practicaPendiente.descripcion,
-          grupoOrden: esEstrategiaGrupal ? primerGrupoDisponible + idx : 1,
-          cantidad: 1,
-          tipoFacturacion: subitemCodigo === 'GA' ? 'D' : 'H',
-          importeTotal: valorComponente != null && valorComponente > 0 ? valorComponente : undefined,
-          valorUnitario: valorComponente != null && valorComponente > 0 ? valorComponente : null,
-          desglose: crearDesglosePorSubitem(subitemCodigo, valsPracticaPendiente),
-          seleccionComponentes: crearSeleccionPorSubitem(subitemCodigo),
-          matriculaEspecialista: matriculasDefault.matriculaEspecialista,
-          matriculaAnestesista: matriculasDefault.matriculaAnestesista,
-          subitemCodigo,
-        } satisfies ItemPractica
-      })
-
-      return [...prev, ...nuevasPracticas]
+      return [...prev, nuevaPractica]
     })
 
     setPracticaPendiente(null)
@@ -1065,10 +1027,57 @@ export function ConsultaForm({
           }))
         }
 
-        // Modo INDIVIDUAL: generar componentes separados (no modular)
-        const componentes: OrdenPracticaItemInput[] = []
         const sel = p.seleccionComponentes
         const d = p.desglose
+
+        // Flujo estándar: por defecto mantener subitems agrupados en una sola línea.
+        if (!desagruparSubitems) {
+          const codigosSubitem = obtenerCodigosSubitemSeleccionados(sel)
+          const incluyeCodigo = Array.from(new Set(codigosSubitem)).join('+') || undefined
+          const importeUnitario = calcularTotalSeleccionado(
+            {
+              valorEspecialista: d?.valorEspecialista ?? null,
+              valorAyudante: d?.valorAyudante ?? null,
+              valorAnestesista: d?.valorAnestesista ?? null,
+              valorGastos: d?.valorGastos ?? null,
+              valorTotal: p.valorUnitario,
+            },
+            sel
+          )
+          const importeTotal =
+            importeUnitario > 0
+              ? importeUnitario * baseCantidad
+              : (p.valorUnitario != null ? p.valorUnitario * baseCantidad : p.importeTotal)
+
+          return [{
+            convenioId: p.convenioId,
+            codigoPractica: p.codigoPractica,
+            descripcionPractica: p.descripcionPractica,
+            cantidad: baseCantidad,
+            tipoFacturacion:
+              codigosSubitem.length > 0 && codigosSubitem.every((codigo) => codigo === 'GA')
+                ? 'D'
+                : 'H',
+            incluyeCodigo,
+            efectorMatricula: resolverEfectorMatricula(p, 'AGRUPADO', {
+              incluyeEspecialista: sel.especialista > 0,
+              incluyeAnestesista: sel.anestesista > 0,
+              incluyeAyudante: sel.ayudante > 0,
+              incluyeGastos: sel.gastos > 0,
+            }),
+            importeTotal,
+          }].map((it) => ({
+            ...it,
+            practicaId: p.practicaId,
+            fecha: p.fecha ? new Date(p.fecha) : undefined,
+            grupoOrden: p.grupoOrden,
+            titularModular: getTituloAplicadoPractica(p._key),
+            ...getDatosPatologiaPractica(p._key),
+          }))
+        }
+
+        // Con DESAGRUPAR activo: generar componentes en líneas separadas.
+        const componentes: OrdenPracticaItemInput[] = []
 
         if (sel.gastos > 0 && d?.valorGastos != null) {
           componentes.push({
@@ -1617,7 +1626,21 @@ export function ConsultaForm({
             Grupalidad
           </button>
         </div>
-        <p className="text-xs text-gray-500">Si no activás ninguna estrategia, queda el comportamiento estándar por defecto: una práctica/subitem por orden.</p>
+        {esEstrategiaEstandar && (
+          <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={desagruparSubitems}
+              onChange={(e) => setDesagruparSubitems(e.target.checked)}
+              className="rounded"
+            />
+            Desagrupar subitems (una línea por componente)
+          </label>
+        )}
+        <p className="text-xs text-gray-500">
+          Estándar: mantiene prácticas y subitems agrupados por defecto.
+          Activá Desagrupar para separarlos en líneas individuales.
+        </p>
 
         {esEstrategiaEstandar && (
           <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-700">

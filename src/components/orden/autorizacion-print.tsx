@@ -193,27 +193,21 @@ export function AutorizacionPrint({
     <>
       {/* Botón imprimir — oculto al imprimir */}
       {mostrarAcciones && (
-        <div className="no-print mb-4 space-y-2">
-          <div className="flex gap-3">
-            <button
-              onClick={() => window.print()}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Imprimir Autorización
-            </button>
-            <button
-              onClick={() => {
-                window.location.assign('/dashboard/admision')
-              }}
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Volver
-            </button>
-          </div>
-          <p className="text-xs text-gray-500">
-            Para quitar "Autorización", fecha/hora y número de página, desactivá la opción
-            "Encabezados y pies de página" en el cuadro de impresión del navegador.
-          </p>
+        <div className="no-print mb-4 flex gap-3">
+          <button
+            onClick={() => window.print()}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Imprimir Autorización
+          </button>
+          <button
+            onClick={() => {
+              window.location.assign('/dashboard/admision')
+            }}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Volver
+          </button>
         </div>
       )}
 

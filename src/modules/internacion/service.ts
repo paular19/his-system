@@ -4,6 +4,7 @@ import type {
   ActualizarCamaInput,
   BusquedaInternacionInput,
   ActualizarTratanteInternacionInput,
+  ActualizarObservacionesInternacionInput,
   CrearEvolucionInput,
   CrearMedicacionInput,
   ActualizarMedicacionInput,
@@ -135,6 +136,29 @@ export async function actualizarTratanteInternacion(
       direccionIp: ip,
     })
   }
+
+  return resultado
+}
+
+export async function actualizarObservacionesInternacion(
+  data: ActualizarObservacionesInternacionInput,
+  usuario: string,
+  ip?: string
+) {
+  const resultado = await repo.actualizarObservacionesInternacion(
+    data.ingresoId,
+    data.observaciones,
+    usuario
+  )
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'Ingreso',
+    registroId: data.ingresoId,
+    detalle: `Observaciones actualizadas en internación ${data.ingresoId}`,
+    direccionIp: ip,
+  })
 
   return resultado
 }

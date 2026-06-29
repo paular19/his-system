@@ -599,7 +599,6 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                 <tr>
                                     <th className="px-3 py-2 text-left">Código</th>
                                     <th className="px-3 py-2 text-left">Nueva práctica</th>
-                                    <th className="px-3 py-2 text-center">Cant.</th>
                                     <th className="px-3 py-2 text-left">Matrículas</th>
                                     <th className="px-3 py-2 w-10"></th>
                                 </tr>
@@ -609,26 +608,6 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                                     <tr key={p.tempId} className="bg-white">
                                         <td className="px-3 py-2 font-mono text-xs text-gray-600">{p.codigo.trim()}</td>
                                         <td className="px-3 py-2 text-gray-900">{p.descripcion}</td>
-                                        <td className="px-3 py-2">
-                                            <div className="flex justify-center">
-                                                <input
-                                                    type="number"
-                                                    min={1}
-                                                    value={p.cantidad}
-                                                    onChange={(e) => {
-                                                        const value = Number.parseInt(e.target.value, 10)
-                                                        const cantidad = Number.isFinite(value) && value > 0 ? value : 1
-                                                        setPracticasAgregar((prev) => prev.map((x) =>
-                                                            x.tempId === p.tempId
-                                                                ? { ...x, cantidad }
-                                                                : x
-                                                        ))
-                                                    }}
-                                                    className="w-16 rounded border border-gray-200 px-1 py-0.5 text-xs text-center"
-                                                    placeholder="Cant."
-                                                />
-                                            </div>
-                                        </td>
                                         <td className="px-3 py-2">
                                             <div className="flex flex-col gap-1">
                                                 {p.requiereMatriculaEspecialista && (

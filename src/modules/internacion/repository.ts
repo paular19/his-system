@@ -1331,6 +1331,39 @@ export async function transferirCama(
 // DIAGNOSTICOS / ALTA
 // ============================================
 
+export async function actualizarObservacionesInternacion(
+  ingresoId: number,
+  observaciones: string | null | undefined,
+  usuario: string
+): Promise<{ ingresoId: number; observaciones: string | null }> {
+  const ingreso = await prisma.ingreso.findUnique({
+    where: { id: ingresoId },
+    select: { id: true, tipoIngresoCodigo: true },
+  })
+
+  if (!ingreso || ingreso.tipoIngresoCodigo !== 'INT') {
+    throw new Error('Internacion no encontrada')
+  }
+
+  const actualizado = await prisma.ingreso.update({
+    where: { id: ingresoId },
+    data: {
+      observaciones: observaciones ?? null,
+      fechaEstado: new Date(),
+      usuario: usuario.slice(0, 10),
+    },
+    select: {
+      id: true,
+      observaciones: true,
+    },
+  })
+
+  return {
+    ingresoId: actualizado.id,
+    observaciones: actualizado.observaciones ?? null,
+  }
+}
+
 export async function actualizarDiagnosticoInternacion(
   data: ActualizarDiagnosticoInternacionInput,
   usuario: string

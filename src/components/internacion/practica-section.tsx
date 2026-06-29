@@ -16,6 +16,7 @@ import {
 import {
     esSubitemAnestesista,
     esSubitemEspecialista,
+    type SubitemCodigo,
     obtenerSubitemsSeleccionados,
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
@@ -41,6 +42,15 @@ const formatoMoneda = new Intl.NumberFormat('es-AR', {
 const MATRICULA_ANESTESISTA_DEFAULT = 6
 const PRACTICAS_LISTA_POR_PAGINA = 8
 const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
+
+function etiquetaSubitem(subitem: SubitemCodigo): string {
+    if (subitem === 'HE') return 'Honorario Especialista (HE)'
+    if (subitem === 'HA') return 'Honorario Anestesista (HA)'
+    if (subitem === 'GA') return 'Derechos/Gastos (GA)'
+    if (subitem === 'A1') return 'Ayudante 1 (A1)'
+    if (subitem === 'A2') return 'Ayudante 2 (A2)'
+    return 'Ayudante 3 (A3)'
+}
 
 function normalizarBusquedaLista(value: string): string {
     return value
@@ -229,6 +239,7 @@ export function PracticaSection({
 
                 return {
                     ...body,
+                    descripcionPractica: `${body.descripcionPractica} · ${etiquetaSubitem(subitem)}`,
                     cantidad: 1,
                     importeBaseUnitario: valorUnitario,
                     matriculaEspecialista: esSubitemEspecialista(subitem) ? body.matriculaEspecialista : null,
@@ -789,7 +800,6 @@ export function PracticaSection({
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-1 text-gray-500 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
-                                                    <span>Cant: {p.cantidad}</span>
                                                     {p.numeroAutorizacion && <span>Aut: {p.numeroAutorizacion}</span>}
                                                     <span
                                                         className={`px-1.5 py-0.5 rounded ${p.facturable
@@ -906,7 +916,6 @@ export function PracticaSection({
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-1 text-emerald-700 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
-                                                    <span>Cant: {p.cantidad}</span>
                                                     {ordenesOrdenadas.map((orden) => (
                                                             <Link
                                                                 key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}

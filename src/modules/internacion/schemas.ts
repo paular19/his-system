@@ -62,6 +62,13 @@ export const ActualizarTratanteInternacionSchema = z.object({
 
 export type ActualizarTratanteInternacionInput = z.infer<typeof ActualizarTratanteInternacionSchema>
 
+export const ActualizarObservacionesInternacionSchema = z.object({
+  ingresoId: z.number().int().positive(),
+  observaciones: z.string().max(5000).trim().optional().nullable(),
+})
+
+export type ActualizarObservacionesInternacionInput = z.infer<typeof ActualizarObservacionesInternacionSchema>
+
 // ============================================
 // EVOLUCIÓN CLÍNICA
 // ============================================

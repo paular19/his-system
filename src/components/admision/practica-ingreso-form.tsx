@@ -40,7 +40,6 @@ interface PracticaIngresoItem {
     codigo: string
     descripcion: string
     numeroAutorizacion: string
-    cantidad: number
     desglose: ComponenteValores
     seleccionComponentes: ComponenteSeleccion
     requiereMatriculaEspecialista: boolean
@@ -122,7 +121,6 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                 codigo: practica.codigo,
                 descripcion: practica.descripcion,
                 numeroAutorizacion: '',
-                cantidad: 1,
                 desglose: {
                     valorEspecialista: practica.valorEspecialista ?? null,
                     valorAyudante: practica.valorAyudante ?? null,
@@ -161,7 +159,6 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
         startTransition(async () => {
             try {
                 const practicasExpandida = practicas.flatMap((p) => {
-                    const cantidadNormalizada = Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1
                     const subitems = obtenerSubitemsSeleccionados(
                         {
                             valorEspecialista: p.desglose.valorEspecialista,
@@ -174,7 +171,7 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
 
                     if (subitems.length === 0) {
                         return [{
-                            cantidad: cantidadNormalizada,
+                            cantidad: 1,
                             convenioId: p.convenioId,
                             codigo: p.codigo.trim(),
                             descripcion: p.descripcion,
@@ -185,7 +182,6 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                             matriculaAnestesista: p.matriculaAnestesista,
                             importeTotal: Number((
                                 calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
-                                * cantidadNormalizada
                             ).toFixed(2)),
                         }]
                     }
@@ -291,30 +287,6 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                                     <div className="flex items-center gap-3">
                                         <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
                                         <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                            <label className="text-xs text-gray-500">Cant.</label>
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                value={p.cantidad}
-                                                onChange={(e) => {
-                                                    const value = Number.parseInt(e.target.value, 10)
-                                                    const cantidad = Number.isFinite(value) && value > 0 ? value : 1
-                                                    setPracticas((prev) =>
-                                                        prev.map((x) =>
-                                                            x._key === p._key
-                                                                ? {
-                                                                    ...x,
-                                                                    cantidad,
-                                                                }
-                                                                : x
-                                                        )
-                                                    )
-                                                }}
-                                                className="w-16 rounded border border-gray-300 px-2 py-1 text-xs"
-                                                placeholder="Cant."
-                                            />
-                                        </div>
                                         {permiteNumeroAutorizacionManual && (
                                             <input
                                                 type="text"

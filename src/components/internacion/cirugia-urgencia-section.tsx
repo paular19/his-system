@@ -14,6 +14,7 @@ import {
 import {
     esSubitemAnestesista,
     esSubitemEspecialista,
+    type SubitemCodigo,
     obtenerSubitemsSeleccionados,
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
@@ -59,7 +60,6 @@ type PracticaFormItem = {
     convenioId: number
     codigo: string
     descripcion: string
-    cantidad: number
     requiereMatriculaEspecialista: boolean
     requiereMatriculaAnestesista: boolean
     matriculaEspecialista: number | null
@@ -69,6 +69,15 @@ type PracticaFormItem = {
 }
 
 const MATRICULA_ANESTESISTA_DEFAULT = 6
+
+function etiquetaSubitem(subitem: SubitemCodigo): string {
+    if (subitem === 'HE') return 'Honorario Especialista (HE)'
+    if (subitem === 'HA') return 'Honorario Anestesista (HA)'
+    if (subitem === 'GA') return 'Derechos/Gastos (GA)'
+    if (subitem === 'A1') return 'Ayudante 1 (A1)'
+    if (subitem === 'A2') return 'Ayudante 2 (A2)'
+    return 'Ayudante 3 (A3)'
+}
 
 type CirugiaUrgenciaItem = {
     id: number
@@ -223,7 +232,6 @@ export function CirugiaUrgenciaSection({
                     convenioId: p.convenioId,
                     codigo: p.codigo.trim().slice(0, 50),
                     descripcion: p.descripcion,
-                    cantidad: 1,
                     requiereMatriculaEspecialista: Number(p.valorEspecialista ?? 0) > 0,
                     requiereMatriculaAnestesista: Number(p.valorAnestesista ?? 0) > 0,
                     matriculaEspecialista: matriculaTratanteDefault ?? null,
@@ -248,19 +256,6 @@ export function CirugiaUrgenciaSection({
 
         setResultadosPractica([])
         setTerminoBusquedaPractica('')
-    }
-
-    const actualizarCantidadPractica = (key: string, value: string) => {
-        setPracticas((prev) =>
-            prev.map((x) => {
-                if (x._key !== key) return x
-                const parsed = Number.parseInt(value, 10)
-                return {
-                    ...x,
-                    cantidad: Number.isFinite(parsed) && parsed > 0 ? parsed : 1,
-                }
-            })
-        )
     }
 
     const quitarPractica = (key: string) => {
@@ -309,7 +304,6 @@ export function CirugiaUrgenciaSection({
 
         try {
             const practicasExpandida = practicas.flatMap((p) => {
-                const cantidadNormalizada = Number.isFinite(p.cantidad) && p.cantidad > 0 ? Math.floor(p.cantidad) : 1
                 const subitems = obtenerSubitemsSeleccionados(
                     {
                         valorEspecialista: p.desglose.valorEspecialista,
@@ -325,11 +319,10 @@ export function CirugiaUrgenciaSection({
                         convenioId: p.convenioId,
                         codigo: p.codigo,
                         descripcion: p.descripcion,
-                        cantidad: cantidadNormalizada,
+                        cantidad: 1,
                         importeTotal: Number(
                             (
-                                calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) *
-                                cantidadNormalizada
+                                calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
                             ).toFixed(2)
                         ),
                         matriculaEspecialista:
@@ -350,7 +343,7 @@ export function CirugiaUrgenciaSection({
                     return {
                         convenioId: p.convenioId,
                         codigo: p.codigo,
-                        descripcion: p.descripcion,
+                        descripcion: `${p.descripcion} · ${etiquetaSubitem(subitem)}`,
                         cantidad: 1,
                         importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
                         matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
@@ -601,17 +594,6 @@ export function CirugiaUrgenciaSection({
                                                     <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
                                                     <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
 
-                                                    <input
-                                                        type="number"
-                                                        min={1}
-                                                        step={1}
-                                                        value={p.cantidad}
-                                                        onChange={(e) => actualizarCantidadPractica(p._key, e.target.value)}
-                                                        className="w-20 rounded border border-gray-300 px-2 py-1 text-xs"
-                                                        title="Cantidad"
-                                                        aria-label="Cantidad"
-                                                    />
-
                                                     {p.requiereMatriculaEspecialista && (
                                                         <input
                                                             type="number"
@@ -820,7 +802,7 @@ export function CirugiaUrgenciaSection({
                                         <ul className="text-xs text-gray-700 space-y-1">
                                             {c.practicas.map((p) => (
                                                 <li key={p.id}>
-                                                    {p.codigo} - {p.descripcion} · Cant: {p.cantidad}
+                                                    {p.codigo} - {p.descripcion}
                                                 </li>
                                             ))}
                                         </ul>

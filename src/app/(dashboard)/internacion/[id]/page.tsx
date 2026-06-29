@@ -12,6 +12,7 @@ import { PracticaSection } from '@/components/internacion/practica-section'
 import { DiagnosticosSection } from '@/components/internacion/diagnosticos-section'
 import { TratanteSection } from '@/components/internacion/tratante-section'
 import { CirugiaUrgenciaSection } from '@/components/internacion/cirugia-urgencia-section'
+import { ObservacionesSection } from '@/components/internacion/observaciones-section'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
@@ -245,15 +246,11 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             </dl>
                         </div>
 
-                        <div className="his-card p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                                <FileText className="h-4 w-4 text-gray-400" />
-                                <h3 className="text-sm font-semibold text-gray-900">Observaciones</h3>
-                            </div>
-                            <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
-                                {detalle.observaciones?.trim() ? detalle.observaciones : 'Sin observaciones'}
-                            </p>
-                        </div>
+                        <ObservacionesSection
+                            ingresoId={ingresoId}
+                            observacionesIniciales={detalle.observaciones ?? null}
+                            puedeModificar={puedeModificar}
+                        />
 
                         <DiagnosticosSection
                             ingresoId={ingresoId}

@@ -870,6 +870,7 @@ export function FichaIngresoClient({
                     refrescarDespuesCambios={false}
                     permitirGenerarSinPendientes={true}
                     incluirPracticaIdsEnGenerarAutorizacion={false}
+                    forzarNavegacionCompletaGenerarAutorizacion={true}
                 />
 
                 {false && (

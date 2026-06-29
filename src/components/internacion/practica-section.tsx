@@ -78,6 +78,7 @@ interface PracticaSectionProps {
     refrescarDespuesCambios?: boolean
     permitirGenerarSinPendientes?: boolean
     incluirPracticaIdsEnGenerarAutorizacion?: boolean
+    forzarNavegacionCompletaGenerarAutorizacion?: boolean
 }
 
 export function PracticaSection({
@@ -90,6 +91,7 @@ export function PracticaSection({
     refrescarDespuesCambios = true,
     permitirGenerarSinPendientes = false,
     incluirPracticaIdsEnGenerarAutorizacion = true,
+    forzarNavegacionCompletaGenerarAutorizacion = false,
 }: PracticaSectionProps) {
     const router = useRouter()
     const [practicas, setPracticas] = useState<PracticaItem[]>(practicasIniciales)
@@ -550,13 +552,23 @@ export function PracticaSection({
                 <div className="flex items-center gap-2">
                     {mostrarBotonGenerar && (
                         botonGenerarHabilitado ? (
-                            <Link
-                                href={hrefGenerarAutorizacion}
-                                className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 hover:bg-emerald-50"
-                            >
-                                <Plus className="h-3.5 w-3.5" />
-                                Generar autorización
-                            </Link>
+                            forzarNavegacionCompletaGenerarAutorizacion ? (
+                                <a
+                                    href={hrefGenerarAutorizacion}
+                                    className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 hover:bg-emerald-50"
+                                >
+                                    <Plus className="h-3.5 w-3.5" />
+                                    Generar autorización
+                                </a>
+                            ) : (
+                                <Link
+                                    href={hrefGenerarAutorizacion}
+                                    className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 hover:bg-emerald-50"
+                                >
+                                    <Plus className="h-3.5 w-3.5" />
+                                    Generar autorización
+                                </Link>
+                            )
                         ) : (
                             <button
                                 type="button"

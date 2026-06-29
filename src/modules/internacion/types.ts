@@ -220,6 +220,7 @@ export interface PracticaItem {
   descripcionPractica: string | null
   fecha: Date
   cantidad: number
+  importeTotal?: number | null
   numeroAutorizacion: string | null
   matriculaEspecialista?: number | null
   matriculaAnestesista?: number | null

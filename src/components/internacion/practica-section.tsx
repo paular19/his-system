@@ -113,6 +113,7 @@ export function PracticaSection({
     )
 
     const [guardando, setGuardando] = useState(false)
+    const [desagrupandoPracticaId, setDesagrupandoPracticaId] = useState<number | null>(null)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
@@ -228,8 +229,13 @@ export function PracticaSection({
             )
             : []
 
-        const entradasCrear = subitemsSeleccionados.length > 0 && practicaSeleccionada
-            ? subitemsSeleccionados.map((subitem) => {
+        const cantidadPorSubitem = new Map<SubitemCodigo, number>()
+        for (const subitem of subitemsSeleccionados) {
+            cantidadPorSubitem.set(subitem, (cantidadPorSubitem.get(subitem) ?? 0) + 1)
+        }
+
+        const entradasCrear = cantidadPorSubitem.size > 0 && practicaSeleccionada
+            ? Array.from(cantidadPorSubitem.entries()).map(([subitem, cantidadSubitem]) => {
                 const valorUnitario = valorUnitarioPorSubitem(subitem, {
                     valorEspecialista: practicaSeleccionada.valorEspecialista,
                     valorAyudante: practicaSeleccionada.valorAyudante,
@@ -240,7 +246,7 @@ export function PracticaSection({
                 return {
                     ...body,
                     descripcionPractica: `${body.descripcionPractica} · ${etiquetaSubitem(subitem)}`,
-                    cantidad: 1,
+                    cantidad: cantidadSubitem,
                     importeBaseUnitario: valorUnitario,
                     matriculaEspecialista: esSubitemEspecialista(subitem) ? body.matriculaEspecialista : null,
                     matriculaAnestesista: esSubitemAnestesista(subitem) ? body.matriculaAnestesista : null,
@@ -278,6 +284,38 @@ export function PracticaSection({
             setError('Error de conexión')
         } finally {
             setGuardando(false)
+        }
+    }
+
+    const handleDesagruparPractica = async (practicaId: number) => {
+        setError(null)
+        setDesagrupandoPracticaId(practicaId)
+        try {
+            const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaId}/desagrupar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store',
+            })
+
+            const json = await res.json().catch(() => null)
+            if (!res.ok) {
+                setError(json?.error ?? 'No se pudo desagrupar la práctica')
+                return
+            }
+
+            const practicasNuevas: PracticaItem[] = Array.isArray(json?.data) ? json.data : []
+            if (practicasNuevas.length > 0) {
+                setPracticas((prev) => {
+                    const restante = prev.filter((p) => p.id !== practicaId)
+                    return [...practicasNuevas, ...restante]
+                })
+            }
+
+            router.refresh()
+        } catch {
+            setError('Error de conexión al desagrupar la práctica')
+        } finally {
+            setDesagrupandoPracticaId(null)
         }
     }
 
@@ -800,6 +838,7 @@ export function PracticaSection({
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-1 text-gray-500 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
+                                                    {p.cantidad > 1 && <span>Cant: {p.cantidad}</span>}
                                                     {p.numeroAutorizacion && <span>Aut: {p.numeroAutorizacion}</span>}
                                                     <span
                                                         className={`px-1.5 py-0.5 rounded ${p.facturable
@@ -812,6 +851,16 @@ export function PracticaSection({
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
+                                                {puedeCrear && p.cantidad > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleDesagruparPractica(p.id)}
+                                                        disabled={desagrupandoPracticaId === p.id}
+                                                        className="rounded-md border border-blue-200 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                    >
+                                                        {desagrupandoPracticaId === p.id ? 'Desagrupando...' : 'Desagrupar'}
+                                                    </button>
+                                                )}
                                                 {p.estado && p.estado !== 'A' && (
                                                     <span className="text-gray-400">{p.estado}</span>
                                                 )}

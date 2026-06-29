@@ -443,6 +443,7 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
         codigoPractica: true,
         fecha: true,
         cantidad: true,
+        importeTotal: true,
         numeroAutorizacion: true,
         matriculaEspecialista: true,
         matriculaAnestesista: true,
@@ -536,13 +537,33 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
         convenioId: true,
         codigo: true,
         descripcion: true,
+        valorEspecialista: true,
+        valorAyudante: true,
+        valorAnestesista: true,
+        valorGastos: true,
       },
     })
     : []
 
   const descripcionPorClave = new Map<string, string>()
+  const componentesPorClave = new Map<
+    string,
+    {
+      valorEspecialista: number | null
+      valorAyudante: number | null
+      valorAnestesista: number | null
+      valorGastos: number | null
+    }
+  >()
   for (const row of nomencladorRows) {
-    descripcionPorClave.set(`${row.convenioId}:${row.codigo.trim()}`, row.descripcion)
+    const key = `${row.convenioId}:${row.codigo.trim()}`
+    descripcionPorClave.set(key, row.descripcion)
+    componentesPorClave.set(key, {
+      valorEspecialista: row.valorEspecialista != null ? Number(row.valorEspecialista) : null,
+      valorAyudante: row.valorAyudante != null ? Number(row.valorAyudante) : null,
+      valorAnestesista: row.valorAnestesista != null ? Number(row.valorAnestesista) : null,
+      valorGastos: row.valorGastos != null ? Number(row.valorGastos) : null,
+    })
   }
 
   const ordenesPracticaRows = practicaIds.length
@@ -636,9 +657,42 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
     practicas: practicasOrdenadas.map((p) => ({
       ...p,
       usuario: p.usuarioRegistro,
-      descripcionPractica:
-        descripcionPorClave.get(`${p.convenioId}:${p.codigoPractica.trim()}`) ?? p.codigoPractica.trim(),
+      descripcionPractica: (() => {
+        const key = `${p.convenioId}:${p.codigoPractica.trim()}`
+        const descripcionBase = descripcionPorClave.get(key) ?? p.codigoPractica.trim()
+        const componentes = componentesPorClave.get(key)
+        const cantidad = Number.isFinite(Number(p.cantidad)) && Number(p.cantidad) > 0
+          ? Math.floor(Number(p.cantidad))
+          : 1
+        const importeTotal = p.importeTotal != null ? Number(p.importeTotal) : null
+        const tieneMatriculaEspecialista =
+          p.matriculaEspecialista != null && Number(p.matriculaEspecialista) > 0
+        const tieneMatriculaAnestesista =
+          p.matriculaAnestesista != null && Number(p.matriculaAnestesista) > 0
+
+        let detalleSubitem: string | null = null
+        if (tieneMatriculaEspecialista && !tieneMatriculaAnestesista) {
+          detalleSubitem = 'Honorario Especialista (HE)'
+        } else if (tieneMatriculaAnestesista && !tieneMatriculaEspecialista) {
+          detalleSubitem = 'Honorario Anestesista (HA)'
+        } else if (!tieneMatriculaEspecialista && !tieneMatriculaAnestesista && importeTotal != null && componentes) {
+          const approx = (a: number, b: number) => Math.abs(a - b) < 0.01
+          const totalGastos =
+            componentes.valorGastos != null ? Number(componentes.valorGastos) * cantidad : null
+          const totalAyudante =
+            componentes.valorAyudante != null ? Number(componentes.valorAyudante) * cantidad : null
+
+          if (totalGastos != null && approx(importeTotal, totalGastos)) {
+            detalleSubitem = 'Derechos/Gastos (GA)'
+          } else if (totalAyudante != null && approx(importeTotal, totalAyudante)) {
+            detalleSubitem = 'Honorarios Ayudante'
+          }
+        }
+
+        return detalleSubitem ? `${descripcionBase} · ${detalleSubitem}` : descripcionBase
+      })(),
       cantidad: Number(p.cantidad),
+      importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
       ordenPractica:
         ((ordenesPracticaPorId.get(p.id) ?? []).length > 0
           ? (ordenesPracticaPorId.get(p.id) ?? [])
@@ -745,7 +799,9 @@ export async function crearPractica(
   usuario: string
 ): Promise<PracticaItem> {
   const codigo = data.codigoPractica.padEnd(8).slice(0, 8)
-  const cantidad = 1
+  const cantidad = Number.isFinite(Number(data.cantidad)) && Number(data.cantidad) > 0
+    ? Math.floor(Number(data.cantidad))
+    : 1
 
   // Preserve the exact component/subitem value chosen in UI when available.
   const importeBaseUnitario =
@@ -804,6 +860,7 @@ export async function crearPractica(
       matriculaEspecialista: true,
       matriculaAnestesista: true,
       facturable: true,
+      importeTotal: true,
       estado: true,
       usuarioRegistro: true,
       ordenPractica: {
@@ -821,6 +878,7 @@ export async function crearPractica(
     usuario: practica.usuarioRegistro,
     descripcionPractica: data.descripcionPractica ?? null,
     cantidad: Number(practica.cantidad),
+    importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : null,
     matriculaEspecialista: practica.matriculaEspecialista,
     matriculaAnestesista: practica.matriculaAnestesista,
     ordenPractica: Array.isArray(practica.ordenPractica)
@@ -832,6 +890,186 @@ export async function crearPractica(
       }))
       : [],
   } as PracticaItem
+}
+
+export async function desagruparPracticaNoAutorizada(
+  ingresoId: number,
+  practicaId: number,
+  usuario: string
+): Promise<PracticaItem[]> {
+  return prisma.$transaction(async (tx) => {
+    const practica = await tx.practica.findFirst({
+      where: {
+        id: practicaId,
+        ingresoId,
+      },
+      select: {
+        id: true,
+        ingresoId: true,
+        convenioId: true,
+        codigoPractica: true,
+        convenioValorId: true,
+        fecha: true,
+        cantidad: true,
+        numeroAutorizacion: true,
+        matriculaEspecialista: true,
+        matriculaAnestesista: true,
+        obraSocialId: true,
+        planId: true,
+        facturable: true,
+        motivoNoFactura: true,
+        importeTotal: true,
+        puestoNumero: true,
+        ordenNumero: true,
+        ordenItem: true,
+        estado: true,
+        usuarioRegistro: true,
+        fechaUsuario: true,
+        ordenPractica: {
+          where: {
+            orden: {
+              NOT: { estado: 'X' },
+            },
+          },
+          select: {
+            puestoNumero: true,
+            ordenNumero: true,
+            item: true,
+          },
+        },
+      },
+    })
+
+    if (!practica) {
+      throw new Error('Práctica no encontrada')
+    }
+
+    const estadoActual = (practica.estado ?? '').trim().toUpperCase()
+    if (estadoActual === 'X') {
+      throw new Error('No se puede desagrupar una práctica anulada')
+    }
+
+    if ((practica.ordenPractica?.length ?? 0) > 0) {
+      throw new Error('No se puede desagrupar una práctica que ya tiene una orden/autorización asociada')
+    }
+
+    if (normalizarNumeroAutorizacion(practica.numeroAutorizacion) != null) {
+      throw new Error('No se puede desagrupar una práctica que ya tiene número de autorización')
+    }
+
+    const cantidadActual = Number.isFinite(Number(practica.cantidad)) && Number(practica.cantidad) > 0
+      ? Math.floor(Number(practica.cantidad))
+      : 1
+
+    if (cantidadActual <= 1) {
+      throw new Error('La práctica ya está desagrupada')
+    }
+
+    const importeUnitario =
+      practica.importeTotal != null
+        ? Number((Number(practica.importeTotal) / cantidadActual).toFixed(2))
+        : null
+
+    const actualizado = await tx.practica.update({
+      where: { id: practica.id },
+      data: {
+        cantidad: 1,
+        importeTotal: importeUnitario,
+        usuarioRegistro: usuario.slice(0, 10),
+        fechaUsuario: new Date(),
+      },
+      select: {
+        id: true,
+        ingresoId: true,
+        convenioId: true,
+        codigoPractica: true,
+        fecha: true,
+        cantidad: true,
+        numeroAutorizacion: true,
+        matriculaEspecialista: true,
+        matriculaAnestesista: true,
+        facturable: true,
+        importeTotal: true,
+        estado: true,
+        usuarioRegistro: true,
+        ordenPractica: {
+          select: {
+            puestoNumero: true,
+            ordenNumero: true,
+            item: true,
+            numeroAutorizacion: true,
+          },
+        },
+      },
+    })
+
+    const creadas: Array<typeof actualizado> = []
+    for (let i = 1; i < cantidadActual; i += 1) {
+      const creada = await tx.practica.create({
+        data: {
+          ingresoId: practica.ingresoId,
+          convenioId: practica.convenioId,
+          codigoPractica: practica.codigoPractica,
+          convenioValorId: practica.convenioValorId,
+          fecha: practica.fecha,
+          cantidad: 1,
+          numeroAutorizacion: null,
+          matriculaEspecialista: practica.matriculaEspecialista,
+          matriculaAnestesista: practica.matriculaAnestesista,
+          obraSocialId: practica.obraSocialId,
+          planId: practica.planId,
+          facturable: practica.facturable,
+          motivoNoFactura: practica.motivoNoFactura,
+          importeTotal: importeUnitario,
+          estado: practica.estado,
+          usuarioRegistro: usuario.slice(0, 10),
+          fechaUsuario: new Date(),
+        },
+        select: {
+          id: true,
+          ingresoId: true,
+          convenioId: true,
+          codigoPractica: true,
+          fecha: true,
+          cantidad: true,
+          numeroAutorizacion: true,
+          matriculaEspecialista: true,
+          matriculaAnestesista: true,
+          facturable: true,
+          importeTotal: true,
+          estado: true,
+          usuarioRegistro: true,
+          ordenPractica: {
+            select: {
+              puestoNumero: true,
+              ordenNumero: true,
+              item: true,
+              numeroAutorizacion: true,
+            },
+          },
+        },
+      })
+      creadas.push(creada)
+    }
+
+    return [actualizado, ...creadas].map((row) => ({
+      ...row,
+      usuario: row.usuarioRegistro,
+      descripcionPractica: null,
+      cantidad: Number(row.cantidad),
+      importeTotal: row.importeTotal != null ? Number(row.importeTotal) : null,
+      matriculaEspecialista: row.matriculaEspecialista,
+      matriculaAnestesista: row.matriculaAnestesista,
+      ordenPractica: Array.isArray(row.ordenPractica)
+        ? row.ordenPractica.map((op) => ({
+          puestoNumero: op.puestoNumero,
+          ordenNumero: op.ordenNumero,
+          item: op.item,
+          numeroAutorizacion: op.numeroAutorizacion,
+        }))
+        : [],
+    })) as PracticaItem[]
+  })
 }
 
 export async function eliminarPracticaNoAutorizada(

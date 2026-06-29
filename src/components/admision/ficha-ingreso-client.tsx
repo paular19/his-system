@@ -192,22 +192,7 @@ export function FichaIngresoClient({
         ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
             ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
         )
-    const practicasParaSeccion: PracticaItem[] = practicasIngreso.map((p) => ({
-        id: p.id,
-        ingresoId: ingreso.id,
-        convenioId: p.convenioId,
-        codigoPractica: p.codigoPractica,
-        descripcionPractica: p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim(),
-        fecha: p.fecha,
-        cantidad: p.cantidad,
-        numeroAutorizacion: p.numeroAutorizacion,
-        matriculaEspecialista: p.matriculaEspecialista ?? null,
-        matriculaAnestesista: p.matriculaAnestesista ?? null,
-        ordenPractica: p.ordenPractica,
-        facturable: true,
-        estado: 'A',
-        usuario: '',
-    }))
+    const practicasParaSeccion = practicasIngreso as unknown as PracticaItem[]
 
     const toDateInputValue = (value: Date | string | null | undefined) => {
         if (!value) return ''
@@ -879,7 +864,7 @@ export function FichaIngresoClient({
                     ingresoId={ingreso.id}
                     convenioId={ingreso.obraSocialId ?? null}
                     practicas={practicasParaSeccion}
-                    puedeCrear={puedeModificar}
+                    puedeCrear={puedeModificar || puedeAgregarDiagnostico}
                     matriculaTratanteDefault={profesionalTratanteMatricula}
                     puedeGenerarAutorizacion={puedeGenerarAutorizacion}
                     refrescarDespuesCambios={false}

@@ -44,13 +44,19 @@ export type IngresoDetalle = IngresoConRelaciones & {
   }>
   practicas: Array<{
     id: number
+    ingresoId: number
     convenioId: number
     codigoPractica: string
+    descripcionPractica: string | null
     cantidad: number
     fecha: Date
+    importeTotal?: number | null
     numeroAutorizacion: string | null
     matriculaEspecialista?: number | null
     matriculaAnestesista?: number | null
+    facturable: boolean
+    estado: string | null
+    usuario: string
     puestoNumero?: number | null
     ordenNumero?: number | null
     ordenItem?: number | null

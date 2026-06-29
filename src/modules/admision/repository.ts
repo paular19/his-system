@@ -16,6 +16,77 @@ import type { ResultadoPaginado } from '@/types'
 // Única capa de acceso a datos. Sin SQL directo.
 // ============================================
 
+type ComponentesPractica = {
+  valorEspecialista: number | null
+  valorAyudante: number | null
+  valorAnestesista: number | null
+  valorGastos: number | null
+}
+
+function resolverDetalleSubitemPractica(params: {
+  matriculaEspecialista: number | null | undefined
+  matriculaAnestesista: number | null | undefined
+  importeTotal: number | null | undefined
+  cantidad: number
+  componentes?: ComponentesPractica | null
+}): string | null {
+  const {
+    matriculaEspecialista,
+    matriculaAnestesista,
+    importeTotal,
+    cantidad,
+    componentes,
+  } = params
+
+  const tieneMatriculaEspecialista =
+    matriculaEspecialista != null && Number(matriculaEspecialista) > 0
+  const tieneMatriculaAnestesista =
+    matriculaAnestesista != null && Number(matriculaAnestesista) > 0
+
+  if (tieneMatriculaEspecialista && !tieneMatriculaAnestesista) {
+    return 'Honorario Especialista (HE)'
+  }
+
+  if (tieneMatriculaAnestesista && !tieneMatriculaEspecialista) {
+    return 'Honorario Anestesista (HA)'
+  }
+
+  if (
+    !tieneMatriculaEspecialista &&
+    !tieneMatriculaAnestesista &&
+    importeTotal != null &&
+    componentes
+  ) {
+    const approx = (a: number, b: number) => Math.abs(a - b) < 0.01
+    const totalGastos =
+      componentes.valorGastos != null ? Number(componentes.valorGastos) * cantidad : null
+    const totalAyudante =
+      componentes.valorAyudante != null ? Number(componentes.valorAyudante) * cantidad : null
+
+    if (totalGastos != null && approx(importeTotal, totalGastos)) {
+      return 'Derechos/Gastos (GA)'
+    }
+
+    if (totalAyudante != null && approx(importeTotal, totalAyudante)) {
+      return 'Honorarios Ayudante'
+    }
+  }
+
+  return null
+}
+
+function construirDescripcionPractica(params: {
+  descripcionBase: string
+  matriculaEspecialista: number | null | undefined
+  matriculaAnestesista: number | null | undefined
+  importeTotal: number | null | undefined
+  cantidad: number
+  componentes?: ComponentesPractica | null
+}): string {
+  const detalleSubitem = resolverDetalleSubitemPractica(params)
+  return detalleSubitem ? `${params.descripcionBase} · ${detalleSubitem}` : params.descripcionBase
+}
+
 const incluirRelacionesBase = {
   paciente: true,
   tipoIngreso: true,
@@ -279,16 +350,21 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
       },
       select: {
         id: true,
+        ingresoId: true,
         convenioId: true,
         codigoPractica: true,
         cantidad: true,
         fecha: true,
+        importeTotal: true,
         numeroAutorizacion: true,
         matriculaEspecialista: true,
         matriculaAnestesista: true,
         puestoNumero: true,
         ordenNumero: true,
         ordenItem: true,
+        facturable: true,
+        estado: true,
+        usuarioRegistro: true,
       },
     }),
   ])
@@ -325,13 +401,25 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
         convenioId: true,
         codigo: true,
         descripcion: true,
+        valorEspecialista: true,
+        valorAyudante: true,
+        valorAnestesista: true,
+        valorGastos: true,
       },
     })
     : []
 
   const descripcionPorClave = new Map<string, string>()
+  const componentesPorClave = new Map<string, ComponentesPractica>()
   for (const row of nomencladorRows) {
-    descripcionPorClave.set(`${row.convenioId}:${row.codigo.trim()}`, row.descripcion)
+    const key = `${row.convenioId}:${row.codigo.trim()}`
+    descripcionPorClave.set(key, row.descripcion)
+    componentesPorClave.set(key, {
+      valorEspecialista: row.valorEspecialista != null ? Number(row.valorEspecialista) : null,
+      valorAyudante: row.valorAyudante != null ? Number(row.valorAyudante) : null,
+      valorAnestesista: row.valorAnestesista != null ? Number(row.valorAnestesista) : null,
+      valorGastos: row.valorGastos != null ? Number(row.valorGastos) : null,
+    })
   }
 
   const ordenesPracticaPorId = new Map<
@@ -354,6 +442,26 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
   const practicas = practicasOrdenadas.map((p) => ({
     ...p,
     cantidad: Number(p.cantidad),
+    importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
+    usuario: p.usuarioRegistro,
+    descripcionPractica: (() => {
+      const key = `${p.convenioId}:${p.codigoPractica.trim()}`
+      const descripcionBase = descripcionPorClave.get(key) ?? p.codigoPractica.trim()
+      const componentes = componentesPorClave.get(key) ?? null
+      const cantidad = Number.isFinite(Number(p.cantidad)) && Number(p.cantidad) > 0
+        ? Math.floor(Number(p.cantidad))
+        : 1
+      const importeTotal = p.importeTotal != null ? Number(p.importeTotal) : null
+
+      return construirDescripcionPractica({
+        descripcionBase,
+        matriculaEspecialista: p.matriculaEspecialista,
+        matriculaAnestesista: p.matriculaAnestesista,
+        importeTotal,
+        cantidad,
+        componentes,
+      })
+    })(),
     ordenPractica: ordenesPracticaPorId.get(p.id) ?? [],
     nomencladorPractica:
       descripcionPorClave.get(`${p.convenioId}:${p.codigoPractica.trim()}`)

@@ -76,6 +76,7 @@ interface PracticaSectionProps {
     matriculaTratanteDefault?: number | null
     puedeGenerarAutorizacion?: boolean
     refrescarDespuesCambios?: boolean
+    permitirGenerarSinPendientes?: boolean
 }
 
 export function PracticaSection({
@@ -86,6 +87,7 @@ export function PracticaSection({
     matriculaTratanteDefault,
     puedeGenerarAutorizacion,
     refrescarDespuesCambios = true,
+    permitirGenerarSinPendientes = false,
 }: PracticaSectionProps) {
     const router = useRouter()
     const [practicas, setPracticas] = useState<PracticaItem[]>(practicasIniciales)
@@ -458,7 +460,9 @@ export function PracticaSection({
         return `/dashboard/ambulatorio/nueva?${params.toString()}`
     }, [ingresoId, practicasPendientes])
     const mostrarBotonGenerar = (puedeGenerarAutorizacion ?? puedeCrear) && practicas.length > 0
-    const botonGenerarHabilitado = practicasPendientes.length > 0
+    const botonGenerarHabilitado = permitirGenerarSinPendientes
+        ? practicasVigentes.length > 0
+        : practicasPendientes.length > 0
 
     useEffect(() => {
         setPracticasSeleccionadas((prev) => prev.filter((id) => practicas.some((p) => p.id === id && (p.ordenPractica?.length ?? 0) === 0)))

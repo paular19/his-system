@@ -868,6 +868,7 @@ export function FichaIngresoClient({
                     matriculaTratanteDefault={profesionalTratanteMatricula}
                     puedeGenerarAutorizacion={puedeGenerarAutorizacion}
                     refrescarDespuesCambios={false}
+                    permitirGenerarSinPendientes={true}
                 />
 
                 {false && (

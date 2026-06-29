@@ -75,6 +75,77 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
   return normalized.length > 0 ? normalized : null
 }
 
+type ComponentesPractica = {
+  valorEspecialista: number | null
+  valorAyudante: number | null
+  valorAnestesista: number | null
+  valorGastos: number | null
+}
+
+function resolverDetalleSubitemPractica(params: {
+  matriculaEspecialista: number | null | undefined
+  matriculaAnestesista: number | null | undefined
+  importeTotal: number | null | undefined
+  cantidad: number
+  componentes?: ComponentesPractica | null
+}): string | null {
+  const {
+    matriculaEspecialista,
+    matriculaAnestesista,
+    importeTotal,
+    cantidad,
+    componentes,
+  } = params
+
+  const tieneMatriculaEspecialista =
+    matriculaEspecialista != null && Number(matriculaEspecialista) > 0
+  const tieneMatriculaAnestesista =
+    matriculaAnestesista != null && Number(matriculaAnestesista) > 0
+
+  if (tieneMatriculaEspecialista && !tieneMatriculaAnestesista) {
+    return 'Honorario Especialista (HE)'
+  }
+
+  if (tieneMatriculaAnestesista && !tieneMatriculaEspecialista) {
+    return 'Honorario Anestesista (HA)'
+  }
+
+  if (
+    !tieneMatriculaEspecialista &&
+    !tieneMatriculaAnestesista &&
+    importeTotal != null &&
+    componentes
+  ) {
+    const approx = (a: number, b: number) => Math.abs(a - b) < 0.01
+    const totalGastos =
+      componentes.valorGastos != null ? Number(componentes.valorGastos) * cantidad : null
+    const totalAyudante =
+      componentes.valorAyudante != null ? Number(componentes.valorAyudante) * cantidad : null
+
+    if (totalGastos != null && approx(importeTotal, totalGastos)) {
+      return 'Derechos/Gastos (GA)'
+    }
+
+    if (totalAyudante != null && approx(importeTotal, totalAyudante)) {
+      return 'Honorarios Ayudante'
+    }
+  }
+
+  return null
+}
+
+function construirDescripcionPractica(params: {
+  descripcionBase: string
+  matriculaEspecialista: number | null | undefined
+  matriculaAnestesista: number | null | undefined
+  importeTotal: number | null | undefined
+  cantidad: number
+  componentes?: ComponentesPractica | null
+}): string {
+  const detalleSubitem = resolverDetalleSubitemPractica(params)
+  return detalleSubitem ? `${params.descripcionBase} · ${detalleSubitem}` : params.descripcionBase
+}
+
 function ingresoActivoParaMapa(fechaIngreso: Date | null | undefined, fechaReferencia: Date): boolean {
   if (!fechaIngreso) return false
   return claveDiaArgentina(fechaIngreso) <= claveDiaArgentina(fechaReferencia)
@@ -660,36 +731,20 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
       descripcionPractica: (() => {
         const key = `${p.convenioId}:${p.codigoPractica.trim()}`
         const descripcionBase = descripcionPorClave.get(key) ?? p.codigoPractica.trim()
-        const componentes = componentesPorClave.get(key)
+        const componentes = componentesPorClave.get(key) ?? null
         const cantidad = Number.isFinite(Number(p.cantidad)) && Number(p.cantidad) > 0
           ? Math.floor(Number(p.cantidad))
           : 1
         const importeTotal = p.importeTotal != null ? Number(p.importeTotal) : null
-        const tieneMatriculaEspecialista =
-          p.matriculaEspecialista != null && Number(p.matriculaEspecialista) > 0
-        const tieneMatriculaAnestesista =
-          p.matriculaAnestesista != null && Number(p.matriculaAnestesista) > 0
 
-        let detalleSubitem: string | null = null
-        if (tieneMatriculaEspecialista && !tieneMatriculaAnestesista) {
-          detalleSubitem = 'Honorario Especialista (HE)'
-        } else if (tieneMatriculaAnestesista && !tieneMatriculaEspecialista) {
-          detalleSubitem = 'Honorario Anestesista (HA)'
-        } else if (!tieneMatriculaEspecialista && !tieneMatriculaAnestesista && importeTotal != null && componentes) {
-          const approx = (a: number, b: number) => Math.abs(a - b) < 0.01
-          const totalGastos =
-            componentes.valorGastos != null ? Number(componentes.valorGastos) * cantidad : null
-          const totalAyudante =
-            componentes.valorAyudante != null ? Number(componentes.valorAyudante) * cantidad : null
-
-          if (totalGastos != null && approx(importeTotal, totalGastos)) {
-            detalleSubitem = 'Derechos/Gastos (GA)'
-          } else if (totalAyudante != null && approx(importeTotal, totalAyudante)) {
-            detalleSubitem = 'Honorarios Ayudante'
-          }
-        }
-
-        return detalleSubitem ? `${descripcionBase} · ${detalleSubitem}` : descripcionBase
+        return construirDescripcionPractica({
+          descripcionBase,
+          matriculaEspecialista: p.matriculaEspecialista,
+          matriculaAnestesista: p.matriculaAnestesista,
+          importeTotal,
+          cantidad,
+          componentes,
+        })
       })(),
       cantidad: Number(p.cantidad),
       importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
@@ -965,6 +1020,35 @@ export async function desagruparPracticaNoAutorizada(
       throw new Error('La práctica ya está desagrupada')
     }
 
+    const codigoPracticaTrim = practica.codigoPractica.trim()
+    const nomenclador = await tx.nomencladorPractica.findFirst({
+      where: {
+        convenioId: practica.convenioId,
+        codigo: codigoPracticaTrim,
+      },
+      select: {
+        descripcion: true,
+        valorEspecialista: true,
+        valorAyudante: true,
+        valorAnestesista: true,
+        valorGastos: true,
+      },
+    })
+
+    const descripcionBase = nomenclador?.descripcion ?? codigoPracticaTrim
+    const componentes: ComponentesPractica | null = nomenclador
+      ? {
+        valorEspecialista:
+            nomenclador.valorEspecialista != null ? Number(nomenclador.valorEspecialista) : null,
+        valorAyudante:
+            nomenclador.valorAyudante != null ? Number(nomenclador.valorAyudante) : null,
+        valorAnestesista:
+            nomenclador.valorAnestesista != null ? Number(nomenclador.valorAnestesista) : null,
+        valorGastos:
+            nomenclador.valorGastos != null ? Number(nomenclador.valorGastos) : null,
+      }
+      : null
+
     const importeUnitario =
       practica.importeTotal != null
         ? Number((Number(practica.importeTotal) / cantidadActual).toFixed(2))
@@ -1055,7 +1139,14 @@ export async function desagruparPracticaNoAutorizada(
     return [actualizado, ...creadas].map((row) => ({
       ...row,
       usuario: row.usuarioRegistro,
-      descripcionPractica: null,
+      descripcionPractica: construirDescripcionPractica({
+        descripcionBase,
+        matriculaEspecialista: row.matriculaEspecialista,
+        matriculaAnestesista: row.matriculaAnestesista,
+        importeTotal: row.importeTotal != null ? Number(row.importeTotal) : null,
+        cantidad: Number(row.cantidad),
+        componentes,
+      }),
       cantidad: Number(row.cantidad),
       importeTotal: row.importeTotal != null ? Number(row.importeTotal) : null,
       matriculaEspecialista: row.matriculaEspecialista,

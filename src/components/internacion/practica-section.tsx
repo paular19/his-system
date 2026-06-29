@@ -290,6 +290,7 @@ export function PracticaSection({
     const handleDesagruparPractica = async (practicaId: number) => {
         setError(null)
         setDesagrupandoPracticaId(practicaId)
+        const descripcionOriginal = practicas.find((p) => p.id === practicaId)?.descripcionPractica ?? null
         try {
             const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaId}/desagrupar`, {
                 method: 'POST',
@@ -303,7 +304,12 @@ export function PracticaSection({
                 return
             }
 
-            const practicasNuevas: PracticaItem[] = Array.isArray(json?.data) ? json.data : []
+            const practicasNuevas: PracticaItem[] = Array.isArray(json?.data)
+                ? (json.data as PracticaItem[]).map((p) => ({
+                    ...p,
+                    descripcionPractica: p.descripcionPractica ?? descripcionOriginal ?? p.codigoPractica.trim(),
+                }))
+                : []
             if (practicasNuevas.length > 0) {
                 setPracticas((prev) => {
                     const restante = prev.filter((p) => p.id !== practicaId)

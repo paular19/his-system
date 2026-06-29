@@ -17,7 +17,13 @@ import { formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 export const metadata: Metadata = { title: 'Nueva Autorización' }
 
 interface PageProps {
-  searchParams: Promise<{ pacienteId?: string; q?: string; ingresoId?: string; modo?: string }>
+  searchParams: Promise<{
+    pacienteId?: string
+    q?: string
+    ingresoId?: string
+    modo?: string
+    practicaIds?: string
+  }>
 }
 
 export default async function NuevaAutorizacionPage({ searchParams }: PageProps) {
@@ -47,6 +53,21 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
   const ingresoId = params.ingresoId ? parseInt(params.ingresoId, 10) : NaN
   const tieneIngresoId = Number.isFinite(ingresoId) && ingresoId > 0
   const modoInicial = params.modo === 'AGRUPADA' ? 'AGRUPADA' : params.modo === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'MASIVA'
+  const practicaIdsIniciales = (() => {
+    const raw = params.practicaIds?.trim()
+    if (!raw) return null
+
+    const ids = Array.from(
+      new Set(
+        raw
+          .split(',')
+          .map((value) => parseInt(value, 10))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      )
+    )
+
+    return ids.length > 0 ? ids : null
+  })()
 
   const [admisiones, admisionSeleccionada] = await Promise.all([
     q.length >= 2 ? buscarAdmisionesActivasPorPaciente(q) : Promise.resolve([]),
@@ -185,6 +206,7 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
             admisionInicial={admisionSeleccionada}
             usuario={usuario.codigoUsuario}
             modoInicial={modoInicial}
+            practicaIdsIniciales={practicaIdsIniciales}
           />
         )}
       </div>

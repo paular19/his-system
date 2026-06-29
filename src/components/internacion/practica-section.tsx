@@ -439,6 +439,12 @@ export function PracticaSection({
     const practicasAutorizadas = practicasVigentes.filter(
         (p) => (p.ordenPractica?.length ?? 0) > 0 || numeroAutorizacionValida(p.numeroAutorizacion)
     )
+    const hrefGenerarAutorizacion = useMemo(() => {
+        const params = new URLSearchParams({ ingresoId: String(ingresoId) })
+        const idsPendientes = practicasPendientes.map((p) => p.id).join(',')
+        if (idsPendientes) params.set('practicaIds', idsPendientes)
+        return `/dashboard/ambulatorio/nueva?${params.toString()}`
+    }, [ingresoId, practicasPendientes])
     const mostrarBotonGenerar = puedeCrear && practicas.length > 0
     const botonGenerarHabilitado = practicasPendientes.length > 0
 
@@ -525,7 +531,7 @@ export function PracticaSection({
                     {mostrarBotonGenerar && (
                         botonGenerarHabilitado ? (
                             <Link
-                                href={`/dashboard/ambulatorio/nueva?ingresoId=${ingresoId}`}
+                                href={hrefGenerarAutorizacion}
                                 className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 hover:bg-emerald-50"
                             >
                                 <Plus className="h-3.5 w-3.5" />

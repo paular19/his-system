@@ -36,6 +36,7 @@ interface ConsultaFormProps {
   profesionales: ProfesionalItem[]
   pacienteInicial?: PacienteResumen | null
   admisionInicial?: AdmisionOrdenContexto | null
+  practicaIdsIniciales?: number[] | null
   usuario: string
   modoInicial?: 'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'
 }
@@ -294,6 +295,7 @@ export function ConsultaForm({
   profesionales,
   pacienteInicial,
   admisionInicial,
+  practicaIdsIniciales,
   modoInicial = 'MASIVA',
 }: ConsultaFormProps) {
   const router = useRouter()
@@ -322,8 +324,15 @@ export function ConsultaForm({
   const [tituloOrden] = useState('')
   const [estrategiaOrden, setEstrategiaOrden] = useState<EstrategiaOrden>('ESTANDAR')
   const [desagruparSubitems, setDesagruparSubitems] = useState(false)
+  const practicasBaseIniciales = (() => {
+    const practicas = admisionInicial?.practicas ?? []
+    if (!practicaIdsIniciales || practicaIdsIniciales.length === 0) return practicas
+
+    const idsPermitidos = new Set(practicaIdsIniciales)
+    return practicas.filter((practica) => idsPermitidos.has(practica.id))
+  })()
   const practicasPendientesIniciales = normalizarPracticasPorCantidad(
-    (admisionInicial?.practicas ?? []).filter(esPracticaPendienteParaNuevaOrden)
+    practicasBaseIniciales.filter(esPracticaPendienteParaNuevaOrden)
   )
   const [practicas, setPracticas] = useState<ItemPractica[]>(
     practicasPendientesIniciales.map((p, idx) => {

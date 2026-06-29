@@ -869,6 +869,7 @@ export function FichaIngresoClient({
                     puedeGenerarAutorizacion={puedeGenerarAutorizacion}
                     refrescarDespuesCambios={false}
                     permitirGenerarSinPendientes={true}
+                    incluirPracticaIdsEnGenerarAutorizacion={false}
                 />
 
                 {false && (

@@ -77,6 +77,7 @@ interface PracticaSectionProps {
     puedeGenerarAutorizacion?: boolean
     refrescarDespuesCambios?: boolean
     permitirGenerarSinPendientes?: boolean
+    incluirPracticaIdsEnGenerarAutorizacion?: boolean
 }
 
 export function PracticaSection({
@@ -88,6 +89,7 @@ export function PracticaSection({
     puedeGenerarAutorizacion,
     refrescarDespuesCambios = true,
     permitirGenerarSinPendientes = false,
+    incluirPracticaIdsEnGenerarAutorizacion = true,
 }: PracticaSectionProps) {
     const router = useRouter()
     const [practicas, setPracticas] = useState<PracticaItem[]>(practicasIniciales)
@@ -455,10 +457,12 @@ export function PracticaSection({
     )
     const hrefGenerarAutorizacion = useMemo(() => {
         const params = new URLSearchParams({ ingresoId: String(ingresoId) })
-        const idsPendientes = practicasPendientes.map((p) => p.id).join(',')
-        if (idsPendientes) params.set('practicaIds', idsPendientes)
+        if (incluirPracticaIdsEnGenerarAutorizacion) {
+            const idsPendientes = practicasPendientes.map((p) => p.id).join(',')
+            if (idsPendientes) params.set('practicaIds', idsPendientes)
+        }
         return `/dashboard/ambulatorio/nueva?${params.toString()}`
-    }, [ingresoId, practicasPendientes])
+    }, [ingresoId, incluirPracticaIdsEnGenerarAutorizacion, practicasPendientes])
     const mostrarBotonGenerar = (puedeGenerarAutorizacion ?? puedeCrear) && practicas.length > 0
     const botonGenerarHabilitado = permitirGenerarSinPendientes
         ? practicasVigentes.length > 0

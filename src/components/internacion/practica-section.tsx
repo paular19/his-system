@@ -74,6 +74,8 @@ interface PracticaSectionProps {
     practicas: PracticaItem[]
     puedeCrear: boolean
     matriculaTratanteDefault?: number | null
+    puedeGenerarAutorizacion?: boolean
+    refrescarDespuesCambios?: boolean
 }
 
 export function PracticaSection({
@@ -82,6 +84,8 @@ export function PracticaSection({
     practicas: practicasIniciales,
     puedeCrear,
     matriculaTratanteDefault,
+    puedeGenerarAutorizacion,
+    refrescarDespuesCambios = true,
 }: PracticaSectionProps) {
     const router = useRouter()
     const [practicas, setPracticas] = useState<PracticaItem[]>(practicasIniciales)
@@ -268,7 +272,9 @@ export function PracticaSection({
                 if (!res.ok) {
                     if (practicasCreadas.length > 0) {
                         setPracticas((prev) => [...practicasCreadas, ...prev])
-                        router.refresh()
+                        if (refrescarDespuesCambios) {
+                            router.refresh()
+                        }
                     }
                     setError(json.error ?? 'Error al registrar la práctica')
                     return
@@ -277,7 +283,9 @@ export function PracticaSection({
             }
 
             setPracticas((prev) => [...practicasCreadas, ...prev])
-            router.refresh()
+            if (refrescarDespuesCambios) {
+                router.refresh()
+            }
             limpiarForm()
             setMostrarForm(false)
         } catch {
@@ -317,7 +325,9 @@ export function PracticaSection({
                 })
             }
 
-            router.refresh()
+            if (refrescarDespuesCambios) {
+                router.refresh()
+            }
         } catch {
             setError('Error de conexión al desagrupar la práctica')
         } finally {
@@ -412,7 +422,9 @@ export function PracticaSection({
             if (exitosas.length > 0) {
                 setPracticas((prev) => prev.filter((p) => !exitosas.includes(p.id)))
                 setPracticasSeleccionadas((prev) => prev.filter((id) => !exitosas.includes(id)))
-                router.refresh()
+                if (refrescarDespuesCambios) {
+                    router.refresh()
+                }
             }
 
             if (fallidas.length === 0) {
@@ -445,7 +457,7 @@ export function PracticaSection({
         if (idsPendientes) params.set('practicaIds', idsPendientes)
         return `/dashboard/ambulatorio/nueva?${params.toString()}`
     }, [ingresoId, practicasPendientes])
-    const mostrarBotonGenerar = puedeCrear && practicas.length > 0
+    const mostrarBotonGenerar = (puedeGenerarAutorizacion ?? puedeCrear) && practicas.length > 0
     const botonGenerarHabilitado = practicasPendientes.length > 0
 
     useEffect(() => {

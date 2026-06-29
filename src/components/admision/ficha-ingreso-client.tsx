@@ -13,6 +13,8 @@ import { AdmisionEditForm } from './admision-edit-form'
 import { FichaAdmisionPrint } from './ficha-admision-print'
 import { PracticaIngresoForm } from './practica-ingreso-form'
 import type { IngresoDetalle } from '@/modules/admision/types'
+import { PracticaSection } from '@/components/internacion/practica-section'
+import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 
@@ -190,6 +192,22 @@ export function FichaIngresoClient({
         ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
             ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
         )
+    const practicasParaSeccion: PracticaItem[] = practicasIngreso.map((p) => ({
+        id: p.id,
+        ingresoId: ingreso.id,
+        convenioId: p.convenioId,
+        codigoPractica: p.codigoPractica,
+        descripcionPractica: p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim(),
+        fecha: p.fecha,
+        cantidad: p.cantidad,
+        numeroAutorizacion: p.numeroAutorizacion,
+        matriculaEspecialista: p.matriculaEspecialista ?? null,
+        matriculaAnestesista: p.matriculaAnestesista ?? null,
+        ordenPractica: p.ordenPractica,
+        facturable: true,
+        estado: 'A',
+        usuario: '',
+    }))
 
     const toDateInputValue = (value: Date | string | null | undefined) => {
         if (!value) return ''
@@ -857,6 +875,17 @@ export function FichaIngresoClient({
                 </div>
 
                 {/* Prácticas realizadas */}
+                <PracticaSection
+                    ingresoId={ingreso.id}
+                    convenioId={ingreso.obraSocialId ?? null}
+                    practicas={practicasParaSeccion}
+                    puedeCrear={puedeModificar}
+                    matriculaTratanteDefault={profesionalTratanteMatricula}
+                    puedeGenerarAutorizacion={puedeGenerarAutorizacion}
+                    refrescarDespuesCambios={false}
+                />
+
+                {false && (
                 <div className="his-card p-5">
                     <div className="flex items-center justify-between mb-3 pb-2 border-b gap-3 flex-wrap">
                         <h3 className="text-sm font-semibold text-gray-700">Prácticas realizadas</h3>
@@ -1231,6 +1260,7 @@ export function FichaIngresoClient({
                         </div>
                     )}
                 </div>
+                )}
 
                 {/* Observaciones */}
                 {observacionesLimpias && (

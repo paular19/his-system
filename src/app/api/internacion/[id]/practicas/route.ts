@@ -15,7 +15,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         const usuario = await getUsuarioSesion()
         const puedeCrear =
             tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||
-            tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')
+            tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+            tienePermiso(usuario.rol, 'ADMISION', 'CREAR') ||
+            tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')
         if (!puedeCrear) {
             return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
         }

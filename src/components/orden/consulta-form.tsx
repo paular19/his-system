@@ -130,6 +130,48 @@ function obtenerCodigosSubitemSeleccionados(seleccion: ComponenteSeleccion): Sub
   return subitems
 }
 
+function valorUnitarioPorSubitemCodigo(
+  desglose: {
+    valorEspecialista: number | null
+    valorAyudante: number | null
+    valorAnestesista: number | null
+    valorGastos: number | null
+  },
+  codigo: SubitemCodigo
+): number | null {
+  if (codigo === 'GA') return desglose.valorGastos != null ? Number(desglose.valorGastos) : null
+  if (codigo === 'HE') return desglose.valorEspecialista != null ? Number(desglose.valorEspecialista) : null
+  if (codigo === 'HA') return desglose.valorAnestesista != null ? Number(desglose.valorAnestesista) : null
+  return desglose.valorAyudante != null ? Number(desglose.valorAyudante) : null
+}
+
+function seleccionParaSubitem(codigo: SubitemCodigo, cantidad: number): ComponenteSeleccion {
+  const cantidadNormalizada = Number.isFinite(cantidad) && cantidad > 0 ? Math.floor(cantidad) : 1
+  const base: ComponenteSeleccion = { especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }
+
+  if (codigo === 'GA') return { ...base, gastos: cantidadNormalizada }
+  if (codigo === 'HE') return { ...base, especialista: cantidadNormalizada }
+  if (codigo === 'HA') return { ...base, anestesista: cantidadNormalizada }
+
+  const ayudante = codigo === 'A1' ? 1 : codigo === 'A2' ? 2 : 3
+  return { ...base, ayudante }
+}
+
+function sonLineasSubitemCompatibles(a: ItemPractica, b: ItemPractica): boolean {
+  if (!a.subitemCodigo || !b.subitemCodigo) return false
+
+  return (
+    a.subitemCodigo === b.subitemCodigo &&
+    a.convenioId === b.convenioId &&
+    a.codigoPractica === b.codigoPractica &&
+    a.descripcionPractica === b.descripcionPractica &&
+    (a.practicaId ?? null) === (b.practicaId ?? null) &&
+    a.grupoOrden === b.grupoOrden &&
+    (a.matriculaEspecialista ?? null) === (b.matriculaEspecialista ?? null) &&
+    (a.matriculaAnestesista ?? null) === (b.matriculaAnestesista ?? null)
+  )
+}
+
 function inferirSeleccionDesdeImporte(
   desglose: {
     valorEspecialista: number | null
@@ -536,31 +578,81 @@ export function ConsultaForm({
 
     setPracticas((prev) => {
       const grupoOrden = esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1
-      const totalSeleccionado = calcularTotalSeleccionado(valsPracticaPendiente, pendienteSeleccion)
-      const soloGastos = subitemsSeleccionados.every((codigo) => codigo === 'GA')
-      const nuevaPractica: ItemPractica = {
-        _key: `${practicaPendiente.convenioId}-${practicaPendiente.codigo}-${Date.now()}`,
-        fecha: new Date(),
-        convenioId: practicaPendiente.convenioId,
-        codigoPractica: practicaPendiente.codigo,
-        descripcionPractica: practicaPendiente.descripcion,
-        grupoOrden,
-        cantidad: 1,
-        tipoFacturacion: soloGastos ? 'D' : 'H',
-        importeTotal: totalSeleccionado > 0 ? totalSeleccionado : undefined,
-        valorUnitario: totalSeleccionado > 0 ? totalSeleccionado : null,
-        desglose: {
-          valorEspecialista: practicaPendiente.valorEspecialista,
-          valorAyudante: practicaPendiente.valorAyudante,
-          valorAnestesista: practicaPendiente.valorAnestesista,
-          valorGastos: practicaPendiente.valorGastos,
-        },
-        seleccionComponentes: pendienteSeleccion,
-        matriculaEspecialista: matriculasDefault.matriculaEspecialista,
-        matriculaAnestesista: matriculasDefault.matriculaAnestesista,
-      }
+      const conteoPorSubitem = new Map<SubitemCodigo, number>()
+      subitemsSeleccionados.forEach((codigo) => {
+        conteoPorSubitem.set(codigo, (conteoPorSubitem.get(codigo) ?? 0) + 1)
+      })
 
-      return [...prev, nuevaPractica]
+      const nuevasLineas: ItemPractica[] = Array.from(conteoPorSubitem.entries()).map(
+        ([codigo, cantidadSubitem], idx) => {
+          const valorUnitario = valorUnitarioPorSubitemCodigo(valsPracticaPendiente, codigo)
+          const importeTotal =
+            valorUnitario != null ? Number((valorUnitario * cantidadSubitem).toFixed(2)) : undefined
+
+          return {
+            _key: `${practicaPendiente.convenioId}-${practicaPendiente.codigo}-${codigo}-${Date.now()}-${idx}`,
+            fecha: new Date(),
+            convenioId: practicaPendiente.convenioId,
+            codigoPractica: practicaPendiente.codigo,
+            descripcionPractica: practicaPendiente.descripcion,
+            grupoOrden,
+            cantidad: cantidadSubitem,
+            tipoFacturacion: codigo === 'GA' ? 'D' : 'H',
+            importeTotal,
+            valorUnitario,
+            desglose: {
+              valorEspecialista: practicaPendiente.valorEspecialista,
+              valorAyudante: practicaPendiente.valorAyudante,
+              valorAnestesista: practicaPendiente.valorAnestesista,
+              valorGastos: practicaPendiente.valorGastos,
+            },
+            seleccionComponentes: seleccionParaSubitem(codigo, cantidadSubitem),
+            matriculaEspecialista:
+              codigo === 'HE' ? matriculasDefault.matriculaEspecialista : null,
+            matriculaAnestesista:
+              codigo === 'HA' ? matriculasDefault.matriculaAnestesista : null,
+            subitemCodigo: codigo,
+          }
+        }
+      )
+
+      const next = [...prev]
+      nuevasLineas.forEach((lineaNueva) => {
+        const idxExistente = next.findIndex((lineaExistente) =>
+          sonLineasSubitemCompatibles(lineaExistente, lineaNueva)
+        )
+
+        if (idxExistente === -1) {
+          next.push(lineaNueva)
+          return
+        }
+
+        const existente = next[idxExistente]!
+        const cantidadActual = Number.isFinite(existente.cantidad) && existente.cantidad > 0
+          ? Math.floor(existente.cantidad)
+          : 1
+        const cantidadNueva = cantidadActual + lineaNueva.cantidad
+        const valorUnitario = existente.valorUnitario != null
+          ? Number(existente.valorUnitario)
+          : lineaNueva.valorUnitario != null
+            ? Number(lineaNueva.valorUnitario)
+            : null
+
+        next[idxExistente] = {
+          ...existente,
+          cantidad: cantidadNueva,
+          valorUnitario,
+          importeTotal:
+            valorUnitario != null
+              ? Number((valorUnitario * cantidadNueva).toFixed(2))
+              : existente.importeTotal,
+          seleccionComponentes: existente.subitemCodigo
+            ? seleccionParaSubitem(existente.subitemCodigo, cantidadNueva)
+            : existente.seleccionComponentes,
+        }
+      })
+
+      return next
     })
 
     setPracticaPendiente(null)
@@ -629,10 +721,45 @@ export function ConsultaForm({
             ...p,
             cantidad,
             importeTotal: p.valorUnitario != null ? p.valorUnitario * cantidad : p.importeTotal,
+            seleccionComponentes: p.subitemCodigo
+              ? seleccionParaSubitem(p.subitemCodigo, cantidad)
+              : p.seleccionComponentes,
           }
           : p
       )
     )
+  }
+
+  const desagruparLineaSubitem = (key: string) => {
+    setPracticas((prev) => {
+      const idx = prev.findIndex((p) => p._key === key)
+      if (idx === -1) return prev
+
+      const linea = prev[idx]!
+      if (!linea.subitemCodigo) return prev
+
+      const cantidad = Number.isFinite(linea.cantidad) && linea.cantidad > 1
+        ? Math.floor(linea.cantidad)
+        : 1
+      if (cantidad <= 1) return prev
+
+      const valorUnitario = linea.valorUnitario != null
+        ? Number(linea.valorUnitario)
+        : linea.importeTotal != null
+          ? Number(linea.importeTotal) / cantidad
+          : null
+
+      const lineasSeparadas: ItemPractica[] = Array.from({ length: cantidad }, (_, pos) => ({
+        ...linea,
+        _key: `${linea._key}-split-${Date.now()}-${pos}`,
+        cantidad: 1,
+        valorUnitario,
+        importeTotal: valorUnitario != null ? Number(valorUnitario.toFixed(2)) : linea.importeTotal,
+        seleccionComponentes: seleccionParaSubitem(linea.subitemCodigo!, 1),
+      }))
+
+      return [...prev.slice(0, idx), ...lineasSeparadas, ...prev.slice(idx + 1)]
+    })
   }
 
   const agregarMedicacionComoPractica = (med: NonNullable<AdmisionOrdenContexto['medicaciones']>[number]) => {
@@ -1553,17 +1680,28 @@ export function ConsultaForm({
                         {obtenerSubitemsSeleccionados(p).join(' + ')}
                       </td>
                       <td className="px-3 py-2 text-center text-gray-600">
-                        <input
-                          type="number"
-                          min={1}
-                          value={p.cantidad}
-                          onChange={(e) => {
-                            const cantidad = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
-                            actualizarCantidad(p._key, cantidad)
-                          }}
-                          className="w-16 rounded border border-gray-200 px-2 py-1 text-xs text-center"
-                          title="Cantidad"
-                        />
+                        <div className="flex flex-col items-center gap-1">
+                          <input
+                            type="number"
+                            min={1}
+                            value={p.cantidad}
+                            onChange={(e) => {
+                              const cantidad = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                              actualizarCantidad(p._key, cantidad)
+                            }}
+                            className="w-16 rounded border border-gray-200 px-2 py-1 text-xs text-center"
+                            title="Cantidad"
+                          />
+                          {p.subitemCodigo && p.cantidad > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => desagruparLineaSubitem(p._key)}
+                              className="text-[10px] font-medium text-blue-600 hover:text-blue-700"
+                            >
+                              Desagrupar
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-center text-gray-600">
                         <input

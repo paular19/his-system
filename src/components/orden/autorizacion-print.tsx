@@ -162,11 +162,11 @@ export function AutorizacionPrint({
       try {
         JsBarcode(svg, codigo, {
           format: 'CODE128',
-          width: 2,
-          height: 60,
+          width: 1.8,
+          height: 44,
           displayValue: true,
-          fontSize: 12,
-          margin: 8,
+          fontSize: 11,
+          margin: 4,
         })
       } catch {
         // barcode generation failed silently
@@ -193,21 +193,27 @@ export function AutorizacionPrint({
     <>
       {/* Botón imprimir — oculto al imprimir */}
       {mostrarAcciones && (
-        <div className="no-print mb-4 flex gap-3">
-          <button
-            onClick={() => window.print()}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Imprimir Autorización
-          </button>
-          <button
-            onClick={() => {
-              window.location.assign('/dashboard/admision')
-            }}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Volver
-          </button>
+        <div className="no-print mb-4 space-y-2">
+          <div className="flex gap-3">
+            <button
+              onClick={() => window.print()}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Imprimir Autorización
+            </button>
+            <button
+              onClick={() => {
+                window.location.assign('/dashboard/admision')
+              }}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Volver
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">
+            Para quitar "Autorización", fecha/hora y número de página, desactivá la opción
+            "Encabezados y pies de página" en el cuadro de impresión del navegador.
+          </p>
         </div>
       )}
 
@@ -360,19 +366,46 @@ export function AutorizacionPrint({
 
       <style>{`
         @media print {
-          .no-print { display: none !important; }
-          body > * { display: none !important; }
-          .print-doc { display: block !important; }
-          nav, header, aside { display: none !important; }
-
-          .autorizacion-pagina {
-            margin-bottom: 0 !important;
-            page-break-inside: avoid;
-            break-inside: avoid-page;
+          @page {
+            size: A4 portrait;
+            margin: 6mm;
           }
 
-          .autorizacion-pagina:not(:last-child) {
+          .no-print { display: none !important; }
+          body > * { display: none !important; }
+          .print-doc {
+            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          nav, header, aside { display: none !important; }
+
+          .aut-tabla-info,
+          .aut-tabla-practicas {
+            font-size: 9px !important;
+          }
+
+          .aut-clinica img {
+            max-width: 68px !important;
+            margin-bottom: 2px !important;
+          }
+
+          .autorizacion-pagina {
+            height: 136mm;
+            margin-bottom: 4mm !important;
+            page-break-after: auto !important;
+            break-after: auto !important;
+            page-break-inside: avoid;
+            break-inside: avoid-page;
+            overflow: hidden;
+          }
+
+          .autorizacion-pagina:last-child {
             margin-bottom: 0 !important;
+          }
+
+          .aut-emisor {
+            display: none !important;
           }
         }
 
@@ -384,32 +417,27 @@ export function AutorizacionPrint({
 
         .autorizacion-pagina {
           border: 1px solid #ccc;
-          margin-bottom: 12px;
+          margin-bottom: 8px;
           page-break-after: auto;
           break-after: auto;
         }
 
-        .autorizacion-pagina:not(:last-child) {
-          page-break-after: always;
-          break-after: page;
-        }
-
         .autorizacion-frente {
-          padding: 10px 14px;
+          padding: 6px 10px;
           border-bottom: 2px solid #000;
         }
 
         .aut-header {
           display: flex;
-          gap: 16px;
-          margin-bottom: 8px;
+          gap: 10px;
+          margin-bottom: 6px;
           border-bottom: 1px solid #ccc;
-          padding-bottom: 8px;
+          padding-bottom: 6px;
         }
 
         .aut-clinica {
-          min-width: 140px;
-          font-size: 10px;
+          min-width: 110px;
+          font-size: 8.5px;
           color: #333;
         }
 
@@ -426,12 +454,12 @@ export function AutorizacionPrint({
 
         .aut-tabla-info {
           width: 100%;
-          font-size: 11px;
+          font-size: 9.5px;
           border-collapse: collapse;
         }
 
         .aut-tabla-info td {
-          padding: 1px 6px 1px 0;
+          padding: 1px 4px 1px 0;
           vertical-align: top;
         }
 
@@ -447,11 +475,11 @@ export function AutorizacionPrint({
 
         .aut-nro-orden {
           font-weight: bold;
-          font-size: 13px;
+          font-size: 11px;
         }
 
         .aut-orden-por {
-          padding: 4px 0;
+          padding: 2px 0;
           display: flex;
           align-items: center;
           gap: 6px;
@@ -461,12 +489,12 @@ export function AutorizacionPrint({
         .aut-tipo-right {
           margin-left: auto;
           font-weight: bold;
-          font-size: 13px;
+          font-size: 11px;
           letter-spacing: 1px;
         }
 
         .aut-diagnostico {
-          padding: 4px 0;
+          padding: 2px 0;
           display: flex;
           gap: 8px;
           border-bottom: 1px solid #eee;
@@ -481,13 +509,13 @@ export function AutorizacionPrint({
         .aut-tabla-practicas {
           width: 100%;
           border-collapse: collapse;
-          margin-top: 6px;
-          font-size: 11px;
+          margin-top: 4px;
+          font-size: 9.5px;
         }
 
         .aut-tabla-practicas th {
           border: 1px solid #999;
-          padding: 3px 6px;
+          padding: 2px 4px;
           background: #f5f5f5;
           font-weight: bold;
           text-align: left;
@@ -495,20 +523,20 @@ export function AutorizacionPrint({
 
         .aut-tabla-practicas td {
           border: 1px solid #ccc;
-          padding: 4px 6px;
+          padding: 2px 4px;
         }
 
         .autorizacion-dorso {
-          padding: 12px 14px;
+          padding: 6px 10px;
           display: flex;
           flex-direction: column;
           align-items: flex-start;
-          gap: 6px;
+          gap: 4px;
           background: #fff;
         }
 
         .aut-barcode {
-          max-width: 280px;
+          max-width: 240px;
         }
 
         .aut-original {
@@ -525,19 +553,19 @@ export function AutorizacionPrint({
         .aut-firmas {
           width: 100%;
           display: flex;
-          gap: 40px;
-          margin-top: 24px;
+          gap: 24px;
+          margin-top: 12px;
         }
 
         .aut-firma-linea {
           flex: 1;
           border-top: 1px solid #000;
-          padding-top: 6px;
+          padding-top: 4px;
           display: flex;
           flex-direction: column;
           align-items: center;
           gap: 4px;
-          font-size: 10px;
+          font-size: 9px;
         }
 
         .aut-firma-label {
@@ -548,13 +576,13 @@ export function AutorizacionPrint({
         }
 
         .aut-firma-fecha {
-          font-size: 9px;
+          font-size: 8px;
           color: #555;
           white-space: nowrap;
         }
 
         .aut-nro-barcode {
-          font-size: 10px;
+          font-size: 9px;
           color: #666;
           letter-spacing: 1px;
         }

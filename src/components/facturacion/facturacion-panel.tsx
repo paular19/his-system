@@ -227,6 +227,23 @@ function parseIncluyeCodigoSeleccion(incluyeCodigo: string | null | undefined): 
     }
 }
 
+function resumenSubitemsIncluidos(incluyeCodigo: string | null | undefined): string {
+    const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
+    if (!seleccion) return 'Completa (todos los componentes)'
+
+    const partes: string[] = []
+    if (seleccion.gastos > 0) partes.push(`GA x${seleccion.gastos}`)
+    if (seleccion.especialista > 0) partes.push(`HE x${seleccion.especialista}`)
+    if (seleccion.anestesista > 0) partes.push(`HA x${seleccion.anestesista}`)
+    if (seleccion.ayudante > 0) partes.push(`Ayudante x${seleccion.ayudante}`)
+
+    return partes.length > 0 ? partes.join(' · ') : 'Completa (todos los componentes)'
+}
+
+function esImporteParcialPorSubitem(incluyeCodigo: string | null | undefined): boolean {
+    return parseIncluyeCodigoSeleccion(incluyeCodigo) !== null
+}
+
 function incluyeTieneAyudante(incluyeCodigo: string | null | undefined): boolean {
     const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
     return Boolean(seleccion && seleccion.ayudante > 0)
@@ -1848,6 +1865,8 @@ export function FacturacionPanel() {
                                                 const selComp = tieneComponentes
                                                     ? (compSeleccion[p.uid] ?? seleccionPorDefecto(desgloseSelector!))
                                                     : (mostrarSelectorComponentes ? (compSeleccion[p.uid] ?? { especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }) : null)
+                                                const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
+                                                const importeParcialPorSubitem = p.tipo === 'PRACTICA' && esImporteParcialPorSubitem(p.incluyeCodigo)
                                                 const diferencialesActivos = resumenDiferenciales(p.diferenciales)
                                                 if (p.diferenciales?.dobleCirugia && p.diferenciales?.esPracticaBase) {
                                                     diferencialesActivos.push('Base 100% (doble cirugía)')
@@ -1897,6 +1916,18 @@ export function FacturacionPanel() {
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
                                                                 <div className="truncate text-xs text-gray-700" title={draft.descripcion || ''}>{draft.descripcion || '—'}</div>
+                                                                {p.tipo === 'PRACTICA' && (
+                                                                    <div className="mt-1 flex flex-wrap gap-1">
+                                                                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                                                                            Incluye: {resumenIncluye}
+                                                                        </span>
+                                                                        {importeParcialPorSubitem && (
+                                                                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                                                                                Importe parcial por subitem
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
                                                                 <span className="text-xs text-gray-700">{draft.cantidad || '—'}</span>
@@ -2085,6 +2116,16 @@ export function FacturacionPanel() {
                                                                             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Valores y diferenciales</p>
                                                                             <div className="mt-1 space-y-1 text-xs text-gray-700">
                                                                                 <div>Monto unitario: <span className="font-medium">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</span></div>
+                                                                                {p.tipo === 'PRACTICA' && (
+                                                                                    <>
+                                                                                        <div>Incluye: <span className="font-medium">{resumenIncluye}</span></div>
+                                                                                        {importeParcialPorSubitem && (
+                                                                                            <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                                                                                                Este importe corresponde solo al subitem incluido; no representa el gasto total del código.
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </>
+                                                                                )}
                                                                                 <div>
                                                                                     {etiquetasDiferencial.length > 0 ? (
                                                                                         <div className="flex flex-wrap gap-1">
@@ -2217,6 +2258,8 @@ export function FacturacionPanel() {
                                                             const draft = editRows[p.uid] ?? buildEditState(p)
                                                             const filaEnEdicion = Boolean(rowEditMode[p.uid])
                                                             const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
+                                                            const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
+                                                            const importeParcialPorSubitem = esImporteParcialPorSubitem(p.incluyeCodigo)
                                                             const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
                                                             const fechaDraft = draft.fecha ? new Date(draft.fecha) : null
                                                             const fechaResumen = fechaDraft && !Number.isNaN(fechaDraft.getTime())
@@ -2325,6 +2368,12 @@ export function FacturacionPanel() {
                                                                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Valores y diferenciales</p>
                                                                                         <div className="mt-1 space-y-1 text-xs text-gray-700">
                                                                                             <div>Monto unitario: <span className="font-medium">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</span></div>
+                                                                                            <div>Incluye: <span className="font-medium">{resumenIncluye}</span></div>
+                                                                                            {importeParcialPorSubitem && (
+                                                                                                <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                                                                                                    Este importe corresponde solo al subitem incluido; no representa el gasto total del código.
+                                                                                                </div>
+                                                                                            )}
                                                                                             <div>
                                                                                                 {etiquetasDiferencial.length > 0 ? (
                                                                                                     <div className="flex flex-wrap gap-1">

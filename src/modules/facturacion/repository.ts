@@ -295,6 +295,69 @@ function calcularTotalUnitarioDesglose(
     )
 }
 
+function serializarIncluyeSeleccion(seleccion: IncluyeCodigoSeleccion): string | null {
+    const tokens: string[] = []
+    if (seleccion.gastos) tokens.push('GA')
+    if (seleccion.especialista) tokens.push('HE')
+    if (seleccion.anestesista) tokens.push('HA')
+    for (let i = 1; i <= Math.min(3, seleccion.ayudantes); i += 1) {
+        tokens.push(`A${i}`)
+    }
+    return tokens.length > 0 ? tokens.join('+') : null
+}
+
+function inferirIncluyeCodigoDesdeImporte(params: {
+    desglose: DesgloseValores | null
+    precioUnitarioDesdeDb: number | null
+}): string | null {
+    if (!params.desglose || params.precioUnitarioDesdeDb == null || params.precioUnitarioDesdeDb <= 0) {
+        return null
+    }
+
+    const objetivo = Number(params.precioUnitarioDesdeDb.toFixed(2))
+    const tol = 0.01
+    const totalCompleta = Number(calcularTotalUnitarioDesglose(params.desglose, null).toFixed(2))
+
+    // Si ya coincide con la práctica completa, no inferir subitem.
+    if (Math.abs(totalCompleta - objetivo) <= tol) return null
+
+    const posiblesEspecialista = params.desglose.valorEspecialista != null ? [false, true] : [false]
+    const posiblesAnestesista = params.desglose.valorAnestesista != null ? [false, true] : [false]
+    const posiblesGastos = params.desglose.valorGastos != null ? [false, true] : [false]
+    const maxAyudantes = params.desglose.valorAyudante != null ? 3 : 0
+
+    const candidatos: string[] = []
+
+    for (const especialista of posiblesEspecialista) {
+        for (const anestesista of posiblesAnestesista) {
+            for (const gastos of posiblesGastos) {
+                for (let ayudantes = 0; ayudantes <= maxAyudantes; ayudantes += 1) {
+                    if (!especialista && !anestesista && !gastos && ayudantes === 0) continue
+
+                    const incluye = serializarIncluyeSeleccion({
+                        especialista,
+                        anestesista,
+                        gastos,
+                        ayudantes,
+                    })
+                    if (!incluye) continue
+
+                    const total = Number(
+                        calcularTotalUnitarioDesglose(params.desglose, incluye).toFixed(2)
+                    )
+                    if (Math.abs(total - objetivo) <= tol) {
+                        candidatos.push(incluye)
+                    }
+                }
+            }
+        }
+    }
+
+    const unicos = Array.from(new Set(candidatos))
+    if (unicos.length !== 1) return null
+    return normalizarIncluyeCodigo(unicos[0])
+}
+
 async function obtenerValoresPracticas(codigosPractica: string[]): Promise<Map<string, number>> {
     const codigos = Array.from(
         new Set(codigosPractica.map(normalizarCodigoPractica).filter(Boolean))
@@ -372,17 +435,42 @@ async function obtenerFallbackDesglosePorCodigo(codigosPractica: string[]): Prom
         orderBy: [{ codigo: 'asc' }, { convenioId: 'asc' }],
     })
 
-    const map = new Map<string, DesgloseValores>()
+    const rowsPorCodigo = new Map<string, typeof rows>()
     for (const row of rows) {
         const codigo = normalizarCodigoPractica(row.codigo)
-        if (map.has(codigo)) continue
+        if (!codigos.includes(codigo)) continue
+
+        const actuales = rowsPorCodigo.get(codigo) ?? []
+        actuales.push(row)
+        rowsPorCodigo.set(codigo, actuales)
+    }
+
+    const map = new Map<string, DesgloseValores>()
+
+    for (const codigo of codigos) {
+        const candidatos = rowsPorCodigo.get(codigo) ?? []
+        if (candidatos.length === 0) continue
+
+        // Si el mismo código tiene valores distintos entre convenios, no asumir uno arbitrario.
+        // Se deja sin fallback para evitar desvíos de importes contra nomenclador.
+        const primer = candidatos[0]
+        if (!primer) continue
+        const todosIguales = candidatos.every((c) => (
+            Number(c.valorEspecialista ?? 0) === Number(primer.valorEspecialista ?? 0) &&
+            Number(c.valorAyudante ?? 0) === Number(primer.valorAyudante ?? 0) &&
+            Number(c.valorAnestesista ?? 0) === Number(primer.valorAnestesista ?? 0) &&
+            Number(c.valorGastos ?? 0) === Number(primer.valorGastos ?? 0)
+        ))
+        if (!todosIguales) continue
+
         map.set(codigo, {
-            valorEspecialista: row.valorEspecialista != null ? Number(row.valorEspecialista) : null,
-            valorAyudante: row.valorAyudante != null ? Number(row.valorAyudante) : null,
-            valorAnestesista: row.valorAnestesista != null ? Number(row.valorAnestesista) : null,
-            valorGastos: row.valorGastos != null ? Number(row.valorGastos) : null,
+            valorEspecialista: primer.valorEspecialista != null ? Number(primer.valorEspecialista) : null,
+            valorAyudante: primer.valorAyudante != null ? Number(primer.valorAyudante) : null,
+            valorAnestesista: primer.valorAnestesista != null ? Number(primer.valorAnestesista) : null,
+            valorGastos: primer.valorGastos != null ? Number(primer.valorGastos) : null,
         })
     }
+
     return map
 }
 
@@ -1470,7 +1558,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 ? (matriculaPorOrden.get(`${ordenPuestoNumero}:${ordenNumero}`) ?? null)
                 : null
         const esInternacion = ingreso.tipoIngresoCodigo === 'INT'
-        const incluyeCodigoPractica = normalizarIncluyeCodigo(
+        const incluyeCodigoPracticaBase = normalizarIncluyeCodigo(
             vinculoPorItem?.incluyeCodigo ??
             (claveOrdenItem ? incluyeCodigoPorOrdenItem.get(claveOrdenItem) : null)
         )
@@ -1490,6 +1578,44 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             diferencialCirugia.diferenciales.practicaBaseId === p.id
         )
         const aplicarDiferencialesCirugia = Boolean(diferencialCirugia) && !esPracticaBaseDobleCirugia
+
+        const precioNomenclador = valoresPractica.get(normalizarCodigoPractica(p.codigoPractica)) ?? 0
+        const coberturaBase = calcularImporteFacturable(
+            precioNomenclador,
+            Number(p.cantidad),
+            reglaFacturacion
+        )
+        const desgloseNomenclador: DesgloseValores | null = p.nomencladorPractica
+            ? {
+                valorEspecialista: p.nomencladorPractica.valorEspecialista != null ? Number(p.nomencladorPractica.valorEspecialista) : null,
+                valorAyudante: p.nomencladorPractica.valorAyudante != null ? Number(p.nomencladorPractica.valorAyudante) : null,
+                valorAnestesista: p.nomencladorPractica.valorAnestesista != null ? Number(p.nomencladorPractica.valorAnestesista) : null,
+                valorGastos: p.nomencladorPractica.valorGastos != null ? Number(p.nomencladorPractica.valorGastos) : null,
+            }
+            : (desgloseFallbackPorCodigo.get(normalizarCodigoPractica(p.codigoPractica)) ?? null)
+
+        const desgloseBase = desgloseNomenclador
+            ? aplicarOverrideEspecialAnestesistaPorCodigo(p.codigoPractica, desgloseNomenclador)
+            : null
+        const desgloseConDiferencial = desgloseBase
+            ? aplicarDiferencialesAValores(
+                desgloseBase,
+                aplicarDiferencialesCirugia ? (diferencialCirugia?.diferenciales ?? null) : null
+            )
+            : null
+        const importeFromDb = p.importeTotal != null ? Number(String(p.importeTotal)) : null
+        const cant = Number(p.cantidad)
+        const precioUnitarioDesdeDb = importeFromDb !== null && cant > 0 ? Number((importeFromDb / cant).toFixed(2)) : null
+        const incluyeCodigoInferido = !incluyeCodigoPracticaBase
+            ? inferirIncluyeCodigoDesdeImporte({
+                desglose: desgloseConDiferencial,
+                precioUnitarioDesdeDb,
+            })
+            : null
+        const incluyeCodigoPractica = normalizarIncluyeCodigo(
+            incluyeCodigoPracticaBase ?? incluyeCodigoInferido
+        )
+
         const esCodigoAnestesista = esCodigoHaObligatorio(p.codigoPractica)
         const incluyeSeleccionPractica = desglosarIncluyeCodigo(incluyeCodigoPractica)
         const incluyeSoloAyudantePractica = Boolean(
@@ -1521,39 +1647,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 ? MATRICULA_ANESTESISTA_INT_DEFAULT
                 : null)
 
-        const precioNomenclador = valoresPractica.get(normalizarCodigoPractica(p.codigoPractica)) ?? 0
-        const coberturaBase = calcularImporteFacturable(
-            precioNomenclador,
-            Number(p.cantidad),
-            reglaFacturacion
-        )
-        const desgloseNomenclador: DesgloseValores | null = p.nomencladorPractica
-            ? {
-                valorEspecialista: p.nomencladorPractica.valorEspecialista != null ? Number(p.nomencladorPractica.valorEspecialista) : null,
-                valorAyudante: p.nomencladorPractica.valorAyudante != null ? Number(p.nomencladorPractica.valorAyudante) : null,
-                valorAnestesista: p.nomencladorPractica.valorAnestesista != null ? Number(p.nomencladorPractica.valorAnestesista) : null,
-                valorGastos: p.nomencladorPractica.valorGastos != null ? Number(p.nomencladorPractica.valorGastos) : null,
-            }
-            : (desgloseFallbackPorCodigo.get(normalizarCodigoPractica(p.codigoPractica)) ?? null)
-
-        const desgloseBase = desgloseNomenclador
-            ? aplicarOverrideEspecialAnestesistaPorCodigo(p.codigoPractica, desgloseNomenclador)
-            : null
-        const desgloseConDiferencial = desgloseBase
-            ? aplicarDiferencialesAValores(
-                desgloseBase,
-                aplicarDiferencialesCirugia ? (diferencialCirugia?.diferenciales ?? null) : null
-            )
-            : null
         const desgloseFiltradoPorIncluye = desgloseConDiferencial
             ? aplicarIncluyeCodigoADesglose(desgloseConDiferencial, incluyeCodigoPractica, p.codigoPractica)
             : null
         const totalUnitarioDesglose = desgloseFiltradoPorIncluye
             ? calcularTotalUnitarioDesglose(desgloseFiltradoPorIncluye, incluyeCodigoPractica)
             : null
-        const importeFromDb = p.importeTotal != null ? Number(String(p.importeTotal)) : null
-        const cant = Number(p.cantidad)
-        const precioUnitarioDesdeDb = importeFromDb !== null && cant > 0 ? Number((importeFromDb / cant).toFixed(2)) : null
         const precioUnitario = totalUnitarioDesglose !== null
             ? totalUnitarioDesglose
             : (incluyeCodigoPractica && precioUnitarioDesdeDb !== null
@@ -2413,16 +2512,40 @@ async function resolverPracticaDesdeInput(
     convenioIdActual: number
 ): Promise<{ convenioId: number; codigoPractica: string }> {
     const codigo = codigoPractica.trim().slice(0, 8)
-    const exacto = await prisma.nomencladorPractica.findFirst({
+    const candidatosCodigo = await prisma.nomencladorPractica.findMany({
         where: {
             convenioId: convenioIdActual,
             codigo: { startsWith: codigo },
         },
         select: { convenioId: true, codigo: true },
     })
+    const codigoNormalizado = normalizarCodigoPractica(codigo)
+    const exacto = candidatosCodigo.find(
+        (c) => normalizarCodigoPractica(c.codigo) === codigoNormalizado
+    )
     if (exacto) return { convenioId: exacto.convenioId, codigoPractica: exacto.codigo.trim() }
+    if (candidatosCodigo.length === 1) {
+        const unico = candidatosCodigo[0]
+        if (!unico) return { convenioId: convenioIdActual, codigoPractica: codigo }
+        return { convenioId: unico.convenioId, codigoPractica: unico.codigo.trim() }
+    }
 
     if (descripcionPractica?.trim()) {
+        const porDescripcionConvenioActual = await prisma.nomencladorPractica.findFirst({
+            where: {
+                convenioId: convenioIdActual,
+                descripcion: { contains: descripcionPractica.trim(), mode: 'insensitive' },
+            },
+            select: { convenioId: true, codigo: true },
+            orderBy: [{ codigo: 'asc' }],
+        })
+        if (porDescripcionConvenioActual) {
+            return {
+                convenioId: porDescripcionConvenioActual.convenioId,
+                codigoPractica: porDescripcionConvenioActual.codigo.trim(),
+            }
+        }
+
         const porDescripcion = await prisma.nomencladorPractica.findFirst({
             where: { descripcion: { contains: descripcionPractica.trim(), mode: 'insensitive' } },
             select: { convenioId: true, codigo: true },

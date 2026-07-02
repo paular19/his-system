@@ -14,6 +14,12 @@ const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({
   modoGeneracion: z.enum(['MASIVA', 'INDIVIDUAL', 'AGRUPADA']).optional().default('MASIVA'),
 })
 
+const CrearPedidoLaboratorioSchema = z.object({
+  ingresoId: z.number().int().positive(),
+  numeroProtocolo: z.string().trim().min(1, 'Ingresá el número de protocolo').max(50),
+  diagnostico: z.string().trim().min(1, 'Ingresá el diagnóstico').max(300),
+})
+
 export async function crearOrdenAction(input: CrearOrdenInput) {
   const usuario = await getUsuarioSesion()
 
@@ -137,6 +143,132 @@ export async function crearOrdenesDesdeAdmisionAction(
   } catch (err) {
     console.error('[ORDEN] Error al crear desde admisión:', err)
     return { error: err instanceof Error ? err.message : 'Error al generar la autorización' }
+  }
+}
+
+export async function crearPedidoLaboratorioAction(input: {
+  ingresoId: number
+  numeroProtocolo: string
+  diagnostico: string
+}) {
+  const usuario = await getUsuarioSesion()
+
+  if (!tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')) {
+    return { error: 'Sin permiso para crear órdenes' }
+  }
+
+  const parsed = CrearPedidoLaboratorioSchema.safeParse(input)
+  if (!parsed.success) {
+    return { error: parsed.error.errors[0]?.message ?? 'Datos inválidos' }
+  }
+
+  try {
+    const ingreso = await prisma.ingreso.findUnique({
+      where: { id: parsed.data.ingresoId },
+      select: {
+        id: true,
+        pacienteId: true,
+        nombre: true,
+        numeroAfiliado: true,
+        obraSocialId: true,
+        obraSocialCoseguroId: true,
+        planCoseguroId: true,
+        profesionalGuardiaId: true,
+        profesionalTratanteId: true,
+        paciente: {
+          select: {
+            id: true,
+            nombreCompleto: true,
+            numeroAfiliado: true,
+          },
+        },
+      },
+    })
+
+    if (!ingreso) {
+      return { error: 'Admisión no encontrada' }
+    }
+
+    if (!ingreso.obraSocialId) {
+      return { error: 'La admisión no tiene obra social asignada' }
+    }
+
+    let profesionalId = ingreso.profesionalTratanteId ?? ingreso.profesionalGuardiaId ?? null
+    if (!profesionalId) {
+      const profesionalFallback = await prisma.profesional.findFirst({
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      })
+      profesionalId = profesionalFallback?.id ?? null
+    }
+
+    if (!profesionalId) {
+      return { error: 'No hay profesional disponible para emitir la orden' }
+    }
+
+    const nombrePaciente = (
+      ingreso.paciente?.nombreCompleto?.trim() ||
+      ingreso.nombre?.trim() ||
+      ''
+    )
+
+    if (!nombrePaciente) {
+      return { error: 'No se pudo resolver el nombre del paciente' }
+    }
+
+    const numeroAfiliado = (
+      ingreso.numeroAfiliado?.trim() ||
+      ingreso.paciente?.numeroAfiliado?.trim() ||
+      ''
+    ).slice(0, 30)
+
+    const numeroProtocolo = parsed.data.numeroProtocolo.trim()
+    const diagnostico = parsed.data.diagnostico.trim()
+
+    const orden = await crearOrdenAmbulatorio(
+      {
+        ingresoId: ingreso.id,
+        pacienteId: ingreso.pacienteId ?? ingreso.paciente?.id ?? undefined,
+        nombrePaciente: nombrePaciente.slice(0, 50),
+        numeroAfiliado,
+        obraSocialId: ingreso.obraSocialId,
+        obraSocialCoseguroId: ingreso.obraSocialCoseguroId ?? undefined,
+        planCoseguroId: ingreso.planCoseguroId ?? undefined,
+        profesionalId,
+        tipoOrdenCodigo: 'PRA',
+        descripcionPatologia: diagnostico,
+        descripcion: `PROTOCOLO N°${numeroProtocolo}`,
+        items: [
+          {
+            convenioId: ingreso.obraSocialId,
+            codigoPractica: '66',
+            descripcionPractica: 'PROTOCOLO BIOQUIMICO',
+            cantidad: 1,
+            fecha: new Date(),
+            tipoFacturacion: 'H',
+            titularModular: 'PROTOCOLO BIOQUIMICO',
+          },
+        ],
+      },
+      usuario.codigoUsuario
+    )
+
+    revalidatePath('/dashboard/ambulatorio')
+    revalidatePath(`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.numero}`)
+    revalidatePath('/dashboard/facturacion')
+    revalidatePath('/dashboard/internacion')
+    revalidatePath('/dashboard/admision')
+    revalidatePath(`/dashboard/internacion/${ingreso.id}`)
+    revalidatePath(`/dashboard/admision/${ingreso.id}`)
+
+    return {
+      ok: true,
+      puestoNumero: orden.puestoNumero,
+      numero: orden.numero,
+    }
+  } catch (err) {
+    console.error('[ORDEN] Error al crear pedido de laboratorio:', err)
+    return { error: err instanceof Error ? err.message : 'Error al generar el pedido de laboratorio' }
   }
 }
 

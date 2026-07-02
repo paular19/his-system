@@ -25,6 +25,9 @@ export const CrearOrdenSchema = z.object({
   ingresoId: z.number().int().positive().optional(),
   pacienteId: z.number().int().positive().optional(),
 
+  // Observaciones de la orden
+  descripcion: z.string().max(255).optional(),
+
   // Datos del paciente en la orden
   nombrePaciente: z.string().min(1).max(50),
   numeroAfiliado: z.string().max(30).default(''),

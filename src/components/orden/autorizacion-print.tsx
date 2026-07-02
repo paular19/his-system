@@ -291,6 +291,7 @@ export function AutorizacionPrint({
                   <span className="aut-label">Diagnóstico:</span>{' '}
                   <span className="aut-valor">{orden.descripcionPatologia ?? ''}</span>
                   <span className="aut-observ-label">Observ.:</span>
+                  <span className="aut-valor">{orden.descripcion ?? ''}</span>
                 </div>
 
                 {/* Tabla de práctica */}

@@ -47,6 +47,7 @@ type ItemPractica = OrdenPracticaItemInput & {
   practicaId?: number | null
   descripcionPractica: string
   _key: string
+  numeroProtocoloLaboratorio?: string | null
   fecha?: Date | string | null
   grupoOrden: number
   valorUnitario: number | null
@@ -385,6 +386,9 @@ export function ConsultaForm({
   const [busquedaPractica, setBusquedaPractica] = useState('')
   const [resultadosPractica, setResultadosPractica] = useState<NomencladorPracticaItem[]>([])
   const [buscandoPractica, setBuscandoPractica] = useState(false)
+  const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
+  const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
+  const [diagnosticoPedidoLaboratorio, setDiagnosticoPedidoLaboratorio] = useState('')
 
   // Selector de componentes (práctica pendiente de confirmar)
   const [practicaPendiente, setPracticaPendiente] = useState<NomencladorPracticaItem | null>(null)
@@ -703,6 +707,63 @@ export function ConsultaForm({
     setBusquedaPractica('')
   }
 
+  const agregarPedidoLaboratorio = () => {
+    const numeroProtocolo = numeroProtocoloLaboratorio.trim()
+    const diagnosticoPedido = diagnosticoPedidoLaboratorio.trim()
+
+    if (!numeroProtocolo) {
+      setError('Ingresá el número de protocolo')
+      return
+    }
+
+    if (!diagnosticoPedido) {
+      setError('Ingresá el diagnóstico')
+      return
+    }
+
+    if (!convenioDefecto) {
+      setError('Seleccioná una obra social antes de agregar un pedido de laboratorio')
+      return
+    }
+
+    setError(null)
+    const matriculasDefault = resolverMatriculasDefault(
+      admisionInicial?.tipoIngresoCodigo,
+      null,
+      null,
+      matriculaEspecialistaInternacionDefault
+    )
+
+    const key = `lab-${Date.now()}`
+    setPracticas((prev) => {
+      const nueva: ItemPractica = {
+        _key: key,
+        fecha: new Date(),
+        convenioId: convenioDefecto,
+        codigoPractica: '66',
+        descripcionPractica: 'PROTOCOLO BIOQUIMICO',
+        numeroProtocoloLaboratorio: numeroProtocolo,
+        grupoOrden: esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1,
+        cantidad: 1,
+        tipoFacturacion: 'H',
+        valorUnitario: null,
+        matriculaEspecialista: matriculasDefault.matriculaEspecialista,
+        matriculaAnestesista: matriculasDefault.matriculaAnestesista,
+      }
+      return [...prev, nueva]
+    })
+
+    setTitularPorPractica((prev) => ({
+      ...prev,
+      [key]: 'PROTOCOLO BIOQUIMICO',
+    }))
+
+    setDiagnostico(diagnosticoPedido)
+    setNumeroProtocoloLaboratorio('')
+    setDiagnosticoPedidoLaboratorio('')
+    setMostrarPedidoLaboratorio(false)
+  }
+
   const quitarPractica = (key: string) => {
     setPracticas((prev) => prev.filter((p) => p._key !== key))
     setComponentGroupings((prev) => {
@@ -939,6 +1000,10 @@ export function ConsultaForm({
 
     setSubmitting(true)
     try {
+      const numeroProtocoloPedidoLaboratorio = practicas
+        .map((p) => p.numeroProtocoloLaboratorio?.trim() ?? '')
+        .find((value) => value.length > 0)
+
       const itemsOrdenBase: Array<OrdenPracticaItemInput & {
         grupoOrden: number
         titularModular?: string | null
@@ -1323,6 +1388,9 @@ export function ConsultaForm({
       const result = await crearOrdenesDesdeAdmisionAction({
         ingresoId: admisionInicial?.id,
         pacienteId: admisionInicial?.paciente?.id ?? paciente.id,
+        descripcion: numeroProtocoloPedidoLaboratorio
+          ? `PROTOCOLO N°${numeroProtocoloPedidoLaboratorio}`
+          : undefined,
         nombrePaciente: paciente.nombreCompleto.slice(0, 50),
         numeroAfiliado: admisionInicial?.numeroAfiliado ?? paciente.numeroAfiliado ?? '',
         obraSocialId: parseInt(obraSocialId, 10),
@@ -1525,6 +1593,56 @@ export function ConsultaForm({
       {/* Prácticas */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Prácticas</h3>
+
+        <div className="rounded-md border border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
+          <button
+            type="button"
+            onClick={() => setMostrarPedidoLaboratorio((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 bg-white px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo pedido de laboratorio
+          </button>
+
+          {mostrarPedidoLaboratorio && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={numeroProtocoloLaboratorio}
+                onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)}
+                placeholder="Número de protocolo"
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <input
+                type="text"
+                value={diagnosticoPedidoLaboratorio}
+                onChange={(e) => setDiagnosticoPedidoLaboratorio(e.target.value)}
+                placeholder="Diagnóstico"
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <div className="md:col-span-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={agregarPedidoLaboratorio}
+                  className="rounded-md bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700"
+                >
+                  Agregar pedido
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrarPedidoLaboratorio(false)
+                    setNumeroProtocoloLaboratorio('')
+                    setDiagnosticoPedidoLaboratorio('')
+                  }}
+                  className="rounded-md border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="flex gap-2">
           <div className="relative flex-1">

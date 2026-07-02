@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, Loader2, Pencil, Plus, Search, Upload, X, XCircle } from 'lucide-react'
 import type { AdmisionFacturacionListItem, FacturacionContexto, PrestacionFacturableItem } from '@/modules/facturacion/types'
+import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
 import {
     ComponenteSelector,
     type ComponenteValores,
@@ -423,6 +424,7 @@ export function FacturacionPanel() {
     const [formPacienteDomicilio, setFormPacienteDomicilio] = useState('')
 
     const [expandNuevaPractica, setExpandNuevaPractica] = useState(false)
+    const [expandPedidoLaboratorio, setExpandPedidoLaboratorio] = useState(false)
     const [expandNuevaMedicacion, setExpandNuevaMedicacion] = useState(false)
     const [expandNuevoDescartable, setExpandNuevoDescartable] = useState(false)
 
@@ -436,6 +438,9 @@ export function FacturacionPanel() {
     })
     const [nuevaPracticaFecha, setNuevaPracticaFecha] = useState(() => toDateInput(new Date()))
     const [nuevaPracticaAutorizacion, setNuevaPracticaAutorizacion] = useState('')
+    const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
+    const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
+    const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
     const npDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const [nuevaMedicacionNombre, setNuevaMedicacionNombre] = useState('')
@@ -916,6 +921,54 @@ export function FacturacionPanel() {
             setError(err instanceof Error ? err.message : 'Error al crear practica')
         } finally {
             setGuardandoPractica(false)
+        }
+    }
+
+    async function crearPedidoLaboratorio() {
+        if (!contexto) return
+
+        const numeroProtocolo = numeroProtocoloLaboratorio.trim()
+        const diagnostico = diagnosticoLaboratorio.trim()
+
+        if (!numeroProtocolo) {
+            setError('Ingresá el número de protocolo')
+            return
+        }
+
+        if (!diagnostico) {
+            setError('Ingresá el diagnóstico')
+            return
+        }
+
+        setGuardandoPedidoLaboratorio(true)
+        setError(null)
+        setMensaje(null)
+        try {
+            const result = await crearPedidoLaboratorioAction({
+                ingresoId: contexto.ingreso.id,
+                numeroProtocolo,
+                diagnostico,
+            })
+
+            if ('error' in result && result.error) {
+                setError(result.error)
+                return
+            }
+
+            setNumeroProtocoloLaboratorio('')
+            setDiagnosticoLaboratorio('')
+            setExpandPedidoLaboratorio(false)
+
+            if ('puestoNumero' in result && 'numero' in result) {
+                window.location.href = `/dashboard/ambulatorio/${result.puestoNumero}/${result.numero}`
+                return
+            }
+
+            setMensaje('Pedido de laboratorio generado')
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al generar pedido de laboratorio')
+        } finally {
+            setGuardandoPedidoLaboratorio(false)
         }
     }
 
@@ -1667,6 +1720,16 @@ export function FacturacionPanel() {
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                 <div className="his-card p-4 space-y-3">
                                     <button onClick={() => setExpandNuevaPractica((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50"><span className="inline-flex items-center gap-2"><Plus className="h-4 w-4" /> Agregar nueva práctica</span>{expandNuevaPractica ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>
+                                    <button onClick={() => setExpandPedidoLaboratorio((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-50"><span className="inline-flex items-center gap-2"><Plus className="h-4 w-4" /> Nuevo pedido de laboratorio</span>{expandPedidoLaboratorio ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>
+                                    {expandPedidoLaboratorio && (
+                                        <>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                <input value={numeroProtocoloLaboratorio} onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Número de protocolo" />
+                                                <input value={diagnosticoLaboratorio} onChange={(e) => setDiagnosticoLaboratorio(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Diagnóstico" />
+                                            </div>
+                                            <button onClick={crearPedidoLaboratorio} disabled={guardandoPedidoLaboratorio} className="rounded-md border border-indigo-300 bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-60">{guardandoPedidoLaboratorio ? 'Generando...' : 'Generar orden'}</button>
+                                        </>
+                                    )}
                                     {expandNuevaPractica && (
                                         <>
                                             {/* Búsqueda nomenclador */}

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
+import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
 import {
     ComponenteSelector,
     type ComponenteValores,
@@ -96,6 +97,7 @@ export function PracticaSection({
     const router = useRouter()
     const [practicas, setPracticas] = useState<PracticaItem[]>(practicasIniciales)
     const [mostrarForm, setMostrarForm] = useState(false)
+    const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
     const [expandido, setExpandido] = useState(true)
     const [filtroLista, setFiltroLista] = useState('')
     const [paginaPendientes, setPaginaPendientes] = useState(1)
@@ -123,6 +125,9 @@ export function PracticaSection({
     )
 
     const [guardando, setGuardando] = useState(false)
+    const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
+    const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
+    const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
     const [desagrupandoPracticaId, setDesagrupandoPracticaId] = useState<number | null>(null)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -179,6 +184,54 @@ export function PracticaSection({
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
         setMatriculaAnestesista(String(MATRICULA_ANESTESISTA_DEFAULT))
         setError(null)
+    }
+
+    const limpiarPedidoLaboratorio = () => {
+        setNumeroProtocoloLaboratorio('')
+        setDiagnosticoLaboratorio('')
+    }
+
+    const handleCrearPedidoLaboratorio = async () => {
+        const numeroProtocolo = numeroProtocoloLaboratorio.trim()
+        const diagnostico = diagnosticoLaboratorio.trim()
+
+        if (!numeroProtocolo) {
+            setError('Ingresá el número de protocolo')
+            return
+        }
+
+        if (!diagnostico) {
+            setError('Ingresá el diagnóstico')
+            return
+        }
+
+        setError(null)
+        setGuardandoPedidoLaboratorio(true)
+        try {
+            const result = await crearPedidoLaboratorioAction({
+                ingresoId,
+                numeroProtocolo,
+                diagnostico,
+            })
+
+            if ('error' in result && result.error) {
+                setError(result.error)
+                return
+            }
+
+            limpiarPedidoLaboratorio()
+            setMostrarPedidoLaboratorio(false)
+            if ('puestoNumero' in result && 'numero' in result) {
+                router.push(`/dashboard/ambulatorio/${result.puestoNumero}/${result.numero}`)
+                return
+            }
+
+            router.refresh()
+        } catch {
+            setError('Error al generar el pedido de laboratorio')
+        } finally {
+            setGuardandoPedidoLaboratorio(false)
+        }
     }
 
     const handleGuardar = async () => {
@@ -585,6 +638,18 @@ export function PracticaSection({
                     {puedeCrear && (
                         <button
                             onClick={() => {
+                                setMostrarPedidoLaboratorio((v) => !v)
+                                if (mostrarPedidoLaboratorio) limpiarPedidoLaboratorio()
+                            }}
+                            className="flex items-center gap-1 text-xs font-medium text-indigo-700 hover:text-indigo-800 border border-indigo-200 rounded-lg px-2.5 py-1 hover:bg-indigo-50"
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            Nuevo pedido de laboratorio
+                        </button>
+                    )}
+                    {puedeCrear && (
+                        <button
+                            onClick={() => {
                                 setMostrarForm((v) => !v)
                                 if (mostrarForm) limpiarForm()
                             }}
@@ -599,6 +664,59 @@ export function PracticaSection({
 
             {expandido && (
                 <div className="p-4 space-y-4">
+                    {mostrarPedidoLaboratorio && puedeCrear && (
+                        <div className="border border-indigo-100 bg-indigo-50/40 rounded-xl p-4 space-y-3">
+                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                                Nuevo pedido de laboratorio
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Número de protocolo</label>
+                                    <input
+                                        type="text"
+                                        value={numeroProtocoloLaboratorio}
+                                        onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)}
+                                        placeholder="Ej: 123456"
+                                        className="his-input text-sm w-full"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Diagnóstico</label>
+                                    <input
+                                        type="text"
+                                        value={diagnosticoLaboratorio}
+                                        onChange={(e) => setDiagnosticoLaboratorio(e.target.value)}
+                                        placeholder="Diagnóstico clínico"
+                                        className="his-input text-sm w-full"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                                <button
+                                    onClick={handleCrearPedidoLaboratorio}
+                                    disabled={guardandoPedidoLaboratorio}
+                                    className="flex items-center gap-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    {guardandoPedidoLaboratorio ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Plus className="h-3.5 w-3.5" />
+                                    )}
+                                    Generar orden
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setMostrarPedidoLaboratorio(false)
+                                        limpiarPedidoLaboratorio()
+                                    }}
+                                    className="text-xs text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Formulario */}
                     {mostrarForm && puedeCrear && (
                         <div className="border border-blue-100 bg-blue-50/40 rounded-xl p-4 space-y-3">

@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, Trash2, Scissors, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Search, Trash2, Scissors, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
 import {
     ComponenteSelector,
     calcularTotalSeleccionado,
@@ -153,8 +154,12 @@ export function CirugiaUrgenciaSection({
     const [cirugias, setCirugias] = useState<CirugiaUrgenciaItem[]>(cirugiasIniciales)
     const [expandido, setExpandido] = useState(true)
     const [mostrarForm, setMostrarForm] = useState(false)
+    const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
     const [guardando, setGuardando] = useState(false)
+    const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
+    const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
 
     const [fechaCirugia, setFechaCirugia] = useState(fechaAInputLocal())
     const [horaCirugia, setHoraCirugia] = useState('')
@@ -277,6 +282,54 @@ export function CirugiaUrgenciaSection({
         setDiferentesViasPatologia(false)
         setDiferentesViasDiferentesPatologia(false)
         setError(null)
+    }
+
+    const limpiarPedidoLaboratorio = () => {
+        setNumeroProtocoloLaboratorio('')
+        setDiagnosticoLaboratorio('')
+    }
+
+    const crearPedidoLaboratorio = async () => {
+        const numeroProtocolo = numeroProtocoloLaboratorio.trim()
+        const diagnostico = diagnosticoLaboratorio.trim()
+
+        if (!numeroProtocolo) {
+            setError('Ingresá el número de protocolo')
+            return
+        }
+
+        if (!diagnostico) {
+            setError('Ingresá el diagnóstico')
+            return
+        }
+
+        setError(null)
+        setGuardandoPedidoLaboratorio(true)
+        try {
+            const result = await crearPedidoLaboratorioAction({
+                ingresoId,
+                numeroProtocolo,
+                diagnostico,
+            })
+
+            if ('error' in result && result.error) {
+                setError(result.error)
+                return
+            }
+
+            limpiarPedidoLaboratorio()
+            setMostrarPedidoLaboratorio(false)
+            if ('puestoNumero' in result && 'numero' in result) {
+                router.push(`/dashboard/ambulatorio/${result.puestoNumero}/${result.numero}`)
+                return
+            }
+
+            router.refresh()
+        } catch {
+            setError('No se pudo generar el pedido de laboratorio')
+        } finally {
+            setGuardandoPedidoLaboratorio(false)
+        }
     }
 
     const guardarCirugiaUrgencia = async () => {
@@ -416,6 +469,16 @@ export function CirugiaUrgenciaSection({
 
                 {puedeCrear && (
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => {
+                                setMostrarPedidoLaboratorio((v) => !v)
+                                if (mostrarPedidoLaboratorio) limpiarPedidoLaboratorio()
+                            }}
+                            className="flex items-center gap-1 text-xs font-medium text-indigo-700 hover:text-indigo-800 border border-indigo-200 rounded-lg px-2.5 py-1 hover:bg-indigo-50"
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            Nuevo pedido de laboratorio
+                        </button>
                         {puedeIrAAutorizaciones && (
                             <Link
                                 href={`/dashboard/ambulatorio/nueva?ingresoId=${ingresoId}`}
@@ -444,6 +507,58 @@ export function CirugiaUrgenciaSection({
                     {error && (
                         <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
                             {error}
+                        </div>
+                    )}
+
+                    {mostrarPedidoLaboratorio && puedeCrear && (
+                        <div className="space-y-3 border border-indigo-100 bg-indigo-50/40 rounded-xl p-4">
+                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                                Nuevo pedido de laboratorio
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Número de protocolo</label>
+                                    <input
+                                        type="text"
+                                        value={numeroProtocoloLaboratorio}
+                                        onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)}
+                                        placeholder="Ej: 123456"
+                                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Diagnóstico</label>
+                                    <input
+                                        type="text"
+                                        value={diagnosticoLaboratorio}
+                                        onChange={(e) => setDiagnosticoLaboratorio(e.target.value)}
+                                        placeholder="Diagnóstico clínico"
+                                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => void crearPedidoLaboratorio()}
+                                    disabled={guardandoPedidoLaboratorio}
+                                    className="flex items-center gap-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    {guardandoPedidoLaboratorio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                                    Generar orden
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setMostrarPedidoLaboratorio(false)
+                                        limpiarPedidoLaboratorio()
+                                    }}
+                                    className="text-xs text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
                         </div>
                     )}
 

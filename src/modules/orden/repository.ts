@@ -234,6 +234,7 @@ export async function crearOrdenInterna(
         numero,
         ingresoId: data.ingresoId ?? null,
         pacienteId: data.pacienteId ?? null,
+        descripcion: data.descripcion ?? null,
         nombrePaciente: data.nombrePaciente,
         numeroAfiliado: data.numeroAfiliado,
         obraSocialId: data.obraSocialId,

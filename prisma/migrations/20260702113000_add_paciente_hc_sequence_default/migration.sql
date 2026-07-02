@@ -3,10 +3,13 @@
 
 CREATE SEQUENCE IF NOT EXISTS "Paciente_HC_seq";
 
+WITH max_hc AS (
+  SELECT MAX("PacHC") AS value FROM "Paciente"
+)
 SELECT setval(
   '"Paciente_HC_seq"',
-  COALESCE((SELECT MAX("PacHC") FROM "Paciente"), 0),
-  true
+  GREATEST(COALESCE((SELECT value FROM max_hc), 1), 1),
+  (SELECT value IS NOT NULL FROM max_hc)
 );
 
 ALTER TABLE "Paciente"

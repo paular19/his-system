@@ -883,6 +883,32 @@ export async function crearPractica(
     },
   })
 
+  const convenioSolicitado =
+    Number.isFinite(Number(data.convenioId)) && Number(data.convenioId) > 0
+      ? Math.floor(Number(data.convenioId))
+      : null
+  const convenioIngreso =
+    ingreso?.obraSocialId != null && Number(ingreso.obraSocialId) > 0
+      ? Number(ingreso.obraSocialId)
+      : null
+
+  let convenioResuelto = convenioSolicitado ?? convenioIngreso
+  if (convenioResuelto == null) {
+    const ultimaPractica = await prisma.practica.findFirst({
+      where: {
+        ingresoId: data.ingresoId,
+        estado: { not: 'X' },
+      },
+      select: { convenioId: true },
+      orderBy: { id: 'desc' },
+    })
+    convenioResuelto = ultimaPractica?.convenioId ?? null
+  }
+
+  if (convenioResuelto == null || convenioResuelto <= 0) {
+    throw new Error('Convenio no encontrado para la internación')
+  }
+
   let importeTotal: number | null = null
   if (importeBaseUnitario != null && importeBaseUnitario > 0) {
     importeTotal = importeBaseUnitario * cantidad
@@ -901,7 +927,7 @@ export async function crearPractica(
   const practica = await prisma.practica.create({
     data: {
       ingresoId: data.ingresoId,
-      convenioId: data.convenioId,
+      convenioId: convenioResuelto,
       codigoPractica: codigo,
       convenioValorId: 0,
       fecha: data.fecha,

@@ -20,7 +20,7 @@ datasource db {
 
 model Paciente {
   id              Int  @id @default(autoincrement()) @map("PacID")
-  historiaClinica Int? @unique @map("PacHC")
+  historiaClinica Int? @unique @default(dbgenerated("nextval('\"Paciente_HC_seq\"'::regclass)")) @map("PacHC")
 
   // Identificación
   apellido        String    @map("PacApell") @db.VarChar(100)

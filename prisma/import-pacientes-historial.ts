@@ -200,7 +200,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 function buildPacienteData(payload: PacienteRow): Prisma.PacienteUncheckedCreateInput {
     return {
         id: payload.id,
-        historiaClinica: payload.historiaClinica,
+        historiaClinica: payload.historiaClinica ?? undefined,
         apellido: payload.apellido,
         nombre: payload.nombre,
         nombreCompleto: payload.nombreCompleto,

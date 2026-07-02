@@ -2,16 +2,11 @@ import { registrarAudit } from '@/lib/security/audit'
 import { crearOrdenInterna } from './repository'
 import type { CrearOrdenInput } from './schemas'
 
-type CrearOrdenAmbulatorioOpciones = {
-  permitirCombinacionesYaAutorizadas?: boolean
-}
-
 export async function crearOrdenAmbulatorio(
   data: CrearOrdenInput,
-  usuario: string,
-  opciones: CrearOrdenAmbulatorioOpciones = {}
+  usuario: string
 ) {
-  const orden = await crearOrdenInterna(data, usuario, opciones)
+  const orden = await crearOrdenInterna(data, usuario)
 
   await registrarAudit({
     usuario,
@@ -25,14 +20,6 @@ export async function crearOrdenAmbulatorio(
 }
 
 export async function crearOrdenesAmbulatoriasPorPractica(data: CrearOrdenInput, usuario: string) {
-  return crearOrdenesAmbulatoriasPorPracticaConOpciones(data, usuario, {})
-}
-
-export async function crearOrdenesAmbulatoriasPorPracticaConOpciones(
-  data: CrearOrdenInput,
-  usuario: string,
-  opciones: CrearOrdenAmbulatorioOpciones = {}
-) {
   const ordenes = [] as Array<{ puestoNumero: number; numero: number }>
 
   for (const item of data.items) {
@@ -41,8 +28,7 @@ export async function crearOrdenesAmbulatoriasPorPracticaConOpciones(
         ...data,
         items: [item],
       },
-      usuario,
-      opciones
+      usuario
     )
     ordenes.push({ puestoNumero: orden.puestoNumero, numero: orden.numero })
   }

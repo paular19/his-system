@@ -201,68 +201,17 @@ function resolverNumeroAutorizacionOrdenLista(row: OrdenListaRowConItems): strin
 // ============================================
 
 export async function crearOrden(data: CrearOrdenInput, usuario: string) {
-  return crearOrdenInterna(data, usuario, { permitirCombinacionesYaAutorizadas: false })
-}
-
-type CrearOrdenOpciones = {
-  permitirCombinacionesYaAutorizadas?: boolean
+  return crearOrdenInterna(data, usuario)
 }
 
 export async function crearOrdenInterna(
   data: CrearOrdenInput,
-  usuario: string,
-  opciones: CrearOrdenOpciones = {}
+  usuario: string
 ) {
   return prisma.$transaction(async (tx) => {
     const usuarioRegistro = usuario.trim().slice(0, 10) || 'SISTEMA'
     const tipoOrdenCodigo = await resolverTipoOrdenCodigo(tx, data.tipoOrdenCodigo)
     const planId = await resolverPlanOrden(tx, data.obraSocialId, usuarioRegistro)
-
-    const itemsNormalizados = data.items.map((item) => ({
-      convenioId: item.convenioId,
-      codigoPractica: item.codigoPractica.trim().slice(0, 8),
-      incluyeCodigo: normalizarIncluyeCodigo(item.incluyeCodigo),
-    }))
-
-    if (!opciones.permitirCombinacionesYaAutorizadas) {
-      // Validar que la práctica no tenga ya orden en el mismo ingreso/paciente
-      const whereOrden: Prisma.OrdenWhereInput = data.ingresoId
-        ? { ingresoId: data.ingresoId, NOT: { estado: 'X' } }
-        : data.pacienteId
-          ? { pacienteId: data.pacienteId, NOT: { estado: 'X' } }
-          : { NOT: { estado: 'X' } }
-
-      const practicasConOrden = await tx.ordenPractica.findMany({
-        where: {
-          orden: whereOrden,
-          OR: itemsNormalizados.map((item) => ({
-            convenioId: item.convenioId,
-            codigoPractica: item.codigoPractica,
-            modulo: item.incluyeCodigo,
-          })),
-        },
-        select: {
-          codigoPractica: true,
-          convenioId: true,
-          modulo: true,
-          ordenNumero: true,
-          puestoNumero: true,
-        },
-      })
-
-      if (practicasConOrden.length > 0) {
-        const practicas = practicasConOrden
-          .map((p) => {
-            const modulo = p.modulo?.trim()
-            const moduloLabel = modulo ? ` [${modulo}]` : ''
-            return `${p.codigoPractica.trim()}${moduloLabel} (Orden ${p.puestoNumero}-${p.ordenNumero})`
-          })
-          .join(', ')
-        throw new Error(
-          `Las prácticas/subitems ya están autorizados: ${practicas}. No se pueden generar nuevas órdenes para la misma combinación.`
-        )
-      }
-    }
 
     // Obtener próximo número de orden
     const ultimo = await tx.orden.findFirst({

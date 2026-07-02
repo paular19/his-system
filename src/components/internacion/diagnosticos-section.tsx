@@ -222,7 +222,7 @@ export function DiagnosticosSection({
                                         <p className="mt-1 text-gray-500 whitespace-pre-line">{diagnostico.observaciones}</p>
                                     )}
                                     <p className="mt-1 text-gray-400">
-                                        {new Date(diagnostico.fecha).toLocaleString('es-AR')} · {diagnostico.usuario}
+                                        {new Date(diagnostico.fecha).toLocaleString('es-AR', { hour12: false })} · {diagnostico.usuario}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">

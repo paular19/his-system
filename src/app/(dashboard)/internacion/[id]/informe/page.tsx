@@ -354,7 +354,7 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
         {/* Footer para impresión */}
         <div className="hidden print:block border-t pt-4 mt-8 text-center text-xs text-gray-400">
           <p>Informe generado automáticamente - Válido con firma autorizada</p>
-          <p>{new Date().toLocaleString('es-AR')}</p>
+          <p>{new Date().toLocaleString('es-AR', { hour12: false })}</p>
         </div>
       </div>
     </>

@@ -86,6 +86,7 @@ export function formatearFechaHoraArgentina(
   const normalizada = normalizarParaVisualizacionArgentina(fecha)
   return normalizada.toLocaleString('es-AR', {
     ...options,
+    hour12: false,
     timeZone: ARG_TIME_ZONE,
   })
 }

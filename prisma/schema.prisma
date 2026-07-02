@@ -1158,6 +1158,8 @@ model Practica {
 
   // ⭐ NÚMERO DE AUTORIZACIÓN (copiado desde OrdenPractica)
   numeroAutorizacion    String? @map("PraNumAut") @db.VarChar(50)
+  numeroProtocoloLab    String? @map("PraLabProt") @db.VarChar(50)
+  diagnosticoLab        String? @map("PraLabDiag") @db.VarChar(300)
   matriculaEspecialista Int?    @map("PraMatEsp")
   matriculaAnestesista  Int?    @map("PraMatAne")
 

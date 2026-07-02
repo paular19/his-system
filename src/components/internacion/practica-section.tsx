@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
-import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
 import {
     ComponenteSelector,
     type ComponenteValores,
@@ -67,6 +66,13 @@ function numeroAutorizacionValida(value: string | null | undefined): boolean {
 
 function practicaActiva(estado: string | null | undefined): boolean {
     return (estado?.trim().toUpperCase() ?? 'A') !== 'X'
+}
+
+function esPedidoLaboratorio(practica: Pick<PracticaItem, 'codigoPractica' | 'numeroProtocoloLaboratorio' | 'diagnosticoLaboratorio'>): boolean {
+    return practica.codigoPractica.trim() === '66' && (
+        (practica.numeroProtocoloLaboratorio?.trim().length ?? 0) > 0 ||
+        (practica.diagnosticoLaboratorio?.trim().length ?? 0) > 0
+    )
 }
 
 interface PracticaSectionProps {
@@ -205,30 +211,47 @@ export function PracticaSection({
             return
         }
 
+        if (!convenioId || convenioId <= 0) {
+            setError('No hay convenio activo para registrar el pedido de laboratorio')
+            return
+        }
+
         setError(null)
         setGuardandoPedidoLaboratorio(true)
         try {
-            const result = await crearPedidoLaboratorioAction({
-                ingresoId,
-                numeroProtocolo,
-                diagnostico,
+            const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    convenioId,
+                    codigoPractica: '66',
+                    descripcionPractica: 'PROTOCOLO BIOQUIMICO',
+                    numeroProtocoloLaboratorio: numeroProtocolo,
+                    diagnosticoLaboratorio: diagnostico,
+                    fecha: new Date().toISOString(),
+                    cantidad: 1,
+                    numeroAutorizacion: null,
+                    matriculaEspecialista: null,
+                    matriculaAnestesista: null,
+                    facturable: true,
+                    importeBaseUnitario: null,
+                }),
             })
+            const json = await res.json()
 
-            if ('error' in result && result.error) {
-                setError(result.error)
+            if (!res.ok) {
+                setError(json?.error ?? 'Error al registrar el pedido de laboratorio')
                 return
             }
 
+            setPracticas((prev) => [json.data as PracticaItem, ...prev])
+            if (refrescarDespuesCambios) {
+                router.refresh()
+            }
             limpiarPedidoLaboratorio()
             setMostrarPedidoLaboratorio(false)
-            if ('puestoNumero' in result && 'numero' in result) {
-                router.push(`/dashboard/ambulatorio/${result.puestoNumero}/${result.numero}`)
-                return
-            }
-
-            router.refresh()
         } catch {
-            setError('Error al generar el pedido de laboratorio')
+            setError('Error al guardar el pedido de laboratorio')
         } finally {
             setGuardandoPedidoLaboratorio(false)
         }
@@ -644,7 +667,7 @@ export function PracticaSection({
                             className="flex items-center gap-1 text-xs font-medium text-indigo-700 hover:text-indigo-800 border border-indigo-200 rounded-lg px-2.5 py-1 hover:bg-indigo-50"
                         >
                             <Plus className="h-3.5 w-3.5" />
-                            Nuevo pedido de laboratorio
+                            Agregar pedido de laboratorio
                         </button>
                     )}
                     {puedeCrear && (
@@ -656,7 +679,7 @@ export function PracticaSection({
                             className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50"
                         >
                             <Plus className="h-3.5 w-3.5" />
-                            Agregar
+                            Agregar práctica
                         </button>
                     )}
                 </div>
@@ -702,7 +725,7 @@ export function PracticaSection({
                                     ) : (
                                         <Plus className="h-3.5 w-3.5" />
                                     )}
-                                    Generar orden
+                                    Guardar
                                 </button>
                                 <button
                                     onClick={() => {
@@ -999,6 +1022,12 @@ export function PracticaSection({
                                                         {p.descripcionPractica ?? p.codigoPractica.trim()}
                                                     </span>
                                                 </div>
+                                                {esPedidoLaboratorio(p) && (
+                                                    <div className="mt-1 text-[11px] text-indigo-700 space-y-0.5">
+                                                        <p>Protocolo N° {p.numeroProtocoloLaboratorio?.trim() || '-'}</p>
+                                                        <p>Diagnóstico: {p.diagnosticoLaboratorio?.trim() || '-'}</p>
+                                                    </div>
+                                                )}
                                                 <div className="flex items-center gap-3 mt-1 text-gray-500 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
                                                     {p.cantidad > 1 && <span>Cant: {p.cantidad}</span>}
@@ -1126,6 +1155,12 @@ export function PracticaSection({
                                                         {p.descripcionPractica ?? p.codigoPractica.trim()}
                                                     </span>
                                                 </div>
+                                                {esPedidoLaboratorio(p) && (
+                                                    <div className="mt-1 text-[11px] text-indigo-700 space-y-0.5">
+                                                        <p>Protocolo N° {p.numeroProtocoloLaboratorio?.trim() || '-'}</p>
+                                                        <p>Diagnóstico: {p.diagnosticoLaboratorio?.trim() || '-'}</p>
+                                                    </div>
+                                                )}
                                                 <div className="flex items-center gap-3 mt-1 text-emerald-700 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
                                                     {ordenesOrdenadas.map((orden) => (

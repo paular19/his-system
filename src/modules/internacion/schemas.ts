@@ -156,6 +156,8 @@ export const CrearPracticaSchema = z.object({
   convenioId: z.number().int().min(0),
   codigoPractica: z.string().min(1).max(8).trim().toUpperCase(),
   descripcionPractica: z.string().max(200).trim().optional().nullable(),
+  numeroProtocoloLaboratorio: z.string().max(50).trim().optional().nullable(),
+  diagnosticoLaboratorio: z.string().max(300).trim().optional().nullable(),
   fecha: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
   cantidad: z.coerce.number().int().min(1).max(999).default(1),
   numeroAutorizacion: z.string().max(50).trim().optional().nullable(),

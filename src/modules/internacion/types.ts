@@ -218,6 +218,8 @@ export interface PracticaItem {
   convenioId: number
   codigoPractica: string
   descripcionPractica: string | null
+  numeroProtocoloLaboratorio?: string | null
+  diagnosticoLaboratorio?: string | null
   fecha: Date
   cantidad: number
   importeTotal?: number | null

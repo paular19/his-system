@@ -48,6 +48,7 @@ type ItemPractica = OrdenPracticaItemInput & {
   descripcionPractica: string
   _key: string
   numeroProtocoloLaboratorio?: string | null
+  diagnosticoLaboratorio?: string | null
   fecha?: Date | string | null
   grupoOrden: number
   valorUnitario: number | null
@@ -351,6 +352,8 @@ export function ConsultaForm({
         convenioId: p.convenioId,
         codigoPractica: p.codigoPractica.trim().slice(0, 8),
         descripcionPractica: p.descripcionPractica,
+        numeroProtocoloLaboratorio: p.numeroProtocoloLaboratorio,
+        diagnosticoLaboratorio: p.diagnosticoLaboratorio,
         grupoOrden: p.grupoOrden ?? 1,
         cantidad: p.cantidad,
         tipoFacturacion: 'H',
@@ -743,6 +746,7 @@ export function ConsultaForm({
         codigoPractica: '66',
         descripcionPractica: 'PROTOCOLO BIOQUIMICO',
         numeroProtocoloLaboratorio: numeroProtocolo,
+        diagnosticoLaboratorio: diagnosticoPedido,
         grupoOrden: esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1,
         cantidad: 1,
         tipoFacturacion: 'H',
@@ -758,7 +762,9 @@ export function ConsultaForm({
       [key]: 'PROTOCOLO BIOQUIMICO',
     }))
 
-    setDiagnostico(diagnosticoPedido)
+    if (!diagnostico.trim()) {
+      setDiagnostico(diagnosticoPedido)
+    }
     setNumeroProtocoloLaboratorio('')
     setDiagnosticoPedidoLaboratorio('')
     setMostrarPedidoLaboratorio(false)
@@ -1000,9 +1006,15 @@ export function ConsultaForm({
 
     setSubmitting(true)
     try {
-      const numeroProtocoloPedidoLaboratorio = practicas
-        .map((p) => p.numeroProtocoloLaboratorio?.trim() ?? '')
-        .find((value) => value.length > 0)
+      const pedidoLaboratorio = practicas
+        .map((p) => ({
+          numeroProtocolo: p.numeroProtocoloLaboratorio?.trim() ?? '',
+          diagnostico: p.diagnosticoLaboratorio?.trim() ?? '',
+        }))
+        .find((value) => value.numeroProtocolo.length > 0)
+
+      const numeroProtocoloPedidoLaboratorio = pedidoLaboratorio?.numeroProtocolo ?? ''
+      const diagnosticoPedidoLaboratorio = pedidoLaboratorio?.diagnostico ?? ''
 
       const itemsOrdenBase: Array<OrdenPracticaItemInput & {
         grupoOrden: number
@@ -1396,7 +1408,7 @@ export function ConsultaForm({
         obraSocialId: parseInt(obraSocialId, 10),
         profesionalId: parseInt(profesionalId, 10),
         tipoOrdenCodigo: 'PRA',
-        descripcionPatologia: diagnostico || undefined,
+        descripcionPatologia: diagnosticoPedidoLaboratorio || diagnostico.trim() || undefined,
         modoGeneracion: esEstrategiaGrupal ? 'AGRUPADA' : modoGeneracion,
         items: itemsOrden,
       })
@@ -1626,7 +1638,7 @@ export function ConsultaForm({
                   onClick={agregarPedidoLaboratorio}
                   className="rounded-md bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700"
                 >
-                  Agregar pedido
+                  Guardar
                 </button>
                 <button
                   type="button"
@@ -1762,6 +1774,12 @@ export function ConsultaForm({
                       </td>
                       <td className="px-3 py-2 text-gray-900">
                         {p.descripcionPractica}
+                        {p.codigoPractica.trim() === '66' && (
+                          <div className="mt-1 space-y-0.5 text-xs text-indigo-700">
+                            <p>Protocolo N° {p.numeroProtocoloLaboratorio?.trim() || '-'}</p>
+                            <p>Diagnóstico: {p.diagnosticoLaboratorio?.trim() || '-'}</p>
+                          </div>
+                        )}
                         {(p.seleccionComponentes?.especialista ?? 0) > 0 && (
                           <div className="mt-1 flex items-center gap-2 text-xs">
                             <span className="text-gray-500">Mat. HE</span>
@@ -1804,51 +1822,67 @@ export function ConsultaForm({
                         )}
                       </td>
                       <td className="px-3 py-2 text-xs text-gray-700">
-                        {obtenerSubitemsSeleccionados(p).join(' + ')}
+                        {p.codigoPractica.trim() === '66'
+                          ? 'Pedido laboratorio'
+                          : obtenerSubitemsSeleccionados(p).join(' + ')}
                       </td>
                       <td className="px-3 py-2 text-center text-gray-600">
-                        <div className="flex flex-col items-center gap-1">
+                        {p.codigoPractica.trim() === '66' ? (
+                          <span className="inline-flex rounded bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700">
+                            1
+                          </span>
+                        ) : (
+                          <div className="flex flex-col items-center gap-1">
+                            <input
+                              type="number"
+                              min={1}
+                              value={p.cantidad}
+                              onChange={(e) => {
+                                const cantidad = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                                actualizarCantidad(p._key, cantidad)
+                              }}
+                              className="w-16 rounded border border-gray-200 px-2 py-1 text-xs text-center"
+                              title="Cantidad"
+                            />
+                            {p.subitemCodigo && p.cantidad > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => desagruparLineaSubitem(p._key)}
+                                className="text-[10px] font-medium text-blue-600 hover:text-blue-700"
+                              >
+                                Desagrupar
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center text-gray-600">
+                        {p.codigoPractica.trim() === '66' ? (
+                          <span className="text-xs font-medium text-indigo-700">{p.grupoOrden}</span>
+                        ) : (
                           <input
                             type="number"
                             min={1}
-                            value={p.cantidad}
+                            value={p.grupoOrden}
                             onChange={(e) => {
-                              const cantidad = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
-                              actualizarCantidad(p._key, cantidad)
+                              const grupo = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                              setPracticas((prev) => prev.map((x) =>
+                                x._key === p._key
+                                  ? { ...x, grupoOrden: grupo }
+                                  : x
+                              ))
                             }}
                             className="w-16 rounded border border-gray-200 px-2 py-1 text-xs text-center"
-                            title="Cantidad"
+                            title="Número de grupo"
                           />
-                          {p.subitemCodigo && p.cantidad > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => desagruparLineaSubitem(p._key)}
-                              className="text-[10px] font-medium text-blue-600 hover:text-blue-700"
-                            >
-                              Desagrupar
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-center text-gray-600">
-                        <input
-                          type="number"
-                          min={1}
-                          value={p.grupoOrden}
-                          onChange={(e) => {
-                            const grupo = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
-                            setPracticas((prev) => prev.map((x) =>
-                              x._key === p._key
-                                ? { ...x, grupoOrden: grupo }
-                                : x
-                            ))
-                          }}
-                          className="w-16 rounded border border-gray-200 px-2 py-1 text-xs text-center"
-                          title="Número de grupo"
-                        />
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right text-gray-600">
-                        {p.valorUnitario != null ? formatoMoneda.format(p.valorUnitario) : '-'}
+                        {p.codigoPractica.trim() === '66'
+                          ? '-'
+                          : p.valorUnitario != null
+                            ? formatoMoneda.format(p.valorUnitario)
+                            : '-'}
                       </td>
                       <td className="px-3 py-2">
                         <button

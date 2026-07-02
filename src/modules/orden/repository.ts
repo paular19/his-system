@@ -760,6 +760,8 @@ export async function obtenerContextoAdmisionParaOrden(
           cantidad: true,
           fecha: true,
           numeroAutorizacion: true,
+          numeroProtocoloLab: true,
+          diagnosticoLab: true,
           facturable: true,
           estado: true,
           puestoNumero: true,
@@ -977,7 +979,12 @@ export async function obtenerContextoAdmisionParaOrden(
           id: p.id,
           convenioId: p.convenioId,
           codigoPractica: p.codigoPractica.trim(),
-          descripcionPractica: nomenclador?.descripcion ?? p.codigoPractica.trim(),
+          descripcionPractica:
+            p.codigoPractica.trim() === '66'
+              ? nomenclador?.descripcion ?? 'PROTOCOLO BIOQUIMICO'
+              : nomenclador?.descripcion ?? p.codigoPractica.trim(),
+          numeroProtocoloLaboratorio: p.numeroProtocoloLab,
+          diagnosticoLaboratorio: p.diagnosticoLab,
           facturable: p.facturable,
           estado: p.estado,
           tieneOrdenActivaPorCodigo: codigosEnOrdenActiva.has(

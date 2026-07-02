@@ -75,6 +75,11 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
   return normalized.length > 0 ? normalized : null
 }
 
+function normalizarTextoOpcional(value: string | null | undefined): string | null {
+  const normalized = value?.trim() ?? ''
+  return normalized.length > 0 ? normalized : null
+}
+
 type ComponentesPractica = {
   valorEspecialista: number | null
   valorAyudante: number | null
@@ -516,6 +521,8 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
         cantidad: true,
         importeTotal: true,
         numeroAutorizacion: true,
+        numeroProtocoloLab: true,
+        diagnosticoLab: true,
         matriculaEspecialista: true,
         matriculaAnestesista: true,
         puestoNumero: true,
@@ -746,6 +753,8 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
           componentes,
         })
       })(),
+      numeroProtocoloLaboratorio: p.numeroProtocoloLab,
+      diagnosticoLaboratorio: p.diagnosticoLab,
       cantidad: Number(p.cantidad),
       importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
       ordenPractica:
@@ -898,6 +907,8 @@ export async function crearPractica(
       fecha: data.fecha,
       cantidad,
       numeroAutorizacion: data.numeroAutorizacion ?? null,
+      numeroProtocoloLab: normalizarTextoOpcional(data.numeroProtocoloLaboratorio),
+      diagnosticoLab: normalizarTextoOpcional(data.diagnosticoLaboratorio),
       matriculaEspecialista: data.matriculaEspecialista ?? null,
       matriculaAnestesista: data.matriculaAnestesista ?? null,
       facturable: data.facturable,
@@ -912,6 +923,8 @@ export async function crearPractica(
       fecha: true,
       cantidad: true,
       numeroAutorizacion: true,
+      numeroProtocoloLab: true,
+      diagnosticoLab: true,
       matriculaEspecialista: true,
       matriculaAnestesista: true,
       facturable: true,
@@ -932,6 +945,8 @@ export async function crearPractica(
     ...practica,
     usuario: practica.usuarioRegistro,
     descripcionPractica: data.descripcionPractica ?? null,
+    numeroProtocoloLaboratorio: practica.numeroProtocoloLab,
+    diagnosticoLaboratorio: practica.diagnosticoLab,
     cantidad: Number(practica.cantidad),
     importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : null,
     matriculaEspecialista: practica.matriculaEspecialista,
@@ -967,6 +982,8 @@ export async function desagruparPracticaNoAutorizada(
         fecha: true,
         cantidad: true,
         numeroAutorizacion: true,
+        numeroProtocoloLab: true,
+        diagnosticoLab: true,
         matriculaEspecialista: true,
         matriculaAnestesista: true,
         obraSocialId: true,
@@ -1070,6 +1087,8 @@ export async function desagruparPracticaNoAutorizada(
         fecha: true,
         cantidad: true,
         numeroAutorizacion: true,
+        numeroProtocoloLab: true,
+        diagnosticoLab: true,
         matriculaEspecialista: true,
         matriculaAnestesista: true,
         facturable: true,
@@ -1098,6 +1117,8 @@ export async function desagruparPracticaNoAutorizada(
           fecha: practica.fecha,
           cantidad: 1,
           numeroAutorizacion: null,
+          numeroProtocoloLab: practica.numeroProtocoloLab,
+          diagnosticoLab: practica.diagnosticoLab,
           matriculaEspecialista: practica.matriculaEspecialista,
           matriculaAnestesista: practica.matriculaAnestesista,
           obraSocialId: practica.obraSocialId,
@@ -1117,6 +1138,8 @@ export async function desagruparPracticaNoAutorizada(
           fecha: true,
           cantidad: true,
           numeroAutorizacion: true,
+          numeroProtocoloLab: true,
+          diagnosticoLab: true,
           matriculaEspecialista: true,
           matriculaAnestesista: true,
           facturable: true,
@@ -1147,6 +1170,8 @@ export async function desagruparPracticaNoAutorizada(
         cantidad: Number(row.cantidad),
         componentes,
       }),
+      numeroProtocoloLaboratorio: row.numeroProtocoloLab,
+      diagnosticoLaboratorio: row.diagnosticoLab,
       cantidad: Number(row.cantidad),
       importeTotal: row.importeTotal != null ? Number(row.importeTotal) : null,
       matriculaEspecialista: row.matriculaEspecialista,

@@ -139,6 +139,8 @@ export type AdmisionOrdenContexto = {
     convenioId: number
     codigoPractica: string
     descripcionPractica: string
+    numeroProtocoloLaboratorio: string | null
+    diagnosticoLaboratorio: string | null
     facturable: boolean
     estado: string | null
     tieneOrdenActivaPorCodigo: boolean

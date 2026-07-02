@@ -151,6 +151,32 @@ function construirDescripcionPractica(params: {
   return detalleSubitem ? `${params.descripcionBase} · ${detalleSubitem}` : params.descripcionBase
 }
 
+async function asegurarNomencladorPedidoLaboratorio(params: {
+  convenioId: number
+  codigoPractica: string
+  descripcion?: string | null
+}) {
+  const codigoNormalizado = params.codigoPractica.trim().padEnd(8).slice(0, 8)
+  if (codigoNormalizado.trim() !== '66') return
+
+  const descripcion = normalizarTextoOpcional(params.descripcion) ?? 'PROTOCOLO BIOQUIMICO'
+
+  await prisma.nomencladorPractica.upsert({
+    where: {
+      convenioId_codigo: {
+        convenioId: params.convenioId,
+        codigo: codigoNormalizado,
+      },
+    },
+    update: {},
+    create: {
+      convenioId: params.convenioId,
+      codigo: codigoNormalizado,
+      descripcion,
+    },
+  })
+}
+
 function ingresoActivoParaMapa(fechaIngreso: Date | null | undefined, fechaReferencia: Date): boolean {
   if (!fechaIngreso) return false
   return claveDiaArgentina(fechaIngreso) <= claveDiaArgentina(fechaReferencia)
@@ -908,6 +934,12 @@ export async function crearPractica(
   if (convenioResuelto == null || convenioResuelto <= 0) {
     throw new Error('Convenio no encontrado para la internación')
   }
+
+  await asegurarNomencladorPedidoLaboratorio({
+    convenioId: convenioResuelto,
+    codigoPractica: codigo,
+    descripcion: data.descripcionPractica,
+  })
 
   let importeTotal: number | null = null
   if (importeBaseUnitario != null && importeBaseUnitario > 0) {

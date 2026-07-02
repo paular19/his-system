@@ -1036,14 +1036,16 @@ export function PracticaSection({
                                                     <span>{fmtFecha(p.fecha)}</span>
                                                     {p.cantidad > 1 && <span>Cant: {p.cantidad}</span>}
                                                     {p.numeroAutorizacion && <span>Aut: {p.numeroAutorizacion}</span>}
-                                                    <span
-                                                        className={`px-1.5 py-0.5 rounded ${p.facturable
-                                                            ? 'bg-green-50 text-green-700'
-                                                            : 'bg-gray-100 text-gray-500'
-                                                            }`}
-                                                    >
-                                                        {p.facturable ? 'Facturable' : 'No facturable'}
-                                                    </span>
+                                                    {!esPedidoLaboratorio(p) && (
+                                                        <span
+                                                            className={`px-1.5 py-0.5 rounded ${p.facturable
+                                                                ? 'bg-green-50 text-green-700'
+                                                                : 'bg-gray-100 text-gray-500'
+                                                                }`}
+                                                        >
+                                                            {p.facturable ? 'Facturable' : 'No facturable'}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">

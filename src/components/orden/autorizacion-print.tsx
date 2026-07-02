@@ -33,6 +33,10 @@ export function AutorizacionPrint({
   }
 
   const tituloPorIncluye = (item: OrdenConItems['items'][number]): string => {
+    if (item.codigoPractica.trim() === '66') {
+      return 'PROTOCOLO BIOQUIMICO'
+    }
+
     const incluye = item.incluyeCodigo
 
     if (item.titularModular) {
@@ -50,6 +54,12 @@ export function AutorizacionPrint({
     if (incluye === 'HA') return 'HONORARIO ANESTESISTA'
     if (incluye.startsWith('A')) return 'HONORARIOS AYUDANTE'
     return 'HONORARIOS'
+  }
+
+  const diferencialTexto = (item: OrdenConItems['items'][number]): string => {
+    if (item.codigoPractica.trim() === '66') return '-'
+    if (item.porcentajeCargoPac !== null) return `${item.porcentajeCargoPac}%`
+    return '100.00%'
   }
 
   const profesionalTexto = (item: OrdenConItems['items'][number]): string => {
@@ -313,11 +323,7 @@ export function AutorizacionPrint({
                         <td>{item.codigoPractica.trim()}</td>
                         <td className="text-center">{item.cantidad}</td>
                         <td>{item.descripcionPractica.toUpperCase()}</td>
-                        <td className="text-center">
-                          {item.porcentajeCargoPac !== null
-                            ? `${item.porcentajeCargoPac}%`
-                            : '100.00%'}
-                        </td>
+                        <td className="text-center">{diferencialTexto(item)}</td>
                         <td className="text-center">{item.incluyeCodigo ?? '-'}</td>
                         <td>{profesionalTexto(item)}</td>
                         <td>{fechaFormateada}</td>

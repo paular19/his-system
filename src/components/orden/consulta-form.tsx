@@ -264,6 +264,10 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
   return normalized.length > 0 ? normalized : null
 }
 
+function esProtocoloBioquimico(item: Pick<ItemPractica, 'codigoPractica'>): boolean {
+  return item.codigoPractica.trim() === '66'
+}
+
 function esPracticaPendienteParaNuevaOrden(
   practica: AdmisionOrdenContexto['practicas'][number]
 ): boolean {
@@ -893,10 +897,18 @@ export function ConsultaForm({
   }
 
   const getTitularPractica = (practiceKey: string): string => {
+    const practica = practicas.find((p) => p._key === practiceKey)
+    if (practica && esProtocoloBioquimico(practica)) {
+      return 'PROTOCOLO BIOQUIMICO'
+    }
     return titularPorPractica[practiceKey] ?? 'HONORARIO ESPECIALISTA'
   }
 
   const getTitularGrupo = (grupo: number): string => {
+    const practicaGrupo = practicas.find((p) => p.grupoOrden === grupo)
+    if (practicaGrupo && esProtocoloBioquimico(practicaGrupo)) {
+      return 'PROTOCOLO BIOQUIMICO'
+    }
     return titularPorGrupo[grupo] ?? 'HONORARIO ESPECIALISTA'
   }
 
@@ -913,7 +925,14 @@ export function ConsultaForm({
     if (tituloPorItem) return tituloPorItem
 
     const tituloGlobal = tituloOrden.trim()
-    return tituloGlobal || undefined
+    if (tituloGlobal) return tituloGlobal
+
+    const practica = practicas.find((p) => p._key === practiceKey)
+    if (practica && esProtocoloBioquimico(practica)) {
+      return 'PROTOCOLO BIOQUIMICO'
+    }
+
+    return undefined
   }
 
   const esTituloAnestesista = (titulo: string | undefined): boolean => {

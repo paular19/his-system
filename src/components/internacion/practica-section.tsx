@@ -200,6 +200,10 @@ export function PracticaSection({
     const handleCrearPedidoLaboratorio = async () => {
         const numeroProtocolo = numeroProtocoloLaboratorio.trim()
         const diagnostico = diagnosticoLaboratorio.trim()
+        const convenioPedidoLaboratorio =
+            convenioId ??
+            practicas.find((practica) => Number(practica.convenioId) > 0)?.convenioId ??
+            0
 
         if (!numeroProtocolo) {
             setError('Ingresá el número de protocolo')
@@ -211,11 +215,6 @@ export function PracticaSection({
             return
         }
 
-        if (!convenioId || convenioId <= 0) {
-            setError('No hay convenio activo para registrar el pedido de laboratorio')
-            return
-        }
-
         setError(null)
         setGuardandoPedidoLaboratorio(true)
         try {
@@ -223,7 +222,7 @@ export function PracticaSection({
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    convenioId,
+                    convenioId: convenioPedidoLaboratorio,
                     codigoPractica: '66',
                     descripcionPractica: 'PROTOCOLO BIOQUIMICO',
                     numeroProtocoloLaboratorio: numeroProtocolo,
@@ -714,6 +713,11 @@ export function PracticaSection({
                                     />
                                 </div>
                             </div>
+                            {error && (
+                                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
+                                    {error}
+                                </p>
+                            )}
                             <div className="flex gap-2 pt-1">
                                 <button
                                     onClick={handleCrearPedidoLaboratorio}

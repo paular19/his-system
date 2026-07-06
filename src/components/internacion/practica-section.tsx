@@ -177,6 +177,35 @@ export function PracticaSection({
         )
     }, [practicaSeleccionada, componenteSeleccion])
 
+    const clasificacionesPorComponenteForm = useMemo(() => {
+        const porComponente: Record<keyof ComponenteSeleccion, Array<{ index: number, label: string, value: string }>> = {
+            especialista: [],
+            ayudante: [],
+            anestesista: [],
+            gastos: [],
+        }
+
+        const contador = new Map<string, number>()
+        for (const [idx, subitem] of subitemsSeleccionadosForm.entries()) {
+            const actual = (contador.get(subitem) ?? 0) + 1
+            contador.set(subitem, actual)
+            const totalSubitem = subitemsSeleccionadosForm.filter((x) => x === subitem).length
+            const sufijo = totalSubitem > 1 ? ` #${actual}` : ''
+            const entrada = {
+                index: idx,
+                label: `${subitem}${sufijo}`,
+                value: clasificacionPorSubitemNuevo[idx] ?? subitem,
+            }
+
+            if (subitem === 'HE') porComponente.especialista.push(entrada)
+            else if (subitem === 'HA') porComponente.anestesista.push(entrada)
+            else if (subitem === 'GA') porComponente.gastos.push(entrada)
+            else porComponente.ayudante.push(entrada)
+        }
+
+        return porComponente
+    }, [subitemsSeleccionadosForm, clasificacionPorSubitemNuevo])
+
     useEffect(() => {
         if (subitemsSeleccionadosForm.length === 0) {
             setClasificacionPorSubitemNuevo([])
@@ -893,6 +922,16 @@ export function PracticaSection({
                                     seleccion={componenteSeleccion}
                                     onChange={setComponenteSeleccion}
                                     disabled={guardando}
+                                    clasificacionesPorComponente={clasificacionesPorComponenteForm}
+                                    onClasificacionChange={(index, value) => {
+                                        const raw = value.toUpperCase()
+                                        setClasificacionPorSubitemNuevo((prev) => {
+                                            const next = [...prev]
+                                            next[index] = normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, '')
+                                            return next
+                                        })
+                                    }}
+                                    clasificacionListId="clasificacion-practica-list"
                                 />
                             )}
 
@@ -923,45 +962,7 @@ export function PracticaSection({
                                 </div>
                             </div>
 
-                            {subitemsSeleccionadosForm.length > 0 ? (
-                                <div className="grid grid-cols-1 gap-3">
-                                    <div>
-                                        <label className="block text-xs text-gray-500 mb-1">Clasificación por subitem para agrupación</label>
-                                        <div className="space-y-2 rounded-md border border-gray-200 bg-white p-2">
-                                            {(() => {
-                                                const contador = new Map<string, number>()
-                                                return subitemsSeleccionadosForm.map((subitem, idx) => {
-                                                    const actual = (contador.get(subitem) ?? 0) + 1
-                                                    contador.set(subitem, actual)
-                                                    const repeticiones = subitemsSeleccionadosForm.filter((x) => x === subitem).length
-                                                    const sufijo = repeticiones > 1 ? ` #${actual}` : ''
-
-                                                    return (
-                                                        <div key={`${subitem}-${idx}`} className="grid grid-cols-[auto,1fr] items-center gap-2">
-                                                            <span className="text-[11px] font-medium text-gray-600">{subitem}{sufijo}</span>
-                                                            <input
-                                                                type="text"
-                                                                value={clasificacionPorSubitemNuevo[idx] ?? subitem}
-                                                                onChange={(e) => {
-                                                                    const raw = e.target.value.toUpperCase()
-                                                                    setClasificacionPorSubitemNuevo((prev) => {
-                                                                        const next = [...prev]
-                                                                        next[idx] = normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, '')
-                                                                        return next
-                                                                    })
-                                                                }}
-                                                                placeholder="HE, HA, GA, HP, A1..."
-                                                                list="clasificacion-practica-list"
-                                                                className="his-input text-xs w-full"
-                                                            />
-                                                        </div>
-                                                    )
-                                                })
-                                            })()}
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
+                            {subitemsSeleccionadosForm.length === 0 && (
                                 <div className="grid grid-cols-1 gap-3">
                                     <div>
                                         <label className="block text-xs text-gray-500 mb-1">Clasificación para agrupación de orden</label>

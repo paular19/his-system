@@ -72,6 +72,13 @@ interface ComponenteSelectorProps {
     seleccion: ComponenteSeleccion
     onChange: (seleccion: ComponenteSeleccion) => void
     disabled?: boolean
+    clasificacionesPorComponente?: Partial<Record<keyof ComponenteSeleccion, Array<{
+        index: number
+        label: string
+        value: string
+    }>>>
+    onClasificacionChange?: (index: number, value: string) => void
+    clasificacionListId?: string
 }
 
 export function ComponenteSelector({
@@ -79,6 +86,9 @@ export function ComponenteSelector({
     seleccion,
     onChange,
     disabled = false,
+    clasificacionesPorComponente,
+    onClasificacionChange,
+    clasificacionListId,
 }: ComponenteSelectorProps) {
     const tieneDesglose =
         valores.valorEspecialista != null ||
@@ -117,38 +127,58 @@ export function ComponenteSelector({
         const importe = valor != null
             ? (cantidad > 1 ? valor * cantidad : valor)
             : null
+        const clasificacionesFila = clasificacionesPorComponente?.[key] ?? []
 
         return (
-            <div className={`flex items-center justify-between gap-2 ${disabled ? 'opacity-60' : ''}`}>
-                <span className="flex items-center gap-1.5 min-w-0">
-                    <input
-                        type="checkbox"
-                        checked={activo}
-                        onChange={() => toggleCantidad(key, maximo)}
-                        disabled={disabled}
-                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className={`text-xs truncate ${activo ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
-                        {label}
-                    </span>
-                    {activo && (
-                        <span className="flex items-center gap-0.5 ml-1">
-                            <button
-                                type="button"
-                                onClick={() => cambiarCantidad(key, maximo, cantidad - 1)}
-                                className="w-4 h-4 rounded text-[10px] bg-gray-200 hover:bg-gray-300 flex items-center justify-center leading-none"
-                                disabled={disabled}
-                            >−</button>
-                            <span className="text-xs font-semibold w-4 text-center">{cantidad}</span>
-                            <button
-                                type="button"
-                                onClick={() => cambiarCantidad(key, maximo, cantidad + 1)}
-                                className="w-4 h-4 rounded text-[10px] bg-gray-200 hover:bg-gray-300 flex items-center justify-center leading-none"
-                                disabled={disabled || !puedeSumar}
-                            >+</button>
+            <div className={`flex items-start justify-between gap-2 ${disabled ? 'opacity-60' : ''}`}>
+                <div className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                        <input
+                            type="checkbox"
+                            checked={activo}
+                            onChange={() => toggleCantidad(key, maximo)}
+                            disabled={disabled}
+                            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className={`text-xs truncate ${activo ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
+                            {label}
                         </span>
+                        {activo && (
+                            <span className="flex items-center gap-0.5 ml-1">
+                                <button
+                                    type="button"
+                                    onClick={() => cambiarCantidad(key, maximo, cantidad - 1)}
+                                    className="w-4 h-4 rounded text-[10px] bg-gray-200 hover:bg-gray-300 flex items-center justify-center leading-none"
+                                    disabled={disabled}
+                                >−</button>
+                                <span className="text-xs font-semibold w-4 text-center">{cantidad}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => cambiarCantidad(key, maximo, cantidad + 1)}
+                                    className="w-4 h-4 rounded text-[10px] bg-gray-200 hover:bg-gray-300 flex items-center justify-center leading-none"
+                                    disabled={disabled || !puedeSumar}
+                                >+</button>
+                            </span>
+                        )}
+                    </span>
+                    {activo && clasificacionesFila.length > 0 && onClasificacionChange && (
+                        <div className="mt-1 ml-5 flex flex-wrap items-center gap-2">
+                            {clasificacionesFila.map((clas) => (
+                                <label key={`${key}-${clas.index}`} className="inline-flex items-center gap-1">
+                                    <span className="text-[10px] text-gray-500">{clas.label}</span>
+                                    <input
+                                        type="text"
+                                        value={clas.value}
+                                        onChange={(e) => onClasificacionChange(clas.index, e.target.value)}
+                                        list={clasificacionListId}
+                                        placeholder="HE"
+                                        className="w-16 rounded border border-gray-200 px-1.5 py-0.5 text-[10px] text-gray-700"
+                                    />
+                                </label>
+                            ))}
+                        </div>
                     )}
-                </span>
+                </div>
                 {importe != null && (
                     <span className={`text-xs font-mono shrink-0 ${activo ? 'text-gray-700' : 'text-gray-400'}`}>
                         {fmt.format(importe)}

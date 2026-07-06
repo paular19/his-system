@@ -277,6 +277,11 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         diagnosticoLab: true,
         estado: true,
         ordenPractica: {
+          where: {
+            orden: {
+              estado: { not: 'X' },
+            },
+          },
           select: { puestoNumero: true, ordenNumero: true },
         },
         nomencladorPractica: {

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
+import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 import {
     ComponenteSelector,
     type ComponenteValores,
@@ -116,6 +117,14 @@ interface PracticaSectionProps {
     forzarNavegacionCompletaGenerarAutorizacion?: boolean
 }
 
+interface OrdenGeneradaGrupo {
+    clasificacion: string
+    puestoNumero: number
+    numero: number
+    practicaIds: number[]
+    seleccionadaImpresion: boolean
+}
+
 export function PracticaSection({
     ingresoId,
     convenioId,
@@ -162,14 +171,15 @@ export function PracticaSection({
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
-    const [clasificacionNuevaPractica, setClasificacionNuevaPractica] = useState('HE')
     const [clasificacionPorSubitemNuevo, setClasificacionPorSubitemNuevo] = useState<string[]>([])
     const [desagrupandoPracticaId, setDesagrupandoPracticaId] = useState<number | null>(null)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
+    const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
     const [clasificacionPorPracticaId, setClasificacionPorPracticaId] = useState<Record<number, string>>({})
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
+    const [ordenesGeneradas, setOrdenesGeneradas] = useState<OrdenGeneradaGrupo[]>([])
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const subitemsPreviosRef = useRef<SubitemCodigo[]>([])
@@ -302,7 +312,6 @@ export function PracticaSection({
         setResultados([])
         setPracticaSeleccionada(null)
         setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
-        setClasificacionNuevaPractica('HE')
         setClasificacionPorSubitemNuevo([])
         setFecha(fechaHoraAInputLocal())
         setNumeroAutorizacion('')
@@ -419,7 +428,10 @@ export function PracticaSection({
 
         const subitemsSeleccionados = subitemsSeleccionadosForm
 
-        const clasificacionManual = normalizarClasificacionAgrupacion(clasificacionNuevaPractica) ?? 'HE'
+        const clasificacionManual =
+            practicaSeleccionada && practicaSeleccionada.valorAnestesista != null && practicaSeleccionada.valorEspecialista == null
+                ? 'HA'
+                : 'HE'
         const entradasCrear = subitemsSeleccionados.length > 0 && practicaSeleccionada
             ? subitemsSeleccionados.map((subitem, idx) => {
                 const valorUnitario = valorUnitarioPorSubitem(subitem, {
@@ -635,6 +647,116 @@ export function PracticaSection({
         }
     }
 
+    const handleGenerarOrdenes = async (imprimirDespues: boolean) => {
+        if (idsPendientesSeleccionadas.length === 0) {
+            setError('Seleccioná al menos una práctica pendiente para generar órdenes')
+            return
+        }
+
+        setError(null)
+        setGenerandoOrdenes(true)
+        try {
+            const clasificacionPayload = Object.fromEntries(
+                idsPendientesSeleccionadas.map((id) => {
+                    const practica = practicas.find((p) => p.id === id)
+                    const clasificacion = practica ? obtenerClasificacionPractica(practica) : 'HE'
+                    return [String(id), clasificacion]
+                })
+            )
+
+            const result = await generarOrdenesDesdeInternacionAction({
+                ingresoId,
+                practicaIds: idsPendientesSeleccionadas,
+                clasificacionPorPracticaId: clasificacionPayload,
+            })
+
+            if ('error' in result && result.error) {
+                setError(result.error)
+                return
+            }
+
+            const asignaciones = Array.isArray((result as { asignaciones?: unknown }).asignaciones)
+                ? ((result as {
+                    asignaciones: Array<{ practicaId: number; puestoNumero: number; numero: number; item: number }>
+                }).asignaciones)
+                : []
+
+            const asignacionPorPracticaId = new Map(
+                asignaciones.map((a) => [a.practicaId, a] as const)
+            )
+
+            setPracticas((prev) => prev.map((p) => {
+                const asignada = asignacionPorPracticaId.get(p.id)
+                if (!asignada) return p
+                const yaVinculada = p.ordenPractica.some(
+                    (op) => op.puestoNumero === asignada.puestoNumero && op.ordenNumero === asignada.numero && op.item === asignada.item
+                )
+                if (yaVinculada) return p
+
+                return {
+                    ...p,
+                    ordenPractica: [
+                        ...p.ordenPractica,
+                        {
+                            puestoNumero: asignada.puestoNumero,
+                            ordenNumero: asignada.numero,
+                            item: asignada.item,
+                            numeroAutorizacion: null,
+                        },
+                    ],
+                }
+            }))
+
+            const grupos = Array.isArray((result as { ordenesPorGrupo?: unknown }).ordenesPorGrupo)
+                ? ((result as {
+                    ordenesPorGrupo: Array<{ clasificacion: string; puestoNumero: number; numero: number; practicaIds: number[] }>
+                }).ordenesPorGrupo)
+                : []
+
+            const gruposConSeleccion = grupos.map((g) => ({
+                ...g,
+                seleccionadaImpresion: true,
+            }))
+
+            setOrdenesGeneradas(gruposConSeleccion)
+            setPracticasSeleccionadas((prev) => prev.filter((id) => !idsPendientesSeleccionadas.includes(id)))
+
+            if (imprimirDespues && gruposConSeleccion.length > 0) {
+                const ordenesParam = gruposConSeleccion
+                    .map((o) => `${o.puestoNumero}-${o.numero}`)
+                    .join(',')
+                router.push(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`)
+            }
+        } catch {
+            setError('Error al generar órdenes desde internación')
+        } finally {
+            setGenerandoOrdenes(false)
+        }
+    }
+
+    const alternarSeleccionOrdenGenerada = (puestoNumero: number, numero: number, checked: boolean) => {
+        setOrdenesGeneradas((prev) => prev.map((o) => {
+            if (o.puestoNumero !== puestoNumero || o.numero !== numero) return o
+            return { ...o, seleccionadaImpresion: checked }
+        }))
+    }
+
+    const handleImprimirOrdenes = (soloSeleccionadas: boolean) => {
+        const base = soloSeleccionadas
+            ? ordenesGeneradas.filter((o) => o.seleccionadaImpresion)
+            : ordenesGeneradas
+
+        if (base.length === 0) {
+            setError('No hay órdenes seleccionadas para imprimir')
+            return
+        }
+
+        const ordenesParam = base
+            .map((o) => `${o.puestoNumero}-${o.numero}`)
+            .join(',')
+        router.push(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`)
+    }
+
     const fmtFecha = (d: Date | string) =>
         new Date(d).toLocaleString('es-AR', {
             day: '2-digit',
@@ -652,29 +774,11 @@ export function PracticaSection({
     const practicasAutorizadas = practicasVigentes.filter(
         (p) => (p.ordenPractica?.length ?? 0) > 0 || numeroAutorizacionValida(p.numeroAutorizacion)
     )
-    const hrefGenerarAutorizacion = useMemo(() => {
-        const params = new URLSearchParams({ ingresoId: String(ingresoId) })
-        if (incluirPracticaIdsEnGenerarAutorizacion) {
-            const idsPendientes = practicasPendientes.map((p) => p.id).join(',')
-            if (idsPendientes) params.set('practicaIds', idsPendientes)
-        }
-
-        const clasificacionesPendientes = practicasPendientes
-            .map((practica) => {
-                const clasificacion = obtenerClasificacionPractica(practica)
-                return `${practica.id}:${clasificacion}`
-            })
-            .join(',')
-        if (clasificacionesPendientes) {
-            params.set('practicaClasificaciones', clasificacionesPendientes)
-        }
-
-        return `/dashboard/ambulatorio/nueva?${params.toString()}`
-    }, [ingresoId, incluirPracticaIdsEnGenerarAutorizacion, practicasPendientes, clasificacionPorPracticaId])
-    const mostrarBotonGenerar = (puedeGenerarAutorizacion ?? puedeCrear) && practicas.length > 0
-    const botonGenerarHabilitado = permitirGenerarSinPendientes
-        ? practicasVigentes.length > 0
-        : practicasPendientes.length > 0
+    const idsPendientesSeleccionadas = useMemo(() => {
+        const pendientesIds = new Set(practicasPendientes.map((p) => p.id))
+        return practicasSeleccionadas.filter((id) => pendientesIds.has(id))
+    }, [practicasPendientes, practicasSeleccionadas])
+    const puedeGenerarOrdenes = (puedeGenerarAutorizacion ?? puedeCrear)
 
     useEffect(() => {
         setPracticasSeleccionadas((prev) => prev.filter((id) => practicas.some((p) => p.id === id && (p.ordenPractica?.length ?? 0) === 0)))
@@ -793,37 +897,6 @@ export function PracticaSection({
                     )}
                 </button>
                 <div className="flex items-center gap-2">
-                    {mostrarBotonGenerar && (
-                        botonGenerarHabilitado ? (
-                            forzarNavegacionCompletaGenerarAutorizacion ? (
-                                <a
-                                    href={hrefGenerarAutorizacion}
-                                    className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 hover:bg-emerald-50"
-                                >
-                                    <Plus className="h-3.5 w-3.5" />
-                                    Generar autorización
-                                </a>
-                            ) : (
-                                <Link
-                                    href={hrefGenerarAutorizacion}
-                                    className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 hover:bg-emerald-50"
-                                >
-                                    <Plus className="h-3.5 w-3.5" />
-                                    Generar autorización
-                                </Link>
-                            )
-                        ) : (
-                            <button
-                                type="button"
-                                disabled
-                                title="No hay prácticas pendientes de autorización"
-                                className="flex items-center gap-1 text-xs font-medium text-gray-400 border border-gray-200 rounded-lg px-2.5 py-1 bg-gray-50 cursor-not-allowed"
-                            >
-                                <Plus className="h-3.5 w-3.5" />
-                                Generar autorización
-                            </button>
-                        )
-                    )}
                     {puedeCrear && (
                         <button
                             onClick={() => {
@@ -1023,27 +1096,6 @@ export function PracticaSection({
                                 </div>
                             </div>
 
-                            {subitemsSeleccionadosForm.length === 0 && (
-                                <div className="grid grid-cols-1 gap-3">
-                                    <div>
-                                        <label className="block text-xs text-gray-500 mb-1">Clasificación para agrupación de orden</label>
-                                        <input
-                                            type="text"
-                                            value={clasificacionNuevaPractica}
-                                            onChange={(e) => {
-                                                const raw = e.target.value.toUpperCase()
-                                                setClasificacionNuevaPractica(
-                                                    normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, '')
-                                                )
-                                            }}
-                                            placeholder="HE, HA, GA, HP, A1..."
-                                            list="clasificacion-practica-list"
-                                            className="his-input text-sm w-full"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
                             {practicaSeleccionada && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {practicaSeleccionada.valorEspecialista != null && (
@@ -1167,6 +1219,73 @@ export function PracticaSection({
                                         >
                                             Eliminar seleccionadas ({practicasSeleccionadas.length})
                                         </button>
+                                        {puedeGenerarOrdenes && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleGenerarOrdenes(false)}
+                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
+                                                    className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                                >
+                                                    {generandoOrdenes ? 'Generando...' : `Generar órdenes (${idsPendientesSeleccionadas.length})`}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleGenerarOrdenes(true)}
+                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
+                                                    className="inline-flex items-center rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                                                >
+                                                    Generar órdenes e imprimir
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                                {ordenesGeneradas.length > 0 && (
+                                    <div className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
+                                        <p className="text-xs font-semibold text-emerald-900">
+                                            Órdenes generadas por categoría
+                                        </p>
+                                        <div className="space-y-1.5">
+                                            {ordenesGeneradas.map((o) => (
+                                                <label
+                                                    key={`${o.puestoNumero}-${o.numero}`}
+                                                    className="flex items-center justify-between gap-3 rounded-md border border-emerald-100 bg-white px-2 py-1.5 text-xs"
+                                                >
+                                                    <span className="inline-flex items-center gap-2 min-w-0">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={o.seleccionadaImpresion}
+                                                            onChange={(e) => alternarSeleccionOrdenGenerada(o.puestoNumero, o.numero, e.target.checked)}
+                                                            className="h-4 w-4 rounded border-emerald-300 text-emerald-700 focus:ring-emerald-500"
+                                                        />
+                                                        <span className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-800">
+                                                            {o.clasificacion}
+                                                        </span>
+                                                        <span className="font-mono text-gray-700">
+                                                            {formatearNumeroOrden(o.puestoNumero, o.numero)}
+                                                        </span>
+                                                    </span>
+                                                    <span className="text-gray-500">{o.practicaIds.length} práctica(s)</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleImprimirOrdenes(true)}
+                                                className="inline-flex items-center rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                                            >
+                                                Imprimir seleccionadas
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleImprimirOrdenes(false)}
+                                                className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                                            >
+                                                Imprimir todas
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                                 {confirmarEliminacionSeleccionadas && practicasSeleccionadas.length > 0 && (

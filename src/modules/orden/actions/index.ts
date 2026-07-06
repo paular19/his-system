@@ -26,6 +26,47 @@ const CrearPedidoLaboratorioSchema = z.object({
   diagnostico: z.string().trim().max(300).optional().default(''),
 })
 
+const GenerarOrdenesInternacionSchema = z.object({
+  ingresoId: z.number().int().positive(),
+  practicaIds: z.array(z.number().int().positive()).min(1, 'Seleccioná al menos una práctica'),
+  clasificacionPorPracticaId: z.record(z.string()).optional().default({}),
+})
+
+function inferirClasificacionPracticaDb(practica: {
+  codigoPractica: string
+  descripcionPractica: string
+  matriculaEspecialista: number | null
+  matriculaAnestesista: number | null
+}): string {
+  if (practica.codigoPractica.trim() === '66') return 'HE'
+
+  const descripcion = (practica.descripcionPractica ?? '').toUpperCase()
+  const match = descripcion.match(/\((HE|HA|GA|HP|A1|A2|A3)\)/)
+  if (match?.[1]) return match[1]
+
+  if (practica.matriculaAnestesista && !practica.matriculaEspecialista) return 'HA'
+  if (practica.matriculaEspecialista && !practica.matriculaAnestesista) return 'HE'
+  return 'HE'
+}
+
+function ordenarClaveClasificacion(a: string, b: string): number {
+  const orden: Record<string, number> = {
+    HE: 1,
+    HA: 2,
+    GA: 3,
+    HP: 4,
+    A1: 5,
+    A2: 6,
+    A3: 7,
+  }
+  const codeA = a.split('+')[0] ?? a
+  const codeB = b.split('+')[0] ?? b
+  const numA = orden[codeA] ?? 99
+  const numB = orden[codeB] ?? 99
+  if (numA !== numB) return numA - numB
+  return a.localeCompare(b)
+}
+
 function claveClasificacionItem(item: CrearOrdenInput['items'][number]): string {
   if (item.codigoPractica.trim() === '66') return '__PROTOCOLO_BIOQUIMICO__'
 
@@ -162,6 +203,240 @@ export async function crearOrdenesDesdeAdmisionAction(
   } catch (err) {
     console.error('[ORDEN] Error al crear desde admisión:', err)
     return { error: err instanceof Error ? err.message : 'Error al generar la autorización' }
+  }
+}
+
+export async function generarOrdenesDesdeInternacionAction(input: {
+  ingresoId: number
+  practicaIds: number[]
+  clasificacionPorPracticaId?: Record<string, string>
+}) {
+  const usuario = await getUsuarioSesion()
+
+  if (!tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')) {
+    return { error: 'Sin permiso para crear órdenes' }
+  }
+
+  const parsed = GenerarOrdenesInternacionSchema.safeParse(input)
+  if (!parsed.success) {
+    return { error: parsed.error.errors[0]?.message ?? 'Datos inválidos' }
+  }
+
+  try {
+    const ingreso = await prisma.ingreso.findUnique({
+      where: { id: parsed.data.ingresoId },
+      select: {
+        id: true,
+        pacienteId: true,
+        nombre: true,
+        numeroAfiliado: true,
+        obraSocialId: true,
+        obraSocialCoseguroId: true,
+        planCoseguroId: true,
+        profesionalGuardiaId: true,
+        profesionalTratanteId: true,
+        paciente: {
+          select: {
+            id: true,
+            nombreCompleto: true,
+            numeroAfiliado: true,
+          },
+        },
+      },
+    })
+
+    if (!ingreso) return { error: 'Internación no encontrada' }
+    if (!ingreso.obraSocialId) return { error: 'La internación no tiene obra social asignada' }
+
+    let profesionalId = ingreso.profesionalTratanteId ?? ingreso.profesionalGuardiaId ?? null
+    if (!profesionalId) {
+      const profesionalFallback = await prisma.profesional.findFirst({
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      })
+      profesionalId = profesionalFallback?.id ?? null
+    }
+    if (!profesionalId) return { error: 'No hay profesional disponible para emitir la orden' }
+
+    const practicas = await prisma.practica.findMany({
+      where: {
+        ingresoId: parsed.data.ingresoId,
+        id: { in: parsed.data.practicaIds },
+      },
+      select: {
+        id: true,
+        convenioId: true,
+        codigoPractica: true,
+        fecha: true,
+        cantidad: true,
+        numeroAutorizacion: true,
+        matriculaEspecialista: true,
+        matriculaAnestesista: true,
+        importeTotal: true,
+        numeroProtocoloLab: true,
+        diagnosticoLab: true,
+        estado: true,
+        ordenPractica: {
+          select: { puestoNumero: true, ordenNumero: true },
+        },
+        nomencladorPractica: {
+          select: { descripcion: true },
+        },
+      },
+    })
+
+    const practicasPendientes = practicas.filter((p) => {
+      const estado = (p.estado ?? 'A').trim().toUpperCase()
+      if (estado === 'X') return false
+      if ((p.numeroAutorizacion?.trim().length ?? 0) > 0) return false
+      return (p.ordenPractica?.length ?? 0) === 0
+    })
+
+    if (practicasPendientes.length === 0) {
+      return { error: 'No hay prácticas pendientes para generar órdenes' }
+    }
+
+    const grupos = new Map<string, Array<{
+      item: CrearOrdenInput['items'][number]
+      practicaId: number
+    }>>()
+
+    for (const practica of practicasPendientes) {
+      const descripcionPractica = practica.codigoPractica.trim() === '66'
+        ? 'PROTOCOLO BIOQUIMICO'
+        : (practica.nomencladorPractica?.descripcion?.trim() || practica.codigoPractica.trim())
+
+      const clasificacionDesdeInput = normalizarClasificacionAgrupacion(
+        parsed.data.clasificacionPorPracticaId[String(practica.id)]
+      )
+      const clasificacionInferida = inferirClasificacionPracticaDb({
+        codigoPractica: practica.codigoPractica,
+        descripcionPractica,
+        matriculaEspecialista: practica.matriculaEspecialista,
+        matriculaAnestesista: practica.matriculaAnestesista,
+      })
+      const clasificacion = clasificacionDesdeInput ?? clasificacionInferida
+      const key = practica.codigoPractica.trim() === '66' ? '__PROTOCOLO_BIOQUIMICO__' : clasificacion
+
+      const item: CrearOrdenInput['items'][number] = {
+        practicaId: practica.id,
+        convenioId: practica.convenioId,
+        codigoPractica: practica.codigoPractica.trim().slice(0, 8),
+        descripcionPractica,
+        cantidad: Number(practica.cantidad ?? 1),
+        fecha: practica.fecha,
+        tipoFacturacion: 'H',
+        clasificacionAgrupacion: key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : clasificacion,
+        efectorMatricula:
+          clasificacion === 'HA'
+            ? (practica.matriculaAnestesista ?? null)
+            : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null),
+        numeroAutorizacion: practica.numeroAutorizacion,
+        importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : undefined,
+      }
+
+      const arr = grupos.get(key) ?? []
+      arr.push({ item, practicaId: practica.id })
+      grupos.set(key, arr)
+    }
+
+    const nombrePaciente = (
+      ingreso.paciente?.nombreCompleto?.trim() ||
+      ingreso.nombre?.trim() ||
+      ''
+    )
+    if (!nombrePaciente) return { error: 'No se pudo resolver el nombre del paciente' }
+
+    const numeroAfiliado = (
+      ingreso.numeroAfiliado?.trim() ||
+      ingreso.paciente?.numeroAfiliado?.trim() ||
+      ''
+    ).slice(0, 30)
+
+    const gruposOrdenados = Array.from(grupos.entries()).sort((a, b) => {
+      if (a[0] === '__PROTOCOLO_BIOQUIMICO__') return -1
+      if (b[0] === '__PROTOCOLO_BIOQUIMICO__') return 1
+      return ordenarClaveClasificacion(a[0], b[0])
+    })
+
+    const ordenesPorGrupo: Array<{
+      clasificacion: string
+      puestoNumero: number
+      numero: number
+      practicaIds: number[]
+    }> = []
+    const asignaciones: Array<{
+      practicaId: number
+      puestoNumero: number
+      numero: number
+      item: number
+    }> = []
+
+    for (const [key, itemsGrupo] of gruposOrdenados) {
+      const clasificacion = key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : key
+      const esGrupoConDerechos = key !== '__PROTOCOLO_BIOQUIMICO__' && contieneClasificacion(clasificacion, 'GA')
+      const titularModular = key === '__PROTOCOLO_BIOQUIMICO__'
+        ? 'PROTOCOLO BIOQUIMICO'
+        : tituloDesdeClasificacion(clasificacion)
+
+      const orden = await crearOrdenAmbulatorio(
+        {
+          ingresoId: ingreso.id,
+          pacienteId: ingreso.pacienteId ?? ingreso.paciente?.id ?? undefined,
+          nombrePaciente: nombrePaciente.slice(0, 50),
+          numeroAfiliado,
+          obraSocialId: ingreso.obraSocialId,
+          obraSocialCoseguroId: ingreso.obraSocialCoseguroId ?? undefined,
+          planCoseguroId: ingreso.planCoseguroId ?? undefined,
+          profesionalId,
+          tipoOrdenCodigo: 'PRA',
+          titularModular,
+          imprimirPorDuplicado: esGrupoConDerechos,
+          items: itemsGrupo.map(({ item }) => ({
+            ...item,
+            clasificacionAgrupacion:
+              key === '__PROTOCOLO_BIOQUIMICO__'
+                ? null
+                : normalizarClasificacionAgrupacion(item.clasificacionAgrupacion) ?? clasificacion,
+            titularModular,
+            imprimirPorDuplicado: Boolean(item.imprimirPorDuplicado) || esGrupoConDerechos,
+          })),
+        },
+        usuario.codigoUsuario
+      )
+
+      const practicaIdsGrupo = itemsGrupo.map((x) => x.practicaId)
+      ordenesPorGrupo.push({
+        clasificacion,
+        puestoNumero: orden.puestoNumero,
+        numero: orden.numero,
+        practicaIds: practicaIdsGrupo,
+      })
+
+      itemsGrupo.forEach((x, idx) => {
+        asignaciones.push({
+          practicaId: x.practicaId,
+          puestoNumero: orden.puestoNumero,
+          numero: orden.numero,
+          item: idx + 1,
+        })
+      })
+    }
+
+    revalidatePath('/dashboard/ambulatorio')
+    revalidatePath('/dashboard/internacion')
+    revalidatePath('/dashboard/admision')
+    revalidatePath(`/dashboard/internacion/${ingreso.id}`)
+    revalidatePath(`/dashboard/admision/${ingreso.id}`)
+
+    return {
+      ok: true,
+      ordenesPorGrupo,
+      asignaciones,
+    }
+  } catch (err) {
+    console.error('[ORDEN] Error al generar desde internación:', err)
+    return { error: err instanceof Error ? err.message : 'Error al generar órdenes desde internación' }
   }
 }
 

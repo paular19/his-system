@@ -154,6 +154,7 @@ export function PracticaSection({
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
     const [clasificacionNuevaPractica, setClasificacionNuevaPractica] = useState('HE')
+    const [clasificacionPorSubitemNuevo, setClasificacionPorSubitemNuevo] = useState<string[]>([])
     const [desagrupandoPracticaId, setDesagrupandoPracticaId] = useState<number | null>(null)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -162,6 +163,32 @@ export function PracticaSection({
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const subitemsSeleccionadosForm = useMemo(() => {
+        if (!practicaSeleccionada) return [] as SubitemCodigo[]
+        return obtenerSubitemsSeleccionados(
+            {
+                valorEspecialista: practicaSeleccionada.valorEspecialista,
+                valorAyudante: practicaSeleccionada.valorAyudante,
+                valorAnestesista: practicaSeleccionada.valorAnestesista,
+                valorGastos: practicaSeleccionada.valorGastos,
+            },
+            componenteSeleccion
+        )
+    }, [practicaSeleccionada, componenteSeleccion])
+
+    useEffect(() => {
+        if (subitemsSeleccionadosForm.length === 0) {
+            setClasificacionPorSubitemNuevo([])
+            return
+        }
+
+        setClasificacionPorSubitemNuevo((prev) =>
+            subitemsSeleccionadosForm.map((subitem, idx) =>
+                normalizarClasificacionAgrupacion(prev[idx]) ?? subitem
+            )
+        )
+    }, [subitemsSeleccionadosForm])
 
     const obtenerClasificacionPractica = (practica: PracticaItem): string => {
         return (
@@ -214,6 +241,7 @@ export function PracticaSection({
         setPracticaSeleccionada(null)
         setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
         setClasificacionNuevaPractica('HE')
+        setClasificacionPorSubitemNuevo([])
         setFecha(fechaHoraAInputLocal())
         setNumeroAutorizacion('')
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
@@ -330,43 +358,30 @@ export function PracticaSection({
                 : null,
         }
 
-        const subitemsSeleccionados = practicaSeleccionada
-            ? obtenerSubitemsSeleccionados(
-                {
-                    valorEspecialista: practicaSeleccionada.valorEspecialista,
-                    valorAyudante: practicaSeleccionada.valorAyudante,
-                    valorAnestesista: practicaSeleccionada.valorAnestesista,
-                    valorGastos: practicaSeleccionada.valorGastos,
-                },
-                componenteSeleccion
-            )
-            : []
-
-        const cantidadPorSubitem = new Map<SubitemCodigo, number>()
-        for (const subitem of subitemsSeleccionados) {
-            cantidadPorSubitem.set(subitem, (cantidadPorSubitem.get(subitem) ?? 0) + 1)
-        }
+        const subitemsSeleccionados = subitemsSeleccionadosForm
 
         const clasificacionManual = normalizarClasificacionAgrupacion(clasificacionNuevaPractica) ?? 'HE'
-        const entradasCrear = cantidadPorSubitem.size > 0 && practicaSeleccionada
-            ? Array.from(cantidadPorSubitem.entries()).map(([subitem, cantidadSubitem]) => {
+        const entradasCrear = subitemsSeleccionados.length > 0 && practicaSeleccionada
+            ? subitemsSeleccionados.map((subitem, idx) => {
                 const valorUnitario = valorUnitarioPorSubitem(subitem, {
                     valorEspecialista: practicaSeleccionada.valorEspecialista,
                     valorAyudante: practicaSeleccionada.valorAyudante,
                     valorAnestesista: practicaSeleccionada.valorAnestesista,
                     valorGastos: practicaSeleccionada.valorGastos,
                 })
+                const clasificacionIndividual =
+                    normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
 
                 return {
                     payload: {
                         ...body,
                         descripcionPractica: `${body.descripcionPractica} · ${etiquetaSubitem(subitem)}`,
-                        cantidad: cantidadSubitem,
+                        cantidad: 1,
                         importeBaseUnitario: valorUnitario,
                         matriculaEspecialista: esSubitemEspecialista(subitem) ? body.matriculaEspecialista : null,
                         matriculaAnestesista: esSubitemAnestesista(subitem) ? body.matriculaAnestesista : null,
                     },
-                    clasificacion: subitem,
+                    clasificacion: clasificacionIndividual,
                 }
             })
             : [{ payload: body, clasificacion: clasificacionManual }]
@@ -908,24 +923,64 @@ export function PracticaSection({
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 gap-3">
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Clasificación para agrupación de orden</label>
-                                    <input
-                                        type="text"
-                                        value={clasificacionNuevaPractica}
-                                        onChange={(e) => {
-                                            const raw = e.target.value.toUpperCase()
-                                            setClasificacionNuevaPractica(
-                                                normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, '')
-                                            )
-                                        }}
-                                        placeholder="HE, HA, GA, HP, A1..."
-                                        list="clasificacion-practica-list"
-                                        className="his-input text-sm w-full"
-                                    />
+                            {subitemsSeleccionadosForm.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-3">
+                                    <div>
+                                        <label className="block text-xs text-gray-500 mb-1">Clasificación por subitem para agrupación</label>
+                                        <div className="space-y-2 rounded-md border border-gray-200 bg-white p-2">
+                                            {(() => {
+                                                const contador = new Map<string, number>()
+                                                return subitemsSeleccionadosForm.map((subitem, idx) => {
+                                                    const actual = (contador.get(subitem) ?? 0) + 1
+                                                    contador.set(subitem, actual)
+                                                    const repeticiones = subitemsSeleccionadosForm.filter((x) => x === subitem).length
+                                                    const sufijo = repeticiones > 1 ? ` #${actual}` : ''
+
+                                                    return (
+                                                        <div key={`${subitem}-${idx}`} className="grid grid-cols-[auto,1fr] items-center gap-2">
+                                                            <span className="text-[11px] font-medium text-gray-600">{subitem}{sufijo}</span>
+                                                            <input
+                                                                type="text"
+                                                                value={clasificacionPorSubitemNuevo[idx] ?? subitem}
+                                                                onChange={(e) => {
+                                                                    const raw = e.target.value.toUpperCase()
+                                                                    setClasificacionPorSubitemNuevo((prev) => {
+                                                                        const next = [...prev]
+                                                                        next[idx] = normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, '')
+                                                                        return next
+                                                                    })
+                                                                }}
+                                                                placeholder="HE, HA, GA, HP, A1..."
+                                                                list="clasificacion-practica-list"
+                                                                className="his-input text-xs w-full"
+                                                            />
+                                                        </div>
+                                                    )
+                                                })
+                                            })()}
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-3">
+                                    <div>
+                                        <label className="block text-xs text-gray-500 mb-1">Clasificación para agrupación de orden</label>
+                                        <input
+                                            type="text"
+                                            value={clasificacionNuevaPractica}
+                                            onChange={(e) => {
+                                                const raw = e.target.value.toUpperCase()
+                                                setClasificacionNuevaPractica(
+                                                    normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, '')
+                                                )
+                                            }}
+                                            placeholder="HE, HA, GA, HP, A1..."
+                                            list="clasificacion-practica-list"
+                                            className="his-input text-sm w-full"
+                                        />
+                                    </div>
+                                </div>
+                            )}
 
                             {practicaSeleccionada && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

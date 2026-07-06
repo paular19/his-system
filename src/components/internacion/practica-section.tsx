@@ -21,7 +21,7 @@ import {
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
-import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
+import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 
 interface NomencladorItem {
     convenioId: number
@@ -1199,7 +1199,7 @@ export function PracticaSection({
                                     practicasPendientesPaginadas.map((p) => (
                                         <div
                                             key={p.id}
-                                            className="flex items-start justify-between gap-3 text-xs border rounded-lg p-2.5 bg-white hover:bg-amber-50/40"
+                                            className="flex items-center justify-between gap-2 text-xs border rounded-lg px-2.5 py-2 bg-white hover:bg-amber-50/40"
                                         >
                                             {puedeCrear && (
                                                 <input
@@ -1207,34 +1207,25 @@ export function PracticaSection({
                                                     checked={practicasSeleccionadas.includes(p.id)}
                                                     onChange={(e) => alternarSeleccionPractica(p.id, e.target.checked)}
                                                     disabled={eliminandoPracticas}
-                                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-700 focus:ring-amber-500"
+                                                    className="h-4 w-4 rounded border-gray-300 text-amber-700 focus:ring-amber-500"
                                                 />
                                             )}
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2 flex-wrap">
+                                            <div className="min-w-0 flex-1 overflow-x-auto">
+                                                <div className="flex items-center gap-2 whitespace-nowrap">
                                                     <span className="font-mono text-gray-400 shrink-0">
                                                         {p.codigoPractica.trim()}
                                                     </span>
-                                                    <span className="font-medium text-gray-800 truncate">
+                                                    <span className="font-medium text-gray-800 inline-block max-w-md truncate">
                                                         {p.descripcionPractica ?? p.codigoPractica.trim()}
                                                     </span>
-                                                    <span
-                                                        title={tituloDesdeClasificacion(obtenerClasificacionPractica(p))}
-                                                        className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
-                                                    >
-                                                        {obtenerClasificacionPractica(p)}
-                                                    </span>
-                                                </div>
-                                                {esPedidoLaboratorio(p) && (
-                                                    <div className="mt-1 text-[11px] text-indigo-700 space-y-0.5">
-                                                        <p>Protocolo N° {p.numeroProtocoloLaboratorio?.trim() || '-'}</p>
-                                                        <p>Diagnóstico: {p.diagnosticoLaboratorio?.trim() || '-'}</p>
-                                                    </div>
-                                                )}
-                                                <div className="flex items-center gap-3 mt-1 text-gray-500 flex-wrap">
                                                     <span>{fmtFecha(p.fecha)}</span>
                                                     {p.cantidad > 1 && <span>Cant: {p.cantidad}</span>}
                                                     {p.numeroAutorizacion && <span>Aut: {p.numeroAutorizacion}</span>}
+                                                    {esPedidoLaboratorio(p) && (
+                                                        <span className="text-indigo-700">
+                                                            Prot: {p.numeroProtocoloLaboratorio?.trim() || '-'}
+                                                        </span>
+                                                    )}
                                                     {!esPedidoLaboratorio(p) && (
                                                         <span
                                                             className={`px-1.5 py-0.5 rounded ${p.facturable
@@ -1245,9 +1236,7 @@ export function PracticaSection({
                                                             {p.facturable ? 'Facturable' : 'No facturable'}
                                                         </span>
                                                     )}
-                                                </div>
-                                                <div className="mt-1 flex items-center gap-2">
-                                                    <span className="text-[11px] text-gray-500">Clasificación</span>
+                                                    <span className="text-[11px] text-gray-500">Clasif.</span>
                                                     <input
                                                         type="text"
                                                         value={obtenerClasificacionPractica(p)}

@@ -25,7 +25,7 @@ export default async function AutorizacionPage({ params }: PageProps) {
   if (!orden) notFound()
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6 max-w-4xl print:p-0 print:max-w-none">
       <AutorizacionPrint
         orden={orden}
         nombreClinica="CLINICA SAN RAFAEL"

@@ -44,7 +44,7 @@ export default async function ImprimirAutorizacionesPage({ searchParams }: PageP
   if (ordenes.length === 0) notFound()
 
   return (
-    <div className="p-6 max-w-5xl space-y-6">
+    <div className="p-6 max-w-5xl space-y-6 print:p-0 print:max-w-none print:space-y-0">
       <PrintActions imprimirLabel="Imprimir todas las órdenes" volverLabel="Volver" />
 
       {ordenes.map((orden) => (

@@ -742,6 +742,24 @@ export function PracticaSection({
         return practicasPendientesFiltradasOrdenadas.slice(desde, desde + PRACTICAS_LISTA_POR_PAGINA)
     }, [paginaPendientesActual, practicasPendientesFiltradasOrdenadas])
 
+    const practicasPendientesPaginadasAgrupadas = useMemo(() => {
+        const grupos = new Map<string, PracticaItem[]>()
+        for (const practica of practicasPendientesPaginadas) {
+            const clasificacion = obtenerClasificacionPractica(practica)
+            const lista = grupos.get(clasificacion)
+            if (lista) {
+                lista.push(practica)
+            } else {
+                grupos.set(clasificacion, [practica])
+            }
+        }
+
+        return Array.from(grupos.entries()).map(([clasificacion, items]) => ({
+            clasificacion,
+            items,
+        }))
+    }, [practicasPendientesPaginadas, clasificacionPorPracticaId])
+
     const idsPendientesFiltradas = practicasPendientesFiltradas.map((p) => p.id)
     const seleccionadasFiltradas = practicasPendientesFiltradas.filter((p) => practicasSeleccionadas.includes(p.id))
     const todasFiltradasSeleccionadas =
@@ -1196,76 +1214,84 @@ export function PracticaSection({
                                 {practicasPendientesFiltradasOrdenadas.length === 0 ? (
                                     <p className="text-xs text-gray-400">No hay prácticas pendientes.</p>
                                 ) : (
-                                    practicasPendientesPaginadas.map((p) => (
+                                    practicasPendientesPaginadasAgrupadas.map((grupo) => (
                                         <div
-                                            key={p.id}
-                                            className="flex items-center justify-between gap-2 text-xs border rounded-lg px-2.5 py-2 bg-white hover:bg-amber-50/40"
+                                            key={`grupo-${grupo.clasificacion}`}
+                                            className="flex items-center gap-2 text-xs border rounded-lg px-2.5 py-2 bg-white hover:bg-amber-50/40"
                                         >
-                                            {puedeCrear && (
-                                                <input
-                                                    type="checkbox"
-                                                    checked={practicasSeleccionadas.includes(p.id)}
-                                                    onChange={(e) => alternarSeleccionPractica(p.id, e.target.checked)}
-                                                    disabled={eliminandoPracticas}
-                                                    className="h-4 w-4 rounded border-gray-300 text-amber-700 focus:ring-amber-500"
-                                                />
-                                            )}
+                                            <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                                {grupo.clasificacion}
+                                            </span>
                                             <div className="min-w-0 flex-1 overflow-x-auto">
-                                                <div className="flex items-center gap-2 whitespace-nowrap">
-                                                    <span className="font-mono text-gray-400 shrink-0">
-                                                        {p.codigoPractica.trim()}
-                                                    </span>
-                                                    <span className="font-medium text-gray-800 inline-block max-w-md truncate">
-                                                        {p.descripcionPractica ?? p.codigoPractica.trim()}
-                                                    </span>
-                                                    <span>{fmtFecha(p.fecha)}</span>
-                                                    {p.cantidad > 1 && <span>Cant: {p.cantidad}</span>}
-                                                    {p.numeroAutorizacion && <span>Aut: {p.numeroAutorizacion}</span>}
-                                                    {esPedidoLaboratorio(p) && (
-                                                        <span className="text-indigo-700">
-                                                            Prot: {p.numeroProtocoloLaboratorio?.trim() || '-'}
-                                                        </span>
-                                                    )}
-                                                    {!esPedidoLaboratorio(p) && (
-                                                        <span
-                                                            className={`px-1.5 py-0.5 rounded ${p.facturable
-                                                                ? 'bg-green-50 text-green-700'
-                                                                : 'bg-gray-100 text-gray-500'
-                                                                }`}
+                                                <div className="inline-flex items-center gap-2 whitespace-nowrap">
+                                                    {grupo.items.map((p) => (
+                                                        <div
+                                                            key={p.id}
+                                                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1"
                                                         >
-                                                            {p.facturable ? 'Facturable' : 'No facturable'}
-                                                        </span>
-                                                    )}
-                                                    <span className="text-[11px] text-gray-500">Clasif.</span>
-                                                    <input
-                                                        type="text"
-                                                        value={obtenerClasificacionPractica(p)}
-                                                        onChange={(e) => {
-                                                            const raw = e.target.value.toUpperCase()
-                                                            setClasificacionPorPracticaId((prev) => ({
-                                                                ...prev,
-                                                                [p.id]: normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, ''),
-                                                            }))
-                                                        }}
-                                                        list="clasificacion-practica-list"
-                                                        className="w-28 rounded border border-gray-200 px-2 py-0.5 text-[11px] text-gray-700"
-                                                    />
+                                                            {puedeCrear && (
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={practicasSeleccionadas.includes(p.id)}
+                                                                    onChange={(e) => alternarSeleccionPractica(p.id, e.target.checked)}
+                                                                    disabled={eliminandoPracticas}
+                                                                    className="h-3.5 w-3.5 rounded border-gray-300 text-amber-700 focus:ring-amber-500"
+                                                                />
+                                                            )}
+                                                            <span className="font-mono text-gray-400 shrink-0">
+                                                                {p.codigoPractica.trim()}
+                                                            </span>
+                                                            <span className="font-medium text-gray-800 inline-block max-w-xs truncate">
+                                                                {p.descripcionPractica ?? p.codigoPractica.trim()}
+                                                            </span>
+                                                            <span className="text-gray-500">{fmtFecha(p.fecha)}</span>
+                                                            {p.cantidad > 1 && <span className="text-gray-500">Cant: {p.cantidad}</span>}
+                                                            {p.numeroAutorizacion && <span className="text-gray-500">Aut: {p.numeroAutorizacion}</span>}
+                                                            {esPedidoLaboratorio(p) && (
+                                                                <span className="text-indigo-700">
+                                                                    Prot: {p.numeroProtocoloLaboratorio?.trim() || '-'}
+                                                                </span>
+                                                            )}
+                                                            {!esPedidoLaboratorio(p) && (
+                                                                <span
+                                                                    className={`px-1.5 py-0.5 rounded ${p.facturable
+                                                                        ? 'bg-green-50 text-green-700'
+                                                                        : 'bg-gray-100 text-gray-500'
+                                                                        }`}
+                                                                >
+                                                                    {p.facturable ? 'Facturable' : 'No facturable'}
+                                                                </span>
+                                                            )}
+                                                            <span className="text-[11px] text-gray-500">Clasif.</span>
+                                                            <input
+                                                                type="text"
+                                                                value={obtenerClasificacionPractica(p)}
+                                                                onChange={(e) => {
+                                                                    const raw = e.target.value.toUpperCase()
+                                                                    setClasificacionPorPracticaId((prev) => ({
+                                                                        ...prev,
+                                                                        [p.id]: normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, ''),
+                                                                    }))
+                                                                }}
+                                                                list="clasificacion-practica-list"
+                                                                className="w-20 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-700"
+                                                            />
+                                                            {puedeCrear && p.cantidad > 1 && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => void handleDesagruparPractica(p.id)}
+                                                                    disabled={desagrupandoPracticaId === p.id}
+                                                                    className="rounded-md border border-blue-200 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                                >
+                                                                    {desagrupandoPracticaId === p.id ? '...' : 'Desagrupar'}
+                                                                </button>
+                                                            )}
+                                                            {p.estado && p.estado !== 'A' && (
+                                                                <span className="text-gray-400">{p.estado}</span>
+                                                            )}
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            </div>
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                {puedeCrear && p.cantidad > 1 && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => void handleDesagruparPractica(p.id)}
-                                                        disabled={desagrupandoPracticaId === p.id}
-                                                        className="rounded-md border border-blue-200 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                                    >
-                                                        {desagrupandoPracticaId === p.id ? 'Desagrupando...' : 'Desagrupar'}
-                                                    </button>
-                                                )}
-                                                {p.estado && p.estado !== 'A' && (
-                                                    <span className="text-gray-400">{p.estado}</span>
-                                                )}
                                             </div>
                                         </div>
                                     ))

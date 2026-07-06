@@ -13,6 +13,7 @@ import {
   obtenerContextoAdmisionParaOrden,
 } from '@/modules/orden/repository'
 import { formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
+import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 
 export const metadata: Metadata = { title: 'Nueva Autorización' }
 
@@ -23,6 +24,7 @@ interface PageProps {
     ingresoId?: string
     modo?: string
     practicaIds?: string
+    practicaClasificaciones?: string
   }>
 }
 
@@ -67,6 +69,26 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
     )
 
     return ids.length > 0 ? ids : null
+  })()
+  const clasificacionPorPracticaIdInicial = (() => {
+    const raw = params.practicaClasificaciones?.trim()
+    if (!raw) return null
+
+    const entries = raw
+      .split(',')
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+
+    const map: Record<number, string> = {}
+    for (const entry of entries) {
+      const [idRaw, clasifRaw] = entry.split(':')
+      const id = Number.parseInt(idRaw ?? '', 10)
+      const clasificacion = normalizarClasificacionAgrupacion(clasifRaw)
+      if (!Number.isFinite(id) || id <= 0 || !clasificacion) continue
+      map[id] = clasificacion
+    }
+
+    return Object.keys(map).length > 0 ? map : null
   })()
 
   const [admisiones, admisionSeleccionada] = await Promise.all([
@@ -207,6 +229,7 @@ export default async function NuevaAutorizacionPage({ searchParams }: PageProps)
             usuario={usuario.codigoUsuario}
             modoInicial={modoInicial}
             practicaIdsIniciales={practicaIdsIniciales}
+            clasificacionPorPracticaIdInicial={clasificacionPorPracticaIdInicial}
           />
         )}
       </div>

@@ -43,6 +43,7 @@ interface ConsultaFormProps {
   pacienteInicial?: PacienteResumen | null
   admisionInicial?: AdmisionOrdenContexto | null
   practicaIdsIniciales?: number[] | null
+  clasificacionPorPracticaIdInicial?: Record<number, string> | null
   usuario: string
   modoInicial?: 'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'
 }
@@ -315,6 +316,7 @@ export function ConsultaForm({
   pacienteInicial,
   admisionInicial,
   practicaIdsIniciales,
+  clasificacionPorPracticaIdInicial,
   modoInicial = 'MASIVA',
 }: ConsultaFormProps) {
   const router = useRouter()
@@ -400,7 +402,9 @@ export function ConsultaForm({
         seleccionComponentes: seleccionInicial,
         matriculaEspecialista: matriculasDefault.matriculaEspecialista,
         matriculaAnestesista: matriculasDefault.matriculaAnestesista,
-        clasificacionAgrupacion: clasificacionDesdeSubitems(obtenerCodigosSubitemSeleccionados(seleccionInicial)),
+        clasificacionAgrupacion:
+          normalizarClasificacionAgrupacion(clasificacionPorPracticaIdInicial?.[p.id]) ??
+          clasificacionDesdeSubitems(obtenerCodigosSubitemSeleccionados(seleccionInicial)),
       }
     })
   )

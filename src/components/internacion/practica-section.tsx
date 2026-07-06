@@ -21,6 +21,7 @@ import {
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
+import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 
 interface NomencladorItem {
     convenioId: number
@@ -73,6 +74,24 @@ function esPedidoLaboratorio(practica: Pick<PracticaItem, 'codigoPractica' | 'nu
         (practica.numeroProtocoloLaboratorio?.trim().length ?? 0) > 0 ||
         (practica.diagnosticoLaboratorio?.trim().length ?? 0) > 0
     )
+}
+
+function clasificacionInferidaPractica(practica: Pick<PracticaItem, 'codigoPractica' | 'descripcionPractica' | 'matriculaEspecialista' | 'matriculaAnestesista'>): string {
+    if (practica.codigoPractica.trim() === '66') return 'HE'
+
+    const descripcion = (practica.descripcionPractica ?? '').toUpperCase()
+    const match = descripcion.match(/\((HE|HA|GA|HP|A1|A2|A3)\)/)
+    if (match?.[1]) return match[1]
+
+    if ((practica.matriculaAnestesista ?? null) && !(practica.matriculaEspecialista ?? null)) {
+        return 'HA'
+    }
+
+    if ((practica.matriculaEspecialista ?? null) && !(practica.matriculaAnestesista ?? null)) {
+        return 'HE'
+    }
+
+    return 'HE'
 }
 
 interface PracticaSectionProps {
@@ -134,13 +153,22 @@ export function PracticaSection({
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
+    const [clasificacionNuevaPractica, setClasificacionNuevaPractica] = useState('HE')
     const [desagrupandoPracticaId, setDesagrupandoPracticaId] = useState<number | null>(null)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
+    const [clasificacionPorPracticaId, setClasificacionPorPracticaId] = useState<Record<number, string>>({})
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const obtenerClasificacionPractica = (practica: PracticaItem): string => {
+        return (
+            normalizarClasificacionAgrupacion(clasificacionPorPracticaId[practica.id]) ??
+            clasificacionInferidaPractica(practica)
+        )
+    }
 
     const buscarPractica = (q: string) => {
         setBusqueda(q)
@@ -185,6 +213,7 @@ export function PracticaSection({
         setResultados([])
         setPracticaSeleccionada(null)
         setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
+        setClasificacionNuevaPractica('HE')
         setFecha(fechaHoraAInputLocal())
         setNumeroAutorizacion('')
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
@@ -210,11 +239,6 @@ export function PracticaSection({
             return
         }
 
-        if (!diagnostico) {
-            setError('Ingresá el diagnóstico')
-            return
-        }
-
         setError(null)
         setGuardandoPedidoLaboratorio(true)
         try {
@@ -226,7 +250,7 @@ export function PracticaSection({
                     codigoPractica: '66',
                     descripcionPractica: 'PROTOCOLO BIOQUIMICO',
                     numeroProtocoloLaboratorio: numeroProtocolo,
-                    diagnosticoLaboratorio: diagnostico,
+                    diagnosticoLaboratorio: diagnostico || null,
                     fecha: new Date().toISOString(),
                     cantidad: 1,
                     numeroAutorizacion: null,
@@ -244,6 +268,10 @@ export function PracticaSection({
             }
 
             setPracticas((prev) => [json.data as PracticaItem, ...prev])
+            setClasificacionPorPracticaId((prev) => ({
+                ...prev,
+                [json.data.id]: 'HE',
+            }))
             if (refrescarDespuesCambios) {
                 router.refresh()
             }
@@ -319,6 +347,7 @@ export function PracticaSection({
             cantidadPorSubitem.set(subitem, (cantidadPorSubitem.get(subitem) ?? 0) + 1)
         }
 
+        const clasificacionManual = normalizarClasificacionAgrupacion(clasificacionNuevaPractica) ?? 'HE'
         const entradasCrear = cantidadPorSubitem.size > 0 && practicaSeleccionada
             ? Array.from(cantidadPorSubitem.entries()).map(([subitem, cantidadSubitem]) => {
                 const valorUnitario = valorUnitarioPorSubitem(subitem, {
@@ -329,25 +358,29 @@ export function PracticaSection({
                 })
 
                 return {
-                    ...body,
-                    descripcionPractica: `${body.descripcionPractica} · ${etiquetaSubitem(subitem)}`,
-                    cantidad: cantidadSubitem,
-                    importeBaseUnitario: valorUnitario,
-                    matriculaEspecialista: esSubitemEspecialista(subitem) ? body.matriculaEspecialista : null,
-                    matriculaAnestesista: esSubitemAnestesista(subitem) ? body.matriculaAnestesista : null,
+                    payload: {
+                        ...body,
+                        descripcionPractica: `${body.descripcionPractica} · ${etiquetaSubitem(subitem)}`,
+                        cantidad: cantidadSubitem,
+                        importeBaseUnitario: valorUnitario,
+                        matriculaEspecialista: esSubitemEspecialista(subitem) ? body.matriculaEspecialista : null,
+                        matriculaAnestesista: esSubitemAnestesista(subitem) ? body.matriculaAnestesista : null,
+                    },
+                    clasificacion: subitem,
                 }
             })
-            : [body]
+            : [{ payload: body, clasificacion: clasificacionManual }]
 
         setGuardando(true)
         try {
             const practicasCreadas: PracticaItem[] = []
 
+            const clasificacionesCreadas: Record<number, string> = {}
             for (const entrada of entradasCrear) {
                 const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(entrada),
+                    body: JSON.stringify(entrada.payload),
                 })
                 const json = await res.json()
                 if (!res.ok) {
@@ -361,9 +394,14 @@ export function PracticaSection({
                     return
                 }
                 practicasCreadas.push(json.data)
+                clasificacionesCreadas[json.data.id] = entrada.clasificacion
             }
 
             setPracticas((prev) => [...practicasCreadas, ...prev])
+            setClasificacionPorPracticaId((prev) => ({
+                ...prev,
+                ...clasificacionesCreadas,
+            }))
             if (refrescarDespuesCambios) {
                 router.refresh()
             }
@@ -403,6 +441,14 @@ export function PracticaSection({
                 setPracticas((prev) => {
                     const restante = prev.filter((p) => p.id !== practicaId)
                     return [...practicasNuevas, ...restante]
+                })
+                setClasificacionPorPracticaId((prev) => {
+                    const next = { ...prev }
+                    delete next[practicaId]
+                    for (const practicaNueva of practicasNuevas) {
+                        next[practicaNueva.id] = clasificacionInferidaPractica(practicaNueva)
+                    }
+                    return next
                 })
             }
 
@@ -503,6 +549,11 @@ export function PracticaSection({
             if (exitosas.length > 0) {
                 setPracticas((prev) => prev.filter((p) => !exitosas.includes(p.id)))
                 setPracticasSeleccionadas((prev) => prev.filter((id) => !exitosas.includes(id)))
+                setClasificacionPorPracticaId((prev) => {
+                    const next = { ...prev }
+                    for (const id of exitosas) delete next[id]
+                    return next
+                })
                 if (refrescarDespuesCambios) {
                     router.refresh()
                 }
@@ -539,8 +590,19 @@ export function PracticaSection({
             const idsPendientes = practicasPendientes.map((p) => p.id).join(',')
             if (idsPendientes) params.set('practicaIds', idsPendientes)
         }
+
+        const clasificacionesPendientes = practicasPendientes
+            .map((practica) => {
+                const clasificacion = obtenerClasificacionPractica(practica)
+                return `${practica.id}:${clasificacion}`
+            })
+            .join(',')
+        if (clasificacionesPendientes) {
+            params.set('practicaClasificaciones', clasificacionesPendientes)
+        }
+
         return `/dashboard/ambulatorio/nueva?${params.toString()}`
-    }, [ingresoId, incluirPracticaIdsEnGenerarAutorizacion, practicasPendientes])
+    }, [ingresoId, incluirPracticaIdsEnGenerarAutorizacion, practicasPendientes, clasificacionPorPracticaId])
     const mostrarBotonGenerar = (puedeGenerarAutorizacion ?? puedeCrear) && practicas.length > 0
     const botonGenerarHabilitado = permitirGenerarSinPendientes
         ? practicasVigentes.length > 0
@@ -846,6 +908,25 @@ export function PracticaSection({
                                 </div>
                             </div>
 
+                            <div className="grid grid-cols-1 gap-3">
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Clasificación para agrupación de orden</label>
+                                    <input
+                                        type="text"
+                                        value={clasificacionNuevaPractica}
+                                        onChange={(e) => {
+                                            const raw = e.target.value.toUpperCase()
+                                            setClasificacionNuevaPractica(
+                                                normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, '')
+                                            )
+                                        }}
+                                        placeholder="HE, HA, GA, HP, A1..."
+                                        list="clasificacion-practica-list"
+                                        className="his-input text-sm w-full"
+                                    />
+                                </div>
+                            </div>
+
                             {practicaSeleccionada && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {practicaSeleccionada.valorEspecialista != null && (
@@ -905,6 +986,19 @@ export function PracticaSection({
                             </div>
                         </div>
                     )}
+
+                    <datalist id="clasificacion-practica-list">
+                        <option value="HE" />
+                        <option value="HA" />
+                        <option value="GA" />
+                        <option value="HP" />
+                        <option value="A1" />
+                        <option value="A2" />
+                        <option value="A3" />
+                        <option value="HE+GA" />
+                        <option value="HE+HA" />
+                        <option value="HA+GA" />
+                    </datalist>
 
                     {/* Lista de prácticas */}
                     {practicas.length === 0 ? (
@@ -1046,6 +1140,22 @@ export function PracticaSection({
                                                             {p.facturable ? 'Facturable' : 'No facturable'}
                                                         </span>
                                                     )}
+                                                </div>
+                                                <div className="mt-1 flex items-center gap-2">
+                                                    <span className="text-[11px] text-gray-500">Clasificación</span>
+                                                    <input
+                                                        type="text"
+                                                        value={obtenerClasificacionPractica(p)}
+                                                        onChange={(e) => {
+                                                            const raw = e.target.value.toUpperCase()
+                                                            setClasificacionPorPracticaId((prev) => ({
+                                                                ...prev,
+                                                                [p.id]: normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, ''),
+                                                            }))
+                                                        }}
+                                                        list="clasificacion-practica-list"
+                                                        className="w-28 rounded border border-gray-200 px-2 py-0.5 text-[11px] text-gray-700"
+                                                    />
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">

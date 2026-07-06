@@ -17,6 +17,7 @@ import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { resumenDiferenciales } from '@/modules/facturacion/diferenciales'
 import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/practicas-subitems'
 import { fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
+import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 
 interface NomencladorItem {
     convenioId: number
@@ -73,6 +74,22 @@ type CirugiaEditableGroup = {
     practicas: CirugiaPracticaEditable[]
     diferenciales: PrestacionFacturableItem['diferenciales']
 }
+
+type ClasificacionToken = 'GA' | 'HE' | 'HA' | 'HP' | 'A1' | 'A2' | 'A3'
+
+type ClasificacionPorComponenteState = Partial<Record<keyof ComponenteSeleccion, string[]>>
+
+type ClasificacionPorComponenteUi = Partial<Record<
+    keyof ComponenteSeleccion,
+    Array<{ index: number; label: string; value: string }>
+>>
+
+const ORDEN_COMPONENTES_CLASIFICACION: Array<keyof ComponenteSeleccion> = [
+    'especialista',
+    'ayudante',
+    'anestesista',
+    'gastos',
+]
 
 function toDateInput(value: Date | string | null | undefined): string {
     if (!value) return ''
@@ -228,6 +245,89 @@ function parseIncluyeCodigoSeleccion(incluyeCodigo: string | null | undefined): 
     }
 }
 
+function normalizarCantidadSeleccion(cantidad: number, maximo?: number): number {
+    if (!Number.isFinite(cantidad) || cantidad <= 0) return 0
+    const normalizada = Math.floor(cantidad)
+    return typeof maximo === 'number' ? Math.min(normalizada, maximo) : normalizada
+}
+
+function cantidadSeleccionadaComponente(
+    seleccion: ComponenteSeleccion,
+    componente: keyof ComponenteSeleccion
+): number {
+    const limite = componente === 'ayudante' ? 3 : undefined
+    return normalizarCantidadSeleccion(Number(seleccion[componente] ?? 0), limite)
+}
+
+function clasificacionPorDefectoComponente(
+    componente: keyof ComponenteSeleccion,
+    posicion: number
+): ClasificacionToken {
+    if (componente === 'ayudante') {
+        const idx = Math.min(Math.max(1, posicion + 1), 3)
+        return `A${idx}` as ClasificacionToken
+    }
+    if (componente === 'anestesista') return 'HA'
+    if (componente === 'gastos') return 'GA'
+    return 'HE'
+}
+
+function normalizarClasificacionToken(
+    value: string | null | undefined,
+    fallback: ClasificacionToken
+): string {
+    const raw = (value ?? '').trim().toUpperCase().replace(/\s+/g, '')
+    if (/^(GA|HE|HA|HP|A[1-3])$/.test(raw)) return raw
+
+    const normalizada = normalizarClasificacionAgrupacion(raw)
+    if (normalizada && /^(GA|HE|HA|HP|A[1-3])$/.test(normalizada)) {
+        return normalizada
+    }
+
+    return fallback
+}
+
+function construirClasificacionesPorComponenteUI(
+    seleccion: ComponenteSeleccion,
+    estadoActual?: ClasificacionPorComponenteState
+): {
+    clasificacionesPorComponente: ClasificacionPorComponenteUi
+    indexMap: Record<number, { componente: keyof ComponenteSeleccion; posicion: number; fallback: ClasificacionToken }>
+} {
+    const clasificacionesPorComponente: ClasificacionPorComponenteUi = {}
+    const indexMap: Record<number, { componente: keyof ComponenteSeleccion; posicion: number; fallback: ClasificacionToken }> = {}
+    let globalIndex = 0
+
+    for (const componente of ORDEN_COMPONENTES_CLASIFICACION) {
+        const cantidad = cantidadSeleccionadaComponente(seleccion, componente)
+        if (cantidad <= 0) continue
+
+        const actuales = estadoActual?.[componente] ?? []
+        const filas: Array<{ index: number; label: string; value: string }> = []
+
+        for (let posicion = 0; posicion < cantidad; posicion += 1) {
+            const fallback = clasificacionPorDefectoComponente(componente, posicion)
+            const value = normalizarClasificacionToken(actuales[posicion], fallback)
+            const index = globalIndex
+
+            filas.push({
+                index,
+                label: cantidad > 1 ? `#${posicion + 1}` : 'Sigla',
+                value,
+            })
+
+            indexMap[index] = { componente, posicion, fallback }
+            globalIndex += 1
+        }
+
+        if (filas.length > 0) {
+            clasificacionesPorComponente[componente] = filas
+        }
+    }
+
+    return { clasificacionesPorComponente, indexMap }
+}
+
 function resumenSubitemsIncluidos(incluyeCodigo: string | null | undefined): string {
     const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
     if (!seleccion) return 'Completa (todos los componentes)'
@@ -263,7 +363,8 @@ function descripcionEsAyudante(value: string | null | undefined): boolean {
 function construirIncluyeCodigoDesdeSeleccion(
     valores: ComponenteValores | null,
     seleccion: ComponenteSeleccion | null | undefined,
-    incluyeCodigoActual?: string | null
+    incluyeCodigoActual?: string | null,
+    clasificacionesPorComponente?: ClasificacionPorComponenteState
 ): string | null {
     if (!valores || !seleccion) return null
 
@@ -283,29 +384,47 @@ function construirIncluyeCodigoDesdeSeleccion(
         return actual && actual !== 'COMPLETA' ? actual : null
     }
 
+    const hayClasificacionPersonalizada = ORDEN_COMPONENTES_CLASIFICACION.some((componente) => {
+        const valoresComponente = clasificacionesPorComponente?.[componente] ?? []
+        return valoresComponente.some((v) => (v ?? '').trim().length > 0)
+    })
+
+    if (hayClasificacionPersonalizada) {
+        const codigosPersonalizados: string[] = []
+
+        const agregarCodigos = (componente: keyof ComponenteSeleccion, cantidad: number) => {
+            const valoresComponente = clasificacionesPorComponente?.[componente] ?? []
+            for (let i = 0; i < cantidad; i += 1) {
+                const fallback = clasificacionPorDefectoComponente(componente, i)
+                codigosPersonalizados.push(normalizarClasificacionToken(valoresComponente[i], fallback))
+            }
+        }
+
+        if (gasDisp) agregarCodigos('gastos', normalizarCantidadSeleccion(seleccion.gastos))
+        if (espDisp) agregarCodigos('especialista', normalizarCantidadSeleccion(seleccion.especialista))
+        if (aneDisp) agregarCodigos('anestesista', normalizarCantidadSeleccion(seleccion.anestesista))
+        if (ayuDisp) agregarCodigos('ayudante', normalizarCantidadSeleccion(seleccion.ayudante, 3))
+
+        if (codigosPersonalizados.length > 0) {
+            return codigosPersonalizados.join('+')
+        }
+    }
+
     const codigos: string[] = []
     if (gasDisp) {
-        const cantidadGastos = Number.isFinite(seleccion.gastos) && seleccion.gastos > 0
-            ? Math.floor(seleccion.gastos)
-            : 0
+        const cantidadGastos = normalizarCantidadSeleccion(seleccion.gastos)
         for (let i = 0; i < cantidadGastos; i += 1) codigos.push('GA')
     }
     if (espDisp) {
-        const cantidadEspecialista = Number.isFinite(seleccion.especialista) && seleccion.especialista > 0
-            ? Math.floor(seleccion.especialista)
-            : 0
+        const cantidadEspecialista = normalizarCantidadSeleccion(seleccion.especialista)
         for (let i = 0; i < cantidadEspecialista; i += 1) codigos.push('HE')
     }
     if (aneDisp) {
-        const cantidadAnestesista = Number.isFinite(seleccion.anestesista) && seleccion.anestesista > 0
-            ? Math.floor(seleccion.anestesista)
-            : 0
+        const cantidadAnestesista = normalizarCantidadSeleccion(seleccion.anestesista)
         for (let i = 0; i < cantidadAnestesista; i += 1) codigos.push('HA')
     }
     if (seleccion.ayudante > 0 && ayuDisp) {
-        const cantidadAyudantes = Number.isFinite(seleccion.ayudante) && seleccion.ayudante > 0
-            ? Math.min(Math.floor(seleccion.ayudante), 3)
-            : 0
+        const cantidadAyudantes = normalizarCantidadSeleccion(seleccion.ayudante, 3)
         for (let i = 1; i <= cantidadAyudantes; i += 1) {
             codigos.push(`A${i}`)
         }
@@ -465,6 +584,7 @@ export function FacturacionPanel() {
 
     // Component selection per practice uid
     const [compSeleccion, setCompSeleccion] = useState<Record<string, ComponenteSeleccion>>({})
+    const [clasificacionPorComponenteUid, setClasificacionPorComponenteUid] = useState<Record<string, ClasificacionPorComponenteState>>({})
     const [diferencialesCirugiaEdit, setDiferencialesCirugiaEdit] = useState<Record<number, DiferencialesCirugiaEditState>>({})
 
     // Auto-dismiss success toast after 3.5 s
@@ -744,6 +864,7 @@ export function FacturacionPanel() {
         setEditRows(state)
         setEditAutorizacionesVinculadas(authState)
         setCompSeleccion(selMap)
+        setClasificacionPorComponenteUid({})
     }
 
     async function buscarAdmisiones() {
@@ -1097,7 +1218,12 @@ export function FacturacionPanel() {
                     const sel = compSeleccion[p.uid]
                     const baseDesc = draft?.descripcion ?? p.descripcion
                     const desgloseSelector = obtenerDesgloseSelector(p)
-                    const incluyeCodigo = construirIncluyeCodigoDesdeSeleccion(desgloseSelector, sel, p.incluyeCodigo)
+                    const incluyeCodigo = construirIncluyeCodigoDesdeSeleccion(
+                        desgloseSelector,
+                        sel,
+                        p.incluyeCodigo,
+                        clasificacionPorComponenteUid[p.uid]
+                    )
                     const usaMatriculaAyudante =
                         incluyeSoloAyudante(incluyeCodigo ?? p.incluyeCodigo) ||
                         (!incluyeCodigo && !p.incluyeCodigo && descripcionEsAyudante(baseDesc))
@@ -1190,6 +1316,12 @@ export function FacturacionPanel() {
                 } else {
                     delete next[p.uid]
                 }
+                return next
+            })
+
+            setClasificacionPorComponenteUid((prev) => {
+                const next = { ...prev }
+                delete next[p.uid]
                 return next
             })
         }
@@ -1928,6 +2060,16 @@ export function FacturacionPanel() {
                                                 const selComp = tieneComponentes
                                                     ? (compSeleccion[p.uid] ?? seleccionPorDefecto(desgloseSelector!))
                                                     : (mostrarSelectorComponentes ? (compSeleccion[p.uid] ?? { especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }) : null)
+                                                const permiteEditarClasificacion = practicaSinOrdenVinculada
+                                                const clasificacionesEditor =
+                                                    p.tipo === 'PRACTICA' &&
+                                                    permiteEditarClasificacion &&
+                                                    selComp
+                                                        ? construirClasificacionesPorComponenteUI(
+                                                            selComp,
+                                                            clasificacionPorComponenteUid[p.uid]
+                                                        )
+                                                        : null
                                                 const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
                                                 const importeParcialPorSubitem = p.tipo === 'PRACTICA' && esImporteParcialPorSubitem(p.incluyeCodigo)
                                                 const diferencialesActivos = resumenDiferenciales(p.diferenciales)
@@ -2270,6 +2412,35 @@ export function FacturacionPanel() {
                                                                                 }}
                                                                                 seleccion={selComp}
                                                                                 disabled={!filaEnEdicion}
+                                                                                clasificacionesPorComponente={clasificacionesEditor?.clasificacionesPorComponente}
+                                                                                onClasificacionChange={
+                                                                                    clasificacionesEditor
+                                                                                        ? (index, value) => {
+                                                                                            if (!filaEnEdicion) return
+                                                                                            const target = clasificacionesEditor.indexMap[index]
+                                                                                            if (!target) return
+
+                                                                                            setClasificacionPorComponenteUid((prev) => {
+                                                                                                const prevUid = prev[p.uid] ?? {}
+                                                                                                const actuales = [...(prevUid[target.componente] ?? [])]
+                                                                                                while (actuales.length <= target.posicion) {
+                                                                                                    const fallback = clasificacionPorDefectoComponente(target.componente, actuales.length)
+                                                                                                    actuales.push(fallback)
+                                                                                                }
+                                                                                                actuales[target.posicion] = normalizarClasificacionToken(value, target.fallback)
+
+                                                                                                return {
+                                                                                                    ...prev,
+                                                                                                    [p.uid]: {
+                                                                                                        ...prevUid,
+                                                                                                        [target.componente]: actuales,
+                                                                                                    },
+                                                                                                }
+                                                                                            })
+                                                                                        }
+                                                                                        : undefined
+                                                                                }
+                                                                                clasificacionListId={clasificacionesEditor ? 'clasificacion-facturacion-list' : undefined}
                                                                                 onChange={(nuevaSeleccion) => {
                                                                                     if (!filaEnEdicion) return
                                                                                     setCompSeleccion((prev) => ({ ...prev, [p.uid]: nuevaSeleccion }))
@@ -2509,6 +2680,16 @@ export function FacturacionPanel() {
                                         </tbody>
                                     </table>
                                 </div>
+
+                                <datalist id="clasificacion-facturacion-list">
+                                    <option value="HE" />
+                                    <option value="HA" />
+                                    <option value="GA" />
+                                    <option value="HP" />
+                                    <option value="A1" />
+                                    <option value="A2" />
+                                    <option value="A3" />
+                                </datalist>
 
                                 <div className="px-4 py-2 border-t text-xs text-gray-500 flex flex-wrap items-center justify-between gap-2">
                                     <span>Seleccionables para facturar: {prestacionesSeleccionables.length} · Seleccionadas: {prestacionesSeleccionadas.length}</span>

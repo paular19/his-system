@@ -392,8 +392,9 @@ export function AutorizacionPrint({
           }
 
           .autorizacion-pagina {
-            height: 136mm;
-            margin-bottom: 8mm !important;
+            height: 134mm;
+            margin-bottom: 5mm !important;
+            box-sizing: border-box;
             page-break-after: auto !important;
             break-after: auto !important;
             page-break-inside: avoid;

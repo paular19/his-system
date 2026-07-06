@@ -362,9 +362,6 @@ export function PracticaSection({
                 ...prev,
                 [json.data.id]: 'HE',
             }))
-            if (refrescarDespuesCambios) {
-                router.refresh()
-            }
             limpiarPedidoLaboratorio()
             setMostrarPedidoLaboratorio(false)
         } catch {
@@ -463,9 +460,6 @@ export function PracticaSection({
                 if (!res.ok) {
                     if (practicasCreadas.length > 0) {
                         setPracticas((prev) => [...practicasCreadas, ...prev])
-                        if (refrescarDespuesCambios) {
-                            router.refresh()
-                        }
                     }
                     setError(json.error ?? 'Error al registrar la práctica')
                     return
@@ -479,9 +473,6 @@ export function PracticaSection({
                 ...prev,
                 ...clasificacionesCreadas,
             }))
-            if (refrescarDespuesCambios) {
-                router.refresh()
-            }
             limpiarForm()
             setMostrarForm(false)
         } catch {

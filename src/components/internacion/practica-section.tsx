@@ -163,6 +163,7 @@ export function PracticaSection({
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const subitemsPreviosRef = useRef<SubitemCodigo[]>([])
 
     const subitemsSeleccionadosForm = useMemo(() => {
         if (!practicaSeleccionada) return [] as SubitemCodigo[]
@@ -209,14 +210,35 @@ export function PracticaSection({
     useEffect(() => {
         if (subitemsSeleccionadosForm.length === 0) {
             setClasificacionPorSubitemNuevo([])
+            subitemsPreviosRef.current = []
             return
         }
 
-        setClasificacionPorSubitemNuevo((prev) =>
-            subitemsSeleccionadosForm.map((subitem, idx) =>
-                normalizarClasificacionAgrupacion(prev[idx]) ?? subitem
-            )
-        )
+        setClasificacionPorSubitemNuevo((prev) => {
+            const clavesPrevias = new Map<string, string>()
+            const contadorPrevio = new Map<string, number>()
+            for (let idx = 0; idx < subitemsPreviosRef.current.length; idx += 1) {
+                const subitemPrevio = subitemsPreviosRef.current[idx]
+                if (!subitemPrevio) continue
+                const ocurrenciaPrevia = (contadorPrevio.get(subitemPrevio) ?? 0) + 1
+                contadorPrevio.set(subitemPrevio, ocurrenciaPrevia)
+                const clave = `${subitemPrevio}#${ocurrenciaPrevia}`
+                const clasificacionPrevia = normalizarClasificacionAgrupacion(prev[idx]) ?? prev[idx]?.trim().toUpperCase() ?? ''
+                if (clasificacionPrevia) clavesPrevias.set(clave, clasificacionPrevia)
+            }
+
+            const contadorActual = new Map<string, number>()
+            const next = subitemsSeleccionadosForm.map((subitem) => {
+                const ocurrenciaActual = (contadorActual.get(subitem) ?? 0) + 1
+                contadorActual.set(subitem, ocurrenciaActual)
+                const clave = `${subitem}#${ocurrenciaActual}`
+                return clavesPrevias.get(clave) ?? subitem
+            })
+
+            return next
+        })
+
+        subitemsPreviosRef.current = subitemsSeleccionadosForm
     }, [subitemsSeleccionadosForm])
 
     const obtenerClasificacionPractica = (practica: PracticaItem): string => {
@@ -254,6 +276,8 @@ export function PracticaSection({
         setPracticaSeleccionada(p)
         setBusqueda(p.descripcion)
         setResultados([])
+        setClasificacionPorSubitemNuevo([])
+        subitemsPreviosRef.current = []
         const valores: ComponenteValores = {
             valorEspecialista: p.valorEspecialista,
             valorAyudante: p.valorAyudante,

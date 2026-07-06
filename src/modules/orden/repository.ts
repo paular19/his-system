@@ -9,6 +9,7 @@ import type {
   NomencladorPracticaItem,
 } from './types'
 import { generarCodigoBarras } from './types'
+import { normalizarClasificacionAgrupacion } from './clasificacion'
 
 const PUESTO_NUMERO = 1 // Número de puesto fijo (configurable a futuro)
 const EFECTOR_FALLBACK_POR_MATRICULA: Record<number, string> = {
@@ -150,6 +151,10 @@ function normalizarIncluyeCodigo(codigo: string | null | undefined): string | nu
   return normalized
 }
 
+function normalizarClasificacion(codigo: string | null | undefined): string | null {
+  return normalizarClasificacionAgrupacion(codigo)
+}
+
 function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
   const normalized = value?.trim() ?? ''
   return normalized.length > 0 ? normalized : null
@@ -262,6 +267,7 @@ export async function crearOrdenInterna(
               codigoPractica: item.codigoPractica.trim().slice(0, 8),
               cantidad: item.cantidad,
               tipoFacturacion: item.tipoFacturacion ?? 'H',
+              clasificacionAgrupacion: normalizarClasificacion(item.clasificacionAgrupacion),
               modulo: normalizarIncluyeCodigo(item.incluyeCodigo),
               titularModular: item.titularModular ?? null,
               imprimirPorDuplicado: item.imprimirPorDuplicado ?? false,
@@ -405,6 +411,7 @@ export async function obtenerOrden(
       descripcionPractica: it.nomencladorPractica?.descripcion ?? it.codigoPractica.trim(),
       cantidad: Number(it.cantidad),
       tipoFacturacion: it.tipoFacturacion,
+      clasificacionAgrupacion: normalizarClasificacion(it.clasificacionAgrupacion),
       incluyeCodigo: normalizarIncluyeCodigo(it.modulo),
       titularModular: it.titularModular,
       imprimirPorDuplicado: it.imprimirPorDuplicado,

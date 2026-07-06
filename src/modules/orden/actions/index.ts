@@ -7,6 +7,12 @@ import { crearOrdenAmbulatorio, crearOrdenesAmbulatoriasPorPractica } from '../s
 import { prisma } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import {
+  clasificacionDesdeIncluyeCodigo,
+  contieneClasificacion,
+  normalizarClasificacionAgrupacion,
+  tituloDesdeClasificacion,
+} from '../clasificacion'
 
 type ModoGeneracion = 'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'
 
@@ -17,8 +23,34 @@ const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({
 const CrearPedidoLaboratorioSchema = z.object({
   ingresoId: z.number().int().positive(),
   numeroProtocolo: z.string().trim().min(1, 'Ingresá el número de protocolo').max(50),
-  diagnostico: z.string().trim().min(1, 'Ingresá el diagnóstico').max(300),
+  diagnostico: z.string().trim().max(300).optional().default(''),
 })
+
+function claveClasificacionItem(item: CrearOrdenInput['items'][number]): string {
+  if (item.codigoPractica.trim() === '66') return '__PROTOCOLO_BIOQUIMICO__'
+
+  const clasificacion =
+    normalizarClasificacionAgrupacion(item.clasificacionAgrupacion) ??
+    clasificacionDesdeIncluyeCodigo(item.incluyeCodigo) ??
+    'HE'
+
+  return clasificacion
+}
+
+function tituloClasificacionGrupo(
+  key: string,
+  itemsGrupo: CrearOrdenInput['items']
+): string {
+  if (key === '__PROTOCOLO_BIOQUIMICO__') return 'PROTOCOLO BIOQUIMICO'
+
+  const tituloPorClasificacion = tituloDesdeClasificacion(key)
+  if (tituloPorClasificacion !== 'HONORARIOS') return tituloPorClasificacion
+
+  const tituloItem = itemsGrupo.find((item) => Boolean(item.titularModular?.trim()))?.titularModular?.trim()
+  if (tituloItem) return tituloItem
+
+  return 'HONORARIO ESPECIALISTA'
+}
 
 export async function crearOrdenAction(input: CrearOrdenInput) {
   const usuario = await getUsuarioSesion()
@@ -69,62 +101,49 @@ export async function crearOrdenesDesdeAdmisionAction(
     }
 
     if (modo === 'AGRUPADA') {
-      // Agrupar por grupoOrden y aplicar título/profesional por grupo
-      const grupos = new Map<number, typeof ordenData.items>()
-      const titularPorGrupo = new Map<number, string>()
-      const matriculaPatologiaPorGrupo = new Map<number, number>()
-      const nombrePatologiaPorGrupo = new Map<number, string>()
+      const grupos = new Map<string, typeof ordenData.items>()
 
       for (const item of ordenData.items) {
-        const grupo = Number.isFinite(Number(item.grupoOrden)) && Number(item.grupoOrden) > 0
-          ? Math.floor(Number(item.grupoOrden))
-          : 1
-        const arr = grupos.get(grupo) ?? []
+        const key = claveClasificacionItem(item)
+        const arr = grupos.get(key) ?? []
         arr.push(item)
-        grupos.set(grupo, arr)
-        // Guardar título/modular por grupo si está presente
-        if (item.titularModular) titularPorGrupo.set(grupo, item.titularModular)
-        // Patología: guardar nombre/matricula si están presentes
-        if (item.titularModular && item.titularModular.toUpperCase().includes('PATOLOG')) {
-          if (item.matriculaPatologia) {
-            matriculaPatologiaPorGrupo.set(grupo, item.matriculaPatologia)
-          }
-          if (item.nombrePatologia) {
-            nombrePatologiaPorGrupo.set(grupo, item.nombrePatologia)
-          }
-        }
+        grupos.set(key, arr)
       }
 
       const ordenes: Array<{ puestoNumero: number; numero: number }> = []
-      const gruposOrdenados = Array.from(grupos.entries()).sort((a, b) => a[0] - b[0])
-      for (const [grupo, itemsGrupo] of gruposOrdenados) {
-        // Detectar título y profesional/matricula para este grupo
-        const titularModular = titularPorGrupo.get(grupo) ?? undefined
-        // Patología: nombre y matricula
-        const matriculaPatologia = matriculaPatologiaPorGrupo.has(grupo) ? matriculaPatologiaPorGrupo.get(grupo) : undefined
-        const nombrePatologia = nombrePatologiaPorGrupo.has(grupo) ? nombrePatologiaPorGrupo.get(grupo) : undefined
+      const gruposOrdenados = Array.from(grupos.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+      for (const [key, itemsGrupo] of gruposOrdenados) {
+        const titularModular = tituloClasificacionGrupo(key, itemsGrupo)
+        const esGrupoConDerechos = key === '__PROTOCOLO_BIOQUIMICO__'
+          ? false
+          : contieneClasificacion(key, 'GA')
+        const esGrupoPatologia = key === '__PROTOCOLO_BIOQUIMICO__'
+          ? false
+          : contieneClasificacion(key, 'HP')
 
-        // Si el título es PATOLOGÍA, setear profesionalId/matricula/nombre si corresponde
-        let profesionalId = ordenData.profesionalId
-        let descripcionPatologia = ordenData.descripcionPatologia
-        if (titularModular && titularModular.toUpperCase().includes('PATOLOG')) {
-          if (matriculaPatologia) {
-            // Si hay una matrícula de patología, buscar el profesionalId correspondiente
-            // (esto requiere que el frontend envíe el id o que se resuelva aquí, si no, dejar el global)
-            // Si no se puede resolver, dejar el profesionalId global
-          }
-          if (nombrePatologia) {
-            descripcionPatologia = nombrePatologia
-          }
-        }
+        const nombrePatologia = esGrupoPatologia
+          ? itemsGrupo.find((item) => Boolean(item.nombrePatologia?.trim()))?.nombrePatologia?.trim() ?? undefined
+          : undefined
+
+        const itemsConClasificacion = itemsGrupo.map((item) => ({
+          ...item,
+          clasificacionAgrupacion:
+            key === '__PROTOCOLO_BIOQUIMICO__'
+              ? null
+              : normalizarClasificacionAgrupacion(item.clasificacionAgrupacion) ?? key,
+          titularModular,
+          imprimirPorDuplicado: Boolean(item.imprimirPorDuplicado) || esGrupoConDerechos,
+        }))
 
         const orden = await crearOrdenAmbulatorio(
           {
             ...ordenData,
-            items: itemsGrupo,
+            items: itemsConClasificacion,
             titularModular,
-            profesionalId,
-            descripcionPatologia,
+            imprimirPorDuplicado: esGrupoConDerechos,
+            descripcionPatologia: esGrupoPatologia
+              ? (nombrePatologia ?? ordenData.descripcionPatologia)
+              : ordenData.descripcionPatologia,
           },
           usuario.codigoUsuario
         )
@@ -236,7 +255,7 @@ export async function crearPedidoLaboratorioAction(input: {
         planCoseguroId: ingreso.planCoseguroId ?? undefined,
         profesionalId,
         tipoOrdenCodigo: 'PRA',
-        descripcionPatologia: diagnostico,
+        descripcionPatologia: diagnostico || undefined,
         descripcion: `PROTOCOLO N°${numeroProtocolo}`,
         items: [
           {
@@ -246,6 +265,7 @@ export async function crearPedidoLaboratorioAction(input: {
             cantidad: 1,
             fecha: new Date(),
             tipoFacturacion: 'H',
+            clasificacionAgrupacion: 'HE',
             titularModular: 'PROTOCOLO BIOQUIMICO',
           },
         ],

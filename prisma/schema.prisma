@@ -1125,6 +1125,7 @@ model OrdenPractica {
 
   // Facturación
   tipoFacturacion      String  @map("OprTipFact") @db.Char(1)
+  clasificacionAgrupacion String? @map("OprClasAgrup") @db.VarChar(30)
   modulo               String? @map("OprModulo") @db.Char(8)
   titularModular       String? @map("OprTitularModular") @db.VarChar(100)
   imprimirPorDuplicado Boolean @default(false) @map("OprImprimirDuplicado")

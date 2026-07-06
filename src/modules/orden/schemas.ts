@@ -8,6 +8,11 @@ export const OrdenPracticaItemSchema = z.object({
   cantidad: z.number().min(0.01),
   fecha: z.coerce.date().optional(),
   grupoOrden: z.number().int().min(1).optional(),
+  clasificacionAgrupacion: z
+    .string()
+    .regex(/^(GA|HE|HA|HP|A[1-3])(\+(GA|HE|HA|HP|A[1-3]))*$/)
+    .optional()
+    .nullable(),
   tipoFacturacion: z.string().length(1).default('H'),
   incluyeCodigo: z.string().regex(/^(GA|HE|HA|A[1-3])(\+(GA|HE|HA|A[1-3]))*$/).optional().nullable(), // Permite GA, HE+GA, GA+HE, etc.
   efectorMatricula: z.number().int().positive().optional().nullable(),

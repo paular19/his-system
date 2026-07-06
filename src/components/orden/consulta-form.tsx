@@ -19,6 +19,12 @@ import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 import { formatearFechaCalendario } from '@/lib/utils'
 import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
+import {
+  clasificacionDesdeIncluyeCodigo,
+  contieneClasificacion,
+  normalizarClasificacionAgrupacion,
+  tituloDesdeClasificacion,
+} from '@/modules/orden/clasificacion'
 
 interface ObraSocialItem {
   id: number
@@ -62,6 +68,7 @@ type ItemPractica = OrdenPracticaItemInput & {
   matriculaEspecialista?: number | null
   matriculaAnestesista?: number | null
   subitemCodigo?: SubitemCodigo
+  clasificacionAgrupacion: string
 }
 
 type EstrategiaOrden = 'ESTANDAR' | 'MODULARIDAD' | 'GRUPALIDAD'
@@ -170,6 +177,7 @@ function sonLineasSubitemCompatibles(a: ItemPractica, b: ItemPractica): boolean 
     a.descripcionPractica === b.descripcionPractica &&
     (a.practicaId ?? null) === (b.practicaId ?? null) &&
     a.grupoOrden === b.grupoOrden &&
+    (a.clasificacionAgrupacion ?? null) === (b.clasificacionAgrupacion ?? null) &&
     (a.matriculaEspecialista ?? null) === (b.matriculaEspecialista ?? null) &&
     (a.matriculaAnestesista ?? null) === (b.matriculaAnestesista ?? null)
   )
@@ -264,6 +272,11 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
   return normalized.length > 0 ? normalized : null
 }
 
+function clasificacionDesdeSubitems(subitems: string[]): string {
+  const limpia = subitems.filter((codigo) => codigo !== 'COMPLETA').join('+')
+  return normalizarClasificacionAgrupacion(limpia) ?? 'HE'
+}
+
 function esProtocoloBioquimico(item: Pick<ItemPractica, 'codigoPractica'>): boolean {
   return item.codigoPractica.trim() === '66'
 }
@@ -348,6 +361,20 @@ export function ConsultaForm({
         p.matriculaAnestesista,
         matriculaEspecialistaInternacionDefault
       )
+      const seleccionInicial = inferirSeleccionDesdeImporte(
+        {
+          valorEspecialista: p.valorEspecialista,
+          valorAyudante: p.valorAyudante,
+          valorAnestesista: p.valorAnestesista,
+          valorGastos: p.valorGastos,
+        },
+        Number(p.cantidad),
+        p.importeTotal,
+        {
+          matriculaEspecialista: p.matriculaEspecialista,
+          matriculaAnestesista: p.matriculaAnestesista,
+        }
+      )
 
       return {
         _key: `ingreso-${p.id}-${idx}`,
@@ -370,22 +397,10 @@ export function ConsultaForm({
           valorAnestesista: p.valorAnestesista,
           valorGastos: p.valorGastos,
         },
-        seleccionComponentes: inferirSeleccionDesdeImporte(
-          {
-            valorEspecialista: p.valorEspecialista,
-            valorAyudante: p.valorAyudante,
-            valorAnestesista: p.valorAnestesista,
-            valorGastos: p.valorGastos,
-          },
-          Number(p.cantidad),
-          p.importeTotal,
-          {
-            matriculaEspecialista: p.matriculaEspecialista,
-            matriculaAnestesista: p.matriculaAnestesista,
-          }
-        ),
+        seleccionComponentes: seleccionInicial,
         matriculaEspecialista: matriculasDefault.matriculaEspecialista,
         matriculaAnestesista: matriculasDefault.matriculaAnestesista,
+        clasificacionAgrupacion: clasificacionDesdeSubitems(obtenerCodigosSubitemSeleccionados(seleccionInicial)),
       }
     })
   )
@@ -409,6 +424,8 @@ export function ConsultaForm({
   const [titularPorGrupo, setTitularPorGrupo] = useState<Record<number, string>>({})
   const [nombrePatologiaPorGrupo, setNombrePatologiaPorGrupo] = useState<Record<number, string>>({})
   const [matriculaPatologiaPorGrupo, setMatriculaPatologiaPorGrupo] = useState<Record<number, number | null>>({})
+  const [nombrePatologiaClasificacion, setNombrePatologiaClasificacion] = useState('')
+  const [matriculaPatologiaClasificacion, setMatriculaPatologiaClasificacion] = useState<number | null>(null)
   const [duplicadoPorPractica, setDuplicadoPorPractica] = useState<Record<string, boolean>>({})
   const [imprimirDuplicadoEstandar, setImprimirDuplicadoEstandar] = useState(false)
   const [duplicadoPorGrupo, setDuplicadoPorGrupo] = useState<Record<number, boolean>>({})
@@ -447,6 +464,9 @@ export function ConsultaForm({
     acc[grupo]!.push(p)
     return acc
   }, {})
+  const requiereDatosPatologiaClasificacion = practicas.some((p) =>
+    contieneClasificacion(normalizarClasificacionAgrupacion(p.clasificacionAgrupacion), 'HP')
+  )
 
   const convenioDefecto =
     obraSocialId && Number.isFinite(parseInt(obraSocialId, 10))
@@ -561,6 +581,7 @@ export function ConsultaForm({
         codigoPractica: practica.codigo,
         descripcionPractica: practica.descripcion,
         grupoOrden: esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1,
+        clasificacionAgrupacion: 'HE',
         cantidad: 1,
         tipoFacturacion: 'H',
         importeTotal: practica.valor ?? undefined,
@@ -616,6 +637,7 @@ export function ConsultaForm({
             codigoPractica: practicaPendiente.codigo,
             descripcionPractica: practicaPendiente.descripcion,
             grupoOrden,
+            clasificacionAgrupacion: codigo,
             cantidad: cantidadSubitem,
             tipoFacturacion: codigo === 'GA' ? 'D' : 'H',
             importeTotal,
@@ -702,6 +724,7 @@ export function ConsultaForm({
         codigoPractica: busquedaPractica.trim().slice(0, 8).toUpperCase(),
         descripcionPractica: busquedaPractica.trim(),
         grupoOrden: esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1,
+        clasificacionAgrupacion: 'HE',
         cantidad: 1,
         tipoFacturacion: 'H',
         valorUnitario: null,
@@ -720,11 +743,6 @@ export function ConsultaForm({
 
     if (!numeroProtocolo) {
       setError('Ingresá el número de protocolo')
-      return
-    }
-
-    if (!diagnosticoPedido) {
-      setError('Ingresá el diagnóstico')
       return
     }
 
@@ -750,8 +768,9 @@ export function ConsultaForm({
         codigoPractica: '66',
         descripcionPractica: 'PROTOCOLO BIOQUIMICO',
         numeroProtocoloLaboratorio: numeroProtocolo,
-        diagnosticoLaboratorio: diagnosticoPedido,
+        diagnosticoLaboratorio: diagnosticoPedido || diagnostico.trim() || null,
         grupoOrden: esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1,
+        clasificacionAgrupacion: 'HE',
         cantidad: 1,
         tipoFacturacion: 'H',
         valorUnitario: null,
@@ -766,7 +785,7 @@ export function ConsultaForm({
       [key]: 'PROTOCOLO BIOQUIMICO',
     }))
 
-    if (!diagnostico.trim()) {
+    if (diagnosticoPedido && !diagnostico.trim()) {
       setDiagnostico(diagnosticoPedido)
     }
     setNumeroProtocoloLaboratorio('')
@@ -859,6 +878,7 @@ export function ConsultaForm({
           codigoPractica: `MED${med.id}`.slice(0, 8).toUpperCase(),
           descripcionPractica: `MEDICACION: ${med.nombre}`,
           grupoOrden: esEstrategiaGrupal ? siguienteGrupoOrden(prev) : 1,
+          clasificacionAgrupacion: 'HE',
           cantidad: 1,
           tipoFacturacion: 'H',
           valorUnitario: null,
@@ -901,7 +921,10 @@ export function ConsultaForm({
     if (practica && esProtocoloBioquimico(practica)) {
       return 'PROTOCOLO BIOQUIMICO'
     }
-    return titularPorPractica[practiceKey] ?? 'HONORARIO ESPECIALISTA'
+    const clasificacion = practica
+      ? normalizarClasificacionAgrupacion(practica.clasificacionAgrupacion) ?? 'HE'
+      : null
+    return tituloDesdeClasificacion(clasificacion)
   }
 
   const getTitularGrupo = (grupo: number): string => {
@@ -913,23 +936,17 @@ export function ConsultaForm({
   }
 
   const getTituloAplicadoPractica = (practiceKey: string): string | undefined => {
-    if (esEstrategiaGrupal) {
-      const grupoPractica = practicas.find((p) => p._key === practiceKey)?.grupoOrden
-      if (typeof grupoPractica === 'number' && grupoPractica > 0) {
-        const tituloGrupo = titularPorGrupo[grupoPractica]?.trim()
-        if (tituloGrupo) return tituloGrupo
-      }
-    }
-
-    const tituloPorItem = titularPorPractica[practiceKey]?.trim()
-    if (tituloPorItem) return tituloPorItem
-
-    const tituloGlobal = tituloOrden.trim()
-    if (tituloGlobal) return tituloGlobal
-
     const practica = practicas.find((p) => p._key === practiceKey)
     if (practica && esProtocoloBioquimico(practica)) {
       return 'PROTOCOLO BIOQUIMICO'
+    }
+
+    if (practica) {
+      const clasificacion =
+        normalizarClasificacionAgrupacion(practica.clasificacionAgrupacion) ??
+        clasificacionDesdeIncluyeCodigo(obtenerSubitemsSeleccionados(practica).join('+')) ??
+        'HE'
+      return tituloDesdeClasificacion(clasificacion)
     }
 
     return undefined
@@ -960,8 +977,9 @@ export function ConsultaForm({
     }
 
     if (esTituloPatologia(tituloAplicado)) {
-      const matriculaPatologia = matriculaPatologiaPorGrupo[p.grupoOrden]
-      return matriculaPatologia != null && matriculaPatologia > 0 ? matriculaPatologia : undefined
+      return matriculaPatologiaClasificacion != null && matriculaPatologiaClasificacion > 0
+        ? matriculaPatologiaClasificacion
+        : undefined
     }
 
     if (tipo === 'HE') return p.matriculaEspecialista ?? undefined
@@ -982,11 +1000,11 @@ export function ConsultaForm({
     const practica = practicas.find((p) => p._key === practiceKey)
     if (!practica) return {}
 
-    const titulo = getTituloAplicadoPractica(practiceKey)
-    if (!esTituloPatologia(titulo)) return {}
+    const clasificacion = normalizarClasificacionAgrupacion(practica.clasificacionAgrupacion)
+    if (!contieneClasificacion(clasificacion, 'HP')) return {}
 
-    const nombrePatologia = (nombrePatologiaPorGrupo[practica.grupoOrden] ?? '').trim()
-    const matriculaPatologia = matriculaPatologiaPorGrupo[practica.grupoOrden]
+    const nombrePatologia = nombrePatologiaClasificacion.trim()
+    const matriculaPatologia = matriculaPatologiaClasificacion
 
     return {
       nombrePatologia: nombrePatologia.length > 0 ? nombrePatologia : undefined,
@@ -1013,6 +1031,14 @@ export function ConsultaForm({
     if (!obraSocialId) return setError('Seleccioná una obra social')
     if (!profesionalId) return setError('No hay profesionales disponibles para generar la autorización')
     if (practicas.length === 0) return setError('Agregá al menos una práctica')
+    if (requiereDatosPatologiaClasificacion) {
+      if (!nombrePatologiaClasificacion.trim()) {
+        return setError('Completá el nombre del profesional para clasificación HP.')
+      }
+      if (!(matriculaPatologiaClasificacion && matriculaPatologiaClasificacion > 0)) {
+        return setError('Completá la matrícula del profesional para clasificación HP.')
+      }
+    }
     if (!esEstrategiaModular) {
       const faltaMatricula = practicas.find((p) => (
         ((p.seleccionComponentes?.especialista ?? 0) > 0 && !p.matriculaEspecialista) ||
@@ -1068,6 +1094,7 @@ export function ConsultaForm({
             practicaId: p.practicaId,
             fecha: p.fecha ? new Date(p.fecha) : undefined,
             grupoOrden: p.grupoOrden,
+            clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
             ...getDatosPatologiaPractica(p._key),
           }))
@@ -1235,6 +1262,7 @@ export function ConsultaForm({
             practicaId: p.practicaId,
             fecha: p.fecha ? new Date(p.fecha) : undefined,
             grupoOrden: p.grupoOrden,
+            clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
             ...getDatosPatologiaPractica(p._key),
           }))
@@ -1254,6 +1282,7 @@ export function ConsultaForm({
             practicaId: p.practicaId,
             fecha: p.fecha ? new Date(p.fecha) : undefined,
             grupoOrden: p.grupoOrden,
+            clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
             ...getDatosPatologiaPractica(p._key),
           }))
@@ -1303,6 +1332,7 @@ export function ConsultaForm({
             practicaId: p.practicaId,
             fecha: p.fecha ? new Date(p.fecha) : undefined,
             grupoOrden: p.grupoOrden,
+            clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
             ...getDatosPatologiaPractica(p._key),
           }))
@@ -1380,6 +1410,7 @@ export function ConsultaForm({
             practicaId: p.practicaId,
             fecha: p.fecha ? new Date(p.fecha) : undefined,
             grupoOrden: p.grupoOrden,
+            clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
             ...getDatosPatologiaPractica(p._key),
           }))
@@ -1390,16 +1421,24 @@ export function ConsultaForm({
           practicaId: p.practicaId,
           fecha: p.fecha ? new Date(p.fecha) : undefined,
           grupoOrden: p.grupoOrden,
+          clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
           titularModular: getTituloAplicadoPractica(p._key),
           ...getDatosPatologiaPractica(p._key),
         }))
       })
 
       const itemsOrden = itemsOrdenBase.map((item) => {
+        const clasificacion =
+          normalizarClasificacionAgrupacion(item.clasificacionAgrupacion) ??
+          clasificacionDesdeIncluyeCodigo(item.incluyeCodigo) ??
+          'HE'
+        const duplicadoPorDerechos = contieneClasificacion(clasificacion, 'GA')
+
         if (esEstrategiaEstandar) {
           return {
             ...item,
-            imprimirPorDuplicado: imprimirDuplicadoEstandar,
+            clasificacionAgrupacion: clasificacion,
+            imprimirPorDuplicado: imprimirDuplicadoEstandar || duplicadoPorDerechos,
           }
         }
 
@@ -1409,11 +1448,16 @@ export function ConsultaForm({
             : 1
           return {
             ...item,
-            imprimirPorDuplicado: getDuplicadoGrupo(grupo),
+            clasificacionAgrupacion: clasificacion,
+            imprimirPorDuplicado: getDuplicadoGrupo(grupo) || duplicadoPorDerechos,
           }
         }
 
-        return item
+        return {
+          ...item,
+          clasificacionAgrupacion: clasificacion,
+          imprimirPorDuplicado: Boolean(item.imprimirPorDuplicado) || duplicadoPorDerechos,
+        }
       })
 
       const result = await crearOrdenesDesdeAdmisionAction({
@@ -1428,7 +1472,7 @@ export function ConsultaForm({
         profesionalId: parseInt(profesionalId, 10),
         tipoOrdenCodigo: 'PRA',
         descripcionPatologia: diagnosticoPedidoLaboratorio || diagnostico.trim() || undefined,
-        modoGeneracion: esEstrategiaGrupal ? 'AGRUPADA' : modoGeneracion,
+        modoGeneracion: 'AGRUPADA',
         items: itemsOrden,
       })
 
@@ -1770,6 +1814,19 @@ export function ConsultaForm({
           </div>
         )}
 
+        <datalist id="clasificacion-orden-list">
+          <option value="HE" />
+          <option value="HA" />
+          <option value="GA" />
+          <option value="HP" />
+          <option value="A1" />
+          <option value="A2" />
+          <option value="A3" />
+          <option value="HE+GA" />
+          <option value="HE+HA" />
+          <option value="HA+GA" />
+        </datalist>
+
         {practicas.length > 0 ? (
           <div className="space-y-2">
             <div className="rounded-md border overflow-hidden">
@@ -1780,7 +1837,7 @@ export function ConsultaForm({
                     <th className="px-3 py-2 text-left">Práctica</th>
                     <th className="px-3 py-2 text-left">Subitem</th>
                     <th className="px-3 py-2 text-center w-24">Cant.</th>
-                    <th className="px-3 py-2 text-center w-20">Grupo</th>
+                    <th className="px-3 py-2 text-center w-40">Clasificación</th>
                     <th className="px-3 py-2 text-right w-28">Precio</th>
                     <th className="px-3 py-2 w-10"></th>
                   </tr>
@@ -1876,25 +1933,30 @@ export function ConsultaForm({
                         )}
                       </td>
                       <td className="px-3 py-2 text-center text-gray-600">
-                        {p.codigoPractica.trim() === '66' ? (
-                          <span className="text-xs font-medium text-indigo-700">{p.grupoOrden}</span>
-                        ) : (
+                        <div className="flex flex-col items-center gap-1">
                           <input
-                            type="number"
-                            min={1}
-                            value={p.grupoOrden}
+                            type="text"
+                            value={p.clasificacionAgrupacion}
                             onChange={(e) => {
-                              const grupo = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                              const raw = e.target.value.toUpperCase()
                               setPracticas((prev) => prev.map((x) =>
                                 x._key === p._key
-                                  ? { ...x, grupoOrden: grupo }
+                                  ? {
+                                    ...x,
+                                    clasificacionAgrupacion:
+                                      normalizarClasificacionAgrupacion(raw) ??
+                                      raw.replace(/\s+/g, ''),
+                                  }
                                   : x
                               ))
                             }}
-                            className="w-16 rounded border border-gray-200 px-2 py-1 text-xs text-center"
-                            title="Número de grupo"
+                            className="w-28 rounded border border-gray-200 px-2 py-1 text-xs text-center"
+                            title="Clasificación lógica"
+                            placeholder="HE o HE+GA"
+                            list="clasificacion-orden-list"
                           />
-                        )}
+                          <span className="text-[10px] text-gray-400">HA, HE, GA, HP, A1, A2, A3</span>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right text-gray-600">
                         {p.codigoPractica.trim() === '66'
@@ -1925,6 +1987,34 @@ export function ConsultaForm({
         )}
       </div>
 
+      {requiereDatosPatologiaClasificacion && (
+        <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">
+            Datos de Patologia (clasificación HP)
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <input
+              type="text"
+              value={nombrePatologiaClasificacion}
+              onChange={(e) => setNombrePatologiaClasificacion(e.target.value)}
+              placeholder="Nombre del profesional"
+              className="rounded border border-amber-300 px-2 py-1 text-xs"
+            />
+            <input
+              type="number"
+              min={1}
+              value={matriculaPatologiaClasificacion ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value.trim()
+                setMatriculaPatologiaClasificacion(raw ? Number.parseInt(raw, 10) || null : null)
+              }}
+              placeholder="Matrícula profesional"
+              className="rounded border border-amber-300 px-2 py-1 text-xs"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Estrategia de carga */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Estrategia</p>
@@ -1935,13 +2025,6 @@ export function ConsultaForm({
             className={`rounded-md border px-3 py-2 text-sm ${esEstrategiaModular ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
             Modularidad
-          </button>
-          <button
-            type="button"
-            onClick={() => setEstrategiaOrden((prev) => (prev === 'GRUPALIDAD' ? 'ESTANDAR' : 'GRUPALIDAD'))}
-            className={`rounded-md border px-3 py-2 text-sm ${esEstrategiaGrupal ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-          >
-            Grupalidad
           </button>
         </div>
         {esEstrategiaEstandar && (
@@ -1957,7 +2040,7 @@ export function ConsultaForm({
         )}
         <p className="text-xs text-gray-500">
           Estándar: mantiene prácticas y subitems agrupados por defecto.
-          Activá Desagrupar para separarlos en líneas individuales.
+          La generación final agrupa órdenes por la columna de clasificación.
         </p>
 
         {esEstrategiaEstandar && (

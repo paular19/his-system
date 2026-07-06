@@ -11,6 +11,7 @@ export type OrdenPracticaItem = {
   descripcionPractica: string
   cantidad: number
   tipoFacturacion: string
+  clasificacionAgrupacion: string | null
   incluyeCodigo: string | null // Puede ser GA, HE, HA, A1-A3, o combinaciones como GA+HE
   titularModular: string | null
   imprimirPorDuplicado: boolean

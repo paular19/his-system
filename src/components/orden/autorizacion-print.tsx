@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import JsBarcode from 'jsbarcode'
 import { formatearNumeroOrden, generarCodigoBarras } from '@/modules/orden/types'
 import type { OrdenConItems } from '@/modules/orden/types'
+import { contieneClasificacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
 
 interface AutorizacionPrintProps {
   orden: OrdenConItems
@@ -29,6 +30,7 @@ export function AutorizacionPrint({
   }
 
   const esTituloPatologia = (item: OrdenConItems['items'][number]): boolean => {
+    if (contieneClasificacion(item.clasificacionAgrupacion, 'HP')) return true
     return (item.titularModular ?? '').toUpperCase().includes('PATOLOG')
   }
 
@@ -41,6 +43,10 @@ export function AutorizacionPrint({
 
     if (item.titularModular) {
       return item.titularModular
+    }
+
+    if (item.clasificacionAgrupacion) {
+      return tituloDesdeClasificacion(item.clasificacionAgrupacion)
     }
 
     if (!incluye) return 'HONORARIOS'
@@ -79,7 +85,7 @@ export function AutorizacionPrint({
 
     // Verificar si es HE o HA (incluso en combinaciones como HE+GA)
     const incluyeCodigo = item.incluyeCodigo || ''
-    if (incluyeCodigo.includes('HA')) {
+    if (contieneClasificacion(item.clasificacionAgrupacion, 'HA') || incluyeCodigo.includes('HA')) {
       return 'ASOSIACION ANESTESISTA · MP 6'
     }
     if (incluyeCodigo.includes('HE') || incluyeCodigo.includes('HA')) {
@@ -111,7 +117,7 @@ export function AutorizacionPrint({
       }
     }
 
-    if (incluyeCodigo.includes('HA')) {
+    if (contieneClasificacion(item.clasificacionAgrupacion, 'HA') || incluyeCodigo.includes('HA')) {
       return { nombre: 'ASOSIACION ANESTESISTA', matricula: 6 }
     }
 

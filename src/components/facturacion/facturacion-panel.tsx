@@ -2126,11 +2126,6 @@ export function FacturacionPanel() {
                                                                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
                                                                             Incluye: {resumenIncluye}
                                                                         </span>
-                                                                        {importeParcialPorSubitem && (
-                                                                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                                                                                Importe parcial por subitem
-                                                                            </span>
-                                                                        )}
                                                                     </div>
                                                                 )}
                                                             </td>

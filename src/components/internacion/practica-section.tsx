@@ -240,16 +240,25 @@ export function PracticaSection({
             try {
                 const res = await fetch('/api/cirugia/profesionales', { cache: 'no-store' })
                 const json = await res.json().catch(() => null)
-                const data = Array.isArray(json?.data) ? json.data : []
+                const data: unknown[] = Array.isArray(json?.data) ? json.data : []
 
                 if (!cancelled) {
                     const filtrados = data
                         .filter(
-                            (profesional): profesional is { id: number; nombre: string; matricula: number } =>
-                                typeof profesional?.id === 'number' &&
-                                typeof profesional?.nombre === 'string' &&
-                                typeof profesional?.matricula === 'number' &&
-                                profesional.matricula > 0
+                            (profesional: unknown): profesional is ProfesionalConMatricula => {
+                                if (!profesional || typeof profesional !== 'object') return false
+                                const candidato = profesional as {
+                                    id?: unknown
+                                    nombre?: unknown
+                                    matricula?: unknown
+                                }
+                                return (
+                                    typeof candidato.id === 'number' &&
+                                    typeof candidato.nombre === 'string' &&
+                                    typeof candidato.matricula === 'number' &&
+                                    candidato.matricula > 0
+                                )
+                            }
                         )
                         .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 

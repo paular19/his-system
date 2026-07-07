@@ -35,6 +35,12 @@ interface NomencladorItem {
     valorGastos: number | null
 }
 
+interface ProfesionalConMatricula {
+    id: number
+    nombre: string
+    matricula: number
+}
+
 const formatoMoneda = new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
@@ -166,6 +172,7 @@ export function PracticaSection({
     const [matriculaAnestesista, setMatriculaAnestesista] = useState(
         String(MATRICULA_ANESTESISTA_DEFAULT)
     )
+    const [profesionalesConMatricula, setProfesionalesConMatricula] = useState<ProfesionalConMatricula[]>([])
 
     const [guardando, setGuardando] = useState(false)
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
@@ -225,6 +232,42 @@ export function PracticaSection({
 
         return porComponente
     }, [subitemsSeleccionadosForm, clasificacionPorSubitemNuevo])
+
+    useEffect(() => {
+        let cancelled = false
+
+        const cargarProfesionales = async () => {
+            try {
+                const res = await fetch('/api/cirugia/profesionales', { cache: 'no-store' })
+                const json = await res.json().catch(() => null)
+                const data = Array.isArray(json?.data) ? json.data : []
+
+                if (!cancelled) {
+                    const filtrados = data
+                        .filter(
+                            (profesional): profesional is { id: number; nombre: string; matricula: number } =>
+                                typeof profesional?.id === 'number' &&
+                                typeof profesional?.nombre === 'string' &&
+                                typeof profesional?.matricula === 'number' &&
+                                profesional.matricula > 0
+                        )
+                        .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+
+                    setProfesionalesConMatricula(filtrados)
+                }
+            } catch {
+                if (!cancelled) {
+                    setProfesionalesConMatricula([])
+                }
+            }
+        }
+
+        cargarProfesionales()
+
+        return () => {
+            cancelled = true
+        }
+    }, [])
 
     useEffect(() => {
         if (subitemsSeleccionadosForm.length === 0) {
@@ -990,9 +1033,6 @@ export function PracticaSection({
                             <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
                                 Nueva práctica
                             </p>
-                            <p className="text-[11px] text-blue-800 bg-blue-100/70 border border-blue-200 rounded-md px-2.5 py-1.5">
-                                La cantidad general está deshabilitada. Cada registro se carga como un ítem individual.
-                            </p>
 
                             {/* Búsqueda nomenclador */}
                             <div className="relative">
@@ -1101,26 +1141,50 @@ export function PracticaSection({
                                     {practicaSeleccionada.valorEspecialista != null && (
                                         <div>
                                             <label className="block text-xs text-gray-500 mb-1">Matrícula especialista (HE)</label>
+                                            <select
+                                                value={matriculaEspecialista}
+                                                onChange={(e) => setMatriculaEspecialista(e.target.value)}
+                                                className="his-input text-sm w-full"
+                                            >
+                                                <option value="">Seleccionar matrícula...</option>
+                                                {profesionalesConMatricula.map((profesional) => (
+                                                    <option key={`esp-${profesional.id}`} value={String(profesional.matricula)}>
+                                                        {profesional.matricula} - {profesional.nombre}
+                                                    </option>
+                                                ))}
+                                            </select>
                                             <input
                                                 type="number"
                                                 min={1}
                                                 value={matriculaEspecialista}
                                                 onChange={(e) => setMatriculaEspecialista(e.target.value)}
                                                 placeholder="Ej: 12345"
-                                                className="his-input text-sm w-full"
+                                                className="his-input text-sm w-full mt-2"
                                             />
                                         </div>
                                     )}
                                     {practicaSeleccionada.valorAnestesista != null && (
                                         <div>
                                             <label className="block text-xs text-gray-500 mb-1">Matrícula anestesista (HA)</label>
+                                            <select
+                                                value={matriculaAnestesista}
+                                                onChange={(e) => setMatriculaAnestesista(e.target.value)}
+                                                className="his-input text-sm w-full"
+                                            >
+                                                <option value="">Seleccionar matrícula...</option>
+                                                {profesionalesConMatricula.map((profesional) => (
+                                                    <option key={`ane-${profesional.id}`} value={String(profesional.matricula)}>
+                                                        {profesional.matricula} - {profesional.nombre}
+                                                    </option>
+                                                ))}
+                                            </select>
                                             <input
                                                 type="number"
                                                 min={1}
                                                 value={matriculaAnestesista}
                                                 onChange={(e) => setMatriculaAnestesista(e.target.value)}
                                                 placeholder="Ej: 12345"
-                                                className="his-input text-sm w-full"
+                                                className="his-input text-sm w-full mt-2"
                                             />
                                         </div>
                                     )}

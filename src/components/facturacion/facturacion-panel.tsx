@@ -1680,8 +1680,6 @@ export function FacturacionPanel() {
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Coseguro</span><div className="font-medium text-gray-900">{contexto.obraSocialCoseguro?.nombre ?? 'Sin coseguro'}</div></div>
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Número afiliado</span>{editandoFicha ? (<input value={formNumeroAfiliado} onChange={(e) => setFormNumeroAfiliado(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1" />) : (<div className="font-medium text-gray-900">{formNumeroAfiliado || '—'}</div>)}</div>
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Ficha de ingreso</span><div className="font-medium text-gray-900">{formatearFechaHoraArgentina(contexto.ingreso.fechaIngreso)}</div></div>
-                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50 md:col-span-2"><span className="text-gray-500 text-xs">Ficha de egreso</span><div className="font-medium text-gray-900">{formatearFechaHoraArgentina(contexto.ingreso.fechaEgreso)}</div></div>
-                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50 md:col-span-2"><span className="text-gray-500 text-xs">Regla de facturación aplicada</span><div className="font-medium text-gray-900">{contexto.reglaFacturacion.descripcion}</div></div>
                                 </div>
                             </div>
 
@@ -2298,6 +2296,12 @@ export function FacturacionPanel() {
                                                                                             <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
                                                                                                 Sin orden vinculada. Primero generá la orden; luego podrás cargar el número de autorización.
                                                                                             </div>
+                                                                                            <Link
+                                                                                                href={`/dashboard/ambulatorio/nueva?ingresoId=${contexto.ingreso.id}`}
+                                                                                                className="inline-flex w-fit items-center justify-center rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                                                                                            >
+                                                                                                Generar orden
+                                                                                            </Link>
                                                                                             <input
                                                                                                 value={draft.numeroAutorizacion}
                                                                                                 disabled

@@ -85,6 +85,13 @@ export function AutorizacionPrint({
 
     // Verificar si es HE o HA (incluso en combinaciones como HE+GA)
     const incluyeCodigo = item.incluyeCodigo || ''
+    const esGastos = contieneClasificacion(item.clasificacionAgrupacion, 'GA') || incluyeCodigo.includes('GA')
+    const matriculaEfector = item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null
+
+    if (esGastos && matriculaEfector === 995) {
+      return 'CLINICA SAN RAFAEL · MP 995'
+    }
+
     if (contieneClasificacion(item.clasificacionAgrupacion, 'HA') || incluyeCodigo.includes('HA')) {
       return 'ASOSIACION ANESTESISTA · MP 6'
     }
@@ -109,6 +116,8 @@ export function AutorizacionPrint({
   const profesionalFirma = (item: OrdenConItems['items'][number]): { nombre: string; matricula: number | null } => {
     const esInternacion = (orden.ingresoTipoCodigo ?? '').trim().toUpperCase() === 'INT'
     const incluyeCodigo = item.incluyeCodigo || ''
+    const esGastos = contieneClasificacion(item.clasificacionAgrupacion, 'GA') || incluyeCodigo.includes('GA')
+    const matriculaEfector = item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null
 
     if (esTituloPatologia(item)) {
       return {
@@ -119,6 +128,10 @@ export function AutorizacionPrint({
 
     if (contieneClasificacion(item.clasificacionAgrupacion, 'HA') || incluyeCodigo.includes('HA')) {
       return { nombre: 'ASOSIACION ANESTESISTA', matricula: 6 }
+    }
+
+    if (esGastos && matriculaEfector === 995) {
+      return { nombre: 'CLINICA SAN RAFAEL', matricula: 995 }
     }
 
     if (!esInternacion && orden.profesional?.nombre) {

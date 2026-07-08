@@ -16,6 +16,8 @@ import {
 
 type ModoGeneracion = 'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'
 const MATRICULA_GASTOS_INTERNACION_DEFAULT = 995
+const ORDEN_CLASIFICACION_COMPONENTES = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3'] as const
+type ClasificacionComponente = (typeof ORDEN_CLASIFICACION_COMPONENTES)[number]
 
 const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({
   modoGeneracion: z.enum(['MASIVA', 'INDIVIDUAL', 'AGRUPADA']).optional().default('MASIVA'),
@@ -32,7 +34,36 @@ const GenerarOrdenesInternacionSchema = z.object({
   practicaIds: z.array(z.number().int().positive()).min(1, 'Seleccioná al menos una práctica'),
   clasificacionPorPracticaId: z.record(z.string()).optional().default({}),
   agruparEnUnaOrden: z.boolean().optional().default(false),
+  titularOrdenAgrupada: z.string().trim().max(120).optional().nullable(),
 })
+
+function componentesClasificacion(
+  clasificacion: string | null | undefined
+): ClasificacionComponente[] {
+  const normalizada = normalizarClasificacionAgrupacion(clasificacion)
+  if (!normalizada) return []
+
+  return normalizada
+    .split('+')
+    .filter((token): token is ClasificacionComponente =>
+      ORDEN_CLASIFICACION_COMPONENTES.includes(token as ClasificacionComponente)
+    )
+}
+
+function titularSugeridoParaOrdenAgrupada(items: CrearOrdenInput['items']): string {
+  const presentes = new Set<ClasificacionComponente>()
+  for (const item of items) {
+    const componentes = componentesClasificacion(item.clasificacionAgrupacion)
+    for (const componente of componentes) presentes.add(componente)
+  }
+
+  const clasificacionCombinada = ORDEN_CLASIFICACION_COMPONENTES
+    .filter((componente) => presentes.has(componente))
+    .join('+')
+
+  if (!clasificacionCombinada) return 'HONORARIOS'
+  return tituloDesdeClasificacion(clasificacionCombinada)
+}
 
 function inferirClasificacionPracticaDb(practica: {
   codigoPractica: string
@@ -213,6 +244,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
   practicaIds: number[]
   clasificacionPorPracticaId?: Record<string, string>
   agruparEnUnaOrden?: boolean
+  titularOrdenAgrupada?: string | null
 }) {
   const usuario = await getUsuarioSesion()
 
@@ -428,8 +460,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       const esGrupoConDerechos = esGrupoAgrupado
         ? itemsGrupo.some(({ item }) => contieneClasificacion(item.clasificacionAgrupacion, 'GA'))
         : (key !== '__PROTOCOLO_BIOQUIMICO__' && contieneClasificacion(clasificacion, 'GA'))
+      const titularElegidoAgrupado = parsed.data.titularOrdenAgrupada?.trim() || null
       const titularModular = esGrupoAgrupado
-        ? 'HONORARIOS'
+        ? (titularElegidoAgrupado ?? titularSugeridoParaOrdenAgrupada(itemsGrupo.map(({ item }) => item)))
         : key === '__PROTOCOLO_BIOQUIMICO__'
         ? 'PROTOCOLO BIOQUIMICO'
         : tituloDesdeClasificacion(clasificacion)

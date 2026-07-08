@@ -22,7 +22,7 @@ import {
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
-import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
+import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
 
 interface NomencladorItem {
     convenioId: number
@@ -59,6 +59,7 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
     A2: 6,
     A3: 7,
 }
+const ORDEN_COMPONENTES_CLASIFICACION = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3'] as const
 
 function etiquetaSubitem(subitem: SubitemCodigo): string {
     if (subitem === 'HE') return 'Honorario Especialista (HE)'
@@ -187,6 +188,7 @@ export function PracticaSection({
     const [error, setError] = useState<string | null>(null)
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
     const [clasificacionPorPracticaId, setClasificacionPorPracticaId] = useState<Record<number, string>>({})
+    const [titularOrdenAgrupada, setTitularOrdenAgrupada] = useState<string>('')
     const [clasificacionesExpandidas, setClasificacionesExpandidas] = useState<Record<string, boolean>>({})
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [ordenesGeneradas, setOrdenesGeneradas] = useState<OrdenGeneradaGrupo[]>([])
@@ -765,6 +767,7 @@ export function PracticaSection({
                 practicaIds: idsPendientesSeleccionadas,
                 clasificacionPorPracticaId: clasificacionPayload,
                 agruparEnUnaOrden,
+                titularOrdenAgrupada: agruparEnUnaOrden ? titularOrdenAgrupada : undefined,
             })
 
             if ('error' in result && result.error) {
@@ -875,6 +878,52 @@ export function PracticaSection({
         const pendientesIds = new Set(practicasPendientes.map((p) => p.id))
         return practicasSeleccionadas.filter((id) => pendientesIds.has(id))
     }, [practicasPendientes, practicasSeleccionadas])
+
+    const titularesAgrupadosDisponibles = useMemo(() => {
+        const componentesPresentes = new Set<string>()
+
+        for (const id of idsPendientesSeleccionadas) {
+            const practica = practicas.find((p) => p.id === id)
+            if (!practica) continue
+            const clasificacion = obtenerClasificacionPractica(practica)
+            const normalizada = normalizarClasificacionAgrupacion(clasificacion)
+            if (!normalizada) continue
+
+            for (const componente of normalizada.split('+')) {
+                if (ORDEN_COMPONENTES_CLASIFICACION.includes(componente as (typeof ORDEN_COMPONENTES_CLASIFICACION)[number])) {
+                    componentesPresentes.add(componente)
+                }
+            }
+        }
+
+        const clasificacionCombinada = ORDEN_COMPONENTES_CLASIFICACION
+            .filter((componente) => componentesPresentes.has(componente))
+            .join('+')
+
+        const opciones: string[] = []
+        if (clasificacionCombinada) {
+            opciones.push(tituloDesdeClasificacion(clasificacionCombinada))
+        }
+
+        for (const componente of ORDEN_COMPONENTES_CLASIFICACION) {
+            if (!componentesPresentes.has(componente)) continue
+            opciones.push(tituloDesdeClasificacion(componente))
+        }
+
+        if (opciones.length === 0) return ['HONORARIOS']
+        return Array.from(new Set(opciones))
+    }, [idsPendientesSeleccionadas, practicas, clasificacionPorPracticaId])
+
+    useEffect(() => {
+        if (titularesAgrupadosDisponibles.length === 0) {
+            setTitularOrdenAgrupada('')
+            return
+        }
+        if (!titularOrdenAgrupada || !titularesAgrupadosDisponibles.includes(titularOrdenAgrupada)) {
+            setTitularOrdenAgrupada(titularesAgrupadosDisponibles[0] ?? 'HONORARIOS')
+        }
+    }, [titularesAgrupadosDisponibles, titularOrdenAgrupada])
+
     const puedeGenerarOrdenes = (puedeGenerarAutorizacion ?? puedeCrear)
 
     useEffect(() => {
@@ -1367,6 +1416,20 @@ export function PracticaSection({
                                         </button>
                                         {puedeGenerarOrdenes && (
                                             <>
+                                                <label className="inline-flex items-center gap-2 text-amber-900">
+                                                    <span>Titular (agrupada)</span>
+                                                    <select
+                                                        value={titularOrdenAgrupada}
+                                                        onChange={(e) => setTitularOrdenAgrupada(e.target.value)}
+                                                        className="rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900"
+                                                    >
+                                                        {titularesAgrupadosDisponibles.map((opcion) => (
+                                                            <option key={`titular-agrupada-${opcion}`} value={opcion}>
+                                                                {opcion}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </label>
                                                 <button
                                                     type="button"
                                                     onClick={() => void handleGenerarOrdenes(false)}

@@ -15,6 +15,7 @@ import {
 } from '../clasificacion'
 
 type ModoGeneracion = 'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'
+const MATRICULA_GASTOS_INTERNACION_DEFAULT = 995
 
 const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({
   modoGeneracion: z.enum(['MASIVA', 'INDIVIDUAL', 'AGRUPADA']).optional().default('MASIVA'),
@@ -30,6 +31,7 @@ const GenerarOrdenesInternacionSchema = z.object({
   ingresoId: z.number().int().positive(),
   practicaIds: z.array(z.number().int().positive()).min(1, 'Seleccioná al menos una práctica'),
   clasificacionPorPracticaId: z.record(z.string()).optional().default({}),
+  profesionalId: z.number().int().positive().optional().nullable(),
 })
 
 function inferirClasificacionPracticaDb(practica: {
@@ -210,6 +212,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
   ingresoId: number
   practicaIds: number[]
   clasificacionPorPracticaId?: Record<string, string>
+  profesionalId?: number | null
 }) {
   const usuario = await getUsuarioSesion()
 
@@ -248,7 +251,21 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     if (!ingreso) return { error: 'Internación no encontrada' }
     if (!ingreso.obraSocialId) return { error: 'La internación no tiene obra social asignada' }
 
-    let profesionalId = ingreso.profesionalTratanteId ?? ingreso.profesionalGuardiaId ?? null
+    if (parsed.data.profesionalId) {
+      const profesionalFirmante = await prisma.profesional.findFirst({
+        where: {
+          id: parsed.data.profesionalId,
+          estado: 'A',
+        },
+        select: { id: true },
+      })
+
+      if (!profesionalFirmante) {
+        return { error: 'El profesional seleccionado no está disponible para firmar la orden' }
+      }
+    }
+
+    let profesionalId = parsed.data.profesionalId ?? ingreso.profesionalTratanteId ?? ingreso.profesionalGuardiaId ?? null
     if (!profesionalId) {
       const profesionalFallback = await prisma.profesional.findFirst({
         select: { id: true },
@@ -322,6 +339,22 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       })
       const clasificacion = clasificacionDesdeInput ?? clasificacionInferida
       const key = practica.codigoPractica.trim() === '66' ? '__PROTOCOLO_BIOQUIMICO__' : clasificacion
+      const esClasificacionSoloGastos =
+        contieneClasificacion(clasificacion, 'GA') &&
+        !contieneClasificacion(clasificacion, 'HE') &&
+        !contieneClasificacion(clasificacion, 'HA') &&
+        !contieneClasificacion(clasificacion, 'HP') &&
+        !contieneClasificacion(clasificacion, 'A1') &&
+        !contieneClasificacion(clasificacion, 'A2') &&
+        !contieneClasificacion(clasificacion, 'A3')
+      const esClasificacionSoloAyudante =
+        (contieneClasificacion(clasificacion, 'A1') ||
+          contieneClasificacion(clasificacion, 'A2') ||
+          contieneClasificacion(clasificacion, 'A3')) &&
+        !contieneClasificacion(clasificacion, 'HE') &&
+        !contieneClasificacion(clasificacion, 'HA') &&
+        !contieneClasificacion(clasificacion, 'GA') &&
+        !contieneClasificacion(clasificacion, 'HP')
 
       const item: CrearOrdenInput['items'][number] = {
         practicaId: practica.id,
@@ -333,7 +366,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         tipoFacturacion: 'H',
         clasificacionAgrupacion: key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : clasificacion,
         efectorMatricula:
-          clasificacion === 'HA'
+          esClasificacionSoloGastos || esClasificacionSoloAyudante
+            ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+            : clasificacion === 'HA'
             ? (practica.matriculaAnestesista ?? null)
             : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null),
         numeroAutorizacion: practica.numeroAutorizacion,

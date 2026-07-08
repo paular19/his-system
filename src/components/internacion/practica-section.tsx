@@ -166,6 +166,8 @@ export function PracticaSection({
     // Campos del form
     const [fecha, setFecha] = useState(() => fechaHoraAInputLocal())
     const [numeroAutorizacion, setNumeroAutorizacion] = useState('')
+    const [cantidadGeneralPractica, setCantidadGeneralPractica] = useState('1')
+    const [crearPracticaTodaJunta, setCrearPracticaTodaJunta] = useState(false)
     const [matriculaEspecialista, setMatriculaEspecialista] = useState(
         matriculaTratanteDefault ? String(matriculaTratanteDefault) : ''
     )
@@ -185,6 +187,8 @@ export function PracticaSection({
     const [error, setError] = useState<string | null>(null)
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
     const [clasificacionPorPracticaId, setClasificacionPorPracticaId] = useState<Record<number, string>>({})
+    const [clasificacionesExpandidas, setClasificacionesExpandidas] = useState<Record<string, boolean>>({})
+    const [profesionalFirmanteId, setProfesionalFirmanteId] = useState<string>('')
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [ordenesGeneradas, setOrdenesGeneradas] = useState<OrdenGeneradaGrupo[]>([])
 
@@ -367,6 +371,8 @@ export function PracticaSection({
         setClasificacionPorSubitemNuevo([])
         setFecha(fechaHoraAInputLocal())
         setNumeroAutorizacion('')
+        setCantidadGeneralPractica('1')
+        setCrearPracticaTodaJunta(false)
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
         setMatriculaAnestesista(String(MATRICULA_ANESTESISTA_DEFAULT))
         setError(null)
@@ -446,13 +452,22 @@ export function PracticaSection({
 
         const requiereEspecialista = practicaSeleccionada?.valorEspecialista != null
         const requiereAnestesista = practicaSeleccionada?.valorAnestesista != null
+        const cantidadGeneral = Number.parseInt(cantidadGeneralPractica, 10)
+        const cantidadGeneralFinal = crearPracticaTodaJunta ? cantidadGeneral : 1
+
+        if (
+            crearPracticaTodaJunta &&
+            (!Number.isFinite(cantidadGeneralFinal) || cantidadGeneralFinal <= 0 || cantidadGeneralFinal > 999)
+        ) {
+            return setError('La cantidad general debe estar entre 1 y 999')
+        }
 
         const body = {
             convenioId: practicaSeleccionada?.convenioId ?? convenioId ?? 0,
             codigoPractica: practicaSeleccionada?.codigo ?? busqueda.trim().slice(0, 8).toUpperCase(),
             descripcionPractica: practicaSeleccionada?.descripcion ?? busqueda.trim(),
             fecha: new Date(fecha).toISOString(),
-            cantidad: 1,
+            cantidad: cantidadGeneralFinal,
             numeroAutorizacion: numeroAutorizacion.trim() || null,
             matriculaEspecialista:
                 requiereEspecialista && matriculaEspecialista.trim()
@@ -480,12 +495,35 @@ export function PracticaSection({
 
         const subitemsSeleccionados = subitemsSeleccionadosForm
 
-        const clasificacionManual =
+        const clasificacionManualDefault =
             practicaSeleccionada && practicaSeleccionada.valorAnestesista != null && practicaSeleccionada.valorEspecialista == null
                 ? 'HA'
                 : 'HE'
-        const entradasCrear = subitemsSeleccionados.length > 0 && practicaSeleccionada
-            ? subitemsSeleccionados.map((subitem, idx) => {
+
+        const entradasCrear = (() => {
+            if (!(subitemsSeleccionados.length > 0 && practicaSeleccionada)) {
+                return [{ payload: body, clasificacion: clasificacionManualDefault }]
+            }
+
+            if (crearPracticaTodaJunta) {
+                const clasificacionesSeleccionadas = subitemsSeleccionados.map((subitem, idx) => (
+                    normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
+                ))
+
+                const clasificacionUnica =
+                    normalizarClasificacionAgrupacion(clasificacionesSeleccionadas.join('+')) ??
+                    clasificacionManualDefault
+
+                return [{
+                    payload: {
+                        ...body,
+                        descripcionPractica: body.descripcionPractica,
+                    },
+                    clasificacion: clasificacionUnica,
+                }]
+            }
+
+            return subitemsSeleccionados.map((subitem, idx) => {
                 const valorUnitario = valorUnitarioPorSubitem(subitem, {
                     valorEspecialista: practicaSeleccionada.valorEspecialista,
                     valorAyudante: practicaSeleccionada.valorAyudante,
@@ -507,7 +545,7 @@ export function PracticaSection({
                     clasificacion: clasificacionIndividual,
                 }
             })
-            : [{ payload: body, clasificacion: clasificacionManual }]
+        })()
 
         setGuardando(true)
         try {
@@ -619,6 +657,13 @@ export function PracticaSection({
         })
     }
 
+    const alternarExpansionClasificacion = (clasificacion: string) => {
+        setClasificacionesExpandidas((prev) => ({
+            ...prev,
+            [clasificacion]: !prev[clasificacion],
+        }))
+    }
+
     const handleEliminarPracticasSeleccionadas = async () => {
         const seleccionActual = [...practicasSeleccionadas]
         if (seleccionActual.length === 0) return
@@ -705,6 +750,14 @@ export function PracticaSection({
             return
         }
 
+        if (profesionalFirmanteId) {
+            const profesionalFirmante = Number.parseInt(profesionalFirmanteId, 10)
+            if (!Number.isFinite(profesionalFirmante) || profesionalFirmante <= 0) {
+                setError('Seleccioná un profesional firmante válido')
+                return
+            }
+        }
+
         setError(null)
         setGenerandoOrdenes(true)
         try {
@@ -720,6 +773,7 @@ export function PracticaSection({
                 ingresoId,
                 practicaIds: idsPendientesSeleccionadas,
                 clasificacionPorPracticaId: clasificacionPayload,
+                profesionalId: profesionalFirmanteId ? Number.parseInt(profesionalFirmanteId, 10) : undefined,
             })
 
             if ('error' in result && result.error) {
@@ -1118,6 +1172,34 @@ export function PracticaSection({
                                 />
                             )}
 
+                            {practicaSeleccionada && subitemsSeleccionadosForm.length > 0 && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <label className="inline-flex items-center gap-2 text-xs text-gray-600">
+                                        <input
+                                            type="checkbox"
+                                            checked={crearPracticaTodaJunta}
+                                            onChange={(e) => setCrearPracticaTodaJunta(e.target.checked)}
+                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        Cargar práctica toda junta (un solo registro con subitems)
+                                    </label>
+                                    {crearPracticaTodaJunta && (
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Cantidad general</label>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                max={999}
+                                                step={1}
+                                                value={cantidadGeneralPractica}
+                                                onChange={(e) => setCantidadGeneralPractica(e.target.value)}
+                                                className="his-input text-sm w-full"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Fecha */}
                             <div className="grid grid-cols-1 gap-3">
                                 <div>
@@ -1280,6 +1362,23 @@ export function PracticaSection({
                                             />
                                             Seleccionar todas (filtro actual)
                                         </label>
+                                        {puedeGenerarOrdenes && (
+                                            <label className="inline-flex items-center gap-2 text-amber-900">
+                                                <span>Firmante</span>
+                                                <select
+                                                    value={profesionalFirmanteId}
+                                                    onChange={(e) => setProfesionalFirmanteId(e.target.value)}
+                                                    className="rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900"
+                                                >
+                                                    <option value="">Médico tratante (default)</option>
+                                                    {profesionalesConMatricula.map((profesional) => (
+                                                        <option key={`firmante-${profesional.id}`} value={String(profesional.id)}>
+                                                            {profesional.nombre} · MP {profesional.matricula}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </label>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -1406,87 +1505,104 @@ export function PracticaSection({
                                 {practicasPendientesFiltradasOrdenadas.length === 0 ? (
                                     <p className="text-xs text-gray-400">No hay prácticas pendientes.</p>
                                 ) : (
-                                    practicasPendientesPaginadasAgrupadas.map((grupo) => (
-                                        <div
-                                            key={`grupo-${grupo.clasificacion}`}
-                                            className="flex items-center gap-2 text-xs border rounded-lg px-2.5 py-2 bg-white hover:bg-amber-50/40"
-                                        >
-                                            <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                                                {grupo.clasificacion}
-                                            </span>
-                                            <div className="min-w-0 flex-1 overflow-x-auto">
-                                                <div className="inline-flex items-center gap-2 whitespace-nowrap">
-                                                    {grupo.items.map((p) => (
-                                                        <div
-                                                            key={p.id}
-                                                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1"
-                                                        >
-                                                            {puedeCrear && (
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={practicasSeleccionadas.includes(p.id)}
-                                                                    onChange={(e) => alternarSeleccionPractica(p.id, e.target.checked)}
-                                                                    disabled={eliminandoPracticas}
-                                                                    className="h-3.5 w-3.5 rounded border-gray-300 text-amber-700 focus:ring-amber-500"
-                                                                />
-                                                            )}
-                                                            <span className="font-mono text-gray-400 shrink-0">
-                                                                {p.codigoPractica.trim()}
-                                                            </span>
-                                                            <span className="font-medium text-gray-800 inline-block max-w-xs truncate">
-                                                                {p.descripcionPractica ?? p.codigoPractica.trim()}
-                                                            </span>
-                                                            <span className="text-gray-500">{fmtFecha(p.fecha)}</span>
-                                                            {p.cantidad > 1 && <span className="text-gray-500">Cant: {p.cantidad}</span>}
-                                                            {p.numeroAutorizacion && <span className="text-gray-500">Aut: {p.numeroAutorizacion}</span>}
-                                                            {esPedidoLaboratorio(p) && (
-                                                                <span className="text-indigo-700">
-                                                                    Prot: {p.numeroProtocoloLaboratorio?.trim() || '-'}
-                                                                </span>
-                                                            )}
-                                                            {!esPedidoLaboratorio(p) && (
-                                                                <span
-                                                                    className={`px-1.5 py-0.5 rounded ${p.facturable
-                                                                        ? 'bg-green-50 text-green-700'
-                                                                        : 'bg-gray-100 text-gray-500'
-                                                                        }`}
-                                                                >
-                                                                    {p.facturable ? 'Facturable' : 'No facturable'}
-                                                                </span>
-                                                            )}
-                                                            <span className="text-[11px] text-gray-500">Clasif.</span>
-                                                            <input
-                                                                type="text"
-                                                                value={obtenerClasificacionPractica(p)}
-                                                                onChange={(e) => {
-                                                                    const raw = e.target.value.toUpperCase()
-                                                                    setClasificacionPorPracticaId((prev) => ({
-                                                                        ...prev,
-                                                                        [p.id]: normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, ''),
-                                                                    }))
-                                                                }}
-                                                                list="clasificacion-practica-list"
-                                                                className="w-20 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-700"
-                                                            />
-                                                            {puedeCrear && p.cantidad > 1 && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => void handleDesagruparPractica(p.id)}
-                                                                    disabled={desagrupandoPracticaId === p.id}
-                                                                    className="rounded-md border border-blue-200 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                                                >
-                                                                    {desagrupandoPracticaId === p.id ? '...' : 'Desagrupar'}
-                                                                </button>
-                                                            )}
-                                                            {p.estado && p.estado !== 'A' && (
-                                                                <span className="text-gray-400">{p.estado}</span>
-                                                            )}
-                                                        </div>
-                                                    ))}
+                                    practicasPendientesPaginadasAgrupadas.map((grupo) => {
+                                        const expandida = Boolean(clasificacionesExpandidas[grupo.clasificacion])
+                                        return (
+                                            <div
+                                                key={`grupo-${grupo.clasificacion}`}
+                                                className="text-xs border rounded-lg px-2.5 py-2 bg-white"
+                                            >
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => alternarExpansionClasificacion(grupo.clasificacion)}
+                                                        className="inline-flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-100"
+                                                    >
+                                                        <span>{grupo.clasificacion}</span>
+                                                        {expandida ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => alternarExpansionClasificacion(grupo.clasificacion)}
+                                                        className="inline-flex items-center rounded border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                                                    >
+                                                        {expandida ? 'Contraer' : `Ampliar (${grupo.items.length})`}
+                                                    </button>
                                                 </div>
+                                                {expandida && (
+                                                    <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
+                                                        {grupo.items.map((p) => (
+                                                            <div
+                                                                key={p.id}
+                                                                className="flex flex-col gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 md:flex-row md:flex-wrap md:items-center"
+                                                            >
+                                                                {puedeCrear && (
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={practicasSeleccionadas.includes(p.id)}
+                                                                        onChange={(e) => alternarSeleccionPractica(p.id, e.target.checked)}
+                                                                        disabled={eliminandoPracticas}
+                                                                        className="h-3.5 w-3.5 rounded border-gray-300 text-amber-700 focus:ring-amber-500"
+                                                                    />
+                                                                )}
+                                                                <span className="font-mono text-gray-400 shrink-0">
+                                                                    {p.codigoPractica.trim()}
+                                                                </span>
+                                                                <span className="font-medium text-gray-800 wrap-break-word">
+                                                                    {p.descripcionPractica ?? p.codigoPractica.trim()}
+                                                                </span>
+                                                                <span className="text-gray-500">{fmtFecha(p.fecha)}</span>
+                                                                {p.cantidad > 1 && <span className="text-gray-500">Cant: {p.cantidad}</span>}
+                                                                {p.numeroAutorizacion && <span className="text-gray-500">Aut: {p.numeroAutorizacion}</span>}
+                                                                {esPedidoLaboratorio(p) && (
+                                                                    <span className="text-indigo-700">
+                                                                        Prot: {p.numeroProtocoloLaboratorio?.trim() || '-'}
+                                                                    </span>
+                                                                )}
+                                                                {!esPedidoLaboratorio(p) && (
+                                                                    <span
+                                                                        className={`px-1.5 py-0.5 rounded ${p.facturable
+                                                                            ? 'bg-green-50 text-green-700'
+                                                                            : 'bg-gray-100 text-gray-500'
+                                                                            }`}
+                                                                    >
+                                                                        {p.facturable ? 'Facturable' : 'No facturable'}
+                                                                    </span>
+                                                                )}
+                                                                <span className="text-[11px] text-gray-500">Clasif.</span>
+                                                                <input
+                                                                    type="text"
+                                                                    value={obtenerClasificacionPractica(p)}
+                                                                    onChange={(e) => {
+                                                                        const raw = e.target.value.toUpperCase()
+                                                                        setClasificacionPorPracticaId((prev) => ({
+                                                                            ...prev,
+                                                                            [p.id]: normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, ''),
+                                                                        }))
+                                                                    }}
+                                                                    list="clasificacion-practica-list"
+                                                                    className="w-20 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-700"
+                                                                />
+                                                                {puedeCrear && p.cantidad > 1 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => void handleDesagruparPractica(p.id)}
+                                                                        disabled={desagrupandoPracticaId === p.id}
+                                                                        className="rounded-md border border-blue-200 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                                    >
+                                                                        {desagrupandoPracticaId === p.id ? '...' : 'Desagrupar'}
+                                                                    </button>
+                                                                )}
+                                                                {p.estado && p.estado !== 'A' && (
+                                                                    <span className="text-gray-400">{p.estado}</span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    ))
+                                        )
+                                    })
                                 )}
                                 {practicasPendientesFiltradasOrdenadas.length > PRACTICAS_LISTA_POR_PAGINA && (
                                     <div className="flex items-center justify-between gap-2">

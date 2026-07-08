@@ -732,9 +732,6 @@ export function PracticaSection({
                     for (const id of exitosas) delete next[id]
                     return next
                 })
-                if (refrescarDespuesCambios) {
-                    router.refresh()
-                }
             }
 
             if (fallidas.length === 0) {

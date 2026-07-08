@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
+import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
@@ -190,8 +190,8 @@ export function PracticaSection({
     const [clasificacionPorPracticaId, setClasificacionPorPracticaId] = useState<Record<number, string>>({})
     const [titularOrdenAgrupada, setTitularOrdenAgrupada] = useState<string>('')
     const [mostrarPopupTitularAgrupada, setMostrarPopupTitularAgrupada] = useState(false)
+    const [imprimirTrasAgrupar, setImprimirTrasAgrupar] = useState(false)
     const [clasificacionesExpandidas, setClasificacionesExpandidas] = useState<Record<string, boolean>>({})
-    const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [ordenesGeneradas, setOrdenesGeneradas] = useState<OrdenGeneradaGrupo[]>([])
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -666,8 +666,8 @@ export function PracticaSection({
         }))
     }
 
-    const handleEliminarPracticasSeleccionadas = async () => {
-        const seleccionActual = [...practicasSeleccionadas]
+    const handleEliminarPracticasSeleccionadas = async (idsAEliminar?: number[]) => {
+        const seleccionActual = idsAEliminar ? [...idsAEliminar] : [...practicasSeleccionadas]
         if (seleccionActual.length === 0) return
 
         setError(null)
@@ -735,9 +735,6 @@ export function PracticaSection({
                 })
             }
 
-            if (fallidas.length === 0) {
-                setConfirmarEliminacionSeleccionadas(false)
-            }
         } finally {
             setEliminandoPracticas(false)
         }
@@ -838,25 +835,26 @@ export function PracticaSection({
         }
     }
 
-    const handleClickAgruparYGenerarOrden = () => {
+    const handleClickAgruparYGenerarOrden = (imprimirDespues: boolean) => {
         if (idsPendientesSeleccionadas.length === 0) {
             setError('Seleccioná al menos una práctica pendiente para generar órdenes')
             return
         }
 
         setError(null)
+        setImprimirTrasAgrupar(imprimirDespues)
         if (requierePopupTitularAgrupada) {
             setMostrarPopupTitularAgrupada(true)
             return
         }
 
-        void handleGenerarOrdenes(true, true)
+        void handleGenerarOrdenes(imprimirDespues, true)
     }
 
     const confirmarPopupTitularAgrupada = () => {
         setMostrarPopupTitularAgrupada(false)
         const titularSeleccionado = titularOrdenAgrupada || titularesAgrupadosDisponibles[0] || 'HONORARIOS'
-        void handleGenerarOrdenes(true, true, titularSeleccionado)
+        void handleGenerarOrdenes(imprimirTrasAgrupar, true, titularSeleccionado)
     }
 
     const alternarSeleccionOrdenGenerada = (puestoNumero: number, numero: number, checked: boolean) => {
@@ -1055,7 +1053,6 @@ export function PracticaSection({
     }, [practicasPendientesPaginadas, clasificacionPorPracticaId])
 
     const idsPendientesFiltradas = practicasPendientesFiltradas.map((p) => p.id)
-    const seleccionadasFiltradas = practicasPendientesFiltradas.filter((p) => practicasSeleccionadas.includes(p.id))
     const todasFiltradasSeleccionadas =
         idsPendientesFiltradas.length > 0 && idsPendientesFiltradas.every((id) => practicasSeleccionadas.includes(id))
 
@@ -1446,18 +1443,6 @@ export function PracticaSection({
                                             />
                                             Seleccionar todas (filtro actual)
                                         </label>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                if (practicasSeleccionadas.length === 0) return
-                                                setError(null)
-                                                setConfirmarEliminacionSeleccionadas(true)
-                                            }}
-                                            disabled={eliminandoPracticas || practicasSeleccionadas.length === 0}
-                                            className="inline-flex items-center rounded-md border border-red-200 bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                                        >
-                                            Eliminar seleccionadas ({practicasSeleccionadas.length})
-                                        </button>
                                         {puedeGenerarOrdenes && (
                                             <>
                                                 <button
@@ -1466,15 +1451,7 @@ export function PracticaSection({
                                                     disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
                                                     className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                                 >
-                                                    {generandoOrdenes ? 'Generando...' : `Generar órdenes (${idsPendientesSeleccionadas.length})`}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleClickAgruparYGenerarOrden}
-                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
-                                                    className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                                                >
-                                                    Agrupar y generar orden
+                                                    Generar órdenes
                                                 </button>
                                                 <button
                                                     type="button"
@@ -1483,6 +1460,22 @@ export function PracticaSection({
                                                     className="inline-flex items-center rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
                                                 >
                                                     Generar órdenes e imprimir
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleClickAgruparYGenerarOrden(false)}
+                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
+                                                    className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                                                >
+                                                    Agrupar y generar órdenes
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleClickAgruparYGenerarOrden(true)}
+                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
+                                                    className="inline-flex items-center rounded-md border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                                                >
+                                                    Agrupar, generar e imprimir
                                                 </button>
                                             </>
                                         )}
@@ -1532,48 +1525,6 @@ export function PracticaSection({
                                             >
                                                 Imprimir todas
                                             </button>
-                                        </div>
-                                    </div>
-                                )}
-                                {confirmarEliminacionSeleccionadas && practicasSeleccionadas.length > 0 && (
-                                    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs">
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <div className="flex items-start gap-2 text-amber-900">
-                                                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                                                <div>
-                                                    <p className="text-sm font-semibold">
-                                                        ¿Eliminar {practicasSeleccionadas.length} práctica(s) no autorizada(s)?
-                                                    </p>
-                                                    {seleccionadasFiltradas.slice(0, 3).map((p) => (
-                                                        <p key={p.id} className="text-xs text-amber-800">
-                                                            {p.codigoPractica.trim()} · {p.descripcionPractica ?? p.codigoPractica.trim()}
-                                                        </p>
-                                                    ))}
-                                                    {practicasSeleccionadas.length > 3 && (
-                                                        <p className="text-xs text-amber-800">... y {practicasSeleccionadas.length - 3} más</p>
-                                                    )}
-                                                    <p className="text-xs text-amber-700 mt-1">Esta acción no se puede deshacer.</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setConfirmarEliminacionSeleccionadas(false)}
-                                                    disabled={eliminandoPracticas}
-                                                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                                >
-                                                    Cancelar
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void handleEliminarPracticasSeleccionadas()}
-                                                    disabled={eliminandoPracticas}
-                                                    className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                                                >
-                                                    {eliminandoPracticas && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                                                    {eliminandoPracticas ? 'Eliminando...' : 'Eliminar'}
-                                                </button>
-                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -1670,6 +1621,20 @@ export function PracticaSection({
                                                                 )}
                                                                 {p.estado && p.estado !== 'A' && (
                                                                     <span className="text-gray-400">{p.estado}</span>
+                                                                )}
+                                                                {puedeCrear && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => void handleEliminarPracticasSeleccionadas([p.id])}
+                                                                        disabled={eliminandoPracticas}
+                                                                        title="Eliminar práctica"
+                                                                        aria-label="Eliminar práctica"
+                                                                        className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                                    >
+                                                                        {eliminandoPracticas
+                                                                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                            : <Trash2 className="h-3.5 w-3.5" />}
+                                                                    </button>
                                                                 )}
                                                             </div>
                                                         ))}

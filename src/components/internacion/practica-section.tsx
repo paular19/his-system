@@ -189,6 +189,7 @@ export function PracticaSection({
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
     const [clasificacionPorPracticaId, setClasificacionPorPracticaId] = useState<Record<number, string>>({})
     const [titularOrdenAgrupada, setTitularOrdenAgrupada] = useState<string>('')
+    const [mostrarPopupTitularAgrupada, setMostrarPopupTitularAgrupada] = useState(false)
     const [clasificacionesExpandidas, setClasificacionesExpandidas] = useState<Record<string, boolean>>({})
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [ordenesGeneradas, setOrdenesGeneradas] = useState<OrdenGeneradaGrupo[]>([])
@@ -831,6 +832,26 @@ export function PracticaSection({
         }
     }
 
+    const handleClickAgruparYGenerarOrden = () => {
+        if (idsPendientesSeleccionadas.length === 0) {
+            setError('Seleccioná al menos una práctica pendiente para generar órdenes')
+            return
+        }
+
+        setError(null)
+        if (requierePopupTitularAgrupada) {
+            setMostrarPopupTitularAgrupada(true)
+            return
+        }
+
+        void handleGenerarOrdenes(true, true)
+    }
+
+    const confirmarPopupTitularAgrupada = () => {
+        setMostrarPopupTitularAgrupada(false)
+        void handleGenerarOrdenes(true, true)
+    }
+
     const alternarSeleccionOrdenGenerada = (puestoNumero: number, numero: number, checked: boolean) => {
         setOrdenesGeneradas((prev) => prev.map((o) => {
             if (o.puestoNumero !== puestoNumero || o.numero !== numero) return o
@@ -910,6 +931,28 @@ export function PracticaSection({
         if (opciones.length === 0) return ['HONORARIOS']
         return Array.from(new Set(opciones))
     }, [idsPendientesSeleccionadas, practicas, clasificacionPorPracticaId])
+
+    const matriculasProfesionalesSeleccionadasAgrupadas = useMemo(() => {
+        const matriculas = new Set<number>()
+
+        for (const id of idsPendientesSeleccionadas) {
+            const practica = practicas.find((p) => p.id === id)
+            if (!practica) continue
+
+            if ((practica.matriculaEspecialista ?? 0) > 0) {
+                matriculas.add(Number(practica.matriculaEspecialista))
+            }
+            if ((practica.matriculaAnestesista ?? 0) > 0) {
+                matriculas.add(Number(practica.matriculaAnestesista))
+            }
+        }
+
+        return Array.from(matriculas)
+    }, [idsPendientesSeleccionadas, practicas])
+
+    const hayMultiplesProfesionalesAgrupados = matriculasProfesionalesSeleccionadasAgrupadas.length > 1
+    const requierePopupTitularAgrupada =
+        titularesAgrupadosDisponibles.length > 1 || hayMultiplesProfesionalesAgrupados
 
     useEffect(() => {
         if (titularesAgrupadosDisponibles.length === 0) {
@@ -1413,20 +1456,6 @@ export function PracticaSection({
                                         </button>
                                         {puedeGenerarOrdenes && (
                                             <>
-                                                <label className="inline-flex items-center gap-2 text-amber-900">
-                                                    <span>Titular (agrupada)</span>
-                                                    <select
-                                                        value={titularOrdenAgrupada}
-                                                        onChange={(e) => setTitularOrdenAgrupada(e.target.value)}
-                                                        className="rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900"
-                                                    >
-                                                        {titularesAgrupadosDisponibles.map((opcion) => (
-                                                            <option key={`titular-agrupada-${opcion}`} value={opcion}>
-                                                                {opcion}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </label>
                                                 <button
                                                     type="button"
                                                     onClick={() => void handleGenerarOrdenes(false)}
@@ -1437,7 +1466,7 @@ export function PracticaSection({
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => void handleGenerarOrdenes(true, true)}
+                                                    onClick={handleClickAgruparYGenerarOrden}
                                                     disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
                                                     className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
                                                 >
@@ -1800,6 +1829,61 @@ export function PracticaSection({
                             </div>
                         </div>
                     )}
+                </div>
+            )}
+
+            {mostrarPopupTitularAgrupada && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+                    <div className="w-full max-w-lg rounded-xl border border-amber-200 bg-white p-4 shadow-xl space-y-3">
+                        <h3 className="text-sm font-semibold text-gray-900">
+                            Seleccionar titular para orden agrupada
+                        </h3>
+                        <p className="text-xs text-gray-600">
+                            Se detectaron múltiples criterios en las prácticas seleccionadas. Elegí el titular antes de generar la orden agrupada.
+                        </p>
+                        {titularesAgrupadosDisponibles.length > 1 && (
+                            <p className="text-xs text-amber-800">
+                                Se detectaron varias combinaciones de subitems en simultáneo.
+                            </p>
+                        )}
+                        {hayMultiplesProfesionalesAgrupados && (
+                            <p className="text-xs text-amber-800">
+                                Se detectaron prácticas con diferentes profesionales cargados.
+                            </p>
+                        )}
+
+                        <label className="block text-xs text-gray-600">
+                            Titular de la orden agrupada
+                            <select
+                                value={titularOrdenAgrupada}
+                                onChange={(e) => setTitularOrdenAgrupada(e.target.value)}
+                                className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-900"
+                            >
+                                {titularesAgrupadosDisponibles.map((opcion) => (
+                                    <option key={`popup-titular-agrupada-${opcion}`} value={opcion}>
+                                        {opcion}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                                type="button"
+                                onClick={() => setMostrarPopupTitularAgrupada(false)}
+                                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmarPopupTitularAgrupada}
+                                className="rounded border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                            >
+                                Generar agrupada
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

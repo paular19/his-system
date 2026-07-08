@@ -743,7 +743,7 @@ export function PracticaSection({
         }
     }
 
-    const handleGenerarOrdenes = async (imprimirDespues: boolean) => {
+    const handleGenerarOrdenes = async (imprimirDespues: boolean, agruparEnUnaOrden = false) => {
         if (idsPendientesSeleccionadas.length === 0) {
             setError('Seleccioná al menos una práctica pendiente para generar órdenes')
             return
@@ -764,6 +764,7 @@ export function PracticaSection({
                 ingresoId,
                 practicaIds: idsPendientesSeleccionadas,
                 clasificacionPorPracticaId: clasificacionPayload,
+                agruparEnUnaOrden,
             })
 
             if ('error' in result && result.error) {
@@ -1373,6 +1374,14 @@ export function PracticaSection({
                                                     className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                                 >
                                                     {generandoOrdenes ? 'Generando...' : `Generar órdenes (${idsPendientesSeleccionadas.length})`}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleGenerarOrdenes(true, true)}
+                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
+                                                    className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                                                >
+                                                    Agrupar y generar orden
                                                 </button>
                                                 <button
                                                     type="button"

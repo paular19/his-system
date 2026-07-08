@@ -31,6 +31,7 @@ const GenerarOrdenesInternacionSchema = z.object({
   ingresoId: z.number().int().positive(),
   practicaIds: z.array(z.number().int().positive()).min(1, 'Seleccioná al menos una práctica'),
   clasificacionPorPracticaId: z.record(z.string()).optional().default({}),
+  agruparEnUnaOrden: z.boolean().optional().default(false),
 })
 
 function inferirClasificacionPracticaDb(practica: {
@@ -211,6 +212,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
   ingresoId: number
   practicaIds: number[]
   clasificacionPorPracticaId?: Record<string, string>
+  agruparEnUnaOrden?: boolean
 }) {
   const usuario = await getUsuarioSesion()
 
@@ -342,7 +344,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         matriculaAnestesista: practica.matriculaAnestesista,
       })
       const clasificacion = clasificacionDesdeInput ?? clasificacionInferida
-      const key = practica.codigoPractica.trim() === '66' ? '__PROTOCOLO_BIOQUIMICO__' : clasificacion
+      const key = parsed.data.agruparEnUnaOrden
+        ? '__AGRUPAR_EN_UNA_ORDEN__'
+        : (practica.codigoPractica.trim() === '66' ? '__PROTOCOLO_BIOQUIMICO__' : clasificacion)
       const esClasificacionSoloGastos =
         contieneClasificacion(clasificacion, 'GA') &&
         !contieneClasificacion(clasificacion, 'HE') &&
@@ -397,11 +401,13 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       ''
     ).slice(0, 30)
 
-    const gruposOrdenados = Array.from(grupos.entries()).sort((a, b) => {
-      if (a[0] === '__PROTOCOLO_BIOQUIMICO__') return -1
-      if (b[0] === '__PROTOCOLO_BIOQUIMICO__') return 1
-      return ordenarClaveClasificacion(a[0], b[0])
-    })
+    const gruposOrdenados = parsed.data.agruparEnUnaOrden
+      ? Array.from(grupos.entries())
+      : Array.from(grupos.entries()).sort((a, b) => {
+          if (a[0] === '__PROTOCOLO_BIOQUIMICO__') return -1
+          if (b[0] === '__PROTOCOLO_BIOQUIMICO__') return 1
+          return ordenarClaveClasificacion(a[0], b[0])
+        })
 
     const ordenesPorGrupo: Array<{
       clasificacion: string
@@ -417,9 +423,14 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     }> = []
 
     for (const [key, itemsGrupo] of gruposOrdenados) {
-      const clasificacion = key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : key
-      const esGrupoConDerechos = key !== '__PROTOCOLO_BIOQUIMICO__' && contieneClasificacion(clasificacion, 'GA')
-      const titularModular = key === '__PROTOCOLO_BIOQUIMICO__'
+      const esGrupoAgrupado = key === '__AGRUPAR_EN_UNA_ORDEN__'
+      const clasificacion = esGrupoAgrupado ? 'AGRUPADA' : (key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : key)
+      const esGrupoConDerechos = esGrupoAgrupado
+        ? itemsGrupo.some(({ item }) => contieneClasificacion(item.clasificacionAgrupacion, 'GA'))
+        : (key !== '__PROTOCOLO_BIOQUIMICO__' && contieneClasificacion(clasificacion, 'GA'))
+      const titularModular = esGrupoAgrupado
+        ? 'HONORARIOS'
+        : key === '__PROTOCOLO_BIOQUIMICO__'
         ? 'PROTOCOLO BIOQUIMICO'
         : tituloDesdeClasificacion(clasificacion)
 
@@ -441,7 +452,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
             clasificacionAgrupacion:
               key === '__PROTOCOLO_BIOQUIMICO__'
                 ? null
-                : normalizarClasificacionAgrupacion(item.clasificacionAgrupacion) ?? clasificacion,
+                : normalizarClasificacionAgrupacion(item.clasificacionAgrupacion) ?? (esGrupoAgrupado ? 'HE' : clasificacion),
             titularModular,
             imprimirPorDuplicado: Boolean(item.imprimirPorDuplicado) || esGrupoConDerechos,
           })),

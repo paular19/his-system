@@ -31,7 +31,6 @@ const GenerarOrdenesInternacionSchema = z.object({
   ingresoId: z.number().int().positive(),
   practicaIds: z.array(z.number().int().positive()).min(1, 'Seleccioná al menos una práctica'),
   clasificacionPorPracticaId: z.record(z.string()).optional().default({}),
-  profesionalId: z.number().int().positive().optional().nullable(),
 })
 
 function inferirClasificacionPracticaDb(practica: {
@@ -212,7 +211,6 @@ export async function generarOrdenesDesdeInternacionAction(input: {
   ingresoId: number
   practicaIds: number[]
   clasificacionPorPracticaId?: Record<string, string>
-  profesionalId?: number | null
 }) {
   const usuario = await getUsuarioSesion()
 
@@ -250,30 +248,6 @@ export async function generarOrdenesDesdeInternacionAction(input: {
 
     if (!ingreso) return { error: 'Internación no encontrada' }
     if (!ingreso.obraSocialId) return { error: 'La internación no tiene obra social asignada' }
-
-    if (parsed.data.profesionalId) {
-      const profesionalFirmante = await prisma.profesional.findFirst({
-        where: {
-          id: parsed.data.profesionalId,
-          estado: 'A',
-        },
-        select: { id: true },
-      })
-
-      if (!profesionalFirmante) {
-        return { error: 'El profesional seleccionado no está disponible para firmar la orden' }
-      }
-    }
-
-    let profesionalId = parsed.data.profesionalId ?? ingreso.profesionalTratanteId ?? ingreso.profesionalGuardiaId ?? null
-    if (!profesionalId) {
-      const profesionalFallback = await prisma.profesional.findFirst({
-        select: { id: true },
-        orderBy: { id: 'asc' },
-      })
-      profesionalId = profesionalFallback?.id ?? null
-    }
-    if (!profesionalId) return { error: 'No hay profesional disponible para emitir la orden' }
 
     const practicas = await prisma.practica.findMany({
       where: {
@@ -317,6 +291,36 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     if (practicasPendientes.length === 0) {
       return { error: 'No hay prácticas pendientes para generar órdenes' }
     }
+
+    const matriculaFirmanteDesdePractica =
+      practicasPendientes
+        .map((p) => (p.matriculaEspecialista != null && p.matriculaEspecialista > 0 ? p.matriculaEspecialista : null))
+        .find((m): m is number => m != null) ?? null
+
+    const profesionalPorPractica = matriculaFirmanteDesdePractica
+      ? await prisma.profesional.findFirst({
+          where: {
+            matricula: matriculaFirmanteDesdePractica,
+            estado: 'A',
+          },
+          select: { id: true },
+        })
+      : null
+
+    let profesionalId =
+      profesionalPorPractica?.id ??
+      ingreso.profesionalTratanteId ??
+      ingreso.profesionalGuardiaId ??
+      null
+    if (!profesionalId) {
+      const profesionalFallback = await prisma.profesional.findFirst({
+        where: { estado: 'A' },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      })
+      profesionalId = profesionalFallback?.id ?? null
+    }
+    if (!profesionalId) return { error: 'No hay profesional disponible para emitir la orden' }
 
     const grupos = new Map<string, Array<{
       item: CrearOrdenInput['items'][number]

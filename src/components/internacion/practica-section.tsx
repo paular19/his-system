@@ -188,7 +188,6 @@ export function PracticaSection({
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
     const [clasificacionPorPracticaId, setClasificacionPorPracticaId] = useState<Record<number, string>>({})
     const [clasificacionesExpandidas, setClasificacionesExpandidas] = useState<Record<string, boolean>>({})
-    const [profesionalFirmanteId, setProfesionalFirmanteId] = useState<string>('')
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [ordenesGeneradas, setOrdenesGeneradas] = useState<OrdenGeneradaGrupo[]>([])
 
@@ -750,14 +749,6 @@ export function PracticaSection({
             return
         }
 
-        if (profesionalFirmanteId) {
-            const profesionalFirmante = Number.parseInt(profesionalFirmanteId, 10)
-            if (!Number.isFinite(profesionalFirmante) || profesionalFirmante <= 0) {
-                setError('Seleccioná un profesional firmante válido')
-                return
-            }
-        }
-
         setError(null)
         setGenerandoOrdenes(true)
         try {
@@ -773,7 +764,6 @@ export function PracticaSection({
                 ingresoId,
                 practicaIds: idsPendientesSeleccionadas,
                 clasificacionPorPracticaId: clasificacionPayload,
-                profesionalId: profesionalFirmanteId ? Number.parseInt(profesionalFirmanteId, 10) : undefined,
             })
 
             if ('error' in result && result.error) {
@@ -1362,23 +1352,6 @@ export function PracticaSection({
                                             />
                                             Seleccionar todas (filtro actual)
                                         </label>
-                                        {puedeGenerarOrdenes && (
-                                            <label className="inline-flex items-center gap-2 text-amber-900">
-                                                <span>Firmante</span>
-                                                <select
-                                                    value={profesionalFirmanteId}
-                                                    onChange={(e) => setProfesionalFirmanteId(e.target.value)}
-                                                    className="rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900"
-                                                >
-                                                    <option value="">Médico tratante (default)</option>
-                                                    {profesionalesConMatricula.map((profesional) => (
-                                                        <option key={`firmante-${profesional.id}`} value={String(profesional.id)}>
-                                                            {profesional.nombre} · MP {profesional.matricula}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </label>
-                                        )}
                                         <button
                                             type="button"
                                             onClick={() => {

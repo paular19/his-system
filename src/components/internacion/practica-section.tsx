@@ -743,7 +743,11 @@ export function PracticaSection({
         }
     }
 
-    const handleGenerarOrdenes = async (imprimirDespues: boolean, agruparEnUnaOrden = false) => {
+    const handleGenerarOrdenes = async (
+        imprimirDespues: boolean,
+        agruparEnUnaOrden = false,
+        titularOrdenAgrupadaOverride?: string
+    ) => {
         if (idsPendientesSeleccionadas.length === 0) {
             setError('Seleccioná al menos una práctica pendiente para generar órdenes')
             return
@@ -765,7 +769,9 @@ export function PracticaSection({
                 practicaIds: idsPendientesSeleccionadas,
                 clasificacionPorPracticaId: clasificacionPayload,
                 agruparEnUnaOrden,
-                titularOrdenAgrupada: agruparEnUnaOrden ? titularOrdenAgrupada : undefined,
+                titularOrdenAgrupada: agruparEnUnaOrden
+                    ? (titularOrdenAgrupadaOverride ?? titularOrdenAgrupada)
+                    : undefined,
             })
 
             if ('error' in result && result.error) {
@@ -849,7 +855,8 @@ export function PracticaSection({
 
     const confirmarPopupTitularAgrupada = () => {
         setMostrarPopupTitularAgrupada(false)
-        void handleGenerarOrdenes(true, true)
+        const titularSeleccionado = titularOrdenAgrupada || titularesAgrupadosDisponibles[0] || 'HONORARIOS'
+        void handleGenerarOrdenes(true, true, titularSeleccionado)
     }
 
     const alternarSeleccionOrdenGenerada = (puestoNumero: number, numero: number, checked: boolean) => {
@@ -941,9 +948,6 @@ export function PracticaSection({
 
             if ((practica.matriculaEspecialista ?? 0) > 0) {
                 matriculas.add(Number(practica.matriculaEspecialista))
-            }
-            if ((practica.matriculaAnestesista ?? 0) > 0) {
-                matriculas.add(Number(practica.matriculaAnestesista))
             }
         }
 

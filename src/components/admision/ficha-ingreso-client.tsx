@@ -102,6 +102,7 @@ export function FichaIngresoClient({
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [errorEliminarPractica, setErrorEliminarPractica] = useState<string | null>(null)
+    const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
 
@@ -1126,6 +1127,7 @@ export function FichaIngresoClient({
                                         {ordenesAutorizadasPaginadas.map((grupo) => {
                                             const destinoAutorizada = obtenerDestinoGrupoPracticasAutorizadas(grupo)
                                             const limitePracticas = 3
+                                            const abierta = ordenesAutorizadasAbiertas[grupo.key] ?? false
                                             const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
                                             const practicasVisibles = expandida
                                                 ? grupo.practicas
@@ -1140,71 +1142,87 @@ export function FichaIngresoClient({
                                                     key={grupo.key}
                                                     className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5"
                                                 >
-                                                    <div className="grid gap-3 md:grid-cols-2">
-                                                        <div className="space-y-1.5 text-xs text-emerald-900">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <span className="font-semibold">{tituloGrupo}</span>
-                                                                {destinoAutorizada && (
-                                                                    <Link
-                                                                        href={destinoAutorizada}
-                                                                        className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
-                                                                    >
-                                                                        Abrir
-                                                                    </Link>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-emerald-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
-                                                            <p className="text-emerald-800">Fecha última práctica: {formatearFechaHora(grupo.fechaReferencia)}</p>
-                                                            <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
-                                                            <p className="text-emerald-800">
-                                                                {grupo.matriculasFirmantes.length > 1
-                                                                    ? 'Matrículas firmantes'
-                                                                    : 'Matrícula firmante'}: {grupo.matriculasFirmantes.length > 0 ? grupo.matriculasFirmantes.join(', ') : '-'}
-                                                            </p>
-                                                        </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOrdenesAutorizadasAbiertas((prev) => ({
+                                                            ...prev,
+                                                            [grupo.key]: !(prev[grupo.key] ?? false),
+                                                        }))}
+                                                        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left hover:bg-emerald-100/40"
+                                                    >
+                                                        <span className="flex items-center gap-2 text-emerald-900">
+                                                            <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+                                                            <span className="text-xs font-semibold">{tituloGrupo}</span>
+                                                        </span>
+                                                        <span className="text-[11px] text-emerald-700">{grupo.practicas.length} práctica(s)</span>
+                                                    </button>
 
-                                                        <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                                                    Prácticas de la orden ({grupo.practicas.length})
+                                                    {abierta && (
+                                                        <div className="mt-2 grid gap-3 md:grid-cols-2">
+                                                            <div className="space-y-1.5 text-xs text-emerald-900">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    {destinoAutorizada && (
+                                                                        <Link
+                                                                            href={destinoAutorizada}
+                                                                            className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
+                                                                        >
+                                                                            Abrir
+                                                                        </Link>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-emerald-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
+                                                                <p className="text-emerald-800">Fecha última práctica: {formatearFechaHora(grupo.fechaReferencia)}</p>
+                                                                <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
+                                                                <p className="text-emerald-800">
+                                                                    {grupo.matriculasFirmantes.length > 1
+                                                                        ? 'Matrículas firmantes'
+                                                                        : 'Matrícula firmante'}: {grupo.matriculasFirmantes.length > 0 ? grupo.matriculasFirmantes.join(', ') : '-'}
                                                                 </p>
-                                                                {grupo.practicas.length > limitePracticas && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setOrdenesAutorizadasExpandidas((prev) => ({
-                                                                            ...prev,
-                                                                            [grupo.key]: !(prev[grupo.key] ?? false),
-                                                                        }))}
-                                                                        className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50"
-                                                                    >
-                                                                        {expandida ? 'Contraer' : 'Expandir'}
-                                                                    </button>
+                                                            </div>
+
+                                                            <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                                        Prácticas de la orden ({grupo.practicas.length})
+                                                                    </p>
+                                                                    {grupo.practicas.length > limitePracticas && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setOrdenesAutorizadasExpandidas((prev) => ({
+                                                                                ...prev,
+                                                                                [grupo.key]: !(prev[grupo.key] ?? false),
+                                                                            }))}
+                                                                            className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50"
+                                                                        >
+                                                                            {expandida ? 'Contraer' : 'Expandir'}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+
+                                                                <div className="mt-2 space-y-1.5 text-xs">
+                                                                    {practicasVisibles.map((practica) => (
+                                                                        <div
+                                                                            key={`${grupo.key}-${practica.id}`}
+                                                                            className="rounded border border-emerald-100 bg-white px-2 py-1.5"
+                                                                        >
+                                                                            <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                                                                <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
+                                                                                <span className="font-medium">Cant. {practica.cantidad}</span>
+                                                                            </div>
+                                                                            <p className="text-emerald-900">
+                                                                                {practica.descripcionPractica ?? practica.codigoPractica.trim()}
+                                                                            </p>
+                                                                            <p className="text-[11px] text-emerald-700">{formatearFechaHora(practica.fecha)}</p>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+
+                                                                {!expandida && restantes > 0 && (
+                                                                    <p className="mt-1 text-[11px] text-emerald-700">+{restantes} práctica(s) más</p>
                                                                 )}
                                                             </div>
-
-                                                            <div className="mt-2 space-y-1.5 text-xs">
-                                                                {practicasVisibles.map((practica) => (
-                                                                    <div
-                                                                        key={`${grupo.key}-${practica.id}`}
-                                                                        className="rounded border border-emerald-100 bg-white px-2 py-1.5"
-                                                                    >
-                                                                        <div className="flex items-center justify-between gap-2 text-emerald-900">
-                                                                            <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
-                                                                            <span className="font-medium">Cant. {practica.cantidad}</span>
-                                                                        </div>
-                                                                        <p className="text-emerald-900">
-                                                                            {practica.descripcionPractica ?? practica.codigoPractica.trim()}
-                                                                        </p>
-                                                                        <p className="text-[11px] text-emerald-700">{formatearFechaHora(practica.fecha)}</p>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-
-                                                            {!expandida && restantes > 0 && (
-                                                                <p className="mt-1 text-[11px] text-emerald-700">+{restantes} práctica(s) más</p>
-                                                            )}
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </div>
                                             )
                                         })}

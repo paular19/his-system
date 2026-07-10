@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { ChevronRight } from 'lucide-react'
 import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItemDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
 import { LoteResumenPrint } from './lote-resumen-print'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
@@ -219,6 +220,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const [editandoPracticas, setEditandoPracticas] = useState(false)
     const [editItems, setEditItems] = useState<Record<string, OrdenItemEditState>>({})
     const [guardandoItemKey, setGuardandoItemKey] = useState<string | null>(null)
+    const [ordenesAbiertas, setOrdenesAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesExpandidas, setOrdenesExpandidas] = useState<Record<string, boolean>>({})
     const [mostrarConfirmPromedi, setMostrarConfirmPromedi] = useState(false)
     const [errorPromedi, setErrorPromedi] = useState('')
@@ -249,6 +251,7 @@ export function LoteDetallePage({ loteId }: Props) {
     async function cargarOrdenes(ingresoId: number) {
         setSelectedIngresoId(ingresoId)
         setLoadingOrdenes(true)
+        setOrdenesAbiertas({})
         setOrdenesExpandidas({})
         try {
             const sp = new URLSearchParams()
@@ -829,6 +832,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                         const itemsTabla = agruparItemsOrdenParaTabla(orden.items)
                                         const totalCantidadOrden = orden.items.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)
                                         const limitePracticas = 4
+                                        const abierta = ordenesAbiertas[keyOrden] ?? false
                                         const expandida = ordenesExpandidas[keyOrden] ?? false
                                         const practicasVisibles = expandida
                                             ? itemsTabla
@@ -837,159 +841,173 @@ export function LoteDetallePage({ loteId }: Props) {
 
                                         return (
                                             <div key={keyOrden} className="border rounded-lg bg-white">
-                                                <div className="grid gap-3 p-3 md:grid-cols-2">
-                                                    <div className="rounded-md border border-gray-200 bg-gray-50/70 p-3 text-xs text-gray-700 space-y-1.5">
-                                                        <p className="text-sm font-semibold text-gray-900">
-                                                            Orden #{orden.numero}
-                                                            {orden.descripcion && <span className="font-normal text-gray-500 ml-1.5">— {orden.descripcion}</span>}
-                                                        </p>
-                                                        <p>Fecha emisión: {new Date(orden.fechaEmision).toLocaleDateString('es-AR')}</p>
-                                                        <p>Importe total: <span className="font-semibold">{formatMonto(orden.importeTotal)}</span></p>
-                                                        <p>N° autorización: <span className="text-blue-700">{orden.numeroAutorizacion ?? '-'}</span></p>
-                                                        <p>Cantidad total: {totalCantidadOrden}</p>
-                                                        <p>Médico firmante: {orden.profesional?.nombre ?? '-'}</p>
-                                                        <p>Matrícula firmante: {orden.profesional?.matricula ?? '-'}</p>
-                                                    </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setOrdenesAbiertas((prev) => ({
+                                                        ...prev,
+                                                        [keyOrden]: !(prev[keyOrden] ?? false),
+                                                    }))}
+                                                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-gray-50"
+                                                >
+                                                    <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                                                        <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+                                                        <span>Orden #{orden.numero}</span>
+                                                        {orden.descripcion && <span className="font-normal text-gray-500">— {orden.descripcion}</span>}
+                                                    </span>
+                                                    <span className="text-xs text-gray-500">{itemsTabla.length} práctica(s)</span>
+                                                </button>
 
-                                                    <div className="rounded-md border border-gray-200 bg-white p-2.5">
-                                                        <div className="flex items-center justify-between gap-2 px-1">
-                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-                                                                Prácticas de la orden ({itemsTabla.length})
-                                                            </p>
-                                                            {!esPendiente || !editandoPracticas ? (
-                                                                itemsTabla.length > limitePracticas && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setOrdenesExpandidas((prev) => ({
-                                                                            ...prev,
-                                                                            [keyOrden]: !(prev[keyOrden] ?? false),
-                                                                        }))}
-                                                                        className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50"
-                                                                    >
-                                                                        {expandida ? 'Contraer' : 'Expandir'}
-                                                                    </button>
-                                                                )
-                                                            ) : null}
+                                                {abierta && (
+                                                    <div className="grid gap-3 p-3 md:grid-cols-2">
+                                                        <div className="rounded-md border border-gray-200 bg-gray-50/70 p-3 text-xs text-gray-700 space-y-1.5">
+                                                            <p>Fecha emisión: {new Date(orden.fechaEmision).toLocaleDateString('es-AR')}</p>
+                                                            <p>Importe total: <span className="font-semibold">{formatMonto(orden.importeTotal)}</span></p>
+                                                            <p>N° autorización: <span className="text-blue-700">{orden.numeroAutorizacion ?? '-'}</span></p>
+                                                            <p>Cantidad total: {totalCantidadOrden}</p>
+                                                            <p>Médico firmante: {orden.profesional?.nombre ?? '-'}</p>
+                                                            <p>Matrícula firmante: {orden.profesional?.matricula ?? '-'}</p>
                                                         </div>
 
-                                                        {esPendiente && editandoPracticas ? (
-                                                            <div className="mt-2 overflow-x-auto">
-                                                                <table className="w-full text-xs">
-                                                                    <thead className="text-gray-500">
-                                                                        <tr>
-                                                                            <th className="px-2 py-1.5 text-left">Fecha</th>
-                                                                            <th className="px-2 py-1.5 text-left">Práctica</th>
-                                                                            <th className="px-2 py-1.5 text-left">Descripción</th>
-                                                                            <th className="px-2 py-1.5 text-center">Cant.</th>
-                                                                            <th className="px-2 py-1.5 text-left">Nro. Aut.</th>
-                                                                            <th className="px-2 py-1.5 text-right">Importe</th>
-                                                                            <th className="px-2 py-1.5 text-right">Acción</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody className="divide-y divide-gray-100">
-                                                                        {orden.items.map((it) => {
-                                                                            const key = keyOrdenItem(orden.puestoNumero, orden.numero, it.item)
-                                                                            const draft = editItems[key] ?? buildOrdenItemEditState(it)
-                                                                            const guardando = guardandoItemKey === key
+                                                        <div className="rounded-md border border-gray-200 bg-white p-2.5">
+                                                            <div className="flex items-center justify-between gap-2 px-1">
+                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                                                                    Prácticas de la orden ({itemsTabla.length})
+                                                                </p>
+                                                                {!esPendiente || !editandoPracticas ? (
+                                                                    itemsTabla.length > limitePracticas && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setOrdenesExpandidas((prev) => ({
+                                                                                ...prev,
+                                                                                [keyOrden]: !(prev[keyOrden] ?? false),
+                                                                            }))}
+                                                                            className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50"
+                                                                        >
+                                                                            {expandida ? 'Contraer' : 'Expandir'}
+                                                                        </button>
+                                                                    )
+                                                                ) : null}
+                                                            </div>
 
-                                                                            return (
-                                                                                <tr key={it.item}>
-                                                                                    <td className="px-2 py-1.5 text-gray-600">
-                                                                                        <input
-                                                                                            type="datetime-local"
-                                                                                            value={draft.fecha}
-                                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, fecha: e.target.value } }))}
-                                                                                            className="w-40 rounded border border-gray-300 px-2 py-1"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-2 py-1.5 font-mono">
-                                                                                        <input
-                                                                                            value={draft.codigoPractica}
-                                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, codigoPractica: e.target.value } }))}
-                                                                                            className="w-24 rounded border border-gray-300 px-2 py-1"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-2 py-1.5 text-gray-600">
-                                                                                        <input
-                                                                                            value={draft.descripcion}
-                                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, descripcion: e.target.value } }))}
-                                                                                            className="w-full rounded border border-gray-300 px-2 py-1"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-2 py-1.5 text-center">
-                                                                                        <input
-                                                                                            type="number"
-                                                                                            min={0.01}
-                                                                                            step={0.01}
-                                                                                            value={draft.cantidad}
-                                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, cantidad: e.target.value } }))}
-                                                                                            className="w-20 rounded border border-gray-300 px-2 py-1 text-center"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-2 py-1.5 text-blue-600">
-                                                                                        <input
-                                                                                            value={draft.numeroAutorizacion}
-                                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, numeroAutorizacion: e.target.value } }))}
-                                                                                            className="w-32 rounded border border-gray-300 px-2 py-1 text-gray-700"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-2 py-1.5 text-right">
-                                                                                        <input
-                                                                                            type="number"
-                                                                                            min={0}
-                                                                                            step={0.01}
-                                                                                            value={draft.importeTotal}
-                                                                                            onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, importeTotal: e.target.value } }))}
-                                                                                            className="w-24 rounded border border-gray-300 px-2 py-1 text-right"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-2 py-1.5 text-right">
-                                                                                        <div className="flex justify-end gap-1">
-                                                                                            <button
-                                                                                                onClick={() => guardarOrdenItem(orden, it)}
-                                                                                                disabled={guardando}
-                                                                                                className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-100 disabled:opacity-60"
-                                                                                            >
-                                                                                                {guardando ? 'Guardando...' : 'Guardar'}
-                                                                                            </button>
-                                                                                            <button
-                                                                                                onClick={() => cancelarEdicionItem(orden, it)}
-                                                                                                disabled={guardando}
-                                                                                                className="rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-                                                                                            >
-                                                                                                Cancelar
-                                                                                            </button>
-                                                                                        </div>
-                                                                                    </td>
-                                                                                </tr>
-                                                                            )
-                                                                        })}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="mt-2 space-y-1.5 text-xs">
-                                                                {practicasVisibles.map((it) => (
-                                                                    <div key={it.key} className="rounded border border-gray-100 bg-gray-50/60 px-2 py-1.5">
-                                                                        <div className="flex items-center justify-between gap-2 text-gray-800">
-                                                                            <span className="font-mono text-[11px]">{it.codigoPractica}</span>
-                                                                            <span className="font-semibold">{formatMonto(it.importeTotal)}</span>
+                                                            {esPendiente && editandoPracticas ? (
+                                                                <div className="mt-2 overflow-x-auto">
+                                                                    <table className="w-full text-xs">
+                                                                        <thead className="text-gray-500">
+                                                                            <tr>
+                                                                                <th className="px-2 py-1.5 text-left">Fecha</th>
+                                                                                <th className="px-2 py-1.5 text-left">Práctica</th>
+                                                                                <th className="px-2 py-1.5 text-left">Descripción</th>
+                                                                                <th className="px-2 py-1.5 text-center">Cant.</th>
+                                                                                <th className="px-2 py-1.5 text-left">Nro. Aut.</th>
+                                                                                <th className="px-2 py-1.5 text-right">Importe</th>
+                                                                                <th className="px-2 py-1.5 text-right">Acción</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody className="divide-y divide-gray-100">
+                                                                            {orden.items.map((it) => {
+                                                                                const key = keyOrdenItem(orden.puestoNumero, orden.numero, it.item)
+                                                                                const draft = editItems[key] ?? buildOrdenItemEditState(it)
+                                                                                const guardando = guardandoItemKey === key
+
+                                                                                return (
+                                                                                    <tr key={it.item}>
+                                                                                        <td className="px-2 py-1.5 text-gray-600">
+                                                                                            <input
+                                                                                                type="datetime-local"
+                                                                                                value={draft.fecha}
+                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, fecha: e.target.value } }))}
+                                                                                                className="w-40 rounded border border-gray-300 px-2 py-1"
+                                                                                            />
+                                                                                        </td>
+                                                                                        <td className="px-2 py-1.5 font-mono">
+                                                                                            <input
+                                                                                                value={draft.codigoPractica}
+                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, codigoPractica: e.target.value } }))}
+                                                                                                className="w-24 rounded border border-gray-300 px-2 py-1"
+                                                                                            />
+                                                                                        </td>
+                                                                                        <td className="px-2 py-1.5 text-gray-600">
+                                                                                            <input
+                                                                                                value={draft.descripcion}
+                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, descripcion: e.target.value } }))}
+                                                                                                className="w-full rounded border border-gray-300 px-2 py-1"
+                                                                                            />
+                                                                                        </td>
+                                                                                        <td className="px-2 py-1.5 text-center">
+                                                                                            <input
+                                                                                                type="number"
+                                                                                                min={0.01}
+                                                                                                step={0.01}
+                                                                                                value={draft.cantidad}
+                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, cantidad: e.target.value } }))}
+                                                                                                className="w-20 rounded border border-gray-300 px-2 py-1 text-center"
+                                                                                            />
+                                                                                        </td>
+                                                                                        <td className="px-2 py-1.5 text-blue-600">
+                                                                                            <input
+                                                                                                value={draft.numeroAutorizacion}
+                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, numeroAutorizacion: e.target.value } }))}
+                                                                                                className="w-32 rounded border border-gray-300 px-2 py-1 text-gray-700"
+                                                                                            />
+                                                                                        </td>
+                                                                                        <td className="px-2 py-1.5 text-right">
+                                                                                            <input
+                                                                                                type="number"
+                                                                                                min={0}
+                                                                                                step={0.01}
+                                                                                                value={draft.importeTotal}
+                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, importeTotal: e.target.value } }))}
+                                                                                                className="w-24 rounded border border-gray-300 px-2 py-1 text-right"
+                                                                                            />
+                                                                                        </td>
+                                                                                        <td className="px-2 py-1.5 text-right">
+                                                                                            <div className="flex justify-end gap-1">
+                                                                                                <button
+                                                                                                    onClick={() => guardarOrdenItem(orden, it)}
+                                                                                                    disabled={guardando}
+                                                                                                    className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                                                                                                >
+                                                                                                    {guardando ? 'Guardando...' : 'Guardar'}
+                                                                                                </button>
+                                                                                                <button
+                                                                                                    onClick={() => cancelarEdicionItem(orden, it)}
+                                                                                                    disabled={guardando}
+                                                                                                    className="rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                                                                                                >
+                                                                                                    Cancelar
+                                                                                                </button>
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                )
+                                                                            })}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="mt-2 space-y-1.5 text-xs">
+                                                                    {practicasVisibles.map((it) => (
+                                                                        <div key={it.key} className="rounded border border-gray-100 bg-gray-50/60 px-2 py-1.5">
+                                                                            <div className="flex items-center justify-between gap-2 text-gray-800">
+                                                                                <span className="font-mono text-[11px]">{it.codigoPractica}</span>
+                                                                                <span className="font-semibold">{formatMonto(it.importeTotal)}</span>
+                                                                            </div>
+                                                                            <p className="text-gray-700">{it.descripcion ?? '-'}</p>
+                                                                            <div className="mt-0.5 flex items-center justify-between text-[11px] text-gray-500">
+                                                                                <span>{new Date(it.fecha).toLocaleString('es-AR')}</span>
+                                                                                <span>Cant. {it.cantidad}</span>
+                                                                            </div>
+                                                                            <p className="text-[11px] text-blue-700">Aut.: {it.numeroAutorizacion ?? '—'}</p>
                                                                         </div>
-                                                                        <p className="text-gray-700">{it.descripcion ?? '-'}</p>
-                                                                        <div className="mt-0.5 flex items-center justify-between text-[11px] text-gray-500">
-                                                                            <span>{new Date(it.fecha).toLocaleString('es-AR')}</span>
-                                                                            <span>Cant. {it.cantidad}</span>
-                                                                        </div>
-                                                                        <p className="text-[11px] text-blue-700">Aut.: {it.numeroAutorizacion ?? '—'}</p>
-                                                                    </div>
-                                                                ))}
-                                                                {!expandida && restantes > 0 && (
-                                                                    <p className="px-1 text-[11px] text-gray-500">+{restantes} práctica(s) más</p>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                                                    ))}
+                                                                    {!expandida && restantes > 0 && (
+                                                                        <p className="px-1 text-[11px] text-gray-500">+{restantes} práctica(s) más</p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
                                             </div>
                                         )
                                     })}

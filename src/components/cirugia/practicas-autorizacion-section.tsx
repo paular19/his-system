@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Loader2, ChevronRight } from 'lucide-react'
 import { actualizarNumerosAutorizacionAction } from '@/modules/cirugia/actions'
 import { formatearNumeroOrden, generarCodigoBarras } from '@/modules/orden/types'
 
@@ -184,6 +184,7 @@ export function PracticasAutorizacionSection({
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [exito, setExito] = useState(false)
+    const [gruposAutorizadosAbiertos, setGruposAutorizadosAbiertos] = useState<Record<string, boolean>>({})
     const [autorizadasExpandidas, setAutorizadasExpandidas] = useState<Record<string, boolean>>({})
 
     useEffect(() => {
@@ -585,6 +586,7 @@ export function PracticasAutorizacionSection({
                     <div className="space-y-2">
                         {gruposAutorizados.map((grupo) => {
                             const limiteItems = 3
+                            const abierta = gruposAutorizadosAbiertos[grupo.key] ?? false
                             const expandida = autorizadasExpandidas[grupo.key] ?? false
                             const itemsVisibles = expandida ? grupo.items : grupo.items.slice(0, limiteItems)
                             const restantes = Math.max(0, grupo.items.length - itemsVisibles.length)
@@ -597,69 +599,85 @@ export function PracticasAutorizacionSection({
 
                             return (
                                 <div key={grupo.key} className="rounded-lg border border-green-200 bg-green-50/40 p-2.5 text-xs">
-                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                                        <div className="space-y-1.5 text-green-900">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="font-semibold">
-                                                    {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
-                                                        ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
-                                                        : 'Autorización manual'}
-                                                </span>
-                                                {destino && (
-                                                    <Link
-                                                        href={destino}
-                                                        className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-900 hover:bg-green-200"
-                                                    >
-                                                        Abrir
-                                                    </Link>
-                                                )}
-                                            </div>
-                                            <p className="text-green-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
-                                            <p className="text-green-800">Cantidad total: {grupo.totalCantidad}</p>
-                                            <p className="text-green-800">
-                                                {grupo.matriculasFirmantes.length > 1
-                                                    ? 'Matrículas firmantes'
-                                                    : 'Matrícula firmante'}: {grupo.matriculasFirmantes.length > 0 ? grupo.matriculasFirmantes.join(', ') : 'No informada'}
-                                            </p>
-                                        </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setGruposAutorizadosAbiertos((prev) => ({
+                                            ...prev,
+                                            [grupo.key]: !(prev[grupo.key] ?? false),
+                                        }))}
+                                        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left hover:bg-green-100/40"
+                                    >
+                                        <span className="flex items-center gap-2 text-green-900">
+                                            <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+                                            <span className="font-semibold">
+                                                {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                                    ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
+                                                    : 'Autorización manual'}
+                                            </span>
+                                        </span>
+                                        <span className="text-[11px] text-green-700">{grupo.items.length} práctica(s)</span>
+                                    </button>
 
-                                        <div className="rounded-md border border-green-200 bg-white/70 p-2">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">
-                                                    Prácticas de la orden ({grupo.items.length})
+                                    {abierta && (
+                                        <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+                                            <div className="space-y-1.5 text-green-900">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {destino && (
+                                                        <Link
+                                                            href={destino}
+                                                            className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-900 hover:bg-green-200"
+                                                        >
+                                                            Abrir
+                                                        </Link>
+                                                    )}
+                                                </div>
+                                                <p className="text-green-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
+                                                <p className="text-green-800">Cantidad total: {grupo.totalCantidad}</p>
+                                                <p className="text-green-800">
+                                                    {grupo.matriculasFirmantes.length > 1
+                                                        ? 'Matrículas firmantes'
+                                                        : 'Matrícula firmante'}: {grupo.matriculasFirmantes.length > 0 ? grupo.matriculasFirmantes.join(', ') : 'No informada'}
                                                 </p>
-                                                {grupo.items.length > limiteItems && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setAutorizadasExpandidas((prev) => ({
-                                                            ...prev,
-                                                            [grupo.key]: !(prev[grupo.key] ?? false),
-                                                        }))}
-                                                        className="rounded border border-green-300 px-2 py-0.5 text-[11px] font-medium text-green-800 hover:bg-green-50"
-                                                    >
-                                                        {expandida ? 'Contraer' : 'Expandir'}
-                                                    </button>
+                                            </div>
+
+                                            <div className="rounded-md border border-green-200 bg-white/70 p-2">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">
+                                                        Prácticas de la orden ({grupo.items.length})
+                                                    </p>
+                                                    {grupo.items.length > limiteItems && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setAutorizadasExpandidas((prev) => ({
+                                                                ...prev,
+                                                                [grupo.key]: !(prev[grupo.key] ?? false),
+                                                            }))}
+                                                            className="rounded border border-green-300 px-2 py-0.5 text-[11px] font-medium text-green-800 hover:bg-green-50"
+                                                        >
+                                                            {expandida ? 'Contraer' : 'Expandir'}
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                <div className="mt-2 space-y-1.5">
+                                                    {itemsVisibles.map((item) => (
+                                                        <div key={item.uid} className="rounded border border-green-100 bg-white px-2 py-1.5">
+                                                            <div className="flex items-center justify-between gap-2 text-green-900">
+                                                                <span className="font-mono text-[11px]">{item.codigo}</span>
+                                                                <span className="font-medium">Cant. {item.cantidad}</span>
+                                                            </div>
+                                                            <p className="text-green-900">{item.descripcion}</p>
+                                                            <p className="text-[11px] text-gray-500 mt-0.5">{item.etiqueta}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                {!expandida && restantes > 0 && (
+                                                    <p className="mt-1 text-[11px] text-green-700">+{restantes} práctica(s) más</p>
                                                 )}
                                             </div>
-
-                                            <div className="mt-2 space-y-1.5">
-                                                {itemsVisibles.map((item) => (
-                                                    <div key={item.uid} className="rounded border border-green-100 bg-white px-2 py-1.5">
-                                                        <div className="flex items-center justify-between gap-2 text-green-900">
-                                                            <span className="font-mono text-[11px]">{item.codigo}</span>
-                                                            <span className="font-medium">Cant. {item.cantidad}</span>
-                                                        </div>
-                                                        <p className="text-green-900">{item.descripcion}</p>
-                                                        <p className="text-[11px] text-gray-500 mt-0.5">{item.etiqueta}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            {!expandida && restantes > 0 && (
-                                                <p className="mt-1 text-[11px] text-green-700">+{restantes} práctica(s) más</p>
-                                            )}
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             )
                         })}

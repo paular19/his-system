@@ -367,6 +367,11 @@ function incluyeTieneEspecialista(incluyeCodigo: string | null | undefined): boo
     return Boolean(seleccion && seleccion.especialista > 0)
 }
 
+function incluyeTieneAnestesista(incluyeCodigo: string | null | undefined): boolean {
+    const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
+    return Boolean(seleccion && seleccion.anestesista > 0)
+}
+
 function descripcionEsAyudante(value: string | null | undefined): boolean {
     const text = (value ?? '').toUpperCase()
     return text.includes('AYUD') || text.includes('[A1') || text.includes('[A2') || text.includes('[A3')
@@ -486,37 +491,46 @@ function obtenerNumeroOrdenPrestacion(
     return '—'
 }
 
+function obtenerMatriculaEjecutanteNumero(
+    p: PrestacionFacturableItem,
+    draft: EditState,
+    autorizacionesVinculadasOrdenadas: AutorizacionVinculadaExtendida[]
+): number | null {
+    const matriculaEspecialistaDraft = parseMatricula(draft.matriculaEspecialista)
+    if (matriculaEspecialistaDraft) return matriculaEspecialistaDraft
+
+    if (p.matriculaEspecialista && p.matriculaEspecialista > 0) {
+        return p.matriculaEspecialista
+    }
+
+    const matriculaAyudanteDraft = parseMatricula(draft.matriculaAyudante)
+    if (matriculaAyudanteDraft) return matriculaAyudanteDraft
+
+    if (p.matriculaProfesional && p.matriculaProfesional > 0) {
+        return p.matriculaProfesional
+    }
+
+    if (p.matriculaAnestesista && p.matriculaAnestesista > 0) {
+        return p.matriculaAnestesista
+    }
+
+    const aut = autorizacionesVinculadasOrdenadas[0]
+    if (!aut) return null
+    if (aut.matriculaProfesional && aut.matriculaProfesional > 0) return aut.matriculaProfesional
+    if (aut.matriculaEspecialista && aut.matriculaEspecialista > 0) return aut.matriculaEspecialista
+    if (aut.matriculaAyudante && aut.matriculaAyudante > 0) return aut.matriculaAyudante
+    if (aut.matriculaAnestesista && aut.matriculaAnestesista > 0) return aut.matriculaAnestesista
+
+    return null
+}
+
 function obtenerMatriculaEjecutante(
     p: PrestacionFacturableItem,
     draft: EditState,
     autorizacionesVinculadasOrdenadas: AutorizacionVinculadaExtendida[]
 ): string {
-    const matriculaEspecialistaDraft = parseMatricula(draft.matriculaEspecialista)
-    if (matriculaEspecialistaDraft) return `MP ${matriculaEspecialistaDraft}`
-
-    if (p.matriculaEspecialista && p.matriculaEspecialista > 0) {
-        return `MP ${p.matriculaEspecialista}`
-    }
-
-    const matriculaAyudanteDraft = parseMatricula(draft.matriculaAyudante)
-    if (matriculaAyudanteDraft) return `Ayu ${matriculaAyudanteDraft}`
-
-    if (p.matriculaProfesional && p.matriculaProfesional > 0) {
-        return `MP ${p.matriculaProfesional}`
-    }
-
-    if (p.matriculaAnestesista && p.matriculaAnestesista > 0) {
-        return `Ane ${p.matriculaAnestesista}`
-    }
-
-    const aut = autorizacionesVinculadasOrdenadas[0]
-    if (!aut) return '—'
-    if (aut.matriculaProfesional && aut.matriculaProfesional > 0) return `MP ${aut.matriculaProfesional}`
-    if (aut.matriculaEspecialista && aut.matriculaEspecialista > 0) return `Esp ${aut.matriculaEspecialista}`
-    if (aut.matriculaAyudante && aut.matriculaAyudante > 0) return `Ayu ${aut.matriculaAyudante}`
-    if (aut.matriculaAnestesista && aut.matriculaAnestesista > 0) return `Ane ${aut.matriculaAnestesista}`
-
-    return '—'
+    const matricula = obtenerMatriculaEjecutanteNumero(p, draft, autorizacionesVinculadasOrdenadas)
+    return matricula ? `MP ${matricula}` : '—'
 }
 
 type OrdenRenumerarState = {
@@ -528,23 +542,6 @@ type AutorizacionVinculada = NonNullable<PrestacionFacturableItem['autorizacione
 
 function keyAutorizacionVinculada(aut: AutorizacionVinculada): string {
     return `${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`
-}
-
-function etiquetaMatriculasAutorizacion(aut: AutorizacionVinculadaExtendida): string | null {
-    const partes: string[] = []
-    if (typeof aut.matriculaProfesional === 'number' && aut.matriculaProfesional > 0) {
-        partes.push(`MP ${aut.matriculaProfesional}`)
-    }
-    if (typeof aut.matriculaEspecialista === 'number' && aut.matriculaEspecialista > 0) {
-        partes.push(`Esp ${aut.matriculaEspecialista}`)
-    }
-    if (typeof aut.matriculaAyudante === 'number' && aut.matriculaAyudante > 0) {
-        partes.push(`Ayu ${aut.matriculaAyudante}`)
-    }
-    if (typeof aut.matriculaAnestesista === 'number' && aut.matriculaAnestesista > 0) {
-        partes.push(`Ane ${aut.matriculaAnestesista}`)
-    }
-    return partes.length > 0 ? partes.join(' · ') : null
 }
 
 function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Record<string, string> {
@@ -898,6 +895,16 @@ export function FacturacionPanel() {
         for (const profesional of profesionalesConMatricula) {
             if (!map.has(profesional.matricula)) {
                 map.set(profesional.matricula, profesional.id)
+            }
+        }
+        return map
+    }, [profesionalesConMatricula])
+
+    const profesionalPorMatricula = useMemo(() => {
+        const map = new Map<number, { id: number; nombre: string; matricula: number }>()
+        for (const profesional of profesionalesConMatricula) {
+            if (!map.has(profesional.matricula)) {
+                map.set(profesional.matricula, profesional)
             }
         }
         return map
@@ -2038,124 +2045,142 @@ export function FacturacionPanel() {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                                <div className="his-card p-4 space-y-3">
-                                    <button onClick={() => setExpandNuevaPractica((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-gray-300 px-2 py-1.5 text-xs font-medium hover:bg-gray-50"><span className="inline-flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Agregar nueva práctica</span>{expandNuevaPractica ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</button>
-                                    <button onClick={() => setExpandPedidoLaboratorio((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-50"><span className="inline-flex items-center gap-2"><Plus className="h-4 w-4" /> Nuevo pedido de laboratorio</span>{expandPedidoLaboratorio ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>
-                                    {expandPedidoLaboratorio && (
-                                        <>
-                                            <div className="grid grid-cols-1 gap-2">
-                                                <input value={numeroProtocoloLaboratorio} onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Número de protocolo" />
-                                                <input value={diagnosticoLaboratorio} onChange={(e) => setDiagnosticoLaboratorio(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Diagnóstico" />
-                                            </div>
-                                            <button onClick={crearPedidoLaboratorio} disabled={guardandoPedidoLaboratorio} className="rounded-md border border-indigo-300 bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-60">{guardandoPedidoLaboratorio ? 'Generando...' : 'Generar orden'}</button>
-                                        </>
-                                    )}
-                                    {expandNuevaPractica && (
-                                        <>
-                                            {/* Búsqueda nomenclador */}
+                            <div className="his-card p-3 space-y-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <button
+                                        onClick={() => setExpandNuevaPractica((v) => !v)}
+                                        className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${expandNuevaPractica ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+                                    >
+                                        <Plus className="h-3 w-3" /> Agregar práctica
+                                    </button>
+                                    <button
+                                        onClick={() => setExpandPedidoLaboratorio((v) => !v)}
+                                        className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${expandPedidoLaboratorio ? 'border-indigo-300 bg-indigo-50 text-indigo-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+                                    >
+                                        <Plus className="h-3 w-3" /> Agregar laboratorio
+                                    </button>
+                                    <button
+                                        onClick={() => setExpandNuevaMedicacion((v) => !v)}
+                                        className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${expandNuevaMedicacion ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+                                    >
+                                        <Plus className="h-3 w-3" /> Agregar medicación
+                                    </button>
+                                    <button
+                                        onClick={() => setExpandNuevoDescartable((v) => !v)}
+                                        className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${expandNuevoDescartable ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+                                    >
+                                        <Plus className="h-3 w-3" /> Agregar descartable
+                                    </button>
+                                </div>
+
+                                {expandNuevaPractica && (
+                                    <div className="rounded-md border border-gray-200 bg-white p-2.5 space-y-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Agregar práctica</p>
+                                        <div className="relative">
                                             <div className="relative">
-                                                <div className="relative">
-                                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-                                                    <input
-                                                        value={npBusqueda}
-                                                        onChange={(e) => buscarNomenclador(e.target.value)}
-                                                        placeholder="Buscar por código o descripción..."
-                                                        className="rounded-md border border-gray-300 pl-8 pr-8 px-2 py-2 text-sm w-full"
-                                                    />
-                                                    {npBuscando && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 animate-spin" />}
-                                                    {npSeleccionada && (
-                                                        <button onClick={() => { setNpSeleccionada(null); setNpBusqueda(''); setNpComponentes({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }) }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="h-3.5 w-3.5" /></button>
-                                                    )}
-                                                </div>
-                                                {npResultados.length > 0 && (
-                                                    <ul className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto text-sm">
-                                                        {npResultados.map((r) => (
-                                                            <li key={`${r.convenioId}-${r.codigo}`}>
-                                                                <button type="button" onClick={() => seleccionarDesdeBusqueda(r)} className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-start gap-2">
-                                                                    <span className="font-mono text-xs text-gray-400 shrink-0 pt-0.5">{r.codigo.trim()}</span>
-                                                                    <span className="min-w-0 flex-1 text-gray-800">{r.descripcion}</span>
-                                                                    <span className="shrink-0 text-xs font-medium text-gray-500">{r.valor != null ? formatCurrency(r.valor) : ''}</span>
-                                                                </button>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
+                                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                                                <input
+                                                    value={npBusqueda}
+                                                    onChange={(e) => buscarNomenclador(e.target.value)}
+                                                    placeholder="Buscar por código o descripción..."
+                                                    className="h-8 w-full rounded border border-gray-300 pl-7 pr-7 text-xs"
+                                                />
+                                                {npBuscando && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 animate-spin" />}
+                                                {npSeleccionada && (
+                                                    <button onClick={() => { setNpSeleccionada(null); setNpBusqueda(''); setNpComponentes({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }) }} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="h-3.5 w-3.5" /></button>
                                                 )}
                                             </div>
-
-                                            {/* Selector de componentes */}
-                                            {npSeleccionada && (
-                                                <ComponenteSelector
-                                                    valores={{
-                                                        valorEspecialista: npSeleccionada.valorEspecialista,
-                                                        valorAyudante: npSeleccionada.valorAyudante,
-                                                        valorAnestesista: npSeleccionada.valorAnestesista,
-                                                        valorGastos: npSeleccionada.valorGastos,
-                                                        valorTotal: npSeleccionada.valor,
-                                                    }}
-                                                    seleccion={npComponentes}
-                                                    onChange={setNpComponentes}
-                                                    disabled={guardandoPractica}
-                                                />
+                                            {npResultados.length > 0 && (
+                                                <ul className="absolute z-20 mt-1 w-full rounded border border-gray-200 bg-white shadow-lg max-h-48 overflow-y-auto text-xs">
+                                                    {npResultados.map((r) => (
+                                                        <li key={`${r.convenioId}-${r.codigo}`}>
+                                                            <button type="button" onClick={() => seleccionarDesdeBusqueda(r)} className="flex w-full items-start gap-2 px-2 py-1.5 text-left hover:bg-blue-50">
+                                                                <span className="font-mono text-[10px] text-gray-400 shrink-0 pt-0.5">{r.codigo.trim()}</span>
+                                                                <span className="min-w-0 flex-1 text-gray-800">{r.descripcion}</span>
+                                                                <span className="shrink-0 text-[10px] font-medium text-gray-500">{r.valor != null ? formatCurrency(r.valor) : ''}</span>
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             )}
+                                        </div>
 
-                                            <div className="grid grid-cols-1 gap-2">
-                                                <input value={nuevaPracticaAutorizacion} onChange={(e) => setNuevaPracticaAutorizacion(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="Nro autorización" />
-                                                <input type="datetime-local" value={nuevaPracticaFecha} onChange={(e) => setNuevaPracticaFecha(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" />
-                                            </div>
-                                            <button onClick={crearPractica} disabled={guardandoPractica || (!npSeleccionada && !npBusqueda.trim())} className="rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoPractica ? 'Guardando...' : 'Guardar práctica'}</button>
-                                        </>
-                                    )}
-                                </div>
+                                        {npSeleccionada && (
+                                            <ComponenteSelector
+                                                valores={{
+                                                    valorEspecialista: npSeleccionada.valorEspecialista,
+                                                    valorAyudante: npSeleccionada.valorAyudante,
+                                                    valorAnestesista: npSeleccionada.valorAnestesista,
+                                                    valorGastos: npSeleccionada.valorGastos,
+                                                    valorTotal: npSeleccionada.valor,
+                                                }}
+                                                seleccion={npComponentes}
+                                                onChange={setNpComponentes}
+                                                disabled={guardandoPractica}
+                                            />
+                                        )}
 
-                                <div className="his-card p-4 space-y-3">
-                                    <button onClick={() => setExpandNuevaMedicacion((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-gray-300 px-2 py-1.5 text-xs font-medium hover:bg-gray-50"><span className="inline-flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Agregar nueva medicación</span>{expandNuevaMedicacion ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</button>
-                                    {expandNuevaMedicacion && (
-                                        <>
-                                            <div className="grid grid-cols-1 gap-2">
-                                                <div>
-                                                    <select
-                                                        value={nuevaMedicacionNombre}
-                                                        onChange={(e) => setNuevaMedicacionNombre(e.target.value)}
-                                                        className="rounded-md border border-gray-300 px-2 py-2 text-sm w-full bg-white"
-                                                    >
-                                                        <option value="">-- Seleccionar de lista unificada --</option>
-                                                        {opcionesInsumosUti.map((item) => (
-                                                            <option key={item.id} value={item.nombre}>{item.nombre}</option>
-                                                        ))}
-                                                    </select>
-                                                    {cargandoInsumosUti && <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>}
-                                                </div>
-                                                <input type="datetime-local" value={nuevaMedicacionFecha} onChange={(e) => setNuevaMedicacionFecha(e.target.value)} className="rounded-md border border-gray-300 px-2 py-2 text-sm" />
-                                            </div>
-                                            <button onClick={crearMedicacion} disabled={guardandoMedicacion} className="rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoMedicacion ? 'Guardando...' : 'Guardar medicación'}</button>
-                                        </>
-                                    )}
-                                </div>
+                                        <div className="grid gap-2 md:grid-cols-2">
+                                            <input value={nuevaPracticaAutorizacion} onChange={(e) => setNuevaPracticaAutorizacion(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" placeholder="Nro autorización" />
+                                            <input type="datetime-local" value={nuevaPracticaFecha} onChange={(e) => setNuevaPracticaFecha(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" />
+                                        </div>
+                                        <button onClick={crearPractica} disabled={guardandoPractica || (!npSeleccionada && !npBusqueda.trim())} className="rounded border px-2 py-1 text-[11px] font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoPractica ? 'Guardando...' : 'Guardar práctica'}</button>
+                                    </div>
+                                )}
 
-                                <div className="his-card p-4 space-y-3">
-                                    <button onClick={() => setExpandNuevoDescartable((v) => !v)} className="w-full flex items-center justify-between rounded-md border border-gray-300 px-2 py-1.5 text-xs font-medium hover:bg-gray-50"><span className="inline-flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Agregar descartable</span>{expandNuevoDescartable ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</button>
-                                    {expandNuevoDescartable && (
-                                        <>
-                                            <div className="grid grid-cols-1 gap-2">
-                                                <div>
-                                                    <select
-                                                        value={nuevoDescartableNombre}
-                                                        onChange={(e) => setNuevoDescartableNombre(e.target.value)}
-                                                        className="rounded-md border border-gray-300 px-2 py-2 text-sm w-full bg-white"
-                                                    >
-                                                        <option value="">-- Seleccionar de lista unificada --</option>
-                                                        {opcionesInsumosUti.map((item) => (
-                                                            <option key={item.id} value={item.nombre}>{item.nombre}</option>
-                                                        ))}
-                                                    </select>
-                                                    {cargandoInsumosUti && <p className="mt-1 text-xs text-gray-400">Cargando listado...</p>}
-                                                </div>
+                                {expandPedidoLaboratorio && (
+                                    <div className="rounded-md border border-indigo-200 bg-indigo-50/40 p-2.5 space-y-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">Agregar laboratorio</p>
+                                        <div className="grid gap-2 md:grid-cols-2">
+                                            <input value={numeroProtocoloLaboratorio} onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" placeholder="Número de protocolo" />
+                                            <input value={diagnosticoLaboratorio} onChange={(e) => setDiagnosticoLaboratorio(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" placeholder="Diagnóstico" />
+                                        </div>
+                                        <button onClick={crearPedidoLaboratorio} disabled={guardandoPedidoLaboratorio} className="rounded border border-indigo-300 bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 disabled:opacity-60">{guardandoPedidoLaboratorio ? 'Generando...' : 'Generar orden'}</button>
+                                    </div>
+                                )}
+
+                                {expandNuevaMedicacion && (
+                                    <div className="rounded-md border border-gray-200 bg-white p-2.5 space-y-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Agregar medicación</p>
+                                        <div className="grid gap-2 md:grid-cols-2">
+                                            <div>
+                                                <select
+                                                    value={nuevaMedicacionNombre}
+                                                    onChange={(e) => setNuevaMedicacionNombre(e.target.value)}
+                                                    className="h-8 w-full rounded border border-gray-300 px-2 text-xs bg-white"
+                                                >
+                                                    <option value="">-- Seleccionar de lista unificada --</option>
+                                                    {opcionesInsumosUti.map((item) => (
+                                                        <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                                                    ))}
+                                                </select>
+                                                {cargandoInsumosUti && <p className="mt-1 text-[11px] text-gray-400">Cargando listado...</p>}
                                             </div>
-                                            <button onClick={crearDescartable} disabled={guardandoDescartable} className="rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoDescartable ? 'Guardando...' : 'Guardar descartable'}</button>
-                                        </>
-                                    )}
-                                </div>
+                                            <input type="datetime-local" value={nuevaMedicacionFecha} onChange={(e) => setNuevaMedicacionFecha(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" />
+                                        </div>
+                                        <button onClick={crearMedicacion} disabled={guardandoMedicacion} className="rounded border px-2 py-1 text-[11px] font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoMedicacion ? 'Guardando...' : 'Guardar medicación'}</button>
+                                    </div>
+                                )}
+
+                                {expandNuevoDescartable && (
+                                    <div className="rounded-md border border-gray-200 bg-white p-2.5 space-y-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Agregar descartable</p>
+                                        <div>
+                                            <select
+                                                value={nuevoDescartableNombre}
+                                                onChange={(e) => setNuevoDescartableNombre(e.target.value)}
+                                                className="h-8 w-full rounded border border-gray-300 px-2 text-xs bg-white"
+                                            >
+                                                <option value="">-- Seleccionar de lista unificada --</option>
+                                                {opcionesInsumosUti.map((item) => (
+                                                    <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                                                ))}
+                                            </select>
+                                            {cargandoInsumosUti && <p className="mt-1 text-[11px] text-gray-400">Cargando listado...</p>}
+                                        </div>
+                                        <button onClick={crearDescartable} disabled={guardandoDescartable} className="rounded border px-2 py-1 text-[11px] font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoDescartable ? 'Guardando...' : 'Guardar descartable'}</button>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="his-card overflow-hidden">
@@ -2251,7 +2276,7 @@ export function FacturacionPanel() {
                                                 const selComp = tieneComponentes
                                                     ? (compSeleccion[p.uid] ?? seleccionPorDefecto(desgloseSelector!))
                                                     : (mostrarSelectorComponentes ? (compSeleccion[p.uid] ?? { especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }) : null)
-                                                const permiteEditarClasificacion = practicaSinOrdenVinculada
+                                                const permiteEditarClasificacion = false
                                                 const clasificacionesEditor =
                                                     p.tipo === 'PRACTICA' &&
                                                     permiteEditarClasificacion &&
@@ -2278,6 +2303,20 @@ export function FacturacionPanel() {
                                                 const importeResumen = Number.parseFloat(draft.importeTotal)
                                                 const numeroOrdenLinea = obtenerNumeroOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
                                                 const matriculaEjecutante = obtenerMatriculaEjecutante(p, draft, autorizacionesVinculadasOrdenadas)
+                                                const matriculaEjecutanteNumero = obtenerMatriculaEjecutanteNumero(p, draft, autorizacionesVinculadasOrdenadas)
+                                                const profesionalEjecutante = matriculaEjecutanteNumero
+                                                    ? profesionalPorMatricula.get(matriculaEjecutanteNumero)
+                                                    : null
+                                                const ejecutanteDetalle = matriculaEjecutanteNumero
+                                                    ? `${profesionalEjecutante?.nombre ?? 'Sin nombre'} · MP ${matriculaEjecutanteNumero}`
+                                                    : '—'
+                                                const mostrarMatriculaAyudante =
+                                                    parseMatricula(draft.matriculaAyudante) !== null ||
+                                                    (p.tipo === 'PRACTICA' && incluyeTieneAyudante(p.incluyeCodigo))
+                                                const mostrarMatriculaAnestesista =
+                                                    parseMatricula(draft.matriculaAnestesista) !== null ||
+                                                    p.matriculaAnestesista !== null ||
+                                                    (p.tipo === 'PRACTICA' && incluyeTieneAnestesista(p.incluyeCodigo))
                                                 return (
                                                     <Fragment key={p.uid}>
                                                         <tr className={yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
@@ -2458,8 +2497,8 @@ export function FacturacionPanel() {
                                                                             </button>
                                                                         )}
                                                                     </div>
-                                                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                                                        <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                    <div className="grid gap-3 lg:grid-cols-12">
+                                                                        <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-5">
                                                                             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Datos de prestación</p>
                                                                             <div className="mt-1 grid gap-2">
                                                                                 <label className="text-[11px] text-gray-600">
@@ -2513,9 +2552,12 @@ export function FacturacionPanel() {
                                                                             </div>
                                                                         </div>
 
-                                                                        <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                        <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-4">
                                                                             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Autorizaciones</p>
-                                                                            <div className="mt-1 space-y-1">
+                                                                            <div className="mt-1 space-y-2">
+                                                                                <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700">
+                                                                                    <span className="font-semibold">Ejecutante:</span> {ejecutanteDetalle}
+                                                                                </div>
                                                                                 {p.tipo === 'PRACTICA' && !p.facturada ? (
                                                                                     tieneAutorizacionesVinculadas ? (
                                                                                         filaEnEdicion ? (
@@ -2526,7 +2568,6 @@ export function FacturacionPanel() {
                                                                                                         <div key={`${p.uid}:${key}`} className="flex flex-wrap items-center gap-2">
                                                                                                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
                                                                                                                 {formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · Item {aut.ordenItem}{aut.incluyeCodigo ? ` [${aut.incluyeCodigo}]` : ''}
-                                                                                                                {etiquetaMatriculasAutorizacion(aut) ? ` · ${etiquetaMatriculasAutorizacion(aut)}` : ''}
                                                                                                             </span>
                                                                                                             <input
                                                                                                                 value={draftAutorizacionesVinculadas[key] ?? ''}
@@ -2555,7 +2596,6 @@ export function FacturacionPanel() {
                                                                                                         title={`Orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · Item ${aut.ordenItem}`}
                                                                                                     >
                                                                                                         {formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · {aut.numeroAutorizacion ?? 'S/A'}{aut.incluyeCodigo ? ` [${aut.incluyeCodigo}]` : ''}
-                                                                                                        {etiquetaMatriculasAutorizacion(aut) ? ` · ${etiquetaMatriculasAutorizacion(aut)}` : ''}
                                                                                                     </span>
                                                                                                 ))}
                                                                                             </div>
@@ -2584,57 +2624,14 @@ export function FacturacionPanel() {
                                                                                 ) : (
                                                                                     <input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
                                                                                 )}
-                                                                                {p.tipo === 'PRACTICA' && (
-                                                                                    <>
-                                                                                        <div>Incluye: <span className="font-medium">{resumenIncluye}</span></div>
-                                                                                        {importeParcialPorSubitem && (
-                                                                                            <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                                                                                                Este importe corresponde solo al subitem incluido; no representa el gasto total del código.
-                                                                                            </div>
-                                                                                        )}
-                                                                                    </>
-                                                                                )}
-                                                                                <div>
-                                                                                    {etiquetasDiferencial.length > 0 ? (
-                                                                                        <div className="flex flex-wrap gap-1">
-                                                                                            {etiquetasDiferencial.map((etq) => (
-                                                                                                <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
-                                                                                            ))}
-                                                                                        </div>
-                                                                                    ) : (
-                                                                                        <span className="text-gray-400">Sin diferencial aplicado</span>
-                                                                                    )}
-                                                                                </div>
-                                                                                {diferencialesActivos.length > 0 && (
-                                                                                    <div className="flex flex-wrap gap-1 pt-1">
-                                                                                        {diferencialesActivos.map((texto) => (
-                                                                                            <span key={texto} className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                                                                                                {texto}
-                                                                                            </span>
-                                                                                        ))}
-                                                                                    </div>
-                                                                                )}
                                                                             </div>
                                                                         </div>
 
-                                                                        <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                        <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-3">
                                                                             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Matrículas</p>
                                                                             <div className="mt-1 grid gap-2">
                                                                                 <label className="text-[11px] text-gray-600">
-                                                                                    Ayudante
-                                                                                    <ProfesionalSelect
-                                                                                        profesionales={profesionalesConMatricula}
-                                                                                        value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
-                                                                                        onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', nextValue)}
-                                                                                        disabled={!filaEnEdicion}
-                                                                                        placeholderOption="-- Seleccionar --"
-                                                                                        searchPlaceholder="Buscar nombre o matricula"
-                                                                                        selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                        searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                    />
-                                                                                </label>
-                                                                                <label className="text-[11px] text-gray-600">
-                                                                                    Especialista
+                                                                                    Ejecutante
                                                                                     <ProfesionalSelect
                                                                                         profesionales={profesionalesConMatricula}
                                                                                         value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
@@ -2646,22 +2643,54 @@ export function FacturacionPanel() {
                                                                                         searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
                                                                                     />
                                                                                 </label>
-                                                                                <label className="text-[11px] text-gray-600">
-                                                                                    Anestesista
-                                                                                    <ProfesionalSelect
-                                                                                        profesionales={profesionalesConMatricula}
-                                                                                        value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
-                                                                                        onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', nextValue)}
-                                                                                        disabled={!filaEnEdicion}
-                                                                                        placeholderOption="-- Seleccionar --"
-                                                                                        searchPlaceholder="Buscar nombre o matricula"
-                                                                                        selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                        searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                    />
-                                                                                </label>
+                                                                                {mostrarMatriculaAyudante && (
+                                                                                    <label className="text-[11px] text-gray-600">
+                                                                                        Ayudante
+                                                                                        <ProfesionalSelect
+                                                                                            profesionales={profesionalesConMatricula}
+                                                                                            value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
+                                                                                            onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', nextValue)}
+                                                                                            disabled={!filaEnEdicion}
+                                                                                            placeholderOption="-- Seleccionar --"
+                                                                                            searchPlaceholder="Buscar nombre o matricula"
+                                                                                            selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                            searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                        />
+                                                                                    </label>
+                                                                                )}
+                                                                                {mostrarMatriculaAnestesista && (
+                                                                                    <label className="text-[11px] text-gray-600">
+                                                                                        Anestesista
+                                                                                        <ProfesionalSelect
+                                                                                            profesionales={profesionalesConMatricula}
+                                                                                            value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
+                                                                                            onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', nextValue)}
+                                                                                            disabled={!filaEnEdicion}
+                                                                                            placeholderOption="-- Seleccionar --"
+                                                                                            searchPlaceholder="Buscar nombre o matricula"
+                                                                                            selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                            searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                        />
+                                                                                    </label>
+                                                                                )}
                                                                             </div>
                                                                         </div>
                                                                     </div>
+
+                                                                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-700">
+                                                                        <span className="rounded-full bg-slate-100 px-2 py-0.5">Incluye: {resumenIncluye}</span>
+                                                                        {etiquetasDiferencial.length > 0 && etiquetasDiferencial.map((etq) => (
+                                                                            <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
+                                                                        ))}
+                                                                        {diferencialesActivos.length > 0 && diferencialesActivos.map((texto) => (
+                                                                            <span key={texto} className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">{texto}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                    {importeParcialPorSubitem && (
+                                                                        <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                                                                            Este importe corresponde solo al subitem incluido; no representa el gasto total del código.
+                                                                        </div>
+                                                                    )}
 
                                                                     {(tieneComponentes || mostrarSelectorComponentes) && selComp && (
                                                                         <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-2">
@@ -2811,6 +2840,20 @@ export function FacturacionPanel() {
                                                             const importeResumen = Number.parseFloat(draft.importeTotal)
                                                             const numeroOrdenLinea = obtenerNumeroOrdenPrestacion(p, [])
                                                             const matriculaEjecutante = obtenerMatriculaEjecutante(p, draft, [])
+                                                            const matriculaEjecutanteNumero = obtenerMatriculaEjecutanteNumero(p, draft, [])
+                                                            const profesionalEjecutante = matriculaEjecutanteNumero
+                                                                ? profesionalPorMatricula.get(matriculaEjecutanteNumero)
+                                                                : null
+                                                            const ejecutanteDetalle = matriculaEjecutanteNumero
+                                                                ? `${profesionalEjecutante?.nombre ?? 'Sin nombre'} · MP ${matriculaEjecutanteNumero}`
+                                                                : '—'
+                                                            const mostrarMatriculaAyudante =
+                                                                parseMatricula(draft.matriculaAyudante) !== null ||
+                                                                (p.tipo === 'PRACTICA' && incluyeTieneAyudante(p.incluyeCodigo))
+                                                            const mostrarMatriculaAnestesista =
+                                                                parseMatricula(draft.matriculaAnestesista) !== null ||
+                                                                p.matriculaAnestesista !== null ||
+                                                                (p.tipo === 'PRACTICA' && incluyeTieneAnestesista(p.incluyeCodigo))
 
                                                             return (
                                                                 <Fragment key={p.uid}>
@@ -2945,8 +2988,8 @@ export function FacturacionPanel() {
                                                                                         </button>
                                                                                     )}
                                                                                 </div>
-                                                                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                                <div className="grid gap-3 lg:grid-cols-12">
+                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-5">
                                                                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Datos de prestación</p>
                                                                                         <div className="mt-1 grid gap-2">
                                                                                             <label className="text-[11px] text-gray-600">
@@ -2974,51 +3017,20 @@ export function FacturacionPanel() {
                                                                                         </div>
                                                                                     </div>
 
-                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-4">
                                                                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Autorización</p>
-                                                                                        <input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
-                                                                                    </div>
-                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2">
-                                                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Valores y diferenciales</p>
                                                                                         <div className="mt-1 space-y-1 text-xs text-gray-700">
-                                                                                            <div>Monto unitario: <span className="font-medium">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</span></div>
-                                                                                            <div>Incluye: <span className="font-medium">{resumenIncluye}</span></div>
-                                                                                            {importeParcialPorSubitem && (
-                                                                                                <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                                                                                                    Este importe corresponde solo al subitem incluido; no representa el gasto total del código.
-                                                                                                </div>
-                                                                                            )}
-                                                                                            <div>
-                                                                                                {etiquetasDiferencial.length > 0 ? (
-                                                                                                    <div className="flex flex-wrap gap-1">
-                                                                                                        {etiquetasDiferencial.map((etq) => (
-                                                                                                            <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
-                                                                                                        ))}
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <span className="text-gray-400">Sin diferencial aplicado</span>
-                                                                                                )}
+                                                                                            <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700">
+                                                                                                <span className="font-semibold">Ejecutante:</span> {ejecutanteDetalle}
                                                                                             </div>
+                                                                                            <input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
                                                                                         </div>
                                                                                     </div>
-                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2">
+                                                                                    <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-3">
                                                                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Matrículas</p>
                                                                                         <div className="mt-1 grid gap-2">
                                                                                             <label className="text-[11px] text-gray-600">
-                                                                                                Ayudante
-                                                                                                <ProfesionalSelect
-                                                                                                    profesionales={profesionalesConMatricula}
-                                                                                                    value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
-                                                                                                    onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', nextValue)}
-                                                                                                    disabled={!filaEnEdicion}
-                                                                                                    placeholderOption="-- Seleccionar --"
-                                                                                                    searchPlaceholder="Buscar nombre o matricula"
-                                                                                                    selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                                    searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                                />
-                                                                                            </label>
-                                                                                            <label className="text-[11px] text-gray-600">
-                                                                                                Especialista
+                                                                                                Ejecutante
                                                                                                 <ProfesionalSelect
                                                                                                     profesionales={profesionalesConMatricula}
                                                                                                     value={resolveSelectedProfesionalId(draft.matriculaEspecialista)}
@@ -3030,22 +3042,50 @@ export function FacturacionPanel() {
                                                                                                     searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
                                                                                                 />
                                                                                             </label>
-                                                                                            <label className="text-[11px] text-gray-600">
-                                                                                                Anestesista
-                                                                                                <ProfesionalSelect
-                                                                                                    profesionales={profesionalesConMatricula}
-                                                                                                    value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
-                                                                                                    onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', nextValue)}
-                                                                                                    disabled={!filaEnEdicion}
-                                                                                                    placeholderOption="-- Seleccionar --"
-                                                                                                    searchPlaceholder="Buscar nombre o matricula"
-                                                                                                    selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                                    searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                                />
-                                                                                            </label>
+                                                                                            {mostrarMatriculaAyudante && (
+                                                                                                <label className="text-[11px] text-gray-600">
+                                                                                                    Ayudante
+                                                                                                    <ProfesionalSelect
+                                                                                                        profesionales={profesionalesConMatricula}
+                                                                                                        value={resolveSelectedProfesionalId(draft.matriculaAyudante)}
+                                                                                                        onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAyudante', nextValue)}
+                                                                                                        disabled={!filaEnEdicion}
+                                                                                                        placeholderOption="-- Seleccionar --"
+                                                                                                        searchPlaceholder="Buscar nombre o matricula"
+                                                                                                        selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                        searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                    />
+                                                                                                </label>
+                                                                                            )}
+                                                                                            {mostrarMatriculaAnestesista && (
+                                                                                                <label className="text-[11px] text-gray-600">
+                                                                                                    Anestesista
+                                                                                                    <ProfesionalSelect
+                                                                                                        profesionales={profesionalesConMatricula}
+                                                                                                        value={resolveSelectedProfesionalId(draft.matriculaAnestesista)}
+                                                                                                        onChange={(nextValue) => applyProfesionalSelection(p.uid, draft, 'matriculaAnestesista', nextValue)}
+                                                                                                        disabled={!filaEnEdicion}
+                                                                                                        placeholderOption="-- Seleccionar --"
+                                                                                                        searchPlaceholder="Buscar nombre o matricula"
+                                                                                                        selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                        searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-[11px] disabled:bg-gray-100 disabled:text-gray-500"
+                                                                                                    />
+                                                                                                </label>
+                                                                                            )}
                                                                                         </div>
                                                                                     </div>
                                                                                 </div>
+                                                                                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-700">
+                                                                                    <span className="rounded-full bg-slate-100 px-2 py-0.5">Incluye: {resumenIncluye}</span>
+                                                                                    {etiquetasDiferencial.length > 0 && etiquetasDiferencial.map((etq) => (
+                                                                                        <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
+                                                                                    ))}
+                                                                                </div>
+                                                                                {importeParcialPorSubitem && (
+                                                                                    <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                                                                                        Este importe corresponde solo al subitem incluido; no representa el gasto total del código.
+                                                                                    </div>
+                                                                                )}
                                                                             </td>
                                                                         </tr>
                                                                     )}

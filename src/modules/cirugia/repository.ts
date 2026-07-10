@@ -258,6 +258,7 @@ export async function listarCirugiasProgramadas(
                         item: number
                         modulo: string | null
                         numeroAutorizacion: string | null
+                        matriculaFirmante: number | null
                     }
                 >()
 

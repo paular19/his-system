@@ -23,7 +23,6 @@ interface HistorialTratanteItem {
 interface TratanteSectionProps {
     ingresoId: number
     tratanteActualId: number | null
-    tratanteActualNombre: string | null
     profesionales: ProfesionalOption[]
     historialTratantes: HistorialTratanteItem[]
     puedeModificar: boolean
@@ -32,7 +31,6 @@ interface TratanteSectionProps {
 export function TratanteSection({
     ingresoId,
     tratanteActualId,
-    tratanteActualNombre,
     profesionales,
     historialTratantes,
     puedeModificar,
@@ -47,6 +45,15 @@ export function TratanteSection({
     const cambiosDetectados = useMemo(
         () => (tratanteActualId ? String(tratanteActualId) !== tratanteSeleccionado : Boolean(tratanteSeleccionado)),
         [tratanteActualId, tratanteSeleccionado]
+    )
+
+    const historialTratantesSinRepetidos = useMemo(
+        () => historialTratantes.filter((item, index, arr) => {
+            if (index === 0) return true
+            const anterior = arr[index - 1]
+            return anterior ? anterior.profesionalId !== item.profesionalId : true
+        }),
+        [historialTratantes]
     )
 
     const guardarTratante = async () => {
@@ -98,8 +105,6 @@ export function TratanteSection({
                 <h3 className="text-sm font-semibold text-gray-900">Médico tratante</h3>
             </div>
 
-            <p className="text-xs text-gray-500 mb-2">Actual: <span className="text-gray-800 font-medium">{tratanteActualNombre ? nombreProfesionalParaMostrar(tratanteActualNombre) : 'Sin asignar'}</span></p>
-
             <div className="space-y-2">
                 <ProfesionalSelect
                     profesionales={profesionales}
@@ -126,11 +131,11 @@ export function TratanteSection({
 
             <div className="mt-4 border-t pt-3">
                 <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Histórico de tratantes</p>
-                {historialTratantes.length === 0 ? (
+                {historialTratantesSinRepetidos.length === 0 ? (
                     <p className="text-xs text-gray-500">No hay cambios de médico tratante registrados.</p>
                 ) : (
                     <ul className="space-y-1.5">
-                        {historialTratantes.map((item) => (
+                        {historialTratantesSinRepetidos.map((item) => (
                             <li key={item.id} className="text-xs text-gray-700">
                                 <span className="font-medium">{nombreProfesionalParaMostrar(item.profesionalNombre)}</span>
                                 <span className="text-gray-500"> · {fmtFecha(item.fecha)} · usuario {item.usuario}</span>

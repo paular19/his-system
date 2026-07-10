@@ -227,7 +227,6 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                         <TratanteSection
                             ingresoId={ingresoId}
                             tratanteActualId={detalle.profesionalTratante?.id ?? null}
-                            tratanteActualNombre={detalle.profesionalTratante?.nombre ? nombreProfesionalParaMostrar(detalle.profesionalTratante.nombre) : null}
                             profesionales={profesionales}
                             historialTratantes={detalle.historialTratantes}
                             puedeModificar={puedeModificar}
@@ -269,30 +268,6 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             puedeModificar={puedeCambiarCama}
                             estadoInternacion={detalle.estado}
                         />
-
-                        {/* Órdenes / Autorizaciones */}
-                        {detalle.ordenes.length > 0 && (
-                            <div className="his-card p-4">
-                                <h3 className="text-sm font-semibold text-gray-900 mb-3">Autorizaciones</h3>
-                                <div className="space-y-2">
-                                    {detalle.ordenes.map((o) => (
-                                        <div key={`${o.puestoNumero}-${o.numero}`} className="text-xs border rounded-lg p-2">
-                                            <div className="flex justify-between items-center">
-                                                <span className="font-medium">
-                                                    {String(o.puestoNumero).padStart(4, '0')}-{String(o.numero).padStart(8, '0')}
-                                                </span>
-                                                <span className={`px-1.5 py-0.5 rounded ${o.estado === 'A' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                                    {o.estado === 'A' ? 'Activa' : 'Cerrada'}
-                                                </span>
-                                            </div>
-                                            <p className="text-gray-400 mt-0.5">
-                                                {formatearFechaArgentina(o.fechaEmision)} · {o.items.length} práctica(s)
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
                     </div>
 
                     {/* Columna central + derecha: evolución + medicaciones */}
@@ -302,6 +277,14 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             evoluciones={detalle.evoluciones}
                             profesionales={profesionales}
                             puedeCrear={puedeCrear}
+                        />
+
+                        <PracticaSection
+                            ingresoId={ingresoId}
+                            convenioId={detalle.obraSocial?.id ?? null}
+                            practicas={detalle.practicas}
+                            puedeCrear={puedeCrear}
+                            matriculaTratanteDefault={matriculaTratanteDefault}
                         />
 
                         <MedicacionSection
@@ -318,14 +301,6 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             profesionales={profesionales}
                             puedeCrear={puedeCrear}
                             puedeModificar={puedeModificar}
-                        />
-
-                        <PracticaSection
-                            ingresoId={ingresoId}
-                            convenioId={detalle.obraSocial?.id ?? null}
-                            practicas={detalle.practicas}
-                            puedeCrear={puedeCrear}
-                            matriculaTratanteDefault={matriculaTratanteDefault}
                         />
 
                         {detalle.paciente && (

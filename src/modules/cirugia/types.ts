@@ -73,6 +73,7 @@ export interface CirugiaProgramadaListItem {
             item: number
             modulo: string | null
             numeroAutorizacion: string | null
+            matriculaFirmante?: number | null
         }>
     }>
 }

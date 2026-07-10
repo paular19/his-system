@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,6 +17,7 @@ import { PracticaSection } from '@/components/internacion/practica-section'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
+import { agruparPracticasAutorizadasPorOrden, obtenerDestinoGrupoPracticasAutorizadas } from '@/lib/practicas-autorizadas'
 
 interface FichaIngresoClientProps {
     ingreso: IngresoDetalle
@@ -101,6 +102,7 @@ export function FichaIngresoClient({
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [errorEliminarPractica, setErrorEliminarPractica] = useState<string | null>(null)
+    const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
 
     const practicasPendientesFiltradas = terminoFiltroPracticas
@@ -133,13 +135,23 @@ export function FichaIngresoClient({
         })
         : practicasAutorizadas
 
+    const practicaAutorizadaIdsFiltradas = useMemo(
+        () => new Set(practicasAutorizadasFiltradas.map((p) => p.id)),
+        [practicasAutorizadasFiltradas]
+    )
+
+    const ordenesAutorizadasFiltradas = useMemo(
+        () => agruparPracticasAutorizadasPorOrden(practicasAutorizadas, practicaAutorizadaIdsFiltradas),
+        [practicasAutorizadas, practicaAutorizadaIdsFiltradas]
+    )
+
     const totalPaginasPendientes = Math.max(
         1,
         Math.ceil(practicasPendientesFiltradas.length / PRACTICAS_POR_PAGINA)
     )
     const totalPaginasAutorizadas = Math.max(
         1,
-        Math.ceil(practicasAutorizadasFiltradas.length / PRACTICAS_POR_PAGINA)
+        Math.ceil(ordenesAutorizadasFiltradas.length / PRACTICAS_POR_PAGINA)
     )
     const paginaPendientesActual = Math.min(paginaPendientes, totalPaginasPendientes)
     const paginaAutorizadasActual = Math.min(paginaAutorizadas, totalPaginasAutorizadas)
@@ -148,7 +160,7 @@ export function FichaIngresoClient({
         (paginaPendientesActual - 1) * PRACTICAS_POR_PAGINA,
         paginaPendientesActual * PRACTICAS_POR_PAGINA
     )
-    const practicasAutorizadasPaginadas = practicasAutorizadasFiltradas.slice(
+    const ordenesAutorizadasPaginadas = ordenesAutorizadasFiltradas.slice(
         (paginaAutorizadasActual - 1) * PRACTICAS_POR_PAGINA,
         paginaAutorizadasActual * PRACTICAS_POR_PAGINA
     )
@@ -1101,9 +1113,9 @@ export function FichaIngresoClient({
 
                             <div>
                                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                    Ya autorizadas ({practicasAutorizadasFiltradas.length})
+                                    Ya autorizadas ({ordenesAutorizadasFiltradas.length})
                                 </p>
-                                {practicasAutorizadasFiltradas.length === 0 ? (
+                                {ordenesAutorizadasFiltradas.length === 0 ? (
                                     <p className="text-sm text-gray-400">
                                         {practicasAutorizadas.length === 0
                                             ? 'No hay prácticas autorizadas.'
@@ -1111,113 +1123,92 @@ export function FichaIngresoClient({
                                     </p>
                                 ) : (
                                     <div className="space-y-2">
-                                        <div className="overflow-x-auto rounded-md border border-emerald-200 bg-emerald-50/40 px-2">
-                                            <table className="w-full text-sm">
-                                                <thead>
-                                                    <tr className="text-left text-xs text-emerald-700 uppercase tracking-wider">
-                                                        <th className="pb-2 pr-4 pt-2">Código</th>
-                                                        <th className="pb-2 pr-4 pt-2">Descripción</th>
-                                                        <th className="pb-2 pr-4 pt-2">Fecha</th>
-                                                        <th className="pb-2 pt-2">Orden</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-emerald-100">
-                                                    {practicasAutorizadasPaginadas.map((p) => {
-                                                        const ordenesOrdenadas = [...p.ordenPractica].sort((a, b) => {
-                                                            if (a.puestoNumero !== b.puestoNumero) {
-                                                                return a.puestoNumero - b.puestoNumero
-                                                            }
-                                                            if (a.ordenNumero !== b.ordenNumero) {
-                                                                return a.ordenNumero - b.ordenNumero
-                                                            }
-                                                            return a.item - b.item
-                                                        })
-                                                        const ordenesUnicas = Array.from(
-                                                            new Map(
-                                                                ordenesOrdenadas.map((orden) => [
-                                                                    `${orden.puestoNumero}-${orden.ordenNumero}`,
-                                                                    orden,
-                                                                ])
-                                                            ).values()
-                                                        )
-                                                        const numeroAutorizacionPractica = (p.numeroAutorizacion ?? '').trim()
-                                                        const destinoAutorizada = ordenesUnicas.length === 0
-                                                            ? (numeroAutorizacionPractica
-                                                                ? `/dashboard/ambulatorio?tab=confirmadas&q=${encodeURIComponent(numeroAutorizacionPractica)}`
-                                                                : null)
-                                                            : ordenesUnicas.length === 1
-                                                                ? `/dashboard/ambulatorio/${ordenesUnicas[0]!.puestoNumero}/${ordenesUnicas[0]!.ordenNumero}?item=${ordenesUnicas[0]!.item}`
-                                                                : `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(
-                                                                    ordenesUnicas
-                                                                        .map((orden) => `${orden.puestoNumero}-${orden.ordenNumero}`)
-                                                                        .join(',')
-                                                                )}`
+                                        {ordenesAutorizadasPaginadas.map((grupo) => {
+                                            const destinoAutorizada = obtenerDestinoGrupoPracticasAutorizadas(grupo)
+                                            const limitePracticas = 3
+                                            const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
+                                            const practicasVisibles = expandida
+                                                ? grupo.practicas
+                                                : grupo.practicas.slice(0, limitePracticas)
+                                            const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
+                                            const tituloGrupo = grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                                ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
+                                                : `Autorización ${grupo.numeroAutorizacion ?? '-'}`
 
-                                                        return (
-                                                        <tr
-                                                            key={p.id}
-                                                            onClick={() => {
-                                                                if (destinoAutorizada) window.location.assign(destinoAutorizada)
-                                                            }}
-                                                            className={destinoAutorizada ? 'cursor-pointer hover:bg-emerald-100/40' : undefined}
-                                                            title={
-                                                                !destinoAutorizada
-                                                                    ? undefined
-                                                                    : ordenesUnicas.length > 1
-                                                                        ? 'Ver todas las órdenes autorizadas'
-                                                                        : ordenesUnicas.length === 1
-                                                                            ? 'Ir a la orden autorizada'
-                                                                            : 'Buscar autorización en Ambulatorio'
-                                                            }
-                                                        >
-                                                            <td className="py-2 pr-4 font-mono text-xs text-emerald-900">
-                                                                {p.codigoPractica.trim()}
-                                                            </td>
-                                                            <td className="py-2 pr-4 text-emerald-900">
-                                                                {p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()}
-                                                            </td>
-                                                            <td className="py-2 pr-4 text-emerald-800">
-                                                                {formatearFechaHora(p.fecha)}
-                                                            </td>
-                                                            <td className="py-2 text-emerald-900">
-                                                                <div className="flex flex-wrap gap-1">
-                                                                    {ordenesOrdenadas.length > 0 ? (
-                                                                        ordenesOrdenadas.map((orden) => (
-                                                                            <a
-                                                                                key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
-                                                                                href={`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`}
-                                                                                onClick={(e) => e.stopPropagation()}
-                                                                                title={`Ver orden ${formatearNumeroOrden(orden.puestoNumero, orden.ordenNumero, orden.item)} en Autorizaciones`}
-                                                                                className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
-                                                                            >
-                                                                                {formatearNumeroOrden(
-                                                                                    orden.puestoNumero,
-                                                                                    orden.ordenNumero,
-                                                                                    orden.item
-                                                                                )}
-                                                                                {orden.numeroAutorizacion
-                                                                                    ? ` · ${orden.numeroAutorizacion}`
-                                                                                    : ' · falta N° de autorización'}
-                                                                            </a>
-                                                                        ))
-                                                                    ) : numeroAutorizacionPractica ? (
-                                                                        <a
-                                                                            href={`/dashboard/ambulatorio?tab=confirmadas&q=${encodeURIComponent(numeroAutorizacionPractica)}`}
-                                                                            onClick={(e) => e.stopPropagation()}
-                                                                            title={`Buscar autorización ${numeroAutorizacionPractica} en Ambulatorio`}
-                                                                            className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
-                                                                        >
-                                                                            Aut. {numeroAutorizacionPractica}
-                                                                        </a>
-                                                                    ) : null}
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    )})}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        {practicasAutorizadasFiltradas.length > PRACTICAS_POR_PAGINA && (
+                                            return (
+                                                <div
+                                                    key={grupo.key}
+                                                    className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5"
+                                                >
+                                                    <div className="grid gap-3 md:grid-cols-2">
+                                                        <div className="space-y-1.5 text-xs text-emerald-900">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="font-semibold">{tituloGrupo}</span>
+                                                                {destinoAutorizada && (
+                                                                    <Link
+                                                                        href={destinoAutorizada}
+                                                                        className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
+                                                                    >
+                                                                        Abrir
+                                                                    </Link>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-emerald-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
+                                                            <p className="text-emerald-800">Fecha última práctica: {formatearFechaHora(grupo.fechaReferencia)}</p>
+                                                            <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
+                                                            <p className="text-emerald-800">
+                                                                {grupo.matriculasFirmantes.length > 1
+                                                                    ? 'Matrículas firmantes'
+                                                                    : 'Matrícula firmante'}: {grupo.matriculasFirmantes.length > 0 ? grupo.matriculasFirmantes.join(', ') : '-'}
+                                                            </p>
+                                                        </div>
+
+                                                        <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                                    Prácticas de la orden ({grupo.practicas.length})
+                                                                </p>
+                                                                {grupo.practicas.length > limitePracticas && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setOrdenesAutorizadasExpandidas((prev) => ({
+                                                                            ...prev,
+                                                                            [grupo.key]: !(prev[grupo.key] ?? false),
+                                                                        }))}
+                                                                        className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50"
+                                                                    >
+                                                                        {expandida ? 'Contraer' : 'Expandir'}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="mt-2 space-y-1.5 text-xs">
+                                                                {practicasVisibles.map((practica) => (
+                                                                    <div
+                                                                        key={`${grupo.key}-${practica.id}`}
+                                                                        className="rounded border border-emerald-100 bg-white px-2 py-1.5"
+                                                                    >
+                                                                        <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                                                            <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
+                                                                            <span className="font-medium">Cant. {practica.cantidad}</span>
+                                                                        </div>
+                                                                        <p className="text-emerald-900">
+                                                                            {practica.descripcionPractica ?? practica.codigoPractica.trim()}
+                                                                        </p>
+                                                                        <p className="text-[11px] text-emerald-700">{formatearFechaHora(practica.fecha)}</p>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+
+                                                            {!expandida && restantes > 0 && (
+                                                                <p className="mt-1 text-[11px] text-emerald-700">+{restantes} práctica(s) más</p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                        {ordenesAutorizadasFiltradas.length > PRACTICAS_POR_PAGINA && (
                                             <div className="flex items-center justify-between gap-2">
                                                 <p className="text-xs text-gray-500">
                                                     Página {paginaAutorizadasActual} de {totalPaginasAutorizadas}

@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { actualizarNumerosAutorizacionAction } from '@/modules/cirugia/actions'
-import { generarCodigoBarras } from '@/modules/orden/types'
+import { formatearNumeroOrden, generarCodigoBarras } from '@/modules/orden/types'
 
 const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
 
@@ -13,12 +14,15 @@ interface Practica {
     descripcion: string
     cantidad: number
     numeroAutorizacion: string | null
+    matriculaEspecialista?: number | null
+    matriculaAnestesista?: number | null
     ordenesAutorizacion?: Array<{
         puestoNumero: number
         ordenNumero: number
         item: number
         modulo: string | null
         numeroAutorizacion: string | null
+        matriculaFirmante?: number | null
     }>
 }
 
@@ -36,9 +40,21 @@ type EntradaAutorizacion = {
     cantidad: number
     etiqueta: string
     numeroAutorizacion: string | null
+    matriculaFirmante: number | null
     actualizacion:
     | { practicaId: number; numeroAutorizacion: string }
     | { puestoNumero: number; ordenNumero: number; item: number; numeroAutorizacion: string }
+}
+
+type GrupoAutorizado = {
+    key: string
+    tipo: 'orden' | 'autorizacion'
+    puestoNumero: number | null
+    ordenNumero: number | null
+    numeroAutorizacion: string | null
+    totalCantidad: number
+    matriculasFirmantes: number[]
+    items: Array<EntradaAutorizacion & { numeroConfirmado: string | null }>
 }
 
 function formatearModulo(modulo: string | null | undefined): string {
@@ -105,6 +121,10 @@ export function PracticasAutorizacionSection({
                         cantidad: practica.cantidad,
                         etiqueta: `Orden ${orden.puestoNumero}-${orden.ordenNumero}-${orden.item} · ${formatearModulo(orden.modulo)}`,
                         numeroAutorizacion: orden.numeroAutorizacion,
+                        matriculaFirmante:
+                            typeof orden.matriculaFirmante === 'number' && orden.matriculaFirmante > 0
+                                ? orden.matriculaFirmante
+                                : null,
                         actualizacion: {
                             puestoNumero: orden.puestoNumero,
                             ordenNumero: orden.ordenNumero,
@@ -123,6 +143,12 @@ export function PracticasAutorizacionSection({
                 cantidad: practica.cantidad,
                 etiqueta: 'Práctica base',
                 numeroAutorizacion: practica.numeroAutorizacion,
+                matriculaFirmante:
+                    (typeof practica.matriculaEspecialista === 'number' && practica.matriculaEspecialista > 0)
+                        ? practica.matriculaEspecialista
+                        : (typeof practica.matriculaAnestesista === 'number' && practica.matriculaAnestesista > 0)
+                            ? practica.matriculaAnestesista
+                            : null,
                 actualizacion: {
                     practicaId: practica.id,
                     numeroAutorizacion: '',
@@ -158,6 +184,7 @@ export function PracticasAutorizacionSection({
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [exito, setExito] = useState(false)
+    const [autorizadasExpandidas, setAutorizadasExpandidas] = useState<Record<string, boolean>>({})
 
     useEffect(() => {
         setNumeros((prev) => {
@@ -172,6 +199,70 @@ export function PracticasAutorizacionSection({
     const entradasVisibles = entradasConEstado.filter((p) => !eliminadas.has(p.uid))
     const pendientes = entradasVisibles.filter((p) => !p.numeroConfirmado)
     const autorizadas = entradasVisibles.filter((p) => p.numeroConfirmado)
+    const gruposAutorizados = useMemo<GrupoAutorizado[]>(() => {
+        const grupos = new Map<string, GrupoAutorizado>()
+
+        for (const entrada of autorizadas) {
+            const numeroConfirmado = entrada.numeroConfirmado
+            const baseOrden = 'puestoNumero' in entrada.actualizacion && 'ordenNumero' in entrada.actualizacion
+                ? {
+                    tipo: 'orden' as const,
+                    key: `ORD-${entrada.actualizacion.puestoNumero}-${entrada.actualizacion.ordenNumero}`,
+                    puestoNumero: entrada.actualizacion.puestoNumero,
+                    ordenNumero: entrada.actualizacion.ordenNumero,
+                }
+                : {
+                    tipo: 'autorizacion' as const,
+                    key: `AUT-${entrada.uid}`,
+                    puestoNumero: null,
+                    ordenNumero: null,
+                }
+
+            const existente = grupos.get(baseOrden.key)
+            if (!existente) {
+                grupos.set(baseOrden.key, {
+                    key: baseOrden.key,
+                    tipo: baseOrden.tipo,
+                    puestoNumero: baseOrden.puestoNumero,
+                    ordenNumero: baseOrden.ordenNumero,
+                    numeroAutorizacion: numeroConfirmado,
+                    totalCantidad: entrada.cantidad,
+                    matriculasFirmantes:
+                        typeof entrada.matriculaFirmante === 'number' && entrada.matriculaFirmante > 0
+                            ? [entrada.matriculaFirmante]
+                            : [],
+                    items: [entrada],
+                })
+                continue
+            }
+
+            existente.totalCantidad += entrada.cantidad
+            existente.items.push(entrada)
+            if (!existente.numeroAutorizacion && numeroConfirmado) {
+                existente.numeroAutorizacion = numeroConfirmado
+            }
+            if (
+                typeof entrada.matriculaFirmante === 'number' &&
+                entrada.matriculaFirmante > 0 &&
+                !existente.matriculasFirmantes.includes(entrada.matriculaFirmante)
+            ) {
+                existente.matriculasFirmantes.push(entrada.matriculaFirmante)
+            }
+        }
+
+        return Array.from(grupos.values())
+            .map((grupo) => ({
+                ...grupo,
+                matriculasFirmantes: [...grupo.matriculasFirmantes].sort((a, b) => a - b),
+                items: [...grupo.items].sort((a, b) => a.codigo.localeCompare(b.codigo)),
+            }))
+            .sort((a, b) => {
+                if (a.tipo !== b.tipo) return a.tipo === 'orden' ? -1 : 1
+                if (a.puestoNumero !== b.puestoNumero) return (b.puestoNumero ?? 0) - (a.puestoNumero ?? 0)
+                if (a.ordenNumero !== b.ordenNumero) return (b.ordenNumero ?? 0) - (a.ordenNumero ?? 0)
+                return a.key.localeCompare(b.key)
+            })
+    }, [autorizadas])
     const pendientesEliminables = pendientes.filter((p) => 'practicaId' in p.actualizacion)
     const idsPendientesEliminables = pendientesEliminables.map((p) => p.uid)
     const firmaPendientesEliminables = idsPendientesEliminables.join('|')
@@ -492,19 +583,86 @@ export function PracticasAutorizacionSection({
                         Ya autorizadas
                     </h4>
                     <div className="space-y-2">
-                        {autorizadas.map((p) => (
-                            <div key={p.uid} className="flex items-start justify-between text-sm">
-                                <div>
-                                    <p className="font-mono text-xs text-gray-500">{p.codigo}</p>
-                                    <p className="text-gray-800">{p.descripcion}</p>
-                                    <p className="text-xs text-gray-500 mt-1">{p.etiqueta}</p>
+                        {gruposAutorizados.map((grupo) => {
+                            const limiteItems = 3
+                            const expandida = autorizadasExpandidas[grupo.key] ?? false
+                            const itemsVisibles = expandida ? grupo.items : grupo.items.slice(0, limiteItems)
+                            const restantes = Math.max(0, grupo.items.length - itemsVisibles.length)
+                            const destino =
+                                grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                    ? `/dashboard/ambulatorio/${grupo.puestoNumero}/${grupo.ordenNumero}`
+                                    : grupo.numeroAutorizacion
+                                        ? `/dashboard/ambulatorio?tab=confirmadas&q=${encodeURIComponent(grupo.numeroAutorizacion)}`
+                                        : null
+
+                            return (
+                                <div key={grupo.key} className="rounded-lg border border-green-200 bg-green-50/40 p-2.5 text-xs">
+                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                        <div className="space-y-1.5 text-green-900">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-semibold">
+                                                    {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                                        ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
+                                                        : 'Autorización manual'}
+                                                </span>
+                                                {destino && (
+                                                    <Link
+                                                        href={destino}
+                                                        className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-900 hover:bg-green-200"
+                                                    >
+                                                        Abrir
+                                                    </Link>
+                                                )}
+                                            </div>
+                                            <p className="text-green-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
+                                            <p className="text-green-800">Cantidad total: {grupo.totalCantidad}</p>
+                                            <p className="text-green-800">
+                                                {grupo.matriculasFirmantes.length > 1
+                                                    ? 'Matrículas firmantes'
+                                                    : 'Matrícula firmante'}: {grupo.matriculasFirmantes.length > 0 ? grupo.matriculasFirmantes.join(', ') : 'No informada'}
+                                            </p>
+                                        </div>
+
+                                        <div className="rounded-md border border-green-200 bg-white/70 p-2">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">
+                                                    Prácticas de la orden ({grupo.items.length})
+                                                </p>
+                                                {grupo.items.length > limiteItems && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setAutorizadasExpandidas((prev) => ({
+                                                            ...prev,
+                                                            [grupo.key]: !(prev[grupo.key] ?? false),
+                                                        }))}
+                                                        className="rounded border border-green-300 px-2 py-0.5 text-[11px] font-medium text-green-800 hover:bg-green-50"
+                                                    >
+                                                        {expandida ? 'Contraer' : 'Expandir'}
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="mt-2 space-y-1.5">
+                                                {itemsVisibles.map((item) => (
+                                                    <div key={item.uid} className="rounded border border-green-100 bg-white px-2 py-1.5">
+                                                        <div className="flex items-center justify-between gap-2 text-green-900">
+                                                            <span className="font-mono text-[11px]">{item.codigo}</span>
+                                                            <span className="font-medium">Cant. {item.cantidad}</span>
+                                                        </div>
+                                                        <p className="text-green-900">{item.descripcion}</p>
+                                                        <p className="text-[11px] text-gray-500 mt-0.5">{item.etiqueta}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {!expandida && restantes > 0 && (
+                                                <p className="mt-1 text-[11px] text-green-700">+{restantes} práctica(s) más</p>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="text-right">
-                                    <p className="font-mono font-medium text-green-700">{p.numeroConfirmado}</p>
-                                    <p className="text-xs text-gray-600">Cantidad: {p.cantidad}</p>
-                                </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 </div>
             )}

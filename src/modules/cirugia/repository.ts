@@ -79,6 +79,26 @@ function resolverNumeroAutorizacionOrdenItem(
     return null
 }
 
+function resolverMatriculaFirmante(
+    modulo: string | null | undefined,
+    matriculaEspecialista: number | null | undefined,
+    matriculaAnestesista: number | null | undefined
+): number | null {
+    const moduloNormalizado = modulo?.trim().toUpperCase() ?? ''
+    const especialistaValida = typeof matriculaEspecialista === 'number' && matriculaEspecialista > 0
+    const anestesistaValida = typeof matriculaAnestesista === 'number' && matriculaAnestesista > 0
+
+    if (moduloNormalizado === 'HA') {
+        if (anestesistaValida) return matriculaAnestesista as number
+        if (especialistaValida) return matriculaEspecialista as number
+        return null
+    }
+
+    if (especialistaValida) return matriculaEspecialista as number
+    if (anestesistaValida) return matriculaAnestesista as number
+    return null
+}
+
 export async function guardarCirugiaProgramada(data: GuardarCirugiaParams) {
     const cirugia = await prisma.cirugiaProgramada.create({
         data: {
@@ -167,6 +187,8 @@ export async function listarCirugiasProgramadas(
                                 id: true,
                                 codigoPractica: true,
                                 numeroAutorizacion: true,
+                                matriculaEspecialista: true,
+                                matriculaAnestesista: true,
                                 puestoNumero: true,
                                 ordenNumero: true,
                                 ordenItem: true,
@@ -259,6 +281,11 @@ export async function listarCirugiasProgramadas(
                                     ordenItem.ordenNumero,
                                     ordenItem.item
                                 ),
+                                matriculaFirmante: resolverMatriculaFirmante(
+                                    ordenItem.modulo,
+                                    practicaInternacion.matriculaEspecialista,
+                                    practicaInternacion.matriculaAnestesista
+                                ),
                             })
                         }
                         continue
@@ -286,6 +313,11 @@ export async function listarCirugiasProgramadas(
                                 Number(practicaInternacion.puestoNumero),
                                 Number(practicaInternacion.ordenNumero),
                                 itemOrden
+                            ),
+                            matriculaFirmante: resolverMatriculaFirmante(
+                                null,
+                                practicaInternacion.matriculaEspecialista,
+                                practicaInternacion.matriculaAnestesista
                             ),
                         })
                     }
@@ -326,9 +358,20 @@ export async function obtenerCirugiaProgramadaConPracticas(id: number) {
                             id: true,
                             codigoPractica: true,
                             numeroAutorizacion: true,
+                            matriculaEspecialista: true,
+                            matriculaAnestesista: true,
                             ordenPractica: {
                                 select: {
+                                    puestoNumero: true,
+                                    ordenNumero: true,
+                                    item: true,
+                                    modulo: true,
                                     numeroAutorizacion: true,
+                                    orden: {
+                                        select: {
+                                            numeroAutorizacion: true,
+                                        },
+                                    },
                                 },
                             },
                         },

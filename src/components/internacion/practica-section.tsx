@@ -23,6 +23,7 @@ import {
 } from '@/lib/practicas-subitems'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
+import { agruparPracticasAutorizadasPorOrden, obtenerDestinoGrupoPracticasAutorizadas } from '@/lib/practicas-autorizadas'
 
 interface NomencladorItem {
     convenioId: number
@@ -193,6 +194,7 @@ export function PracticaSection({
     const [imprimirTrasAgrupar, setImprimirTrasAgrupar] = useState(false)
     const [clasificacionesExpandidas, setClasificacionesExpandidas] = useState<Record<string, boolean>>({})
     const [ordenesGeneradas, setOrdenesGeneradas] = useState<OrdenGeneradaGrupo[]>([])
+    const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const subitemsPreviosRef = useRef<SubitemCodigo[]>([])
@@ -1024,8 +1026,18 @@ export function PracticaSection({
         })
     }, [practicasAutorizadas, terminoFiltroLista])
 
+    const practicaAutorizadaIdsFiltradas = useMemo(
+        () => new Set(practicasAutorizadasFiltradas.map((p) => p.id)),
+        [practicasAutorizadasFiltradas]
+    )
+
+    const ordenesAutorizadasFiltradas = useMemo(
+        () => agruparPracticasAutorizadasPorOrden(practicasAutorizadas, practicaAutorizadaIdsFiltradas),
+        [practicasAutorizadas, practicaAutorizadaIdsFiltradas]
+    )
+
     const totalPaginasPendientes = Math.max(1, Math.ceil(practicasPendientesFiltradasOrdenadas.length / PRACTICAS_LISTA_POR_PAGINA))
-    const totalPaginasAutorizadas = Math.max(1, Math.ceil(practicasAutorizadasFiltradas.length / PRACTICAS_LISTA_POR_PAGINA))
+    const totalPaginasAutorizadas = Math.max(1, Math.ceil(ordenesAutorizadasFiltradas.length / PRACTICAS_LISTA_POR_PAGINA))
     const paginaPendientesActual = Math.min(paginaPendientes, totalPaginasPendientes)
     const paginaAutorizadasActual = Math.min(paginaAutorizadas, totalPaginasAutorizadas)
 
@@ -1056,10 +1068,10 @@ export function PracticaSection({
     const todasFiltradasSeleccionadas =
         idsPendientesFiltradas.length > 0 && idsPendientesFiltradas.every((id) => practicasSeleccionadas.includes(id))
 
-    const practicasAutorizadasPaginadas = useMemo(() => {
+    const ordenesAutorizadasPaginadas = useMemo(() => {
         const desde = (paginaAutorizadasActual - 1) * PRACTICAS_LISTA_POR_PAGINA
-        return practicasAutorizadasFiltradas.slice(desde, desde + PRACTICAS_LISTA_POR_PAGINA)
-    }, [paginaAutorizadasActual, practicasAutorizadasFiltradas])
+        return ordenesAutorizadasFiltradas.slice(desde, desde + PRACTICAS_LISTA_POR_PAGINA)
+    }, [paginaAutorizadasActual, ordenesAutorizadasFiltradas])
 
     useEffect(() => {
         setPaginaPendientes(1)
@@ -1673,104 +1685,104 @@ export function PracticaSection({
 
                             <div className="space-y-2">
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                    Ya autorizadas ({practicasAutorizadasFiltradas.length})
+                                    Ya autorizadas ({ordenesAutorizadasFiltradas.length})
                                 </p>
-                                {practicasAutorizadasFiltradas.length === 0 ? (
+                                {ordenesAutorizadasFiltradas.length === 0 ? (
                                     <p className="text-xs text-gray-400">No hay prácticas autorizadas.</p>
                                 ) : (
-                                    practicasAutorizadasPaginadas.map((p) => {
-                                        const ordenesOrdenadas = [...p.ordenPractica].sort((a, b) => {
-                                            if (a.puestoNumero !== b.puestoNumero) {
-                                                return a.puestoNumero - b.puestoNumero
-                                            }
-                                            if (a.ordenNumero !== b.ordenNumero) {
-                                                return a.ordenNumero - b.ordenNumero
-                                            }
-                                            return a.item - b.item
-                                        })
-                                        const ordenesUnicas = Array.from(
-                                            new Map(
-                                                ordenesOrdenadas.map((orden) => [
-                                                    `${orden.puestoNumero}-${orden.ordenNumero}`,
-                                                    orden,
-                                                ])
-                                            ).values()
-                                        )
-                                        const destinoAutorizada = ordenesUnicas.length === 0
-                                            ? null
-                                            : ordenesUnicas.length === 1
-                                                ? `/dashboard/ambulatorio/${ordenesUnicas[0]!.puestoNumero}/${ordenesUnicas[0]!.ordenNumero}?item=${ordenesUnicas[0]!.item}`
-                                                : `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(
-                                                    ordenesUnicas
-                                                        .map((orden) => `${orden.puestoNumero}-${orden.ordenNumero}`)
-                                                        .join(',')
-                                                )}`
+                                    ordenesAutorizadasPaginadas.map((grupo) => {
+                                        const destinoAutorizada = obtenerDestinoGrupoPracticasAutorizadas(grupo)
+                                        const limitePracticas = 3
+                                        const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
+                                        const practicasVisibles = expandida
+                                            ? grupo.practicas
+                                            : grupo.practicas.slice(0, limitePracticas)
+                                        const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
+                                        const tituloGrupo = grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                            ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
+                                            : `Autorización ${grupo.numeroAutorizacion ?? '-'}`
 
                                         return (
-                                        <div
-                                            key={p.id}
-                                            role={destinoAutorizada ? 'button' : undefined}
-                                            tabIndex={destinoAutorizada ? 0 : undefined}
-                                            onClick={() => {
-                                                if (destinoAutorizada) router.push(destinoAutorizada)
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (!destinoAutorizada) return
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault()
-                                                    router.push(destinoAutorizada)
-                                                }
-                                            }}
-                                            title={
-                                                !destinoAutorizada
-                                                    ? undefined
-                                                    : ordenesUnicas.length > 1
-                                                        ? 'Ver todas las órdenes autorizadas'
-                                                        : 'Ir a la orden autorizada'
-                                            }
-                                            className={`flex items-start justify-between gap-3 text-xs border border-emerald-200 rounded-lg p-2.5 bg-emerald-50/40 ${destinoAutorizada ? 'cursor-pointer hover:bg-emerald-100/40' : ''}`}
-                                        >
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="font-mono text-emerald-800/70 shrink-0">
-                                                        {p.codigoPractica.trim()}
-                                                    </span>
-                                                    <span className="font-medium text-emerald-900 truncate">
-                                                        {p.descripcionPractica ?? p.codigoPractica.trim()}
-                                                    </span>
-                                                </div>
-                                                {esPedidoLaboratorio(p) && (
-                                                    <div className="mt-1 text-[11px] text-indigo-700 space-y-0.5">
-                                                        <p>Protocolo N° {p.numeroProtocoloLaboratorio?.trim() || '-'}</p>
-                                                        <p>Diagnóstico: {p.diagnosticoLaboratorio?.trim() || '-'}</p>
+                                            <div
+                                                key={grupo.key}
+                                                className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5 text-xs"
+                                            >
+                                                <div className="grid gap-3 md:grid-cols-2">
+                                                    <div className="space-y-1.5 text-emerald-900">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="font-semibold">{tituloGrupo}</span>
+                                                            {destinoAutorizada && (
+                                                                <Link
+                                                                    href={destinoAutorizada}
+                                                                    className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
+                                                                >
+                                                                    Abrir
+                                                                </Link>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-emerald-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
+                                                        <p className="text-emerald-800">Fecha última práctica: {fmtFecha(grupo.fechaReferencia)}</p>
+                                                        <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
+                                                        <p className="text-emerald-800">
+                                                            {grupo.matriculasFirmantes.length > 1
+                                                                ? 'Matrículas firmantes'
+                                                                : 'Matrícula firmante'}: {grupo.matriculasFirmantes.length > 0 ? grupo.matriculasFirmantes.join(', ') : '-'}
+                                                        </p>
                                                     </div>
-                                                )}
-                                                <div className="flex items-center gap-3 mt-1 text-emerald-700 flex-wrap">
-                                                    <span>{fmtFecha(p.fecha)}</span>
-                                                    {ordenesOrdenadas.map((orden) => (
-                                                            <Link
-                                                                key={`${p.id}-${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`}
-                                                                href={`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.ordenNumero}?item=${orden.item}`}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                title={`Ver orden ${formatearNumeroOrden(orden.puestoNumero, orden.ordenNumero, orden.item)} en Autorizaciones`}
-                                                                className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900 hover:bg-emerald-200"
-                                                            >
-                                                                {formatearNumeroOrden(
-                                                                    orden.puestoNumero,
-                                                                    orden.ordenNumero,
-                                                                    orden.item
-                                                                )}
-                                                                {orden.numeroAutorizacion
-                                                                    ? ` · ${orden.numeroAutorizacion}`
-                                                                    : ' · falta N° de autorización'}
-                                                            </Link>
-                                                        ))}
+
+                                                    <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                                Prácticas de la orden ({grupo.practicas.length})
+                                                            </p>
+                                                            {grupo.practicas.length > limitePracticas && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setOrdenesAutorizadasExpandidas((prev) => ({
+                                                                        ...prev,
+                                                                        [grupo.key]: !(prev[grupo.key] ?? false),
+                                                                    }))}
+                                                                    className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50"
+                                                                >
+                                                                    {expandida ? 'Contraer' : 'Expandir'}
+                                                                </button>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="mt-2 space-y-1.5">
+                                                            {practicasVisibles.map((practica) => (
+                                                                <div
+                                                                    key={`${grupo.key}-${practica.id}`}
+                                                                    className="rounded border border-emerald-100 bg-white px-2 py-1.5"
+                                                                >
+                                                                    <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                                                        <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
+                                                                        <span className="font-medium">Cant. {practica.cantidad}</span>
+                                                                    </div>
+                                                                    <p className="text-emerald-900">
+                                                                        {practica.descripcionPractica ?? practica.codigoPractica.trim()}
+                                                                    </p>
+                                                                    <p className="text-[11px] text-emerald-700">{fmtFecha(practica.fecha)}</p>
+                                                                    {esPedidoLaboratorio(practica) && (
+                                                                        <div className="mt-1 text-[11px] text-indigo-700 space-y-0.5">
+                                                                            <p>Protocolo N° {practica.numeroProtocoloLaboratorio?.trim() || '-'}</p>
+                                                                            <p>Diagnóstico: {practica.diagnosticoLaboratorio?.trim() || '-'}</p>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        {!expandida && restantes > 0 && (
+                                                            <p className="mt-1 text-[11px] text-emerald-700">+{restantes} práctica(s) más</p>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )})
+                                        )
+                                    })
                                 )}
-                                {practicasAutorizadasFiltradas.length > PRACTICAS_LISTA_POR_PAGINA && (
+                                {ordenesAutorizadasFiltradas.length > PRACTICAS_LISTA_POR_PAGINA && (
                                     <div className="flex items-center justify-between gap-2">
                                         <p className="text-xs text-gray-500">
                                             Página {paginaAutorizadasActual} de {totalPaginasAutorizadas}

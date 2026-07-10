@@ -45,6 +45,26 @@ function resolverNumeroAutorizacionOrdenItem(
     return null
 }
 
+function resolverMatriculaFirmante(
+    modulo: string | null | undefined,
+    matriculaEspecialista: number | null | undefined,
+    matriculaAnestesista: number | null | undefined
+): number | null {
+    const moduloNormalizado = modulo?.trim().toUpperCase() ?? ''
+    const especialistaValida = typeof matriculaEspecialista === 'number' && matriculaEspecialista > 0
+    const anestesistaValida = typeof matriculaAnestesista === 'number' && matriculaAnestesista > 0
+
+    if (moduloNormalizado === 'HA') {
+        if (anestesistaValida) return matriculaAnestesista as number
+        if (especialistaValida) return matriculaEspecialista as number
+        return null
+    }
+
+    if (especialistaValida) return matriculaEspecialista as number
+    if (anestesistaValida) return matriculaAnestesista as number
+    return null
+}
+
 export default async function CirugiaProgramadaDetallePage({ params }: CirugiaProgramadaDetallePageProps) {
     const { id } = await params
     const cirugiaId = Number.parseInt(id, 10)
@@ -79,6 +99,8 @@ export default async function CirugiaProgramadaDetallePage({ params }: CirugiaPr
                         select: {
                             codigoPractica: true,
                             numeroAutorizacion: true,
+                            matriculaEspecialista: true,
+                            matriculaAnestesista: true,
                             puestoNumero: true,
                             ordenNumero: true,
                             ordenItem: true,
@@ -214,6 +236,11 @@ export default async function CirugiaProgramadaDetallePage({ params }: CirugiaPr
                                                 op.ordenNumero,
                                                 op.item
                                             ),
+                                            matriculaFirmante: resolverMatriculaFirmante(
+                                                op.modulo,
+                                                pi.matriculaEspecialista,
+                                                pi.matriculaAnestesista
+                                            ),
                                         }))
                                     }
 
@@ -240,6 +267,11 @@ export default async function CirugiaProgramadaDetallePage({ params }: CirugiaPr
                                                     pi.ordenItem != null && Number(pi.ordenItem) > 0
                                                         ? Number(pi.ordenItem)
                                                         : 1
+                                                ),
+                                                matriculaFirmante: resolverMatriculaFirmante(
+                                                    null,
+                                                    pi.matriculaEspecialista,
+                                                    pi.matriculaAnestesista
                                                 ),
                                             },
                                         ]

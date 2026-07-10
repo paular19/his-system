@@ -19,6 +19,18 @@ import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/pra
 import { fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 
+type AutorizacionVinculadaExtendida = {
+    ordenPuestoNumero: number
+    ordenNumero: number
+    ordenItem: number
+    numeroAutorizacion: string | null
+    incluyeCodigo?: string | null
+    matriculaProfesional?: number | null
+    matriculaEspecialista?: number | null
+    matriculaAnestesista?: number | null
+    matriculaAyudante?: number | null
+}
+
 interface NomencladorItem {
     convenioId: number
     codigo: string
@@ -445,10 +457,32 @@ type EditState = {
     matriculaAnestesista: string
 }
 
+type OrdenRenumerarState = {
+    nuevoPuestoNumero: string
+    nuevoNumero: string
+}
+
 type AutorizacionVinculada = NonNullable<PrestacionFacturableItem['autorizacionesVinculadas']>[number]
 
 function keyAutorizacionVinculada(aut: AutorizacionVinculada): string {
     return `${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`
+}
+
+function etiquetaMatriculasAutorizacion(aut: AutorizacionVinculadaExtendida): string | null {
+    const partes: string[] = []
+    if (typeof aut.matriculaProfesional === 'number' && aut.matriculaProfesional > 0) {
+        partes.push(`MP ${aut.matriculaProfesional}`)
+    }
+    if (typeof aut.matriculaEspecialista === 'number' && aut.matriculaEspecialista > 0) {
+        partes.push(`Esp ${aut.matriculaEspecialista}`)
+    }
+    if (typeof aut.matriculaAyudante === 'number' && aut.matriculaAyudante > 0) {
+        partes.push(`Ayu ${aut.matriculaAyudante}`)
+    }
+    if (typeof aut.matriculaAnestesista === 'number' && aut.matriculaAnestesista > 0) {
+        partes.push(`Ane ${aut.matriculaAnestesista}`)
+    }
+    return partes.length > 0 ? partes.join(' · ') : null
 }
 
 function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Record<string, string> {
@@ -581,6 +615,9 @@ export function FacturacionPanel() {
     const [anulando, setAnulando] = useState<string | null>(null)
     const [guardandoDiferencialCirugiaId, setGuardandoDiferencialCirugiaId] = useState<number | null>(null)
     const [mostrarImportadorNomenclador, setMostrarImportadorNomenclador] = useState(false)
+    const [creandoOrdenPracticaUid, setCreandoOrdenPracticaUid] = useState<string | null>(null)
+    const [renumerandoOrdenKey, setRenumerandoOrdenKey] = useState<string | null>(null)
+    const [renumerarOrdenDraft, setRenumerarOrdenDraft] = useState<Record<string, OrdenRenumerarState>>({})
 
     // Component selection per practice uid
     const [compSeleccion, setCompSeleccion] = useState<Record<string, ComponenteSeleccion>>({})
@@ -819,9 +856,7 @@ export function FacturacionPanel() {
     ) => {
         const profesionalId = Number.parseInt(profesionalIdRaw, 10)
         const matricula = Number.isFinite(profesionalId) ? matriculaPorProfesionalId.get(profesionalId) : null
-        const matriculaFinal = field === 'matriculaAyudante'
-            ? String(MATRICULA_AYUDANTE_DEFAULT)
-            : (matricula ? String(matricula) : '')
+        const matriculaFinal = matricula ? String(matricula) : ''
         setEditRows((prev) => ({
             ...prev,
             [uid]: {
@@ -1081,7 +1116,10 @@ export function FacturacionPanel() {
             setExpandPedidoLaboratorio(false)
 
             if ('puestoNumero' in result && 'numero' in result) {
-                window.location.href = `/dashboard/ambulatorio/${result.puestoNumero}/${result.numero}`
+                if (typeof window !== 'undefined') {
+                    window.open(`/dashboard/ambulatorio/${result.puestoNumero}/${result.numero}`, '_blank', 'noopener,noreferrer')
+                }
+                setMensaje(`Pedido generado: ${formatOrderNumber(result.puestoNumero, result.numero)} (abierto en nueva pestaña)`)
                 return
             }
 
@@ -1441,6 +1479,94 @@ export function FacturacionPanel() {
         }
     }
 
+    async function crearOrdenDesdePractica(p: PrestacionFacturableItem) {
+        if (!contexto) return
+        if (p.tipo !== 'PRACTICA' || !p.origen.practicaId) return
+
+        setCreandoOrdenPracticaUid(p.uid)
+        setError(null)
+        try {
+            const res = await fetch('/api/facturacion/ordenes/crear-desde-practica', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ingresoId: contexto.ingreso.id,
+                    practicaId: p.origen.practicaId,
+                }),
+            })
+
+            const json = (await res.json()) as ApiResponse<{ puestoNumero: number; numero: number }>
+            if (!res.ok || !json.ok || !json.data) {
+                throw new Error(json.error ?? 'No se pudo crear la orden para la práctica')
+            }
+
+            setMensaje(`Orden creada desde facturación: ${formatOrderNumber(json.data.puestoNumero, json.data.numero)}`)
+            await cargarContexto(contexto.ingreso.id)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al crear orden desde práctica')
+        } finally {
+            setCreandoOrdenPracticaUid(null)
+        }
+    }
+
+    async function renumerarOrden(puestoNumero: number, numero: number) {
+        if (!contexto) return
+        const key = `${puestoNumero}:${numero}`
+        const draft = renumerarOrdenDraft[key] ?? {
+            nuevoPuestoNumero: String(puestoNumero),
+            nuevoNumero: String(numero),
+        }
+
+        const nuevoPuestoNumero = Number.parseInt(draft.nuevoPuestoNumero, 10)
+        const nuevoNumero = Number.parseInt(draft.nuevoNumero, 10)
+
+        if (!Number.isFinite(nuevoPuestoNumero) || nuevoPuestoNumero <= 0) {
+            setError('Nuevo puesto inválido')
+            return
+        }
+        if (!Number.isFinite(nuevoNumero) || nuevoNumero <= 0) {
+            setError('Nuevo número de orden inválido')
+            return
+        }
+
+        if (nuevoPuestoNumero === puestoNumero && nuevoNumero === numero) {
+            setMensaje('No hubo cambios en la numeración de la orden')
+            return
+        }
+
+        const confirmar = window.confirm(
+            `¿Renumerar orden ${formatOrderNumber(puestoNumero, numero)} a ${formatOrderNumber(nuevoPuestoNumero, nuevoNumero)}?`
+        )
+        if (!confirmar) return
+
+        setRenumerandoOrdenKey(key)
+        setError(null)
+        try {
+            const res = await fetch('/api/facturacion/ordenes/renumerar', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    puestoNumero,
+                    numero,
+                    nuevoPuestoNumero,
+                    nuevoNumero,
+                }),
+            })
+
+            const json = (await res.json()) as ApiResponse<{ puestoNumero: number; numero: number }>
+            if (!res.ok || !json.ok || !json.data) {
+                throw new Error(json.error ?? 'No se pudo renumerar la orden')
+            }
+
+            setMensaje(`Orden renumerada a ${formatOrderNumber(json.data.puestoNumero, json.data.numero)}`)
+            await cargarContexto(contexto.ingreso.id)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al renumerar orden')
+        } finally {
+            setRenumerandoOrdenKey(null)
+        }
+    }
+
     async function guardarDiferencialesCirugia(cirugia: CirugiaEditableGroup) {
         if (!contexto) return
         if (diferencialesCirugiaCongelados) {
@@ -1657,28 +1783,20 @@ export function FacturacionPanel() {
                             <div className="his-card p-4 space-y-3">
                                 <div className="flex items-center justify-between gap-3">
                                     <div>
-                                        <h3 className="text-base font-semibold text-gray-900">Ficha de facturación</h3>
+                                        <h3 className="text-base font-semibold text-gray-900">Resumen del paciente</h3>
                                         <p className="text-xs text-gray-500 mt-1">Pendiente: <span className="font-semibold text-orange-700">{formatCurrency(totalPacientePendiente)}</span> {' · '}Facturado: <span className="font-semibold text-green-700">{formatCurrency(totalPacienteFacturado)}</span></p>
                                     </div>
-                                    {!editandoFicha ? (
-                                        <button onClick={() => setEditandoFicha(true)} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-50"><Pencil className="h-3.5 w-3.5" /> Editar datos</button>
-                                    ) : (
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={guardarFicha} disabled={guardandoFicha} className="rounded-md bg-blue-600 text-white px-3 py-2 text-xs font-medium hover:bg-blue-700 disabled:opacity-60">{guardandoFicha ? 'Guardando...' : 'Guardar cambios'}</button>
-                                            <button onClick={() => { cargarFormDesdeContexto(contexto); setEditandoFicha(false) }} className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-50">Cancelar</button>
-                                        </div>
-                                    )}
+                                    <div className="text-xs text-gray-500">Foco operativo: prácticas y órdenes</div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Tipo de ingreso</span><div className="font-medium text-gray-900">{contexto.ingreso.tipoIngresoCodigo}</div></div>
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Número de ingreso</span><div className="font-medium text-gray-900">{contexto.ingreso.numeroIngreso}</div></div>
-                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Nombre</span>{editandoFicha ? (<input value={formPacienteNombreCompleto} onChange={(e) => setFormPacienteNombreCompleto(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1" />) : (<div className="font-medium text-gray-900">{formPacienteNombreCompleto || '—'}</div>)}</div>
+                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Paciente</span><div className="font-medium text-gray-900">{formPacienteNombreCompleto || '—'}</div></div>
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">DNI</span><div className="font-medium text-gray-900">{contexto.paciente?.numeroDocumento ?? '—'}</div></div>
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Obra social</span><div className="font-medium text-gray-900">{contexto.obraSocial?.nombre ?? 'Particular'}</div></div>
-                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Convenio / Plan</span><div className="font-medium text-gray-900">{contexto.plan?.descripcion ?? '—'}</div></div>
-                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Coseguro</span><div className="font-medium text-gray-900">{contexto.obraSocialCoseguro?.nombre ?? 'Sin coseguro'}</div></div>
-                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Número afiliado</span>{editandoFicha ? (<input value={formNumeroAfiliado} onChange={(e) => setFormNumeroAfiliado(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1" />) : (<div className="font-medium text-gray-900">{formNumeroAfiliado || '—'}</div>)}</div>
+                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Plan</span><div className="font-medium text-gray-900">{contexto.plan?.descripcion ?? '—'}</div></div>
+                                    <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">N° afiliado</span><div className="font-medium text-gray-900">{formNumeroAfiliado || '—'}</div></div>
                                     <div className="rounded-md border border-gray-200 px-3 py-2 bg-gray-50"><span className="text-gray-500 text-xs">Ficha de ingreso</span><div className="font-medium text-gray-900">{formatearFechaHoraArgentina(contexto.ingreso.fechaIngreso)}</div></div>
                                 </div>
                             </div>
@@ -2026,7 +2144,7 @@ export function FacturacionPanel() {
                                                 const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
                                                 const autorizacionesVinculadasOrdenadas =
                                                     p.tipo === 'PRACTICA' && !p.facturada
-                                                        ? [...(p.autorizacionesVinculadas ?? [])].sort((a, b) => {
+                                                        ? [...((p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[])].sort((a, b) => {
                                                             if (a.ordenPuestoNumero !== b.ordenPuestoNumero) {
                                                                 return a.ordenPuestoNumero - b.ordenPuestoNumero
                                                             }
@@ -2124,6 +2242,20 @@ export function FacturacionPanel() {
                                                                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
                                                                             Incluye: {resumenIncluye}
                                                                         </span>
+                                                                        {autorizacionesVinculadasOrdenadas.slice(0, 2).map((aut) => (
+                                                                            <span
+                                                                                key={`${p.uid}:resumen:${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`}
+                                                                                className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800"
+                                                                                title={`Orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · Item ${aut.ordenItem}`}
+                                                                            >
+                                                                                {formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · {aut.numeroAutorizacion ?? 'S/A'}
+                                                                            </span>
+                                                                        ))}
+                                                                        {autorizacionesVinculadasOrdenadas.length > 2 && (
+                                                                            <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                                                                                +{autorizacionesVinculadasOrdenadas.length - 2} más
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 )}
                                                             </td>
@@ -2258,6 +2390,7 @@ export function FacturacionPanel() {
                                                                                                         <div key={`${p.uid}:${key}`} className="flex flex-wrap items-center gap-2">
                                                                                                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
                                                                                                                 {formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · Item {aut.ordenItem}{aut.incluyeCodigo ? ` [${aut.incluyeCodigo}]` : ''}
+                                                                                                                {etiquetaMatriculasAutorizacion(aut) ? ` · ${etiquetaMatriculasAutorizacion(aut)}` : ''}
                                                                                                             </span>
                                                                                                             <input
                                                                                                                 value={draftAutorizacionesVinculadas[key] ?? ''}
@@ -2280,14 +2413,14 @@ export function FacturacionPanel() {
                                                                                         ) : (
                                                                                             <div className="flex flex-wrap gap-1">
                                                                                                 {autorizacionesVinculadasOrdenadas.map((aut) => (
-                                                                                                    <Link
+                                                                                                    <span
                                                                                                         key={`${p.uid}:${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`}
-                                                                                                        href={`/dashboard/ambulatorio/${aut.ordenPuestoNumero}/${aut.ordenNumero}?item=${aut.ordenItem}`}
-                                                                                                        className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800 hover:bg-blue-200"
+                                                                                                        className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800"
                                                                                                         title={`Orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · Item ${aut.ordenItem}`}
                                                                                                     >
                                                                                                         {formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · {aut.numeroAutorizacion ?? 'S/A'}{aut.incluyeCodigo ? ` [${aut.incluyeCodigo}]` : ''}
-                                                                                                    </Link>
+                                                                                                        {etiquetaMatriculasAutorizacion(aut) ? ` · ${etiquetaMatriculasAutorizacion(aut)}` : ''}
+                                                                                                    </span>
                                                                                                 ))}
                                                                                             </div>
                                                                                         )
@@ -2296,12 +2429,14 @@ export function FacturacionPanel() {
                                                                                             <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
                                                                                                 Sin orden vinculada. Primero generá la orden; luego podrás cargar el número de autorización.
                                                                                             </div>
-                                                                                            <Link
-                                                                                                href={`/dashboard/ambulatorio/nueva?ingresoId=${contexto.ingreso.id}`}
-                                                                                                className="inline-flex w-fit items-center justify-center rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => crearOrdenDesdePractica(p)}
+                                                                                                disabled={creandoOrdenPracticaUid === p.uid}
+                                                                                                className="inline-flex w-fit items-center justify-center rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60"
                                                                                             >
-                                                                                                Generar orden
-                                                                                            </Link>
+                                                                                                {creandoOrdenPracticaUid === p.uid ? 'Generando orden...' : 'Generar orden en facturación'}
+                                                                                            </button>
                                                                                             <input
                                                                                                 value={draft.numeroAutorizacion}
                                                                                                 disabled
@@ -2313,13 +2448,6 @@ export function FacturacionPanel() {
                                                                                 ) : (
                                                                                     <input value={draft.numeroAutorizacion} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))} disabled={!filaEnEdicion} placeholder="Nro autorización" className="w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
                                                                                 )}
-                                                                            </div>
-                                                                        </div>
-
-                                                                        <div className="rounded-md border border-slate-200 bg-white p-2">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Valores y diferenciales</p>
-                                                                            <div className="mt-1 space-y-1 text-xs text-gray-700">
-                                                                                <div>Monto unitario: <span className="font-medium">{p.precioUnitario !== null ? formatCurrency(p.precioUnitario) : '—'}</span></div>
                                                                                 {p.tipo === 'PRACTICA' && (
                                                                                     <>
                                                                                         <div>Incluye: <span className="font-medium">{resumenIncluye}</span></div>
@@ -2480,6 +2608,52 @@ export function FacturacionPanel() {
                                                                     <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>
                                                                     Orden {formatOrderNumber(orden.puesto, orden.numero)}
                                                                 </button>
+                                                                <div className="mt-2 flex flex-wrap items-end gap-2">
+                                                                    <label className="text-[11px] text-gray-600">
+                                                                        Nuevo puesto
+                                                                        <input
+                                                                            type="number"
+                                                                            min={1}
+                                                                            value={renumerarOrdenDraft[orden.key]?.nuevoPuestoNumero ?? String(orden.puesto)}
+                                                                            onChange={(e) =>
+                                                                                setRenumerarOrdenDraft((prev) => ({
+                                                                                    ...prev,
+                                                                                    [orden.key]: {
+                                                                                        nuevoPuestoNumero: e.target.value,
+                                                                                        nuevoNumero: prev[orden.key]?.nuevoNumero ?? String(orden.numero),
+                                                                                    },
+                                                                                }))
+                                                                            }
+                                                                            className="mt-1 w-24 rounded border border-gray-300 px-2 py-1 text-xs"
+                                                                        />
+                                                                    </label>
+                                                                    <label className="text-[11px] text-gray-600">
+                                                                        Nuevo número
+                                                                        <input
+                                                                            type="number"
+                                                                            min={1}
+                                                                            value={renumerarOrdenDraft[orden.key]?.nuevoNumero ?? String(orden.numero)}
+                                                                            onChange={(e) =>
+                                                                                setRenumerarOrdenDraft((prev) => ({
+                                                                                    ...prev,
+                                                                                    [orden.key]: {
+                                                                                        nuevoPuestoNumero: prev[orden.key]?.nuevoPuestoNumero ?? String(orden.puesto),
+                                                                                        nuevoNumero: e.target.value,
+                                                                                    },
+                                                                                }))
+                                                                            }
+                                                                            className="mt-1 w-28 rounded border border-gray-300 px-2 py-1 text-xs"
+                                                                        />
+                                                                    </label>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => renumerarOrden(orden.puesto, orden.numero)}
+                                                                        disabled={renumerandoOrdenKey === orden.key}
+                                                                        className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                                                                    >
+                                                                        {renumerandoOrdenKey === orden.key ? 'Renumerando...' : 'Renumerar'}
+                                                                    </button>
+                                                                </div>
                                                             </td>
                                                             <td className="px-3 py-2 text-xs text-gray-700">{orden.items.length} ítems</td>
                                                             <td className="px-3 py-2 text-xs font-semibold text-gray-800">{formatCurrency(orden.total)}</td>

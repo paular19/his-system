@@ -8,10 +8,12 @@ import type {
     BusquedaFacturacionInput,
     BusquedaLotesInput,
     CargarOrdenesFacturacionInput,
+    CrearOrdenDesdePracticaFacturacionInput,
     CrearLoteFacturacionInput,
     CrearDescartableFacturacionInput,
     CrearMedicacionFacturacionInput,
     CrearPracticaFacturacionInput,
+    RenumerarOrdenFacturacionInput,
 } from './schemas'
 import * as repo from './repository'
 
@@ -182,6 +184,44 @@ export async function anularOrdenFacturacion(
         detalle: `Anulacion de facturacion de orden ${puestoNumero}-${numero}`,
         direccionIp: ip,
     })
+}
+
+export async function crearOrdenDesdePracticaFacturacion(
+    data: CrearOrdenDesdePracticaFacturacionInput,
+    usuario: string,
+    ip?: string
+) {
+    const orden = await repo.crearOrdenDesdePracticaFacturacion(data, usuario)
+
+    await registrarAudit({
+        usuario,
+        accion: 'CREAR',
+        entidad: 'Orden',
+        registroId: `${orden.puestoNumero}-${orden.numero}`,
+        detalle: `Creacion de orden desde facturacion para practica ${data.practicaId}`,
+        direccionIp: ip,
+    })
+
+    return orden
+}
+
+export async function renumerarOrdenFacturacion(
+    data: RenumerarOrdenFacturacionInput,
+    usuario: string,
+    ip?: string
+) {
+    const orden = await repo.renumerarOrdenFacturacion(data)
+
+    await registrarAudit({
+        usuario,
+        accion: 'MODIFICAR',
+        entidad: 'Orden',
+        registroId: `${data.puestoNumero}-${data.numero}`,
+        detalle: `Renumeracion de orden a ${orden.puestoNumero}-${orden.numero}`,
+        direccionIp: ip,
+    })
+
+    return orden
 }
 
 // ============================================

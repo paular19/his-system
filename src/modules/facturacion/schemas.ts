@@ -103,6 +103,23 @@ export const CargarOrdenesFacturacionSchema = z.object({
 
 export type CargarOrdenesFacturacionInput = z.infer<typeof CargarOrdenesFacturacionSchema>
 
+export const CrearOrdenDesdePracticaFacturacionSchema = z.object({
+    ingresoId: z.number().int().positive(),
+    practicaId: z.number().int().positive(),
+    profesionalId: z.number().int().positive().optional().nullable(),
+})
+
+export type CrearOrdenDesdePracticaFacturacionInput = z.infer<typeof CrearOrdenDesdePracticaFacturacionSchema>
+
+export const RenumerarOrdenFacturacionSchema = z.object({
+    puestoNumero: z.number().int().positive(),
+    numero: z.number().int().positive(),
+    nuevoPuestoNumero: z.number().int().positive(),
+    nuevoNumero: z.number().int().positive(),
+})
+
+export type RenumerarOrdenFacturacionInput = z.infer<typeof RenumerarOrdenFacturacionSchema>
+
 export const ActualizarAutorizacionSchema = z.discriminatedUnion('tipo', [
     z.object({
         tipo: z.literal('PRACTICA'),

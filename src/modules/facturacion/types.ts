@@ -47,6 +47,10 @@ export interface PrestacionFacturableItem {
         ordenItem: number
         numeroAutorizacion: string | null
         incluyeCodigo?: string | null
+        matriculaProfesional?: number | null
+        matriculaEspecialista?: number | null
+        matriculaAnestesista?: number | null
+        matriculaAyudante?: number | null
     }>
     origen: {
         ingresoId: number

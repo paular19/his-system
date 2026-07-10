@@ -9,11 +9,13 @@ import type {
     BusquedaFacturacionInput,
     BusquedaLotesInput,
     CargarOrdenesFacturacionInput,
+    CrearOrdenDesdePracticaFacturacionInput,
     CrearLoteFacturacionInput,
     CrearLoteIPSTxtInput,
     CrearDescartableFacturacionInput,
     CrearMedicacionFacturacionInput,
     CrearPracticaFacturacionInput,
+    RenumerarOrdenFacturacionInput,
 } from './schemas'
 import type {
     AdmisionFacturacionListItem,
@@ -30,6 +32,7 @@ import type {
 } from './types'
 import { calcularImporteFacturable, resolverReglaFacturacion } from './cobertura'
 import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './diferenciales'
+import { crearOrdenAmbulatorio } from '@/modules/orden/service'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 const NOMBRE_MATRICULA_9110_DEFAULT = 'CLINICA SAN RAFAEL'
@@ -1294,6 +1297,10 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             ordenItem: number
             numeroAutorizacion: string | null
             incluyeCodigo: string | null
+            matriculaProfesional: number | null
+            matriculaEspecialista: number | null
+            matriculaAnestesista: number | null
+            matriculaAyudante: number | null
         }>
     >()
     const ordenVinculadaPorPractica = new Map<
@@ -1433,6 +1440,42 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 it.item
             )
             const incluyeCodigoVinculo = normalizarIncluyeCodigo(it.modulo)
+            const incluyeVinculo = desglosarIncluyeCodigo(incluyeCodigoVinculo)
+            const esSoloAyudanteVinculo = Boolean(
+                incluyeVinculo &&
+                incluyeVinculo.ayudantes > 0 &&
+                !incluyeVinculo.especialista &&
+                !incluyeVinculo.anestesista &&
+                !incluyeVinculo.gastos
+            )
+            const incluyeTieneAyudanteVinculo = Boolean(incluyeVinculo && incluyeVinculo.ayudantes > 0)
+            const permiteFallbackAyudanteVinculo = !incluyeVinculo || esSoloAyudanteVinculo
+            const permiteFallbackAnestesistaVinculo = !incluyeVinculo || Boolean(incluyeVinculo.anestesista)
+            const esCodigoAnestesistaVinculo = esCodigoHaObligatorio(it.codigoPractica)
+            const esGastoVinculo = esSeleccionSoloGastos(incluyeVinculo) || (!incluyeVinculo && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
+            const matriculaEspecialistaVinculo = esGastoVinculo
+                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                : (esCodigoAnestesistaVinculo
+                    ? null
+                    : (it.practica?.matriculaEspecialista ??
+                        (ingreso.tipoIngresoCodigo === 'INT' &&
+                            it.nomencladorPractica?.valorAyudante != null &&
+                            permiteFallbackAyudanteVinculo
+                            ? MATRICULA_AYUDANTE_INT_DEFAULT
+                            : null)))
+            const matriculaAnestesistaVinculo = esGastoVinculo
+                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                : (it.practica?.matriculaAnestesista ??
+                    (ingreso.tipoIngresoCodigo === 'INT' &&
+                        (it.nomencladorPractica?.valorAnestesista != null || esCodigoAnestesistaVinculo) &&
+                        (permiteFallbackAnestesistaVinculo || esCodigoAnestesistaVinculo)
+                        ? MATRICULA_ANESTESISTA_INT_DEFAULT
+                        : null))
+            const matriculaAyudanteVinculo = incluyeTieneAyudanteVinculo
+                ? (esGastoVinculo
+                    ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                    : (it.practica?.matriculaEspecialista ?? MATRICULA_AYUDANTE_INT_DEFAULT))
+                : null
 
             const vinculadasActuales = autorizacionesVinculadasPorPractica.get(practicaIdAsociada) ?? []
             if (!vinculadasActuales.some(
@@ -1447,6 +1490,10 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     ordenItem: it.item,
                     numeroAutorizacion: numeroAutorizacionVinculo,
                     incluyeCodigo: incluyeCodigoVinculo,
+                    matriculaProfesional: o.profesional?.matricula ?? null,
+                    matriculaEspecialista: matriculaEspecialistaVinculo,
+                    matriculaAnestesista: matriculaAnestesistaVinculo,
+                    matriculaAyudante: matriculaAyudanteVinculo,
                 })
                 autorizacionesVinculadasPorPractica.set(practicaIdAsociada, vinculadasActuales)
             }
@@ -2865,6 +2912,271 @@ export async function anularOrdenFacturacion(puestoNumero: number, numero: numbe
             where: { puestoNumero_numero: { puestoNumero, numero } },
             data: { estado: 'X', fechaEstado: new Date() },
         })
+    })
+}
+
+export async function crearOrdenDesdePracticaFacturacion(
+    data: CrearOrdenDesdePracticaFacturacionInput,
+    usuario: string
+): Promise<{ puestoNumero: number; numero: number }> {
+    const practica = await prisma.practica.findUnique({
+        where: { id: data.practicaId },
+        select: {
+            id: true,
+            ingresoId: true,
+            convenioId: true,
+            codigoPractica: true,
+            cantidad: true,
+            fecha: true,
+            numeroAutorizacion: true,
+            importeTotal: true,
+            puestoNumero: true,
+            ordenNumero: true,
+            ordenItem: true,
+            nomencladorPractica: { select: { descripcion: true } },
+        },
+    })
+
+    if (!practica) throw new Error('Práctica no encontrada')
+    if (practica.ingresoId !== data.ingresoId) {
+        throw new Error('La práctica no pertenece al ingreso seleccionado')
+    }
+    if (practica.puestoNumero && practica.ordenNumero) {
+        throw new Error('La práctica ya tiene una orden vinculada')
+    }
+
+    const ingreso = await prisma.ingreso.findUnique({
+        where: { id: data.ingresoId },
+        select: {
+            id: true,
+            pacienteId: true,
+            nombre: true,
+            numeroAfiliado: true,
+            obraSocialId: true,
+            obraSocialCoseguroId: true,
+            planCoseguroId: true,
+            descripcionPatologia: true,
+            profesionalTratanteId: true,
+            profesionalGuardiaId: true,
+            paciente: { select: { nombreCompleto: true } },
+        },
+    })
+
+    if (!ingreso) throw new Error('Ingreso no encontrado')
+    if (!ingreso.obraSocialId) throw new Error('El ingreso no tiene obra social cargada')
+
+    const profesionalId =
+        data.profesionalId ?? ingreso.profesionalTratanteId ?? ingreso.profesionalGuardiaId ?? null
+    if (!profesionalId) {
+        throw new Error('No hay profesional asignado. Seleccioná uno para generar la orden.')
+    }
+
+    const descripcionPractica =
+        practica.nomencladorPractica?.descripcion ?? practica.codigoPractica.trim()
+
+    const orden = await crearOrdenAmbulatorio(
+        {
+            ingresoId: ingreso.id,
+            pacienteId: ingreso.pacienteId ?? undefined,
+            nombrePaciente: ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? 'PACIENTE',
+            numeroAfiliado: ingreso.numeroAfiliado ?? '',
+            obraSocialId: ingreso.obraSocialId,
+            obraSocialCoseguroId: ingreso.obraSocialCoseguroId ?? undefined,
+            planCoseguroId: ingreso.planCoseguroId ?? undefined,
+            profesionalId,
+            tipoOrdenCodigo: 'PRA',
+            descripcionPatologia: ingreso.descripcionPatologia ?? undefined,
+            items: [
+                {
+                    practicaId: practica.id,
+                    convenioId: practica.convenioId,
+                    codigoPractica: practica.codigoPractica.trim(),
+                    descripcionPractica,
+                    cantidad: Number(practica.cantidad),
+                    tipoFacturacion: 'H',
+                    fecha: practica.fecha,
+                    numeroAutorizacion: practica.numeroAutorizacion,
+                    importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : undefined,
+                },
+            ],
+        },
+        usuario
+    )
+
+    await prisma.practica.update({
+        where: { id: practica.id },
+        data: {
+            puestoNumero: orden.puestoNumero,
+            ordenNumero: orden.numero,
+            ordenItem: 1,
+        },
+    })
+
+    return { puestoNumero: orden.puestoNumero, numero: orden.numero }
+}
+
+export async function renumerarOrdenFacturacion(
+    data: RenumerarOrdenFacturacionInput
+): Promise<{ puestoNumero: number; numero: number }> {
+    if (data.puestoNumero === data.nuevoPuestoNumero && data.numero === data.nuevoNumero) {
+        return { puestoNumero: data.nuevoPuestoNumero, numero: data.nuevoNumero }
+    }
+
+    return prisma.$transaction(async (tx) => {
+        const ordenActual = await tx.orden.findUnique({
+            where: {
+                puestoNumero_numero: {
+                    puestoNumero: data.puestoNumero,
+                    numero: data.numero,
+                },
+            },
+            select: {
+                puestoNumero: true,
+                numero: true,
+                ingresoId: true,
+                estado: true,
+                descripcion: true,
+                fechaEmision: true,
+                fechaPedido: true,
+                numeroAutorizacion: true,
+                pacienteId: true,
+                nombrePaciente: true,
+                numeroAfiliado: true,
+                obraSocialId: true,
+                planId: true,
+                obraSocialCoseguroId: true,
+                planCoseguroId: true,
+                profesionalId: true,
+                tipoOrdenCodigo: true,
+                patologiaId: true,
+                descripcionPatologia: true,
+                importeTotal: true,
+                importeCargoPac: true,
+                titularModular: true,
+                imprimirPorDuplicado: true,
+                fechaEstado: true,
+                usuarioRegistro: true,
+                items: {
+                    orderBy: { item: 'asc' },
+                    select: {
+                        item: true,
+                        practicaId: true,
+                        convenioId: true,
+                        codigoPractica: true,
+                        convenioValorId: true,
+                        tipoDiferencialCodigo: true,
+                        numeroAutorizacion: true,
+                        fecha: true,
+                        cantidad: true,
+                        cantidadModuloIntegral: true,
+                        importeTotal: true,
+                        importeCargoPaciente: true,
+                        porcentajeCargoPac: true,
+                        tipoFacturacion: true,
+                        clasificacionAgrupacion: true,
+                        modulo: true,
+                        titularModular: true,
+                        imprimirPorDuplicado: true,
+                        efectorMatricula: true,
+                    },
+                },
+            },
+        })
+
+        if (!ordenActual) throw new Error('Orden no encontrada')
+
+        const yaExisteDestino = await tx.orden.findUnique({
+            where: {
+                puestoNumero_numero: {
+                    puestoNumero: data.nuevoPuestoNumero,
+                    numero: data.nuevoNumero,
+                },
+            },
+            select: { numero: true },
+        })
+        if (yaExisteDestino) {
+            throw new Error('Ya existe una orden con el nuevo puesto y número')
+        }
+
+        await tx.orden.create({
+            data: {
+                puestoNumero: data.nuevoPuestoNumero,
+                numero: data.nuevoNumero,
+                ingresoId: ordenActual.ingresoId,
+                descripcion: ordenActual.descripcion,
+                fechaEmision: ordenActual.fechaEmision,
+                fechaPedido: ordenActual.fechaPedido,
+                numeroAutorizacion: ordenActual.numeroAutorizacion,
+                pacienteId: ordenActual.pacienteId,
+                nombrePaciente: ordenActual.nombrePaciente,
+                numeroAfiliado: ordenActual.numeroAfiliado,
+                obraSocialId: ordenActual.obraSocialId,
+                planId: ordenActual.planId,
+                obraSocialCoseguroId: ordenActual.obraSocialCoseguroId,
+                planCoseguroId: ordenActual.planCoseguroId,
+                profesionalId: ordenActual.profesionalId,
+                tipoOrdenCodigo: ordenActual.tipoOrdenCodigo,
+                patologiaId: ordenActual.patologiaId,
+                descripcionPatologia: ordenActual.descripcionPatologia,
+                importeTotal: ordenActual.importeTotal,
+                importeCargoPac: ordenActual.importeCargoPac,
+                titularModular: ordenActual.titularModular,
+                imprimirPorDuplicado: ordenActual.imprimirPorDuplicado,
+                estado: ordenActual.estado,
+                fechaEstado: ordenActual.fechaEstado,
+                usuarioRegistro: ordenActual.usuarioRegistro,
+            },
+        })
+
+        if (ordenActual.items.length > 0) {
+            await tx.ordenPractica.createMany({
+                data: ordenActual.items.map((it) => ({
+                    puestoNumero: data.nuevoPuestoNumero,
+                    ordenNumero: data.nuevoNumero,
+                    item: it.item,
+                    practicaId: it.practicaId,
+                    convenioId: it.convenioId,
+                    codigoPractica: it.codigoPractica,
+                    convenioValorId: it.convenioValorId,
+                    tipoDiferencialCodigo: it.tipoDiferencialCodigo,
+                    numeroAutorizacion: it.numeroAutorizacion,
+                    fecha: it.fecha,
+                    cantidad: it.cantidad,
+                    cantidadModuloIntegral: it.cantidadModuloIntegral,
+                    importeTotal: it.importeTotal,
+                    importeCargoPaciente: it.importeCargoPaciente,
+                    porcentajeCargoPac: it.porcentajeCargoPac,
+                    tipoFacturacion: it.tipoFacturacion,
+                    clasificacionAgrupacion: it.clasificacionAgrupacion,
+                    modulo: it.modulo,
+                    titularModular: it.titularModular,
+                    imprimirPorDuplicado: it.imprimirPorDuplicado,
+                    efectorMatricula: it.efectorMatricula,
+                })),
+            })
+        }
+
+        await tx.practica.updateMany({
+            where: {
+                puestoNumero: data.puestoNumero,
+                ordenNumero: data.numero,
+            },
+            data: {
+                puestoNumero: data.nuevoPuestoNumero,
+                ordenNumero: data.nuevoNumero,
+            },
+        })
+
+        await tx.orden.delete({
+            where: {
+                puestoNumero_numero: {
+                    puestoNumero: data.puestoNumero,
+                    numero: data.numero,
+                },
+            },
+        })
+
+        return { puestoNumero: data.nuevoPuestoNumero, numero: data.nuevoNumero }
     })
 }
 

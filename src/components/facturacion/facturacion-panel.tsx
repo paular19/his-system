@@ -537,6 +537,54 @@ function obtenerDestinoOrdenPrestacion(
     return `/dashboard/ambulatorio/${ordenPuestoNumero}/${ordenNumero}`
 }
 
+type ItemOrdenRelacionado = {
+    ordenPuestoNumero: number
+    ordenNumero: number
+    ordenItem: number
+}
+
+function keyItemOrdenRelacionado(item: ItemOrdenRelacionado): string {
+    return `${item.ordenPuestoNumero}:${item.ordenNumero}:${item.ordenItem}`
+}
+
+function obtenerItemsOrdenRelacionados(
+    p: PrestacionFacturableItem,
+    autorizacionesVinculadasOrdenadas: AutorizacionVinculadaExtendida[]
+): ItemOrdenRelacionado[] {
+    const items: ItemOrdenRelacionado[] = []
+
+    if (p.origen.ordenPuestoNumero && p.origen.ordenNumero && p.origen.ordenItem) {
+        items.push({
+            ordenPuestoNumero: p.origen.ordenPuestoNumero,
+            ordenNumero: p.origen.ordenNumero,
+            ordenItem: p.origen.ordenItem,
+        })
+    }
+
+    for (const aut of autorizacionesVinculadasOrdenadas) {
+        items.push({
+            ordenPuestoNumero: aut.ordenPuestoNumero,
+            ordenNumero: aut.ordenNumero,
+            ordenItem: aut.ordenItem,
+        })
+    }
+
+    const unicos = new Map<string, ItemOrdenRelacionado>()
+    for (const item of items) {
+        unicos.set(keyItemOrdenRelacionado(item), item)
+    }
+
+    return Array.from(unicos.values()).sort((a, b) => {
+        if (a.ordenPuestoNumero !== b.ordenPuestoNumero) {
+            return a.ordenPuestoNumero - b.ordenPuestoNumero
+        }
+        if (a.ordenNumero !== b.ordenNumero) {
+            return a.ordenNumero - b.ordenNumero
+        }
+        return a.ordenItem - b.ordenItem
+    })
+}
+
 function obtenerMatriculaEjecutanteNumero(
     p: PrestacionFacturableItem,
     draft: EditState,
@@ -2496,6 +2544,13 @@ export function FacturacionPanel() {
                                                 const numeroOrdenLinea = obtenerNumeroOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
                                                 const destinoOrdenLinea = obtenerDestinoOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
                                                 const ordenAgrupada = Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
+                                                const itemsOrdenRelacionados = obtenerItemsOrdenRelacionados(p, autorizacionesVinculadasOrdenadas)
+                                                const itemOrdenPrincipalKey =
+                                                    p.origen.ordenPuestoNumero && p.origen.ordenNumero && p.origen.ordenItem
+                                                        ? `${p.origen.ordenPuestoNumero}:${p.origen.ordenNumero}:${p.origen.ordenItem}`
+                                                        : (itemsOrdenRelacionados[0]
+                                                            ? keyItemOrdenRelacionado(itemsOrdenRelacionados[0])
+                                                            : null)
                                                 const matriculaEjecutante = obtenerMatriculaEjecutante(p, draft, autorizacionesVinculadasOrdenadas)
                                                 const matriculaEjecutanteNumero = obtenerMatriculaEjecutanteNumero(p, draft, autorizacionesVinculadasOrdenadas)
                                                 const profesionalEjecutante = matriculaEjecutanteNumero
@@ -2882,6 +2937,21 @@ export function FacturacionPanel() {
 
                                                                     <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-700">
                                                                         <span className="rounded-full bg-slate-100 px-2 py-0.5">Incluye: {resumenIncluye}</span>
+                                                                        {itemsOrdenRelacionados.map((item) => {
+                                                                            const keyItem = keyItemOrdenRelacionado(item)
+                                                                            const esPrincipal = itemOrdenPrincipalKey === keyItem
+                                                                            return (
+                                                                                <span
+                                                                                    key={`${p.uid}:item-vinculado:${keyItem}`}
+                                                                                    className={esPrincipal
+                                                                                        ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800'
+                                                                                        : 'rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700'}
+                                                                                >
+                                                                                    {formatOrderNumber(item.ordenPuestoNumero, item.ordenNumero)} · Item {item.ordenItem}
+                                                                                    {esPrincipal ? ' (esta práctica)' : ''}
+                                                                                </span>
+                                                                            )
+                                                                        })}
                                                                         {etiquetasDiferencial.length > 0 && etiquetasDiferencial.map((etq) => (
                                                                             <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
                                                                         ))}

@@ -760,6 +760,7 @@ export function FacturacionPanel() {
     const [detallePrestacionesExpand, setDetallePrestacionesExpand] = useState<Record<string, boolean>>({})
     const [guardandoRowUid, setGuardandoRowUid] = useState<string | null>(null)
     const [ordenesExpand, setOrdenesExpand] = useState<Record<string, boolean>>({})
+    const [ordenesPendientesExpand, setOrdenesPendientesExpand] = useState<Record<string, boolean>>({})
     const [filtroPrestaciones, setFiltroPrestaciones] = useState('')
     const [paginaPrestaciones, setPaginaPrestaciones] = useState(1)
     const [porPaginaPrestaciones, setPorPaginaPrestaciones] = useState(PRESTACIONES_POR_PAGINA_DEFAULT)
@@ -936,13 +937,47 @@ export function FacturacionPanel() {
         })
     }, [prestacionesNoOrdenadasFiltradas])
 
-    const totalPaginasPrestaciones = Math.max(1, Math.ceil(prestacionesNoOrdenadasFiltradas.length / porPaginaPrestaciones))
+    const gruposPrestacionesNoOrdenadasFiltradas = useMemo(() => {
+        const grupos: Array<{
+            key: string
+            ordenPuestoNumero: number | null
+            ordenNumero: number | null
+            items: PrestacionFacturableItem[]
+        }> = []
+
+        const indicePorKey = new Map<string, number>()
+
+        for (const p of prestacionesNoOrdenadasFiltradasOrdenadas) {
+            const orden = obtenerOrdenParaOrdenamiento(p)
+            const key = orden
+                ? `ORD:${orden.puestoNumero}:${orden.ordenNumero}`
+                : `SIN:${p.uid}`
+
+            const idx = indicePorKey.get(key)
+            if (idx == null) {
+                indicePorKey.set(key, grupos.length)
+                grupos.push({
+                    key,
+                    ordenPuestoNumero: orden?.puestoNumero ?? null,
+                    ordenNumero: orden?.ordenNumero ?? null,
+                    items: [p],
+                })
+                continue
+            }
+
+            grupos[idx]?.items.push(p)
+        }
+
+        return grupos
+    }, [prestacionesNoOrdenadasFiltradasOrdenadas])
+
+    const totalPaginasPrestaciones = Math.max(1, Math.ceil(gruposPrestacionesNoOrdenadasFiltradas.length / porPaginaPrestaciones))
     const paginaPrestacionesActual = Math.min(paginaPrestaciones, totalPaginasPrestaciones)
 
-    const prestacionesNoOrdenadasPaginadas = useMemo(() => {
+    const gruposPrestacionesNoOrdenadasPaginadas = useMemo(() => {
         const desde = (paginaPrestacionesActual - 1) * porPaginaPrestaciones
-        return prestacionesNoOrdenadasFiltradasOrdenadas.slice(desde, desde + porPaginaPrestaciones)
-    }, [paginaPrestacionesActual, porPaginaPrestaciones, prestacionesNoOrdenadasFiltradasOrdenadas])
+        return gruposPrestacionesNoOrdenadasFiltradas.slice(desde, desde + porPaginaPrestaciones)
+    }, [paginaPrestacionesActual, porPaginaPrestaciones, gruposPrestacionesNoOrdenadasFiltradas])
 
     const cirugiasEditables = useMemo(() => {
         if (!contexto) return []
@@ -2345,12 +2380,12 @@ export function FacturacionPanel() {
                                             onChange={(e) => setPorPaginaPrestaciones(Number.parseInt(e.target.value, 10) || PRESTACIONES_POR_PAGINA_DEFAULT)}
                                             className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-700"
                                         >
-                                            <option value={8}>8 por página</option>
-                                            <option value={12}>12 por página</option>
-                                            <option value={20}>20 por página</option>
+                                            <option value={8}>8 órdenes por página</option>
+                                            <option value={12}>12 órdenes por página</option>
+                                            <option value={20}>20 órdenes por página</option>
                                         </select>
                                         <p className="text-xs text-gray-500 whitespace-nowrap">
-                                            {prestacionesNoOrdenadasFiltradas.length} de {prestacionesNoOrdenadas.length} pendientes
+                                            Órdenes: {gruposPrestacionesNoOrdenadasFiltradas.length} · Prácticas: {prestacionesNoOrdenadasFiltradas.length} de {prestacionesNoOrdenadas.length}
                                         </p>
                                     </div>
                                 </div>
@@ -2372,7 +2407,30 @@ export function FacturacionPanel() {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
-                                            {prestacionesNoOrdenadasPaginadas.map((p) => {
+                                            {gruposPrestacionesNoOrdenadasPaginadas.map((grupo) => {
+                                                const grupoExpandido = ordenesPendientesExpand[grupo.key] ?? true
+                                                const etiquetaOrden =
+                                                    grupo.ordenPuestoNumero && grupo.ordenNumero
+                                                        ? formatOrderNumber(grupo.ordenPuestoNumero, grupo.ordenNumero)
+                                                        : 'Sin orden vinculada'
+
+                                                return (
+                                                    <Fragment key={grupo.key}>
+                                                        <tr className="bg-slate-50">
+                                                            <td colSpan={10} className="px-3 py-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setOrdenesPendientesExpand((prev) => ({ ...prev, [grupo.key]: !grupoExpandido }))}
+                                                                    className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                                                                >
+                                                                    {grupoExpandido ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                                    Orden {etiquetaOrden}
+                                                                    <span className="text-[11px] text-slate-500">({grupo.items.length} práctica{grupo.items.length === 1 ? '' : 's'})</span>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+
+                                                        {grupoExpandido && grupo.items.map((p) => {
                                                 const draft = editRows[p.uid] ?? buildEditState(p)
                                                 const filaEnEdicion = Boolean(rowEditMode[p.uid])
                                                 const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
@@ -2437,6 +2495,7 @@ export function FacturacionPanel() {
                                                 const importeResumen = Number.parseFloat(draft.importeTotal)
                                                 const numeroOrdenLinea = obtenerNumeroOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
                                                 const destinoOrdenLinea = obtenerDestinoOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
+                                                const ordenAgrupada = Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
                                                 const matriculaEjecutante = obtenerMatriculaEjecutante(p, draft, autorizacionesVinculadasOrdenadas)
                                                 const matriculaEjecutanteNumero = obtenerMatriculaEjecutanteNumero(p, draft, autorizacionesVinculadasOrdenadas)
                                                 const profesionalEjecutante = matriculaEjecutanteNumero
@@ -2531,7 +2590,9 @@ export function FacturacionPanel() {
                                                                 )}
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
-                                                                {destinoOrdenLinea ? (
+                                                                {ordenAgrupada ? (
+                                                                    <span className="text-[11px] text-gray-400">↳</span>
+                                                                ) : destinoOrdenLinea ? (
                                                                     <Link
                                                                         href={destinoOrdenLinea}
                                                                         target="_blank"
@@ -2896,6 +2957,10 @@ export function FacturacionPanel() {
                                                 )
                                             })}
 
+                                                    </Fragment>
+                                                )
+                                            })}
+
                                             {prestacionesNoOrdenadasFiltradas.length === 0 && prestacionesNoOrdenadas.length > 0 && (
                                                 <tr>
                                                     <td colSpan={10} className="px-3 py-4 text-center text-xs text-gray-500">
@@ -3247,7 +3312,7 @@ export function FacturacionPanel() {
                                                 )
                                             })}
 
-                                            {contexto.prestaciones.length === 0 && <tr><td colSpan={10} className="px-3 py-6 text-center text-sm text-gray-500">Sin prestaciones registradas</td></tr>}
+                                                    {gruposPrestacionesNoOrdenadasFiltradas.length === 0 && <tr><td colSpan={10} className="px-3 py-6 text-center text-sm text-gray-500">Sin prestaciones pendientes</td></tr>}
                                         </tbody>
                                     </table>
                                 </div>
@@ -3264,7 +3329,7 @@ export function FacturacionPanel() {
 
                                 <div className="px-4 py-2 border-t text-xs text-gray-500 flex flex-wrap items-center justify-between gap-2">
                                     <span>Seleccionables para facturar: {prestacionesSeleccionables.length} · Seleccionadas: {prestacionesSeleccionadas.length}</span>
-                                    {prestacionesNoOrdenadasFiltradas.length > porPaginaPrestaciones && (
+                                    {gruposPrestacionesNoOrdenadasFiltradas.length > porPaginaPrestaciones && (
                                         <span className="inline-flex items-center gap-1">
                                             <button
                                                 type="button"

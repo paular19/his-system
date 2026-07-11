@@ -528,6 +528,23 @@ function resolverNumeroAutorizacionOrdenItem(
     return resolverNumeroAutorizacion(authItem, authOrden)
 }
 
+function tieneAutorizacionBloqueanteOrdenItem(
+    numeroAutorizacionItem: string | null | undefined,
+    numeroAutorizacionOrden: string | null | undefined,
+    puestoNumero: number,
+    ordenNumero: number,
+    item: number
+): boolean {
+    const authOrden = numeroAutorizacionOrden?.trim() ?? null
+    if (tieneNumeroAutorizacionValido(authOrden)) return true
+
+    const authItem = numeroAutorizacionItem?.trim() ?? null
+    if (!tieneNumeroAutorizacionValido(authItem)) return false
+
+    const codigoBarrasGenerado = generarCodigoBarrasOrdenItem(puestoNumero, ordenNumero, item)
+    return authItem !== codigoBarrasGenerado
+}
+
 type PrestacionPreparadaFacturacion = {
     practicaId: number | null
     convenioId: number
@@ -2685,10 +2702,14 @@ export async function actualizarPrestacionFacturacion(
             }
 
             const ordenBloqueadaPorAutorizacion = Boolean(
-                ordenItemVinculado && (
-                    tieneNumeroAutorizacionValido(ordenItemVinculado.numeroAutorizacion) ||
-                    tieneNumeroAutorizacionValido(ordenItemVinculado.orden.numeroAutorizacion)
-                )
+                ordenItemVinculado &&
+                    tieneAutorizacionBloqueanteOrdenItem(
+                        ordenItemVinculado.numeroAutorizacion,
+                        ordenItemVinculado.orden.numeroAutorizacion,
+                        ordenItemVinculado.puestoNumero,
+                        ordenItemVinculado.ordenNumero,
+                        ordenItemVinculado.item
+                    )
             )
 
             const numeroAutorizacionOrden =

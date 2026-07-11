@@ -2728,18 +2728,6 @@ export async function actualizarPrestacionFacturacion(
                     importeTotal: data.importeTotal,
                     matriculaEspecialista: data.matriculaEspecialista ?? null,
                     matriculaAnestesista: data.matriculaAnestesista ?? null,
-                    ...(ordenItemVinculado && !ordenBloqueadaPorAutorizacion
-                        ? {
-                            puestoNumero: ordenItemVinculado.puestoNumero,
-                            ordenNumero: ordenItemVinculado.ordenNumero,
-                            ordenItem: ordenItemVinculado.item,
-                        }
-                        : {
-                            // Si la orden ya tiene autorización, se mantiene el desacople para no sobrescribirla.
-                            puestoNumero: null,
-                            ordenNumero: null,
-                            ordenItem: null,
-                        }),
                 },
             })
 

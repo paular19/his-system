@@ -377,6 +377,33 @@ function descripcionEsAyudante(value: string | null | undefined): boolean {
     return text.includes('AYUD') || text.includes('[A1') || text.includes('[A2') || text.includes('[A3')
 }
 
+function descripcionEsAnestesista(value: string | null | undefined): boolean {
+    const text = (value ?? '').toUpperCase()
+    return text.includes('ANEST') || text.includes('[HA')
+}
+
+function mostrarCampoMatriculaAyudante(
+    p: PrestacionFacturableItem,
+    desglose: ComponenteValores | null
+): boolean {
+    return (
+        incluyeTieneAyudante(p.incluyeCodigo) ||
+        (desglose?.valorAyudante ?? null) !== null ||
+        (!p.incluyeCodigo && descripcionEsAyudante(p.descripcion))
+    )
+}
+
+function mostrarCampoMatriculaAnestesista(
+    p: PrestacionFacturableItem,
+    desglose: ComponenteValores | null
+): boolean {
+    return (
+        incluyeTieneAnestesista(p.incluyeCodigo) ||
+        (desglose?.valorAnestesista ?? null) !== null ||
+        (!p.incluyeCodigo && descripcionEsAnestesista(p.descripcion))
+    )
+}
+
 function construirIncluyeCodigoDesdeSeleccion(
     valores: ComponenteValores | null,
     seleccion: ComponenteSeleccion | null | undefined,
@@ -489,6 +516,25 @@ function obtenerNumeroOrdenPrestacion(
     }
 
     return '—'
+}
+
+function obtenerDestinoOrdenPrestacion(
+    p: PrestacionFacturableItem,
+    autorizacionesVinculadasOrdenadas: AutorizacionVinculadaExtendida[]
+): string | null {
+    const ordenPuestoNumero =
+        p.ordenPuestoNumero ??
+        p.origen.ordenPuestoNumero ??
+        autorizacionesVinculadasOrdenadas[0]?.ordenPuestoNumero ??
+        null
+    const ordenNumero =
+        p.ordenNumero ??
+        p.origen.ordenNumero ??
+        autorizacionesVinculadasOrdenadas[0]?.ordenNumero ??
+        null
+
+    if (!ordenPuestoNumero || !ordenNumero) return null
+    return `/dashboard/ambulatorio/${ordenPuestoNumero}/${ordenNumero}`
 }
 
 function obtenerMatriculaEjecutanteNumero(
@@ -2302,6 +2348,7 @@ export function FacturacionPanel() {
                                                     : '—'
                                                 const importeResumen = Number.parseFloat(draft.importeTotal)
                                                 const numeroOrdenLinea = obtenerNumeroOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
+                                                const destinoOrdenLinea = obtenerDestinoOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
                                                 const matriculaEjecutante = obtenerMatriculaEjecutante(p, draft, autorizacionesVinculadasOrdenadas)
                                                 const matriculaEjecutanteNumero = obtenerMatriculaEjecutanteNumero(p, draft, autorizacionesVinculadasOrdenadas)
                                                 const profesionalEjecutante = matriculaEjecutanteNumero
@@ -2310,13 +2357,8 @@ export function FacturacionPanel() {
                                                 const ejecutanteDetalle = matriculaEjecutanteNumero
                                                     ? `${profesionalEjecutante?.nombre ?? 'Sin nombre'} · MP ${matriculaEjecutanteNumero}`
                                                     : '—'
-                                                const mostrarMatriculaAyudante =
-                                                    parseMatricula(draft.matriculaAyudante) !== null ||
-                                                    (p.tipo === 'PRACTICA' && incluyeTieneAyudante(p.incluyeCodigo))
-                                                const mostrarMatriculaAnestesista =
-                                                    parseMatricula(draft.matriculaAnestesista) !== null ||
-                                                    p.matriculaAnestesista !== null ||
-                                                    (p.tipo === 'PRACTICA' && incluyeTieneAnestesista(p.incluyeCodigo))
+                                                const mostrarMatriculaAyudante = mostrarCampoMatriculaAyudante(p, desgloseSelector)
+                                                const mostrarMatriculaAnestesista = mostrarCampoMatriculaAnestesista(p, desgloseSelector)
                                                 return (
                                                     <Fragment key={p.uid}>
                                                         <tr className={yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
@@ -2401,7 +2443,19 @@ export function FacturacionPanel() {
                                                                 )}
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
-                                                                <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{numeroOrdenLinea}</span>
+                                                                {destinoOrdenLinea ? (
+                                                                    <Link
+                                                                        href={destinoOrdenLinea}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                                                                        title="Abrir orden"
+                                                                    >
+                                                                        {numeroOrdenLinea}
+                                                                    </Link>
+                                                                ) : (
+                                                                    <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{numeroOrdenLinea}</span>
+                                                                )}
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
                                                                 {filaEnEdicion && (p.tipo === 'PRACTICA' || p.tipo === 'ORDEN_ITEM') ? (
@@ -2830,6 +2884,7 @@ export function FacturacionPanel() {
                                                             const draft = editRows[p.uid] ?? buildEditState(p)
                                                             const filaEnEdicion = Boolean(rowEditMode[p.uid])
                                                             const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
+                                                            const desgloseSelector = obtenerDesgloseSelector(p)
                                                             const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
                                                             const importeParcialPorSubitem = esImporteParcialPorSubitem(p.incluyeCodigo)
                                                             const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
@@ -2839,6 +2894,7 @@ export function FacturacionPanel() {
                                                                 : '—'
                                                             const importeResumen = Number.parseFloat(draft.importeTotal)
                                                             const numeroOrdenLinea = obtenerNumeroOrdenPrestacion(p, [])
+                                                            const destinoOrdenLinea = obtenerDestinoOrdenPrestacion(p, [])
                                                             const matriculaEjecutante = obtenerMatriculaEjecutante(p, draft, [])
                                                             const matriculaEjecutanteNumero = obtenerMatriculaEjecutanteNumero(p, draft, [])
                                                             const profesionalEjecutante = matriculaEjecutanteNumero
@@ -2847,13 +2903,8 @@ export function FacturacionPanel() {
                                                             const ejecutanteDetalle = matriculaEjecutanteNumero
                                                                 ? `${profesionalEjecutante?.nombre ?? 'Sin nombre'} · MP ${matriculaEjecutanteNumero}`
                                                                 : '—'
-                                                            const mostrarMatriculaAyudante =
-                                                                parseMatricula(draft.matriculaAyudante) !== null ||
-                                                                (p.tipo === 'PRACTICA' && incluyeTieneAyudante(p.incluyeCodigo))
-                                                            const mostrarMatriculaAnestesista =
-                                                                parseMatricula(draft.matriculaAnestesista) !== null ||
-                                                                p.matriculaAnestesista !== null ||
-                                                                (p.tipo === 'PRACTICA' && incluyeTieneAnestesista(p.incluyeCodigo))
+                                                            const mostrarMatriculaAyudante = mostrarCampoMatriculaAyudante(p, desgloseSelector)
+                                                            const mostrarMatriculaAnestesista = mostrarCampoMatriculaAnestesista(p, desgloseSelector)
 
                                                             return (
                                                                 <Fragment key={p.uid}>
@@ -2896,7 +2947,19 @@ export function FacturacionPanel() {
                                                                             )}
                                                                         </td>
                                                                         <td className="px-3 py-2 align-top">
-                                                                            <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{numeroOrdenLinea}</span>
+                                                                            {destinoOrdenLinea ? (
+                                                                                <Link
+                                                                                    href={destinoOrdenLinea}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                    className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                                                                                    title="Abrir orden"
+                                                                                >
+                                                                                    {numeroOrdenLinea}
+                                                                                </Link>
+                                                                            ) : (
+                                                                                <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{numeroOrdenLinea}</span>
+                                                                            )}
                                                                         </td>
                                                                         <td className="px-3 py-2 align-top">
                                                                             {filaEnEdicion ? (

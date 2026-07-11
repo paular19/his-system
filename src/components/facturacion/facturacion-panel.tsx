@@ -1051,9 +1051,12 @@ export function FacturacionPanel() {
         }
     }
 
-    async function cargarContexto(ingresoId: number) {
+    async function cargarContexto(ingresoId: number, options?: { silent?: boolean }) {
+        const silent = Boolean(options?.silent)
         setError(null)
-        setCargandoContexto(true)
+        if (!silent) {
+            setCargandoContexto(true)
+        }
         try {
             const res = await fetch(`/api/facturacion/contexto?ingresoId=${ingresoId}`)
             const json = (await res.json()) as ApiResponse<FacturacionContexto>
@@ -1071,7 +1074,9 @@ export function FacturacionPanel() {
             setError(err instanceof Error ? err.message : 'Error al cargar contexto')
             setContexto(null)
         } finally {
-            setCargandoContexto(false)
+            if (!silent) {
+                setCargandoContexto(false)
+            }
         }
     }
 
@@ -1588,7 +1593,7 @@ export function FacturacionPanel() {
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo guardar prestación')
 
             setRowEditMode((prev) => ({ ...prev, [p.uid]: false }))
-            if (contexto) await cargarContexto(contexto.ingreso.id)
+            if (contexto) await cargarContexto(contexto.ingreso.id, { silent: true })
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al guardar prestación')
         } finally {

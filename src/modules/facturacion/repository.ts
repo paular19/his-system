@@ -2612,7 +2612,12 @@ export async function actualizarPrestacionFacturacion(
     if (data.tipo === 'PRACTICA') {
         const actual = await prisma.practica.findUnique({
             where: { id: data.practicaId },
-            select: { convenioId: true },
+            select: {
+                convenioId: true,
+                puestoNumero: true,
+                ordenNumero: true,
+                ordenItem: true,
+            },
         })
         if (!actual) throw new Error('Práctica no encontrada')
 
@@ -2622,23 +2627,168 @@ export async function actualizarPrestacionFacturacion(
             actual.convenioId
         )
 
-        await prisma.practica.update({
-            where: { id: data.practicaId },
-            data: {
-                fecha: data.fecha,
-                convenioId: resolved.convenioId,
-                codigoPractica: resolved.codigoPractica.trim(),
-                cantidad: data.cantidad,
-                numeroAutorizacion: data.numeroAutorizacion ?? null,
-                importeTotal: data.importeTotal,
-                matriculaEspecialista: data.matriculaEspecialista ?? null,
-                matriculaAnestesista: data.matriculaAnestesista ?? null,
-                // Unlink from any existing order so it's treated as pending again
-                puestoNumero: null,
-                ordenNumero: null,
-                ordenItem: null,
-            },
+        let ingresoIdParaRecalculo: number | null = null
+
+        await prisma.$transaction(async (tx) => {
+            let ordenItemVinculado: {
+                puestoNumero: number
+                ordenNumero: number
+                item: number
+                numeroAutorizacion: string | null
+                orden: {
+                    ingresoId: number | null
+                    numeroAutorizacion: string | null
+                }
+            } | null = null
+
+            if (actual.puestoNumero && actual.ordenNumero && actual.ordenItem) {
+                ordenItemVinculado = await tx.ordenPractica.findUnique({
+                    where: {
+                        puestoNumero_ordenNumero_item: {
+                            puestoNumero: actual.puestoNumero,
+                            ordenNumero: actual.ordenNumero,
+                            item: actual.ordenItem,
+                        },
+                    },
+                    select: {
+                        puestoNumero: true,
+                        ordenNumero: true,
+                        item: true,
+                        numeroAutorizacion: true,
+                        orden: {
+                            select: {
+                                ingresoId: true,
+                                numeroAutorizacion: true,
+                            },
+                        },
+                    },
+                })
+            }
+
+            if (!ordenItemVinculado) {
+                ordenItemVinculado = await tx.ordenPractica.findFirst({
+                    where: { practicaId: data.practicaId },
+                    orderBy: [{ fecha: 'desc' }],
+                    select: {
+                        puestoNumero: true,
+                        ordenNumero: true,
+                        item: true,
+                        numeroAutorizacion: true,
+                        orden: {
+                            select: {
+                                ingresoId: true,
+                                numeroAutorizacion: true,
+                            },
+                        },
+                    },
+                })
+            }
+
+            const ordenBloqueadaPorAutorizacion = Boolean(
+                ordenItemVinculado && (
+                    tieneNumeroAutorizacionValido(ordenItemVinculado.numeroAutorizacion) ||
+                    tieneNumeroAutorizacionValido(ordenItemVinculado.orden.numeroAutorizacion)
+                )
+            )
+
+            const numeroAutorizacionOrden =
+                data.numeroAutorizacion?.trim()
+                    ? data.numeroAutorizacion.trim().slice(0, 15)
+                    : null
+
+            await tx.practica.update({
+                where: { id: data.practicaId },
+                data: {
+                    fecha: data.fecha,
+                    convenioId: resolved.convenioId,
+                    codigoPractica: resolved.codigoPractica.trim(),
+                    cantidad: data.cantidad,
+                    numeroAutorizacion: data.numeroAutorizacion ?? null,
+                    importeTotal: data.importeTotal,
+                    matriculaEspecialista: data.matriculaEspecialista ?? null,
+                    matriculaAnestesista: data.matriculaAnestesista ?? null,
+                    ...(ordenItemVinculado && !ordenBloqueadaPorAutorizacion
+                        ? {
+                            puestoNumero: ordenItemVinculado.puestoNumero,
+                            ordenNumero: ordenItemVinculado.ordenNumero,
+                            ordenItem: ordenItemVinculado.item,
+                        }
+                        : {
+                            // Si la orden ya tiene autorización, se mantiene el desacople para no sobrescribirla.
+                            puestoNumero: null,
+                            ordenNumero: null,
+                            ordenItem: null,
+                        }),
+                },
+            })
+
+            if (ordenItemVinculado && !ordenBloqueadaPorAutorizacion) {
+                await tx.ordenPractica.update({
+                    where: {
+                        puestoNumero_ordenNumero_item: {
+                            puestoNumero: ordenItemVinculado.puestoNumero,
+                            ordenNumero: ordenItemVinculado.ordenNumero,
+                            item: ordenItemVinculado.item,
+                        },
+                    },
+                    data: {
+                        fecha: data.fecha,
+                        convenioId: resolved.convenioId,
+                        codigoPractica: resolved.codigoPractica.trim(),
+                        cantidad: data.cantidad,
+                        numeroAutorizacion: numeroAutorizacionOrden,
+                        importeTotal: data.importeTotal,
+                    },
+                })
+
+                if (data.matriculaProfesional) {
+                    const profesional = await tx.profesional.findFirst({
+                        where: { matricula: data.matriculaProfesional },
+                        select: { id: true },
+                    })
+
+                    if (profesional) {
+                        await tx.orden.update({
+                            where: {
+                                puestoNumero_numero: {
+                                    puestoNumero: ordenItemVinculado.puestoNumero,
+                                    numero: ordenItemVinculado.ordenNumero,
+                                },
+                            },
+                            data: { profesionalId: profesional.id },
+                        })
+                    }
+                }
+
+                const orden = await tx.orden.findUnique({
+                    where: {
+                        puestoNumero_numero: {
+                            puestoNumero: ordenItemVinculado.puestoNumero,
+                            numero: ordenItemVinculado.ordenNumero,
+                        },
+                    },
+                    select: { ingresoId: true, items: { select: { importeTotal: true } } },
+                })
+
+                if (orden) {
+                    const total = orden.items.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
+                    await tx.orden.update({
+                        where: {
+                            puestoNumero_numero: {
+                                puestoNumero: ordenItemVinculado.puestoNumero,
+                                numero: ordenItemVinculado.ordenNumero,
+                            },
+                        },
+                        data: { importeTotal: total },
+                    })
+                    ingresoIdParaRecalculo = orden.ingresoId
+                }
+            }
         })
+
+        if (ingresoIdParaRecalculo) {
+            await recalcularTotalesLotesPendientesPracticasPorIngreso(ingresoIdParaRecalculo)
+        }
         return
     }
 

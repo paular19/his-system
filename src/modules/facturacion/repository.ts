@@ -215,8 +215,22 @@ function esIngresoInternacion(tipoIngresoCodigo: string | null | undefined): boo
 
 function resolverMatriculaGastoPorTipoIngreso(tipoIngresoCodigo: string | null | undefined): number {
     return esIngresoInternacion(tipoIngresoCodigo)
-        ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+        ? MATRICULA_AYUDANTE_INT_DEFAULT
         : MATRICULA_AMBULATORIO_DEFAULT
+}
+
+function esDesgloseSoloGastos(desglose: {
+    valorEspecialista: number | Prisma.Decimal | null | undefined
+    valorAyudante: number | Prisma.Decimal | null | undefined
+    valorAnestesista: number | Prisma.Decimal | null | undefined
+    valorGastos: number | Prisma.Decimal | null | undefined
+} | null | undefined): boolean {
+    if (!desglose) return false
+    const tieneEspecialista = desglose.valorEspecialista != null
+    const tieneAyudante = desglose.valorAyudante != null
+    const tieneAnestesista = desglose.valorAnestesista != null
+    const tieneGastos = desglose.valorGastos != null
+    return tieneGastos && !tieneEspecialista && !tieneAyudante && !tieneAnestesista
 }
 
 function resolverNombreEfectorFallback(params: {
@@ -1116,6 +1130,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                                 valorEspecialista: true,
                                 valorAyudante: true,
                                 valorAnestesista: true,
+                                valorGastos: true,
                             },
                         },
                     },
@@ -1458,6 +1473,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             )
             const incluyeCodigoVinculo = normalizarIncluyeCodigo(it.modulo)
             const incluyeVinculo = desglosarIncluyeCodigo(incluyeCodigoVinculo)
+            const desgloseVinculo = {
+                valorEspecialista: it.nomencladorPractica?.valorEspecialista ?? null,
+                valorAyudante: it.nomencladorPractica?.valorAyudante ?? null,
+                valorAnestesista: it.nomencladorPractica?.valorAnestesista ?? null,
+                valorGastos: it.nomencladorPractica?.valorGastos ?? null,
+            }
             const esSoloAyudanteVinculo = Boolean(
                 incluyeVinculo &&
                 incluyeVinculo.ayudantes > 0 &&
@@ -1469,7 +1490,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             const permiteFallbackAyudanteVinculo = !incluyeVinculo || esSoloAyudanteVinculo
             const permiteFallbackAnestesistaVinculo = !incluyeVinculo || Boolean(incluyeVinculo.anestesista)
             const esCodigoAnestesistaVinculo = esCodigoHaObligatorio(it.codigoPractica)
-            const esGastoVinculo = esSeleccionSoloGastos(incluyeVinculo) || (!incluyeVinculo && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
+            const esGastoVinculo =
+                esSeleccionSoloGastos(incluyeVinculo) ||
+                (!incluyeVinculo && (
+                    descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null) ||
+                    esDesgloseSoloGastos(desgloseVinculo)
+                ))
             const matriculaEspecialistaVinculo = esGastoVinculo
                 ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                 : (esCodigoAnestesistaVinculo
@@ -1734,7 +1760,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 : (importeFromDb ?? coberturaBase.importeTotalFacturable))
         const descripcionBase = p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()
         const incluyeSeleccion = incluyeSeleccionPractica
-        const esGastoPractica = esSeleccionSoloGastos(incluyeSeleccion) || (!incluyeSeleccion && descripcionEsGasto(descripcionBase))
+        const esGastoPractica =
+            esSeleccionSoloGastos(incluyeSeleccion) ||
+            (!incluyeSeleccion && (
+                descripcionEsGasto(descripcionBase) ||
+                esDesgloseSoloGastos(desgloseFiltradoPorIncluye ?? desgloseConDiferencial ?? desgloseBase)
+            ))
         const matriculaEspecialistaFinal = esGastoPractica
             ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
             : matriculaEspecialista
@@ -1854,7 +1885,17 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
 
             const incluye = desglosarIncluyeCodigo(it.modulo)
-            const esGastoItem = esSeleccionSoloGastos(incluye) || (!incluye && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
+            const esGastoItem =
+                esSeleccionSoloGastos(incluye) ||
+                (!incluye && (
+                    descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null) ||
+                    esDesgloseSoloGastos({
+                        valorEspecialista: it.nomencladorPractica?.valorEspecialista ?? null,
+                        valorAyudante: it.nomencladorPractica?.valorAyudante ?? null,
+                        valorAnestesista: it.nomencladorPractica?.valorAnestesista ?? null,
+                        valorGastos: it.nomencladorPractica?.valorGastos ?? null,
+                    })
+                ))
             const tieneHE = Boolean(incluye?.especialista)
             const tieneHA = Boolean(incluye?.anestesista)
             const incluyeSoloAyudante = Boolean(

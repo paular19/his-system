@@ -552,20 +552,20 @@ function obtenerMatriculaEjecutanteNumero(
     const matriculaAyudanteDraft = parseMatricula(draft.matriculaAyudante)
     if (matriculaAyudanteDraft) return matriculaAyudanteDraft
 
-    if (p.matriculaProfesional && p.matriculaProfesional > 0) {
-        return p.matriculaProfesional
-    }
-
     if (p.matriculaAnestesista && p.matriculaAnestesista > 0) {
         return p.matriculaAnestesista
     }
 
+    if (p.matriculaProfesional && p.matriculaProfesional > 0) {
+        return p.matriculaProfesional
+    }
+
     const aut = autorizacionesVinculadasOrdenadas[0]
     if (!aut) return null
-    if (aut.matriculaProfesional && aut.matriculaProfesional > 0) return aut.matriculaProfesional
     if (aut.matriculaEspecialista && aut.matriculaEspecialista > 0) return aut.matriculaEspecialista
     if (aut.matriculaAyudante && aut.matriculaAyudante > 0) return aut.matriculaAyudante
     if (aut.matriculaAnestesista && aut.matriculaAnestesista > 0) return aut.matriculaAnestesista
+    if (aut.matriculaProfesional && aut.matriculaProfesional > 0) return aut.matriculaProfesional
 
     return null
 }

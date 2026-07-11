@@ -579,6 +579,52 @@ function obtenerMatriculaEjecutante(
     return matricula ? `MP ${matricula}` : '—'
 }
 
+function obtenerOrdenParaOrdenamiento(
+    p: PrestacionFacturableItem
+): { puestoNumero: number; ordenNumero: number } | null {
+    if (p.ordenPuestoNumero && p.ordenNumero) {
+        return { puestoNumero: p.ordenPuestoNumero, ordenNumero: p.ordenNumero }
+    }
+
+    if (p.origen.ordenPuestoNumero && p.origen.ordenNumero) {
+        return {
+            puestoNumero: p.origen.ordenPuestoNumero,
+            ordenNumero: p.origen.ordenNumero,
+        }
+    }
+
+    const vinculadas = p.autorizacionesVinculadas ?? []
+    if (vinculadas.length === 0) return null
+
+    let primera = vinculadas[0]
+    if (!primera) return null
+
+    for (const actual of vinculadas) {
+        if (actual.ordenPuestoNumero < primera.ordenPuestoNumero) {
+            primera = actual
+            continue
+        }
+        if (
+            actual.ordenPuestoNumero === primera.ordenPuestoNumero &&
+            actual.ordenNumero < primera.ordenNumero
+        ) {
+            primera = actual
+        }
+    }
+
+    return {
+        puestoNumero: primera.ordenPuestoNumero,
+        ordenNumero: primera.ordenNumero,
+    }
+}
+
+function prioridadTipoPrestacionParaGrilla(p: PrestacionFacturableItem): number {
+    if (p.tipo === 'PRACTICA') return 0
+    if (p.tipo === 'MEDICACION') return 1
+    if (p.tipo === 'DESCARTABLE') return 2
+    return 3
+}
+
 type OrdenRenumerarState = {
     nuevoPuestoNumero: string
     nuevoNumero: string
@@ -853,13 +899,50 @@ export function FacturacionPanel() {
         })
     }, [filtroPrestaciones, prestacionesNoOrdenadas])
 
+    const prestacionesNoOrdenadasFiltradasOrdenadas = useMemo(() => {
+        return [...prestacionesNoOrdenadasFiltradas].sort((a, b) => {
+            const ordenA = obtenerOrdenParaOrdenamiento(a)
+            const ordenB = obtenerOrdenParaOrdenamiento(b)
+
+            if (ordenA && ordenB) {
+                if (ordenA.puestoNumero !== ordenB.puestoNumero) {
+                    return ordenA.puestoNumero - ordenB.puestoNumero
+                }
+                if (ordenA.ordenNumero !== ordenB.ordenNumero) {
+                    return ordenA.ordenNumero - ordenB.ordenNumero
+                }
+
+                const prioridadTipoA = prioridadTipoPrestacionParaGrilla(a)
+                const prioridadTipoB = prioridadTipoPrestacionParaGrilla(b)
+                if (prioridadTipoA !== prioridadTipoB) {
+                    return prioridadTipoA - prioridadTipoB
+                }
+
+                const fechaA = new Date(a.fecha).getTime()
+                const fechaB = new Date(b.fecha).getTime()
+                if (fechaA !== fechaB) return fechaA - fechaB
+
+                return (a.descripcion ?? '').localeCompare(b.descripcion ?? '', 'es', { sensitivity: 'base' })
+            }
+
+            if (ordenA && !ordenB) return -1
+            if (!ordenA && ordenB) return 1
+
+            const fechaA = new Date(a.fecha).getTime()
+            const fechaB = new Date(b.fecha).getTime()
+            if (fechaA !== fechaB) return fechaB - fechaA
+
+            return (a.descripcion ?? '').localeCompare(b.descripcion ?? '', 'es', { sensitivity: 'base' })
+        })
+    }, [prestacionesNoOrdenadasFiltradas])
+
     const totalPaginasPrestaciones = Math.max(1, Math.ceil(prestacionesNoOrdenadasFiltradas.length / porPaginaPrestaciones))
     const paginaPrestacionesActual = Math.min(paginaPrestaciones, totalPaginasPrestaciones)
 
     const prestacionesNoOrdenadasPaginadas = useMemo(() => {
         const desde = (paginaPrestacionesActual - 1) * porPaginaPrestaciones
-        return prestacionesNoOrdenadasFiltradas.slice(desde, desde + porPaginaPrestaciones)
-    }, [paginaPrestacionesActual, porPaginaPrestaciones, prestacionesNoOrdenadasFiltradas])
+        return prestacionesNoOrdenadasFiltradasOrdenadas.slice(desde, desde + porPaginaPrestaciones)
+    }, [paginaPrestacionesActual, porPaginaPrestaciones, prestacionesNoOrdenadasFiltradasOrdenadas])
 
     const cirugiasEditables = useMemo(() => {
         if (!contexto) return []

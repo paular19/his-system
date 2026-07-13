@@ -82,7 +82,7 @@ export const PrestacionOrdenInputSchema = z.object({
     incluyeCodigo: z
         .string()
         .trim()
-        .regex(/^(GA|HE|HA|A[1-3])(\+(GA|HE|HA|A[1-3]))*$/)
+        .regex(/^(GA|HE|HA|HP|A[1-3])(\+(GA|HE|HA|HP|A[1-3]))*$/)
         .optional()
         .nullable(),
     numeroAutorizacion: z.string().trim().max(50).optional().nullable(),

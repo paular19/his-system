@@ -40,6 +40,7 @@ const MATRICULA_GASTOS_INTERNACION_DEFAULT = 9995
 const NOMBRE_MATRICULA_9995_DEFAULT = 'GASTOS INTERNACION'
 const MATRICULA_ANESTESISTA_INT_DEFAULT = 6
 const MATRICULA_AYUDANTE_INT_DEFAULT = 995
+const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const NOMBRE_MATRICULA_6_DEFAULT = 'ASOSIACION ANESTESISTA'
 const NOMBRE_MATRICULA_995_DEFAULT = 'PROFESIONAL AYUDANTE'
 const CODIGOS_HA_OBLIGATORIO = new Set(['169006'])
@@ -82,7 +83,13 @@ function descripcionEsGasto(descripcion: string | null | undefined): boolean {
 
 function esCodigoHaObligatorio(codigoPractica: string | null | undefined): boolean {
     if (!codigoPractica) return false
-    return CODIGOS_HA_OBLIGATORIO.has(normalizarCodigoPractica(codigoPractica))
+    const codigoNormalizado = normalizarCodigoPractica(codigoPractica)
+    return codigoNormalizado.startsWith('16') || CODIGOS_HA_OBLIGATORIO.has(codigoNormalizado)
+}
+
+function esCodigoPatologiaPorDefecto(codigoPractica: string | null | undefined): boolean {
+    if (!codigoPractica) return false
+    return normalizarCodigoPractica(codigoPractica).startsWith('15')
 }
 
 function esCodigoHeConOpcionHa(codigoPractica: string | null | undefined): boolean {
@@ -99,9 +106,15 @@ type DesgloseValores = {
 
 type IncluyeCodigoSeleccion = {
     especialista: boolean
+    patologia: boolean
     anestesista: boolean
     gastos: boolean
     ayudantes: number
+}
+
+function incluyeTieneEspecialista(seleccion: IncluyeCodigoSeleccion | null | undefined): boolean {
+    if (!seleccion) return false
+    return seleccion.especialista || seleccion.patologia
 }
 
 function aplicarOverrideEspecialAnestesistaPorCodigo(
@@ -133,10 +146,23 @@ function normalizarIncluyeCodigo(incluyeCodigo: string | null | undefined): stri
     const parts = normalized
         .split('+')
         .map((part) => part.trim())
-        .filter((part) => /^(GA|HE|HA|A[1-3])$/.test(part))
+        .filter((part) => /^(GA|HE|HA|HP|A[1-3])$/.test(part))
 
     if (parts.length === 0) return null
     return Array.from(new Set(parts)).join('+')
+}
+
+function expandirModulosCompatibles(incluyeCodigo: string | null | undefined): string[] {
+    const incluyeNormalizado = normalizarIncluyeCodigo(incluyeCodigo)
+    if (!incluyeNormalizado) return []
+
+    const tokens = incluyeNormalizado.split('+').filter(Boolean)
+    const compatibles = new Set<string>([incluyeNormalizado, ...tokens])
+
+    if (tokens.includes('HP')) compatibles.add('HE')
+    if (tokens.includes('HE')) compatibles.add('HP')
+
+    return Array.from(compatibles)
 }
 
 function combinarIncluyeCodigos(
@@ -148,6 +174,7 @@ function combinarIncluyeCodigos(
     if (!a && !b) return null
 
     const especialista = Boolean(a?.especialista || b?.especialista)
+    const patologia = Boolean(a?.patologia || b?.patologia)
     const anestesista = Boolean(a?.anestesista || b?.anestesista)
     const gastos = Boolean(a?.gastos || b?.gastos)
     const ayudantes = Math.min(3, (a?.ayudantes ?? 0) + (b?.ayudantes ?? 0))
@@ -155,6 +182,7 @@ function combinarIncluyeCodigos(
     const tokens: string[] = []
     if (gastos) tokens.push('GA')
     if (especialista) tokens.push('HE')
+    if (patologia) tokens.push('HP')
     if (anestesista) tokens.push('HA')
     for (let i = 1; i <= ayudantes; i += 1) {
         tokens.push(`A${i}`)
@@ -190,6 +218,7 @@ function desglosarIncluyeCodigo(incluyeCodigo: string | null | undefined): Inclu
     const parts = normalized.split('+')
     return {
         especialista: parts.includes('HE'),
+        patologia: parts.includes('HP'),
         anestesista: parts.includes('HA'),
         gastos: parts.includes('GA'),
         ayudantes: parts.filter((part) => /^A[1-3]$/.test(part)).length,
@@ -198,7 +227,7 @@ function desglosarIncluyeCodigo(incluyeCodigo: string | null | undefined): Inclu
 
 function esSeleccionSoloGastos(seleccion: IncluyeCodigoSeleccion | null | undefined): boolean {
     if (!seleccion) return false
-    return seleccion.gastos && !seleccion.especialista && !seleccion.anestesista && seleccion.ayudantes === 0
+    return seleccion.gastos && !incluyeTieneEspecialista(seleccion) && !seleccion.anestesista && seleccion.ayudantes === 0
 }
 
 function esTituloAnestesista(titularModular: string | null | undefined): boolean {
@@ -217,6 +246,19 @@ function resolverMatriculaGastoPorTipoIngreso(tipoIngresoCodigo: string | null |
     return esIngresoInternacion(tipoIngresoCodigo)
         ? MATRICULA_AYUDANTE_INT_DEFAULT
         : MATRICULA_AMBULATORIO_DEFAULT
+}
+
+function resolverMatriculaEspecialistaPorPatologia(
+    matriculaActual: number | null | undefined,
+    incluye: IncluyeCodigoSeleccion | null | undefined,
+    codigoPractica: string | null | undefined
+): number | null {
+    const matricula = matriculaActual ?? null
+    if (matricula && matricula > 0) return matricula
+    if (incluye?.patologia || esCodigoPatologiaPorDefecto(codigoPractica)) {
+        return MATRICULA_PATOLOGIA_DEFAULT
+    }
+    return matricula
 }
 
 function esDesgloseSoloGastos(desglose: {
@@ -283,7 +325,7 @@ function aplicarIncluyeCodigoADesglose(
             : null)
 
     return {
-        valorEspecialista: seleccion.especialista ? valorEspecialistaCompatible : null,
+        valorEspecialista: incluyeTieneEspecialista(seleccion) ? valorEspecialistaCompatible : null,
         valorAyudante: seleccion.ayudantes > 0 ? desglose.valorAyudante : null,
         valorAnestesista: seleccion.anestesista ? desglose.valorAnestesista : null,
         valorGastos: seleccion.gastos ? desglose.valorGastos : null,
@@ -305,7 +347,7 @@ function calcularTotalUnitarioDesglose(
     }
 
     return (
-        (seleccion.especialista ? (desglose.valorEspecialista ?? 0) : 0) +
+        (incluyeTieneEspecialista(seleccion) ? (desglose.valorEspecialista ?? 0) : 0) +
         (seleccion.ayudantes > 0 ? (desglose.valorAyudante ?? 0) * seleccion.ayudantes : 0) +
         (seleccion.anestesista ? (desglose.valorAnestesista ?? 0) : 0) +
         (seleccion.gastos ? (desglose.valorGastos ?? 0) : 0)
@@ -316,6 +358,7 @@ function serializarIncluyeSeleccion(seleccion: IncluyeCodigoSeleccion): string |
     const tokens: string[] = []
     if (seleccion.gastos) tokens.push('GA')
     if (seleccion.especialista) tokens.push('HE')
+    if (seleccion.patologia) tokens.push('HP')
     if (seleccion.anestesista) tokens.push('HA')
     for (let i = 1; i <= Math.min(3, seleccion.ayudantes); i += 1) {
         tokens.push(`A${i}`)
@@ -353,6 +396,7 @@ function inferirIncluyeCodigoDesdeImporte(params: {
 
                     const incluye = serializarIncluyeSeleccion({
                         especialista,
+                        patologia: false,
                         anestesista,
                         gastos,
                         ayudantes,
@@ -600,6 +644,14 @@ function incluyeCodigoCompatibleParaVinculo(
     const pIncluyeO = oTokens.every((token) => pSet.has(token))
     const oIncluyeP = pTokens.every((token) => oSet.has(token))
     if (pIncluyeO || oIncluyeP) return true
+
+    // Patologia compatibility: treat HE and HP as equivalent specialist components.
+    const normalizarPatologia = (token: string) => (token === 'HE' || token === 'HP' ? 'HX' : token)
+    const pPat = new Set(pTokens.map(normalizarPatologia))
+    const oPat = new Set(oTokens.map(normalizarPatologia))
+    const pPatIncluyeO = Array.from(oPat).every((token) => pPat.has(token))
+    const oPatIncluyeP = Array.from(pPat).every((token) => oPat.has(token))
+    if (pPatIncluyeO || oPatIncluyeP) return true
 
     // Compatibilidad histórica HE/HA para códigos especiales.
     if (esCodigoHaObligatorio(codigoPractica) || esCodigoHeConOpcionHa(codigoPractica)) {
@@ -1482,7 +1534,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             const esSoloAyudanteVinculo = Boolean(
                 incluyeVinculo &&
                 incluyeVinculo.ayudantes > 0 &&
-                !incluyeVinculo.especialista &&
+                !incluyeTieneEspecialista(incluyeVinculo) &&
                 !incluyeVinculo.anestesista &&
                 !incluyeVinculo.gastos
             )
@@ -1500,12 +1552,16 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                 : (esCodigoAnestesistaVinculo
                     ? null
-                    : (it.practica?.matriculaEspecialista ??
-                        (ingreso.tipoIngresoCodigo === 'INT' &&
-                            it.nomencladorPractica?.valorAyudante != null &&
-                            permiteFallbackAyudanteVinculo
-                            ? MATRICULA_AYUDANTE_INT_DEFAULT
-                            : null)))
+                    : resolverMatriculaEspecialistaPorPatologia(
+                        it.practica?.matriculaEspecialista ??
+                            (ingreso.tipoIngresoCodigo === 'INT' &&
+                                it.nomencladorPractica?.valorAyudante != null &&
+                                permiteFallbackAyudanteVinculo
+                                ? MATRICULA_AYUDANTE_INT_DEFAULT
+                                : null),
+                        incluyeVinculo,
+                        it.codigoPractica
+                    ))
             const matriculaAnestesistaVinculo = esGastoVinculo
                 ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                 : (it.practica?.matriculaAnestesista ??
@@ -1555,14 +1611,14 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     const incluyeSoloAyudante = Boolean(
                         incluye &&
                         incluye.ayudantes > 0 &&
-                        !incluye.especialista &&
+                        !incluyeTieneEspecialista(incluye) &&
                         !incluye.anestesista &&
                         !incluye.gastos
                     )
                     if (incluyeSoloAyudante) {
                         return MATRICULA_AYUDANTE_INT_DEFAULT
                     }
-                    const tieneHE = Boolean(incluye?.especialista)
+                    const tieneHE = incluyeTieneEspecialista(incluye)
                     const tituloPatologia = esTituloPatologia(it.titularModular)
                     const desdeEfector = it.efectorMatricula && (
                         tituloPatologia ||
@@ -1575,7 +1631,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         ? it.efectorMatricula
                         : null
                     const desdePractica = it.practica?.matriculaEspecialista ?? null
-                    return combinarMatricula(desdePractica, desdeEfector)
+                    const matriculaBase = combinarMatricula(desdePractica, desdeEfector)
+                    return resolverMatriculaEspecialistaPorPatologia(matriculaBase, incluye, it.codigoPractica)
                 })(),
                 matriculaAnestesista: (() => {
                     const incluye = desglosarIncluyeCodigo(it.modulo)
@@ -1711,7 +1768,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const incluyeSoloAyudantePractica = Boolean(
             incluyeSeleccionPractica &&
             incluyeSeleccionPractica.ayudantes > 0 &&
-            !incluyeSeleccionPractica.especialista &&
+            !incluyeTieneEspecialista(incluyeSeleccionPractica) &&
             !incluyeSeleccionPractica.anestesista &&
             !incluyeSeleccionPractica.gastos
         )
@@ -1723,12 +1780,16 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const matriculaEspecialista =
             esCodigoAnestesista
                 ? null
-                : (vinculoPorItem?.matriculaEspecialista ??
-                    p.matriculaEspecialista ??
-                    (esInternacion && p.nomencladorPractica?.valorAyudante != null
-                        && permiteFallbackAyudante
-                        ? MATRICULA_AYUDANTE_INT_DEFAULT
-                        : null))
+                : resolverMatriculaEspecialistaPorPatologia(
+                    vinculoPorItem?.matriculaEspecialista ??
+                        p.matriculaEspecialista ??
+                        (esInternacion && p.nomencladorPractica?.valorAyudante != null
+                            && permiteFallbackAyudante
+                            ? MATRICULA_AYUDANTE_INT_DEFAULT
+                            : null),
+                    incluyeSeleccionPractica,
+                    p.codigoPractica
+                )
         const matriculaAnestesista =
             vinculoPorItem?.matriculaAnestesista ??
             p.matriculaAnestesista ??
@@ -1896,12 +1957,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         valorGastos: it.nomencladorPractica?.valorGastos ?? null,
                     })
                 ))
-            const tieneHE = Boolean(incluye?.especialista)
+            const tieneHE = incluyeTieneEspecialista(incluye)
             const tieneHA = Boolean(incluye?.anestesista)
             const incluyeSoloAyudante = Boolean(
                 incluye &&
                 incluye.ayudantes > 0 &&
-                !incluye.especialista &&
+                !incluyeTieneEspecialista(incluye) &&
                 !incluye.anestesista &&
                 !incluye.gastos
             )
@@ -1925,7 +1986,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     : (
                         ingreso.tipoIngresoCodigo === 'INT' &&
                         it.nomencladorPractica?.valorAyudante != null &&
-                        (!incluye || (incluye.ayudantes > 0 && !incluye.especialista && !incluye.anestesista))
+                        (!incluye || (incluye.ayudantes > 0 && !incluyeTieneEspecialista(incluye) && !incluye.anestesista))
                     )
                         ? MATRICULA_AYUDANTE_INT_DEFAULT
                         : null
@@ -1933,7 +1994,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                 : (incluyeSoloAyudante
                     ? MATRICULA_AYUDANTE_INT_DEFAULT
-                    : (matriculaEspecialistaEfector ?? it.practica?.matriculaEspecialista ?? fallbackAyudanteDefault))
+                    : resolverMatriculaEspecialistaPorPatologia(
+                        matriculaEspecialistaEfector ?? it.practica?.matriculaEspecialista ?? fallbackAyudanteDefault,
+                        incluye,
+                        it.codigoPractica
+                    ))
 
             const matriculaAnestesistaEfector =
                 it.efectorMatricula && (
@@ -2386,10 +2451,7 @@ export async function cargarOrdenesDesdePrestaciones(
             const vinculo = vinculosOrdenExistente.get(practicaId)
             if (!vinculo) return []
 
-            const incluyeNormalizado = normalizarIncluyeCodigo(prestacion.incluyeCodigo)
-            const modulosCompatibles = incluyeNormalizado
-                ? Array.from(new Set([incluyeNormalizado, ...incluyeNormalizado.split('+')]))
-                : []
+            const modulosCompatibles = expandirModulosCompatibles(prestacion.incluyeCodigo)
             const codigoNormalizado = normalizarCodigoPractica(prestacion.codigoPractica)
 
             if (modulosCompatibles.length > 1) {
@@ -2444,10 +2506,7 @@ export async function cargarOrdenesDesdePrestaciones(
 
                 ordenesARecalcular.add(`${vinculo.puestoNumero}:${vinculo.ordenNumero}`)
 
-                const incluyeNormalizado = normalizarIncluyeCodigo(prestacion.incluyeCodigo)
-                const modulosCompatibles = incluyeNormalizado
-                    ? Array.from(new Set([incluyeNormalizado, ...incluyeNormalizado.split('+')]))
-                    : []
+                const modulosCompatibles = expandirModulosCompatibles(prestacion.incluyeCodigo)
                 const codigoNormalizado = normalizarCodigoPractica(prestacion.codigoPractica)
 
                 if (modulosCompatibles.length > 1) {

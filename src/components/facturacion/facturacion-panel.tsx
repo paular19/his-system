@@ -211,7 +211,17 @@ function esCodigoHeConOpcionHa(codigoPractica: string | null | undefined): boole
 }
 
 function esCodigoHaObligatorio(codigoPractica: string | null | undefined): boolean {
-    return normalizarCodigoPractica(codigoPractica) === '169006'
+    return normalizarCodigoPractica(codigoPractica).startsWith('16')
+}
+
+function esCodigoPatologiaPorDefecto(codigoPractica: string | null | undefined): boolean {
+    return normalizarCodigoPractica(codigoPractica).startsWith('15')
+}
+
+function clasificacionEspecialistaPorDefecto(codigoPractica: string | null | undefined): Extract<ClasificacionToken, 'HE' | 'HA' | 'HP'> {
+    if (esCodigoHaObligatorio(codigoPractica)) return 'HA'
+    if (esCodigoPatologiaPorDefecto(codigoPractica)) return 'HP'
+    return 'HE'
 }
 
 function obtenerDesgloseSelector(p: PrestacionFacturableItem): ComponenteValores | null {
@@ -245,12 +255,12 @@ function parseIncluyeCodigoSeleccion(incluyeCodigo: string | null | undefined): 
     const parts = normalized
         .split('+')
         .map((part) => part.trim())
-        .filter((part) => /^(GA|HE|HA|A[1-3])$/.test(part))
+        .filter((part) => /^(GA|HE|HA|HP|A[1-3])$/.test(part))
 
     if (parts.length === 0) return null
 
     return {
-        especialista: parts.filter((part) => part === 'HE').length,
+        especialista: parts.filter((part) => part === 'HE' || part === 'HP').length,
         ayudante: Math.min(3, parts.filter((part) => /^A[1-3]$/.test(part)).length),
         anestesista: parts.filter((part) => part === 'HA').length,
         gastos: parts.filter((part) => part === 'GA').length,
@@ -273,7 +283,8 @@ function cantidadSeleccionadaComponente(
 
 function clasificacionPorDefectoComponente(
     componente: keyof ComponenteSeleccion,
-    posicion: number
+    posicion: number,
+    codigoPractica?: string | null
 ): ClasificacionToken {
     if (componente === 'ayudante') {
         const idx = Math.min(Math.max(1, posicion + 1), 3)
@@ -281,7 +292,7 @@ function clasificacionPorDefectoComponente(
     }
     if (componente === 'anestesista') return 'HA'
     if (componente === 'gastos') return 'GA'
-    return 'HE'
+    return clasificacionEspecialistaPorDefecto(codigoPractica)
 }
 
 function normalizarClasificacionToken(
@@ -301,7 +312,8 @@ function normalizarClasificacionToken(
 
 function construirClasificacionesPorComponenteUI(
     seleccion: ComponenteSeleccion,
-    estadoActual?: ClasificacionPorComponenteState
+    estadoActual?: ClasificacionPorComponenteState,
+    codigoPractica?: string | null
 ): {
     clasificacionesPorComponente: ClasificacionPorComponenteUi
     indexMap: Record<number, { componente: keyof ComponenteSeleccion; posicion: number; fallback: ClasificacionToken }>
@@ -318,7 +330,7 @@ function construirClasificacionesPorComponenteUI(
         const filas: Array<{ index: number; label: string; value: string }> = []
 
         for (let posicion = 0; posicion < cantidad; posicion += 1) {
-            const fallback = clasificacionPorDefectoComponente(componente, posicion)
+            const fallback = clasificacionPorDefectoComponente(componente, posicion, codigoPractica)
             const value = normalizarClasificacionToken(actuales[posicion], fallback)
             const index = globalIndex
 
@@ -344,9 +356,22 @@ function resumenSubitemsIncluidos(incluyeCodigo: string | null | undefined): str
     const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
     if (!seleccion) return 'Completa (todos los componentes)'
 
+    const cantidadPatologia = (incluyeCodigo ?? '')
+        .trim()
+        .toUpperCase()
+        .split('+')
+        .map((part) => part.trim())
+        .filter((part) => part === 'HP').length
+
     const partes: string[] = []
     if (seleccion.gastos > 0) partes.push(`GA x${seleccion.gastos}`)
-    if (seleccion.especialista > 0) partes.push(`HE x${seleccion.especialista}`)
+    if (cantidadPatologia > 0) {
+        partes.push(`HP x${cantidadPatologia}`)
+        const cantidadHe = Math.max(0, seleccion.especialista - cantidadPatologia)
+        if (cantidadHe > 0) partes.push(`HE x${cantidadHe}`)
+    } else if (seleccion.especialista > 0) {
+        partes.push(`HE x${seleccion.especialista}`)
+    }
     if (seleccion.anestesista > 0) partes.push(`HA x${seleccion.anestesista}`)
     if (seleccion.ayudante > 0) partes.push(`Ayudante x${seleccion.ayudante}`)
 
@@ -370,6 +395,15 @@ function incluyeTieneEspecialista(incluyeCodigo: string | null | undefined): boo
 function incluyeTieneAnestesista(incluyeCodigo: string | null | undefined): boolean {
     const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
     return Boolean(seleccion && seleccion.anestesista > 0)
+}
+
+function incluyeTienePatologia(incluyeCodigo: string | null | undefined): boolean {
+    const normalized = (incluyeCodigo ?? '').trim().toUpperCase()
+    if (!normalized || normalized === 'COMPLETA') return false
+    return normalized
+        .split('+')
+        .map((part) => part.trim())
+        .some((part) => part === 'HP')
 }
 
 function descripcionEsAyudante(value: string | null | undefined): boolean {
@@ -408,7 +442,8 @@ function construirIncluyeCodigoDesdeSeleccion(
     valores: ComponenteValores | null,
     seleccion: ComponenteSeleccion | null | undefined,
     incluyeCodigoActual?: string | null,
-    clasificacionesPorComponente?: ClasificacionPorComponenteState
+    clasificacionesPorComponente?: ClasificacionPorComponenteState,
+    codigoPractica?: string | null
 ): string | null {
     if (!valores || !seleccion) return null
 
@@ -439,7 +474,7 @@ function construirIncluyeCodigoDesdeSeleccion(
         const agregarCodigos = (componente: keyof ComponenteSeleccion, cantidad: number) => {
             const valoresComponente = clasificacionesPorComponente?.[componente] ?? []
             for (let i = 0; i < cantidad; i += 1) {
-                const fallback = clasificacionPorDefectoComponente(componente, i)
+                const fallback = clasificacionPorDefectoComponente(componente, i, codigoPractica)
                 codigosPersonalizados.push(normalizarClasificacionToken(valoresComponente[i], fallback))
             }
         }
@@ -461,7 +496,8 @@ function construirIncluyeCodigoDesdeSeleccion(
     }
     if (espDisp) {
         const cantidadEspecialista = normalizarCantidadSeleccion(seleccion.especialista)
-        for (let i = 0; i < cantidadEspecialista; i += 1) codigos.push('HE')
+        const codigoEspecialistaDefault = clasificacionEspecialistaPorDefecto(codigoPractica)
+        for (let i = 0; i < cantidadEspecialista; i += 1) codigos.push(codigoEspecialistaDefault)
     }
     if (aneDisp) {
         const cantidadAnestesista = normalizarCantidadSeleccion(seleccion.anestesista)
@@ -693,6 +729,7 @@ function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Re
 }
 
 const MATRICULA_AYUDANTE_DEFAULT = 995
+const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const PRESTACIONES_POR_PAGINA_DEFAULT = 12
 
 function incluyeSoloAyudante(incluyeCodigo: string | null | undefined): boolean {
@@ -710,6 +747,7 @@ function buildEditState(p: PrestacionFacturableItem): EditState {
     const soloAyudante = incluyeSoloAyudante(p.incluyeCodigo)
     const tieneAyudante = incluyeTieneAyudante(p.incluyeCodigo) || (!p.incluyeCodigo && descripcionEsAyudante(p.descripcion))
     const tieneEspecialista = incluyeTieneEspecialista(p.incluyeCodigo)
+    const tienePatologia = incluyeTienePatologia(p.incluyeCodigo) || esCodigoPatologiaPorDefecto(p.codigoPractica)
     return {
         fecha: toDateInput(p.fecha),
         codigoPractica: p.codigoPractica ?? '',
@@ -718,7 +756,11 @@ function buildEditState(p: PrestacionFacturableItem): EditState {
         numeroAutorizacion: p.numeroAutorizacion ?? '',
         importeTotal: String(p.importeTotal ?? 0),
         matriculaAyudante: tieneAyudante ? String(MATRICULA_AYUDANTE_DEFAULT) : '',
-        matriculaEspecialista: (!soloAyudante || tieneEspecialista) && p.matriculaEspecialista ? String(p.matriculaEspecialista) : '',
+        matriculaEspecialista: (!soloAyudante || tieneEspecialista)
+            ? (p.matriculaEspecialista
+                ? String(p.matriculaEspecialista)
+                : (tienePatologia ? String(MATRICULA_PATOLOGIA_DEFAULT) : ''))
+            : '',
         matriculaAnestesista: p.matriculaAnestesista ? String(p.matriculaAnestesista) : '',
     }
 }
@@ -1548,11 +1590,18 @@ export function FacturacionPanel() {
                         desgloseSelector,
                         sel,
                         p.incluyeCodigo,
-                        clasificacionPorComponenteUid[p.uid]
+                        clasificacionPorComponenteUid[p.uid],
+                        p.codigoPractica
                     )
+                    const incluyeCodigoFinal = incluyeCodigo ?? p.incluyeCodigo
                     const usaMatriculaAyudante =
-                        incluyeSoloAyudante(incluyeCodigo ?? p.incluyeCodigo) ||
+                        incluyeSoloAyudante(incluyeCodigoFinal) ||
                         (!incluyeCodigo && !p.incluyeCodigo && descripcionEsAyudante(baseDesc))
+                    const usaMatriculaPatologia =
+                        !usaMatriculaAyudante &&
+                        (incluyeTienePatologia(incluyeCodigoFinal) || esCodigoPatologiaPorDefecto(p.codigoPractica))
+                    const matriculaEspecialistaDraft =
+                        draft?.matriculaEspecialista ? Number(draft.matriculaEspecialista) : null
                     const descripcionPractica = sel && incluyeCodigo
                         ? baseDesc + descripcionComponentes(sel)
                         : baseDesc
@@ -1568,8 +1617,8 @@ export function FacturacionPanel() {
                         matriculaEspecialista: draft
                             ? (usaMatriculaAyudante
                                 ? MATRICULA_AYUDANTE_DEFAULT
-                                : (draft.matriculaEspecialista ? Number(draft.matriculaEspecialista) : null))
-                            : (p.matriculaEspecialista ?? null),
+                                : (matriculaEspecialistaDraft ?? (usaMatriculaPatologia ? MATRICULA_PATOLOGIA_DEFAULT : null)))
+                            : (p.matriculaEspecialista ?? (usaMatriculaPatologia ? MATRICULA_PATOLOGIA_DEFAULT : null)),
                         matriculaAnestesista: draft
                             ? (draft.matriculaAnestesista ? Number(draft.matriculaAnestesista) : null)
                             : (p.matriculaAnestesista ?? null),
@@ -1715,6 +1764,9 @@ export function FacturacionPanel() {
             const usaMatriculaAyudante =
                 incluyeSoloAyudante(p.incluyeCodigo) ||
                 (!p.incluyeCodigo && descripcionEsAyudante(draft.descripcion || p.descripcion))
+            const usaMatriculaPatologia =
+                !usaMatriculaAyudante &&
+                (incluyeTienePatologia(p.incluyeCodigo) || esCodigoPatologiaPorDefecto(draft.codigoPractica || p.codigoPractica))
             const common = {
                 fecha: new Date(draft.fecha || p.fecha).toISOString(),
                 codigoPractica: (draft.codigoPractica || p.codigoPractica || '').trim(),
@@ -1728,7 +1780,9 @@ export function FacturacionPanel() {
                 matriculaProfesional: null,
                 matriculaEspecialista: usaMatriculaAyudante
                     ? MATRICULA_AYUDANTE_DEFAULT
-                    : (draft.matriculaEspecialista ? Number(draft.matriculaEspecialista) : null),
+                    : (draft.matriculaEspecialista
+                        ? Number(draft.matriculaEspecialista)
+                        : (usaMatriculaPatologia ? MATRICULA_PATOLOGIA_DEFAULT : null)),
                 matriculaAnestesista: draft.matriculaAnestesista ? Number(draft.matriculaAnestesista) : null,
             }
 
@@ -2542,7 +2596,8 @@ export function FacturacionPanel() {
                                                     selComp
                                                         ? construirClasificacionesPorComponenteUI(
                                                             selComp,
-                                                            clasificacionPorComponenteUid[p.uid]
+                                                            clasificacionPorComponenteUid[p.uid],
+                                                            p.codigoPractica
                                                         )
                                                         : null
                                                 const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
@@ -3008,7 +3063,7 @@ export function FacturacionPanel() {
                                                                                                 const prevUid = prev[p.uid] ?? {}
                                                                                                 const actuales = [...(prevUid[target.componente] ?? [])]
                                                                                                 while (actuales.length <= target.posicion) {
-                                                                                                    const fallback = clasificacionPorDefectoComponente(target.componente, actuales.length)
+                                                                                                    const fallback = clasificacionPorDefectoComponente(target.componente, actuales.length, p.codigoPractica)
                                                                                                     actuales.push(fallback)
                                                                                                 }
                                                                                                 actuales[target.posicion] = normalizarClasificacionToken(value, target.fallback)

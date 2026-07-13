@@ -2589,7 +2589,7 @@ export function FacturacionPanel() {
                                                 const selComp = tieneComponentes
                                                     ? (compSeleccion[p.uid] ?? seleccionPorDefecto(desgloseSelector!))
                                                     : (mostrarSelectorComponentes ? (compSeleccion[p.uid] ?? { especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }) : null)
-                                                const permiteEditarClasificacion = false
+                                                const permiteEditarClasificacion = true
                                                 const clasificacionesEditor =
                                                     p.tipo === 'PRACTICA' &&
                                                     permiteEditarClasificacion &&

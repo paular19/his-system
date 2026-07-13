@@ -15,6 +15,7 @@ export interface AdmisionFacturacionListItem {
     paciente: {
         id: number
         nombreCompleto: string
+        historiaClinica: number | null
         numeroDocumento: number | null
     } | null
     obraSocial: { id: number; nombre: string } | null

@@ -13,8 +13,14 @@ export async function GET(request: NextRequest) {
         const { searchParams } = request.nextUrl
         const params = BusquedaFacturacionSchema.parse({
             q: searchParams.get('q') ?? undefined,
+            pacienteNombre: searchParams.get('pacienteNombre') ?? undefined,
+            historiaClinica: searchParams.get('historiaClinica') ?? undefined,
+            numeroDocumento: searchParams.get('numeroDocumento') ?? undefined,
             tipoIngresoCodigo: searchParams.get('tipoIngresoCodigo') ?? undefined,
             codigoPractica: searchParams.get('codigoPractica') ?? undefined,
+            fechaIngreso: searchParams.get('fechaIngreso') ?? undefined,
+            fechaDesde: searchParams.get('fechaDesde') ?? undefined,
+            fechaHasta: searchParams.get('fechaHasta') ?? undefined,
             pagina: searchParams.get('pagina') ?? 1,
             porPagina: searchParams.get('porPagina') ?? 20,
         })

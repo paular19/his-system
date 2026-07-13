@@ -2,8 +2,26 @@ import { z } from 'zod'
 
 export const BusquedaFacturacionSchema = z.object({
     q: z.string().trim().max(200).optional(),
+    pacienteNombre: z.string().trim().max(200).optional(),
+    historiaClinica: z.coerce.number().int().positive().optional(),
+    numeroDocumento: z.coerce.number().int().positive().optional(),
     tipoIngresoCodigo: z.string().trim().max(3).optional(),
     codigoPractica: z.string().trim().max(20).optional(),
+    fechaIngreso: z
+        .string()
+        .trim()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
+    fechaDesde: z
+        .string()
+        .trim()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
+    fechaHasta: z
+        .string()
+        .trim()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
     pagina: z.coerce.number().int().min(1).default(1),
     porPagina: z.coerce.number().int().min(1).max(100).default(20),
 })

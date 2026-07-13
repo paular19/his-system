@@ -3,7 +3,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import Link from 'next/link'
-import { ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, Loader2, Pencil, Plus, Search, Upload, X, XCircle } from 'lucide-react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { CalendarDays, ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, ListFilter, Loader2, Pencil, Plus, Search, Upload, X, XCircle } from 'lucide-react'
 import type { AdmisionFacturacionListItem, FacturacionContexto, PrestacionFacturableItem } from '@/modules/facturacion/types'
 import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
 import {
@@ -89,6 +90,16 @@ type CirugiaEditableGroup = {
 }
 
 type ClasificacionToken = 'GA' | 'HE' | 'HA' | 'HP' | 'A1' | 'A2' | 'A3'
+type CriterioBusquedaPaciente = 'NOMBRE' | 'HC' | 'DNI'
+type BusquedaFacturacionState = {
+    criterioBusquedaPaciente: CriterioBusquedaPaciente
+    busquedaPaciente: string
+    usarFiltroFechaIngreso: boolean
+    fechaIngreso: string
+    usarFiltroTipoIngreso: boolean
+    tipoIngresoCodigo: string
+    codigoPractica: string
+}
 
 type ClasificacionPorComponenteState = Partial<Record<keyof ComponenteSeleccion, string[]>>
 
@@ -130,6 +141,98 @@ function normalizarTextoBusqueda(value: string | null | undefined): string {
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .trim()
+}
+
+function parseEnteroPositivo(value: string | null | undefined): number | null {
+    if (!value) return null
+    const parsed = Number.parseInt(value, 10)
+    if (!Number.isFinite(parsed) || parsed <= 0) return null
+    return parsed
+}
+
+function normalizarCriterioBusqueda(value: string | null | undefined): CriterioBusquedaPaciente {
+    const criterio = (value ?? '').trim().toUpperCase()
+    if (criterio === 'HC') return 'HC'
+    if (criterio === 'DNI') return 'DNI'
+    return 'NOMBRE'
+}
+
+function coincideBusquedaDirectaPaciente(
+    admision: AdmisionFacturacionListItem,
+    criterio: CriterioBusquedaPaciente,
+    termino: string
+): boolean {
+    const terminoLimpio = termino.trim()
+    if (!terminoLimpio) return false
+
+    if (criterio === 'NOMBRE') {
+        const nombrePaciente = normalizarTextoBusqueda(admision.paciente?.nombreCompleto)
+        const nombreBusqueda = normalizarTextoBusqueda(terminoLimpio)
+        return Boolean(nombrePaciente && nombrePaciente.includes(nombreBusqueda))
+    }
+
+    const numeroBuscado = parseEnteroPositivo(terminoLimpio)
+    if (!numeroBuscado || !admision.paciente) return false
+    if (criterio === 'HC') return admision.paciente.historiaClinica === numeroBuscado
+    return admision.paciente.numeroDocumento === numeroBuscado
+}
+
+function resolverEstadoBusquedaDesdeQuery(searchParams: { get(name: string): string | null }): BusquedaFacturacionState {
+    const historiaClinica = parseEnteroPositivo(searchParams.get('historiaClinica'))
+    const numeroDocumento = parseEnteroPositivo(searchParams.get('numeroDocumento'))
+    const pacienteNombre = (searchParams.get('pacienteNombre') ?? '').trim()
+    const criterioParam = normalizarCriterioBusqueda(searchParams.get('criterio'))
+
+    const criterioBusquedaPaciente: CriterioBusquedaPaciente = historiaClinica
+        ? 'HC'
+        : numeroDocumento
+            ? 'DNI'
+            : pacienteNombre
+                ? 'NOMBRE'
+                : criterioParam
+
+    const busquedaPaciente = (() => {
+        if (historiaClinica) return String(historiaClinica)
+        if (numeroDocumento) return String(numeroDocumento)
+        if (pacienteNombre) return pacienteNombre
+        return (
+            searchParams.get('qPaciente') ??
+            searchParams.get('q') ??
+            ''
+        )
+    })()
+
+    const fechaIngreso = (
+        searchParams.get('fechaIngreso') ??
+        searchParams.get('fechaDesde') ??
+        ''
+    ).trim()
+
+    return {
+        criterioBusquedaPaciente,
+        busquedaPaciente,
+        usarFiltroFechaIngreso:
+            searchParams.get('filtrarFecha') === '1' ||
+            Boolean(fechaIngreso),
+        fechaIngreso,
+        usarFiltroTipoIngreso:
+            searchParams.get('filtrarTipoIngreso') === '1' ||
+            Boolean(searchParams.get('tipoIngresoCodigo')),
+        tipoIngresoCodigo: (searchParams.get('tipoIngresoCodigo') ?? '').trim().toUpperCase(),
+        codigoPractica: (searchParams.get('codigoPractica') ?? '').trim().toUpperCase(),
+    }
+}
+
+function buildBusquedaStateKey(state: BusquedaFacturacionState): string {
+    return [
+        state.criterioBusquedaPaciente,
+        state.busquedaPaciente.trim(),
+        state.usarFiltroFechaIngreso ? '1' : '0',
+        state.fechaIngreso,
+        state.usarFiltroTipoIngreso ? '1' : '0',
+        state.tipoIngresoCodigo,
+        state.codigoPractica,
+    ].join('|')
 }
 
 function calcularRecargosDiferencial(diferenciales: PrestacionFacturableItem['diferenciales'] | null | undefined): {
@@ -763,6 +866,12 @@ function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Re
 const MATRICULA_AYUDANTE_DEFAULT = 995
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const PRESTACIONES_POR_PAGINA_DEFAULT = 12
+const CRITERIOS_BUSQUEDA_PACIENTE: Array<{ value: CriterioBusquedaPaciente; label: string; placeholder: string }> = [
+    { value: 'NOMBRE', label: 'Nombre paciente', placeholder: 'Ej: Perez, Ana' },
+    { value: 'HC', label: 'Nro HC', placeholder: 'Ej: 10234' },
+    { value: 'DNI', label: 'Nro DNI', placeholder: 'Ej: 28456789' },
+]
+const TIPOS_INGRESO_FILTRO = ['INT', 'AMB', 'GUA']
 
 function incluyeSoloAyudante(incluyeCodigo: string | null | undefined): boolean {
     const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
@@ -815,14 +924,30 @@ function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): Diferenc
 }
 
 export function FacturacionPanel() {
-    const [q, setQ] = useState('')
-    const [tipoIngresoCodigo, setTipoIngresoCodigo] = useState('')
-    const [codigoPractica, setCodigoPractica] = useState('')
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const estadoBusquedaInicial = resolverEstadoBusquedaDesdeQuery(searchParams)
+
+    const [criterioBusquedaPaciente, setCriterioBusquedaPaciente] = useState<CriterioBusquedaPaciente>(
+        estadoBusquedaInicial.criterioBusquedaPaciente
+    )
+    const [busquedaPaciente, setBusquedaPaciente] = useState(estadoBusquedaInicial.busquedaPaciente)
+    const [usarFiltroFechaIngreso, setUsarFiltroFechaIngreso] = useState(estadoBusquedaInicial.usarFiltroFechaIngreso)
+    const [fechaIngreso, setFechaIngreso] = useState(estadoBusquedaInicial.fechaIngreso)
+    const [usarFiltroTipoIngreso, setUsarFiltroTipoIngreso] = useState(estadoBusquedaInicial.usarFiltroTipoIngreso)
+    const [tipoIngresoCodigo, setTipoIngresoCodigo] = useState(estadoBusquedaInicial.tipoIngresoCodigo)
+    const [codigoPractica, setCodigoPractica] = useState(estadoBusquedaInicial.codigoPractica)
 
     const [buscando, setBuscando] = useState(false)
     const [admisiones, setAdmisiones] = useState<AdmisionFacturacionListItem[]>([])
     const [totalAdmisiones, setTotalAdmisiones] = useState(0)
-    const [selectedIngresoId, setSelectedIngresoId] = useState<number | null>(null)
+    const [selectedIngresoId, setSelectedIngresoId] = useState<number | null>(() =>
+        parseEnteroPositivo(searchParams.get('ingresoId'))
+    )
+    const [autoSeleccionBusquedaDirecta, setAutoSeleccionBusquedaDirecta] = useState(false)
+    const [mostrarCoincidenciasBusqueda, setMostrarCoincidenciasBusqueda] = useState(true)
+    const ultimoEstadoBusquedaAutoRef = useRef('')
 
     const [cargandoContexto, setCargandoContexto] = useState(false)
     const [contexto, setContexto] = useState<FacturacionContexto | null>(null)
@@ -1260,15 +1385,129 @@ export function FacturacionPanel() {
         setClasificacionPorComponenteUid({})
     }
 
-    async function buscarAdmisiones() {
+    function obtenerBusquedaStateActual(
+        overrides?: Partial<BusquedaFacturacionState>
+    ): BusquedaFacturacionState {
+        return {
+            criterioBusquedaPaciente: overrides?.criterioBusquedaPaciente ?? criterioBusquedaPaciente,
+            busquedaPaciente: overrides?.busquedaPaciente ?? busquedaPaciente,
+            usarFiltroFechaIngreso: overrides?.usarFiltroFechaIngreso ?? usarFiltroFechaIngreso,
+            fechaIngreso: overrides?.fechaIngreso ?? fechaIngreso,
+            usarFiltroTipoIngreso: overrides?.usarFiltroTipoIngreso ?? usarFiltroTipoIngreso,
+            tipoIngresoCodigo: overrides?.tipoIngresoCodigo ?? tipoIngresoCodigo,
+            codigoPractica: overrides?.codigoPractica ?? codigoPractica,
+        }
+    }
+
+    function construirQueryEstado(
+        ingresoId: number | null,
+        snapshot?: BusquedaFacturacionState
+    ): string {
+        const state = snapshot ?? obtenerBusquedaStateActual()
+        const urlParams = new URLSearchParams()
+        const terminoPaciente = state.busquedaPaciente.trim()
+        const codigoTipo = state.tipoIngresoCodigo.trim().toUpperCase()
+        const codigoPracticaFiltro = state.codigoPractica.trim().toUpperCase()
+
+        if (terminoPaciente) {
+            urlParams.set('criterio', state.criterioBusquedaPaciente)
+            urlParams.set('qPaciente', terminoPaciente)
+        }
+
+        if (state.usarFiltroFechaIngreso) {
+            urlParams.set('filtrarFecha', '1')
+            if (state.fechaIngreso) urlParams.set('fechaIngreso', state.fechaIngreso)
+        }
+
+        if (state.usarFiltroTipoIngreso) {
+            urlParams.set('filtrarTipoIngreso', '1')
+            if (codigoTipo) urlParams.set('tipoIngresoCodigo', codigoTipo)
+        }
+
+        if (codigoPracticaFiltro) urlParams.set('codigoPractica', codigoPracticaFiltro)
+        if (ingresoId) urlParams.set('ingresoId', String(ingresoId))
+
+        return urlParams.toString()
+    }
+
+    function actualizarQueryEstado(ingresoId: number | null, snapshot?: BusquedaFacturacionState) {
+        const qs = construirQueryEstado(ingresoId, snapshot)
+        router.replace(qs ? `${pathname}?${qs}` : pathname)
+    }
+
+    function limpiarBusqueda() {
+        const stateLimpio: BusquedaFacturacionState = {
+            criterioBusquedaPaciente: 'NOMBRE',
+            busquedaPaciente: '',
+            usarFiltroFechaIngreso: false,
+            fechaIngreso: '',
+            usarFiltroTipoIngreso: false,
+            tipoIngresoCodigo: '',
+            codigoPractica: '',
+        }
+
+        setCriterioBusquedaPaciente(stateLimpio.criterioBusquedaPaciente)
+        setBusquedaPaciente(stateLimpio.busquedaPaciente)
+        setUsarFiltroFechaIngreso(stateLimpio.usarFiltroFechaIngreso)
+        setFechaIngreso(stateLimpio.fechaIngreso)
+        setUsarFiltroTipoIngreso(stateLimpio.usarFiltroTipoIngreso)
+        setTipoIngresoCodigo(stateLimpio.tipoIngresoCodigo)
+        setCodigoPractica(stateLimpio.codigoPractica)
+        setAutoSeleccionBusquedaDirecta(false)
+        setMostrarCoincidenciasBusqueda(true)
+        setSelectedIngresoId(null)
+        setContexto(null)
+        setSeleccion({})
+        setAdmisiones([])
+        setTotalAdmisiones(0)
+        router.replace(pathname)
+    }
+
+    async function buscarAdmisiones(
+        overrides?: Partial<BusquedaFacturacionState>,
+        options?: { actualizarUrl?: boolean }
+    ) {
         setError(null)
         setMensaje(null)
         setBuscando(true)
         try {
+            const snapshot = obtenerBusquedaStateActual(overrides)
+            const terminoPaciente = snapshot.busquedaPaciente.trim()
+            const codigoTipo = snapshot.tipoIngresoCodigo.trim().toUpperCase()
+            const codigoPracticaFiltro = snapshot.codigoPractica.trim().toUpperCase()
             const params = new URLSearchParams()
-            if (q.trim()) params.set('q', q.trim())
-            if (tipoIngresoCodigo.trim()) params.set('tipoIngresoCodigo', tipoIngresoCodigo.trim().toUpperCase())
-            if (codigoPractica.trim()) params.set('codigoPractica', codigoPractica.trim().toUpperCase())
+
+            if (terminoPaciente) {
+                if (snapshot.criterioBusquedaPaciente === 'NOMBRE') {
+                    params.set('pacienteNombre', terminoPaciente)
+                } else {
+                    const numero = parseEnteroPositivo(terminoPaciente)
+                    if (!numero) {
+                        throw new Error(
+                            snapshot.criterioBusquedaPaciente === 'HC'
+                                ? 'El número de HC debe ser numérico y mayor a 0.'
+                                : 'El número de DNI debe ser numérico y mayor a 0.'
+                        )
+                    }
+                    params.set(
+                        snapshot.criterioBusquedaPaciente === 'HC' ? 'historiaClinica' : 'numeroDocumento',
+                        String(numero)
+                    )
+                }
+            }
+
+            if (snapshot.usarFiltroTipoIngreso && codigoTipo) {
+                params.set('tipoIngresoCodigo', codigoTipo)
+            }
+
+            if (snapshot.usarFiltroFechaIngreso) {
+                if (!snapshot.fechaIngreso) {
+                    throw new Error('Debe seleccionar una fecha de ingreso para aplicar el filtro.')
+                }
+                params.set('fechaIngreso', snapshot.fechaIngreso)
+            }
+
+            if (codigoPracticaFiltro) params.set('codigoPractica', codigoPracticaFiltro)
             params.set('porPagina', '30')
 
             const res = await fetch(`/api/facturacion/busqueda?${params.toString()}`)
@@ -1278,14 +1517,39 @@ export function FacturacionPanel() {
             setAdmisiones(json.data.items)
             setTotalAdmisiones(json.data.total)
 
+            let ingresoSugeridoId: number | null = selectedIngresoId
+            let autoSeleccion = false
+
+            if (terminoPaciente) {
+                const candidatoDirecto = json.data.items.find((item) =>
+                    coincideBusquedaDirectaPaciente(item, snapshot.criterioBusquedaPaciente, terminoPaciente)
+                )
+                if (candidatoDirecto) {
+                    ingresoSugeridoId = candidatoDirecto.id
+                    autoSeleccion = true
+                } else if (json.data.items.length === 1) {
+                    ingresoSugeridoId = json.data.items[0]?.id ?? null
+                    autoSeleccion = true
+                }
+            }
+
             const mantenerSeleccion =
-                selectedIngresoId !== null &&
-                json.data.items.some((item) => item.id === selectedIngresoId)
+                ingresoSugeridoId !== null &&
+                json.data.items.some((item) => item.id === ingresoSugeridoId)
 
             if (!mantenerSeleccion) {
+                ingresoSugeridoId = null
                 setSelectedIngresoId(null)
                 setContexto(null)
                 setSeleccion({})
+            } else if (ingresoSugeridoId !== selectedIngresoId) {
+                setSelectedIngresoId(ingresoSugeridoId)
+            }
+
+            setAutoSeleccionBusquedaDirecta(autoSeleccion)
+            setMostrarCoincidenciasBusqueda(!autoSeleccion)
+            if (options?.actualizarUrl !== false) {
+                actualizarQueryEstado(ingresoSugeridoId, snapshot)
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error de busqueda')
@@ -2113,9 +2377,25 @@ export function FacturacionPanel() {
     }
 
     useEffect(() => {
-        buscarAdmisiones()
+        const estadoDesdeUrl = resolverEstadoBusquedaDesdeQuery(searchParams)
+        const ingresoIdDesdeUrl = parseEnteroPositivo(searchParams.get('ingresoId'))
+
+        setCriterioBusquedaPaciente(estadoDesdeUrl.criterioBusquedaPaciente)
+        setBusquedaPaciente(estadoDesdeUrl.busquedaPaciente)
+        setUsarFiltroFechaIngreso(estadoDesdeUrl.usarFiltroFechaIngreso)
+        setFechaIngreso(estadoDesdeUrl.fechaIngreso)
+        setUsarFiltroTipoIngreso(estadoDesdeUrl.usarFiltroTipoIngreso)
+        setTipoIngresoCodigo(estadoDesdeUrl.tipoIngresoCodigo)
+        setCodigoPractica(estadoDesdeUrl.codigoPractica)
+        setSelectedIngresoId(ingresoIdDesdeUrl)
+
+        const estadoKey = buildBusquedaStateKey(estadoDesdeUrl)
+        if (estadoKey === ultimoEstadoBusquedaAutoRef.current) return
+        ultimoEstadoBusquedaAutoRef.current = estadoKey
+
+        void buscarAdmisiones(estadoDesdeUrl, { actualizarUrl: false })
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [searchParams])
 
     useEffect(() => {
         if (selectedIngresoId) {
@@ -2127,6 +2407,13 @@ export function FacturacionPanel() {
     useEffect(() => {
         setPaginaPrestaciones(1)
     }, [filtroPrestaciones, porPaginaPrestaciones, selectedIngresoId])
+
+    const criterioPacienteActivo =
+        CRITERIOS_BUSQUEDA_PACIENTE.find((criterio) => criterio.value === criterioBusquedaPaciente) ??
+        CRITERIOS_BUSQUEDA_PACIENTE[0]
+    const tieneBusquedaPacienteActiva = busquedaPaciente.trim().length > 0
+    const mostrarListaCoincidencias =
+        mostrarCoincidenciasBusqueda || !autoSeleccionBusquedaDirecta || !tieneBusquedaPacienteActiva
 
     return (
         <div className="p-6 space-y-4">
@@ -2161,81 +2448,244 @@ export function FacturacionPanel() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12">
-                    <label className="space-y-1 xl:col-span-4">
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Búsqueda</span>
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+                    <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 xl:col-span-6">
+                        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
+                            <Search className="h-3.5 w-3.5" /> Búsqueda directa de paciente
+                        </div>
+
+                        <div className="mb-2 flex flex-wrap gap-2">
+                            {CRITERIOS_BUSQUEDA_PACIENTE.map((criterio) => {
+                                const activo = criterio.value === criterioBusquedaPaciente
+                                return (
+                                    <button
+                                        key={criterio.value}
+                                        type="button"
+                                        onClick={() => setCriterioBusquedaPaciente(criterio.value)}
+                                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                                            activo
+                                                ? 'border-blue-600 bg-blue-600 text-white'
+                                                : 'border-blue-200 bg-white text-blue-700 hover:bg-blue-100'
+                                        }`}
+                                    >
+                                        {criterio.label}
+                                    </button>
+                                )
+                            })}
+                        </div>
+
                         <div className="relative">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
                             <input
-                                value={q}
-                                onChange={(e) => setQ(e.target.value)}
-                                placeholder="Paciente, nro ingreso o documento"
-                                className="h-10 w-full rounded-md border border-gray-300 bg-white pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                value={busquedaPaciente}
+                                onChange={(e) => setBusquedaPaciente(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        void buscarAdmisiones()
+                                    }
+                                }}
+                                placeholder={criterioPacienteActivo.placeholder}
+                                className="h-10 w-full rounded-md border border-blue-200 bg-white pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                             />
                         </div>
-                    </label>
+                    </div>
 
-                    <label className="space-y-1 xl:col-span-3">
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Tipo de ingreso</span>
-                        <input
-                            value={tipoIngresoCodigo}
-                            onChange={(e) => setTipoIngresoCodigo(e.target.value)}
-                            placeholder="INT / GUA / AMB"
-                            className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                        />
-                    </label>
+                    <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3 xl:col-span-6">
+                        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                            <ListFilter className="h-3.5 w-3.5" /> Filtros de listado
+                        </div>
 
-                    <label className="space-y-1 xl:col-span-3">
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Código práctica</span>
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm text-emerald-900">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-400"
+                                    checked={usarFiltroFechaIngreso}
+                                    onChange={(e) => setUsarFiltroFechaIngreso(e.target.checked)}
+                                />
+                                Filtrar por fecha de ingreso
+                            </label>
+
+                            {usarFiltroFechaIngreso && (
+                                <label className="space-y-1">
+                                    <span className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">Fecha puntual</span>
+                                    <div className="relative">
+                                        <CalendarDays className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500" />
+                                        <input
+                                            type="date"
+                                            value={fechaIngreso}
+                                            onChange={(e) => setFechaIngreso(e.target.value)}
+                                            className="h-9 w-full rounded-md border border-emerald-200 bg-white pl-8 pr-2 text-sm text-gray-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                                        />
+                                    </div>
+                                </label>
+                            )}
+
+                            <label className="flex items-center gap-2 text-sm text-emerald-900">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-400"
+                                    checked={usarFiltroTipoIngreso}
+                                    onChange={(e) => setUsarFiltroTipoIngreso(e.target.checked)}
+                                />
+                                Filtrar por tipo de ingreso
+                            </label>
+
+                            {usarFiltroTipoIngreso && (
+                                <div className="flex flex-wrap gap-2">
+                                    {TIPOS_INGRESO_FILTRO.map((tipo) => {
+                                        const activo = tipoIngresoCodigo === tipo
+                                        return (
+                                            <label
+                                                key={tipo}
+                                                className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-medium ${
+                                                    activo
+                                                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                                                        : 'border-emerald-200 bg-white text-emerald-800'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-3.5 w-3.5"
+                                                    checked={activo}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setTipoIngresoCodigo(tipo)
+                                                        } else {
+                                                            setTipoIngresoCodigo('')
+                                                        }
+                                                    }}
+                                                />
+                                                {tipo}
+                                            </label>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <label className="space-y-1 xl:col-span-5">
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Código de práctica (opcional)</span>
                         <input
                             value={codigoPractica}
                             onChange={(e) => setCodigoPractica(e.target.value)}
-                            placeholder="Filtrar por práctica"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    void buscarAdmisiones()
+                                }
+                            }}
+                            placeholder="Ej: 420303"
                             className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                         />
                     </label>
 
-                    <div className="flex items-end gap-2 xl:col-span-2">
+                    <div className="flex items-end gap-2 xl:col-span-7">
                         <button
                             onClick={buscarAdmisiones}
-                            className="inline-flex h-10 flex-1 items-center justify-center rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex h-10 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={buscando}
                         >
-                            {buscando ? 'Buscando...' : 'Buscar'}
+                            {buscando ? 'Buscando...' : 'Aplicar búsqueda'}
                         </button>
+                        <button
+                            type="button"
+                            onClick={limpiarBusqueda}
+                            className="inline-flex h-10 items-center justify-center rounded-md border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                        >
+                            Limpiar
+                        </button>
+                        <div className="inline-flex h-10 items-center rounded-md bg-gray-100 px-3 text-xs font-medium text-gray-700">
+                            {totalAdmisiones} opciones encontradas
+                        </div>
+                        {autoSeleccionBusquedaDirecta && selectedIngresoId && (
+                            <div className="inline-flex h-10 items-center rounded-md bg-emerald-100 px-3 text-xs font-medium text-emerald-800">
+                                Selección automática aplicada
+                            </div>
+                        )}
                     </div>
 
-                    <div className="xl:col-span-12">
-                        <div className="grid gap-2 md:grid-cols-[auto,1fr] md:items-center">
-                            <div className="inline-flex items-center rounded-md bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-600">
-                                {totalAdmisiones} admisiones encontradas
-                            </div>
-                            <label className="space-y-1">
-                                <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Admisión seleccionada</span>
-                                <select
-                                    value={selectedIngresoId ?? ''}
-                                    onChange={(e) => {
-                                        const next = Number.parseInt(e.target.value, 10)
-                                        if (Number.isFinite(next) && next > 0) {
-                                            setSelectedIngresoId(next)
-                                        } else {
-                                            setSelectedIngresoId(null)
-                                            setContexto(null)
-                                            setSeleccion({})
-                                        }
-                                    }}
-                                    className="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-xs text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                                >
-                                    <option value="">Seleccionar admisión...</option>
-                                    {admisiones.map((a) => (
-                                        <option key={a.id} value={a.id}>
-                                            {`${a.tipoIngresoCodigo}-${a.numeroIngreso} · ${a.paciente?.nombreCompleto ?? 'Sin nombre'} · DNI ${a.paciente?.numeroDocumento ?? '—'}`}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
+                    {autoSeleccionBusquedaDirecta && !mostrarListaCoincidencias && admisiones.length > 1 && (
+                        <div className="xl:col-span-12">
+                            <button
+                                type="button"
+                                onClick={() => setMostrarCoincidenciasBusqueda(true)}
+                                className="text-xs font-medium text-blue-700 underline decoration-blue-300 underline-offset-2"
+                            >
+                                Ver coincidencias encontradas ({admisiones.length})
+                            </button>
                         </div>
-                    </div>
+                    )}
+
+                    {mostrarListaCoincidencias && (
+                        <div className="xl:col-span-12">
+                            {admisiones.length === 0 ? (
+                                <div className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-4 text-sm text-gray-500">
+                                    No se encontraron admisiones para los filtros actuales.
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
+                                    <table className="min-w-full text-sm">
+                                        <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                                            <tr>
+                                                <th className="px-3 py-2 text-left">Ingreso</th>
+                                                <th className="px-3 py-2 text-left">Paciente</th>
+                                                <th className="px-3 py-2 text-left">HC</th>
+                                                <th className="px-3 py-2 text-left">DNI</th>
+                                                <th className="px-3 py-2 text-left">Fecha ingreso</th>
+                                                <th className="px-3 py-2 text-right">Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {admisiones.map((admision) => {
+                                                const seleccionado = selectedIngresoId === admision.id
+                                                return (
+                                                    <tr
+                                                        key={admision.id}
+                                                        className={seleccionado ? 'bg-blue-50' : 'border-t border-gray-100'}
+                                                    >
+                                                        <td className="px-3 py-2 font-medium text-gray-900">
+                                                            {admision.tipoIngresoCodigo}-{admision.numeroIngreso}
+                                                        </td>
+                                                        <td className="px-3 py-2 text-gray-800">
+                                                            {admision.paciente?.nombreCompleto ?? 'Sin nombre'}
+                                                        </td>
+                                                        <td className="px-3 py-2 text-gray-700">
+                                                            {admision.paciente?.historiaClinica ?? '—'}
+                                                        </td>
+                                                        <td className="px-3 py-2 text-gray-700">
+                                                            {admision.paciente?.numeroDocumento ?? '—'}
+                                                        </td>
+                                                        <td className="px-3 py-2 text-gray-600">
+                                                            {admision.fechaIngreso ? formatearFechaHoraArgentina(admision.fechaIngreso) : '—'}
+                                                        </td>
+                                                        <td className="px-3 py-2 text-right">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setAutoSeleccionBusquedaDirecta(false)
+                                                                    setMostrarCoincidenciasBusqueda(true)
+                                                                    setSelectedIngresoId(admision.id)
+                                                                    actualizarQueryEstado(admision.id)
+                                                                }}
+                                                                className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                                                                    seleccionado
+                                                                        ? 'bg-blue-600 text-white'
+                                                                        : 'border border-blue-300 bg-white text-blue-700 hover:bg-blue-50'
+                                                                }`}
+                                                            >
+                                                                {seleccionado ? 'Seleccionada' : 'Seleccionar'}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 

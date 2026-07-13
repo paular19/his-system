@@ -1017,47 +1017,121 @@ function normalizarCodigoPracticaFacturacion(codigo: string): string {
 export async function buscarAdmisionesFacturacion(
     params: BusquedaFacturacionInput
 ): Promise<{ items: AdmisionFacturacionListItem[]; total: number }> {
-    const { q, tipoIngresoCodigo, codigoPractica, pagina, porPagina } = params
+    const {
+        q,
+        pacienteNombre,
+        historiaClinica,
+        numeroDocumento,
+        tipoIngresoCodigo,
+        codigoPractica,
+        fechaIngreso,
+        fechaDesde,
+        fechaHasta,
+        pagina,
+        porPagina,
+    } = params
     const skip = (pagina - 1) * porPagina
 
     const where: Prisma.IngresoWhereInput = {
         estado: { in: ['A', 'E'] },
     }
 
-    if (tipoIngresoCodigo) where.tipoIngresoCodigo = tipoIngresoCodigo
+    const andFilters: Prisma.IngresoWhereInput[] = []
+
+    if (tipoIngresoCodigo) {
+        andFilters.push({ tipoIngresoCodigo: tipoIngresoCodigo.trim().toUpperCase() })
+    }
+
+    if (pacienteNombre) {
+        andFilters.push({
+            OR: [
+                { nombre: { contains: pacienteNombre, mode: 'insensitive' } },
+                { paciente: { nombreCompleto: { contains: pacienteNombre, mode: 'insensitive' } } },
+            ],
+        })
+    }
+
+    if (typeof historiaClinica === 'number' && Number.isFinite(historiaClinica)) {
+        andFilters.push({ paciente: { historiaClinica } })
+    }
+
+    if (typeof numeroDocumento === 'number' && Number.isFinite(numeroDocumento)) {
+        andFilters.push({ paciente: { numeroDocumento } })
+    }
 
     if (q) {
         const esNumerico = /^\d+$/.test(q)
         if (esNumerico) {
             const n = parseInt(q, 10)
-            where.OR = [
-                { numeroIngreso: n },
-                { paciente: { numeroDocumento: n } },
-                { nombre: { contains: q, mode: 'insensitive' } },
-            ]
+            andFilters.push({
+                OR: [
+                    { numeroIngreso: n },
+                    { paciente: { numeroDocumento: n } },
+                    { paciente: { historiaClinica: n } },
+                    { nombre: { contains: q, mode: 'insensitive' } },
+                ],
+            })
         } else {
-            where.OR = [
-                { nombre: { contains: q, mode: 'insensitive' } },
-                { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' } } },
-            ]
+            andFilters.push({
+                OR: [
+                    { nombre: { contains: q, mode: 'insensitive' } },
+                    { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' } } },
+                ],
+            })
+        }
+    }
+
+    const fechaExacta = fechaIngreso ?? fechaDesde
+    if (fechaExacta) {
+        const desde = new Date(`${fechaExacta}T00:00:00.000Z`)
+        const hasta = new Date(`${fechaExacta}T23:59:59.999Z`)
+        if (!Number.isNaN(desde.getTime()) && !Number.isNaN(hasta.getTime())) {
+            andFilters.push({
+                fechaIngreso: {
+                    gte: desde,
+                    lte: hasta,
+                },
+            })
+        }
+    } else if (fechaDesde || fechaHasta) {
+        const filtroFecha: Prisma.DateTimeFilter = {}
+
+        if (fechaDesde) {
+            const desde = new Date(`${fechaDesde}T00:00:00.000Z`)
+            if (!Number.isNaN(desde.getTime())) {
+                filtroFecha.gte = desde
+            }
+        }
+
+        if (fechaHasta) {
+            const hasta = new Date(`${fechaHasta}T23:59:59.999Z`)
+            if (!Number.isNaN(hasta.getTime())) {
+                filtroFecha.lte = hasta
+            }
+        }
+
+        if (Object.keys(filtroFecha).length > 0) {
+            andFilters.push({ fechaIngreso: filtroFecha })
         }
     }
 
     if (codigoPractica) {
-        where.AND = [
-            {
-                OR: [
-                    { practicas: { some: { codigoPractica: { contains: codigoPractica, mode: 'insensitive' } } } },
-                    {
-                        ordenes: {
-                            some: {
-                                items: { some: { codigoPractica: { contains: codigoPractica, mode: 'insensitive' } } },
-                            },
+        andFilters.push({
+            OR: [
+                { practicas: { some: { codigoPractica: { contains: codigoPractica, mode: 'insensitive' } } } },
+                {
+                    ordenes: {
+                        some: {
+                            items: { some: { codigoPractica: { contains: codigoPractica, mode: 'insensitive' } } },
                         },
                     },
-                ],
-            },
-        ]
+                },
+            ],
+        })
+    }
+
+    if (andFilters.length > 0) {
+        where.AND = andFilters
     }
 
     const [total, items] = await Promise.all([
@@ -1078,6 +1152,7 @@ export async function buscarAdmisionesFacturacion(
                     select: {
                         id: true,
                         nombreCompleto: true,
+                        historiaClinica: true,
                         numeroDocumento: true,
                     },
                 },

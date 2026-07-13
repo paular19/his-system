@@ -466,11 +466,6 @@ function construirIncluyeCodigoDesdeSeleccion(
         (aneDisp ? seleccion.anestesista === 1 : seleccion.anestesista === 0) &&
         (gasDisp ? seleccion.gastos === 1 : seleccion.gastos === 0)
 
-    if (esCompleta) {
-        const actual = (incluyeCodigoActual ?? '').trim().toUpperCase()
-        return actual && actual !== 'COMPLETA' ? actual : null
-    }
-
     const hayClasificacionPersonalizada = ORDEN_COMPONENTES_CLASIFICACION.some((componente) => {
         const valoresComponente = clasificacionesPorComponente?.[componente] ?? []
         return valoresComponente.some((v) => (v ?? '').trim().length > 0)
@@ -495,6 +490,11 @@ function construirIncluyeCodigoDesdeSeleccion(
         if (codigosPersonalizados.length > 0) {
             return codigosPersonalizados.join('+')
         }
+    }
+
+    if (esCompleta) {
+        const actual = (incluyeCodigoActual ?? '').trim().toUpperCase()
+        return actual && actual !== 'COMPLETA' ? actual : null
     }
 
     const codigos: string[] = []

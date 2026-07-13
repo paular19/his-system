@@ -71,6 +71,7 @@ export function AutorizacionPrint({
   const profesionalTexto = (item: OrdenConItems['items'][number]): string => {
     const nombreFallbackPorMatricula = (matricula: number): string => {
       if (matricula === 6) return 'ASOSIACION ANESTESISTA'
+      if (matricula === 2675) return 'ANA MARIA VEGA'
       if (matricula === 9110) return 'CLINICA SAN RAFAEL'
       if (matricula === 9995) return 'GASTOS INTERNACION'
       if (matricula === 995) return 'PROFESIONAL AYUDANTE'
@@ -78,7 +79,11 @@ export function AutorizacionPrint({
     }
 
     if (esTituloPatologia(item)) {
-      const nombrePatologia = (orden.descripcionPatologia ?? item.efectorProfesional?.nombre ?? 'PROFESIONAL').toUpperCase()
+      const nombrePatologia = (
+        item.efectorProfesional?.nombre ??
+        (item.efectorMatricula ? nombreFallbackPorMatricula(item.efectorMatricula) : null) ??
+        'PROFESIONAL'
+      ).toUpperCase()
       const matriculaPatologia = item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null
       return `${nombrePatologia} · MP ${matriculaPatologia ?? '-'}`
     }
@@ -120,8 +125,11 @@ export function AutorizacionPrint({
     const matriculaEfector = item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null
 
     if (esTituloPatologia(item)) {
+      const nombreFallbackPatologia = item.efectorMatricula === 2675
+        ? 'ANA MARIA VEGA'
+        : 'PROFESIONAL'
       return {
-        nombre: orden.descripcionPatologia ?? item.efectorProfesional?.nombre ?? 'PROFESIONAL',
+        nombre: item.efectorProfesional?.nombre ?? nombreFallbackPatologia,
         matricula: item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null,
       }
     }
@@ -151,6 +159,8 @@ export function AutorizacionPrint({
     if (item.efectorMatricula) {
       const nombre = item.efectorMatricula === 6
         ? 'ASOSIACION ANESTESISTA'
+        : item.efectorMatricula === 2675
+          ? 'ANA MARIA VEGA'
         : item.efectorMatricula === 9110
           ? 'CLINICA SAN RAFAEL'
           : item.efectorMatricula === 9995

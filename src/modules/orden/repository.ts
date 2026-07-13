@@ -14,6 +14,7 @@ import { normalizarClasificacionAgrupacion } from './clasificacion'
 const PUESTO_NUMERO = 1 // Número de puesto fijo (configurable a futuro)
 const EFECTOR_FALLBACK_POR_MATRICULA: Record<number, string> = {
   6: 'ASOSIACION ANESTESISTA',
+  2675: 'ANA MARIA VEGA',
   9110: 'CLINICA SAN RAFAEL',
   9995: 'GASTOS INTERNACION',
 }

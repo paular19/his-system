@@ -41,6 +41,7 @@ const NOMBRE_MATRICULA_9995_DEFAULT = 'GASTOS INTERNACION'
 const MATRICULA_ANESTESISTA_INT_DEFAULT = 6
 const MATRICULA_AYUDANTE_INT_DEFAULT = 995
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
+const NOMBRE_MATRICULA_2675_DEFAULT = 'ANA MARIA VEGA'
 const NOMBRE_MATRICULA_6_DEFAULT = 'ASOSIACION ANESTESISTA'
 const NOMBRE_MATRICULA_995_DEFAULT = 'PROFESIONAL AYUDANTE'
 const CODIGOS_HA_OBLIGATORIO = new Set(['169006'])
@@ -303,6 +304,7 @@ function resolverNombreEfectorFallback(params: {
 }): string {
     if (params.matricula === MATRICULA_AMBULATORIO_DEFAULT) return NOMBRE_MATRICULA_9110_DEFAULT
     if (params.matricula === MATRICULA_GASTOS_INTERNACION_DEFAULT) return NOMBRE_MATRICULA_9995_DEFAULT
+    if (params.matricula === MATRICULA_PATOLOGIA_DEFAULT) return NOMBRE_MATRICULA_2675_DEFAULT
     if (esTituloAnestesista(params.titularModular)) return 'ASOSIACION ANESTESISTA'
     if (esTituloPatologia(params.titularModular) && (params.descripcionPatologia ?? '').trim().length > 0) {
         return (params.descripcionPatologia ?? '').trim()
@@ -1360,6 +1362,16 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         matriculasProfesionales.add(MATRICULA_GASTOS_INTERNACION_DEFAULT)
     }
 
+    if (!matriculasProfesionales.has(MATRICULA_PATOLOGIA_DEFAULT)) {
+        profesionalesExtra.push({
+            id: profesionalExtraId,
+            nombre: NOMBRE_MATRICULA_2675_DEFAULT,
+            matricula: MATRICULA_PATOLOGIA_DEFAULT,
+        })
+        profesionalExtraId -= 1
+        matriculasProfesionales.add(MATRICULA_PATOLOGIA_DEFAULT)
+    }
+
     const profesionales = [...profesionalesBase, ...profesionalesExtra]
         .map((profesional) => (
             profesional.matricula === MATRICULA_AMBULATORIO_DEFAULT
@@ -1370,6 +1382,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     ? { ...profesional, nombre: NOMBRE_MATRICULA_6_DEFAULT }
                     : profesional.matricula === MATRICULA_AYUDANTE_INT_DEFAULT
                         ? { ...profesional, nombre: NOMBRE_MATRICULA_995_DEFAULT }
+                        : profesional.matricula === MATRICULA_PATOLOGIA_DEFAULT
+                            ? { ...profesional, nombre: NOMBRE_MATRICULA_2675_DEFAULT }
                         : profesional
         ))
         .sort((a, b) =>
@@ -2913,7 +2927,23 @@ export async function actualizarPrestacionFacturacion(
                 },
             })
 
-            if (ordenItemVinculado && !ordenBloqueadaPorAutorizacion) {
+            if (ordenItemVinculado) {
+                const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
+                    modulo: incluyeCodigoNormalizado,
+                    clasificacionAgrupacion: esPatologia ? 'HP' : null,
+                    titularModular: esPatologia ? 'HONORARIO PATOLOGO' : null,
+                    efectorMatricula: esPatologia ? MATRICULA_PATOLOGIA_DEFAULT : undefined,
+                }
+
+                if (!ordenBloqueadaPorAutorizacion) {
+                    dataOrdenPractica.fecha = data.fecha
+                    dataOrdenPractica.convenioId = resolved.convenioId
+                    dataOrdenPractica.codigoPractica = resolved.codigoPractica.trim()
+                    dataOrdenPractica.cantidad = data.cantidad
+                    dataOrdenPractica.numeroAutorizacion = numeroAutorizacionOrden
+                    dataOrdenPractica.importeTotal = data.importeTotal
+                }
+
                 await tx.ordenPractica.update({
                     where: {
                         puestoNumero_ordenNumero_item: {
@@ -2922,27 +2952,41 @@ export async function actualizarPrestacionFacturacion(
                             item: ordenItemVinculado.item,
                         },
                     },
-                    data: {
-                        fecha: data.fecha,
-                        convenioId: resolved.convenioId,
-                        codigoPractica: resolved.codigoPractica.trim(),
-                        cantidad: data.cantidad,
-                        modulo: incluyeCodigoNormalizado,
-                        clasificacionAgrupacion: esPatologia ? 'HP' : undefined,
-                        titularModular: esPatologia ? 'HONORARIO PATOLOGO' : undefined,
-                        efectorMatricula: esPatologia ? MATRICULA_PATOLOGIA_DEFAULT : undefined,
-                        numeroAutorizacion: numeroAutorizacionOrden,
-                        importeTotal: data.importeTotal,
-                    },
+                    data: dataOrdenPractica,
                 })
 
-                if (data.matriculaProfesional) {
-                    const profesional = await tx.profesional.findFirst({
-                        where: { matricula: data.matriculaProfesional },
-                        select: { id: true },
+                if (!ordenBloqueadaPorAutorizacion) {
+                    if (data.matriculaProfesional) {
+                        const profesional = await tx.profesional.findFirst({
+                            where: { matricula: data.matriculaProfesional },
+                            select: { id: true },
+                        })
+
+                        if (profesional) {
+                            await tx.orden.update({
+                                where: {
+                                    puestoNumero_numero: {
+                                        puestoNumero: ordenItemVinculado.puestoNumero,
+                                        numero: ordenItemVinculado.ordenNumero,
+                                    },
+                                },
+                                data: { profesionalId: profesional.id },
+                            })
+                        }
+                    }
+
+                    const orden = await tx.orden.findUnique({
+                        where: {
+                            puestoNumero_numero: {
+                                puestoNumero: ordenItemVinculado.puestoNumero,
+                                numero: ordenItemVinculado.ordenNumero,
+                            },
+                        },
+                        select: { ingresoId: true, items: { select: { importeTotal: true } } },
                     })
 
-                    if (profesional) {
+                    if (orden) {
+                        const total = orden.items.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
                         await tx.orden.update({
                             where: {
                                 puestoNumero_numero: {
@@ -2950,33 +2994,10 @@ export async function actualizarPrestacionFacturacion(
                                     numero: ordenItemVinculado.ordenNumero,
                                 },
                             },
-                            data: { profesionalId: profesional.id },
+                            data: { importeTotal: total },
                         })
+                        ingresoIdParaRecalculo = orden.ingresoId
                     }
-                }
-
-                const orden = await tx.orden.findUnique({
-                    where: {
-                        puestoNumero_numero: {
-                            puestoNumero: ordenItemVinculado.puestoNumero,
-                            numero: ordenItemVinculado.ordenNumero,
-                        },
-                    },
-                    select: { ingresoId: true, items: { select: { importeTotal: true } } },
-                })
-
-                if (orden) {
-                    const total = orden.items.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
-                    await tx.orden.update({
-                        where: {
-                            puestoNumero_numero: {
-                                puestoNumero: ordenItemVinculado.puestoNumero,
-                                numero: ordenItemVinculado.ordenNumero,
-                            },
-                        },
-                        data: { importeTotal: total },
-                    })
-                    ingresoIdParaRecalculo = orden.ingresoId
                 }
             }
         })

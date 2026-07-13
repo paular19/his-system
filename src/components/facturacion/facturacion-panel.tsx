@@ -2461,20 +2461,39 @@ export function FacturacionPanel() {
                                                     grupo.ordenPuestoNumero && grupo.ordenNumero
                                                         ? formatOrderNumber(grupo.ordenPuestoNumero, grupo.ordenNumero)
                                                         : 'Sin orden vinculada'
+                                                const destinoOrdenGrupo =
+                                                    grupo.ordenPuestoNumero && grupo.ordenNumero
+                                                        ? `/dashboard/ambulatorio/${grupo.ordenPuestoNumero}/${grupo.ordenNumero}`
+                                                        : null
 
                                                 return (
                                                     <Fragment key={grupo.key}>
                                                         <tr className="bg-slate-50">
                                                             <td colSpan={10} className="px-3 py-2">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setOrdenesPendientesExpand((prev) => ({ ...prev, [grupo.key]: !grupoExpandido }))}
-                                                                    className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-                                                                >
-                                                                    {grupoExpandido ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                                                    Orden {etiquetaOrden}
+                                                                <div className="inline-flex items-center gap-2 rounded border border-slate-200 bg-white px-2 py-1">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setOrdenesPendientesExpand((prev) => ({ ...prev, [grupo.key]: !grupoExpandido }))}
+                                                                        className="inline-flex items-center gap-1 text-xs font-medium text-slate-700"
+                                                                    >
+                                                                        {grupoExpandido ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                                    </button>
+                                                                    <span className="text-xs font-medium text-slate-700">Orden</span>
+                                                                    {destinoOrdenGrupo ? (
+                                                                        <Link
+                                                                            href={destinoOrdenGrupo}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                                                                            title="Abrir orden en nueva pestaña"
+                                                                        >
+                                                                            {etiquetaOrden}
+                                                                        </Link>
+                                                                    ) : (
+                                                                        <span className="text-xs font-medium text-slate-600">{etiquetaOrden}</span>
+                                                                    )}
                                                                     <span className="text-[11px] text-slate-500">({grupo.items.length} práctica{grupo.items.length === 1 ? '' : 's'})</span>
-                                                                </button>
+                                                                </div>
                                                             </td>
                                                         </tr>
 

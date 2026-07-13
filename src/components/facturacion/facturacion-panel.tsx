@@ -335,8 +335,10 @@ function construirClasificacionesPorComponenteUI(
 
         for (let posicion = 0; posicion < cantidad; posicion += 1) {
             const fallback = clasificacionPorDefectoComponente(componente, posicion, codigoPractica)
-            const rawValue = normalizarClasificacionInput(actuales[posicion])
-            const value = rawValue.length > 0 ? rawValue : fallback
+            const valorActual = actuales[posicion]
+            const tieneValorActual = valorActual !== undefined && valorActual !== null
+            const rawValue = normalizarClasificacionInput(valorActual)
+            const value = tieneValorActual ? rawValue : fallback
             const index = globalIndex
 
             filas.push({

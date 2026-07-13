@@ -362,7 +362,7 @@ function construirClasificacionesPorComponenteUI(
 
 function resumenSubitemsIncluidos(incluyeCodigo: string | null | undefined): string {
     const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
-    if (!seleccion) return 'Completa (todos los componentes)'
+    if (!seleccion) return ''
 
     const cantidadPatologia = (incluyeCodigo ?? '')
         .trim()
@@ -383,11 +383,7 @@ function resumenSubitemsIncluidos(incluyeCodigo: string | null | undefined): str
     if (seleccion.anestesista > 0) partes.push(`HA x${seleccion.anestesista}`)
     if (seleccion.ayudante > 0) partes.push(`Ayudante x${seleccion.ayudante}`)
 
-    return partes.length > 0 ? partes.join(' · ') : 'Completa (todos los componentes)'
-}
-
-function esImporteParcialPorSubitem(incluyeCodigo: string | null | undefined): boolean {
-    return parseIncluyeCodigoSeleccion(incluyeCodigo) !== null
+    return partes.length > 0 ? partes.join(' · ') : ''
 }
 
 function incluyeTieneAyudante(incluyeCodigo: string | null | undefined): boolean {
@@ -2638,7 +2634,6 @@ export function FacturacionPanel() {
                                                         )
                                                         : null
                                                 const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
-                                                const importeParcialPorSubitem = p.tipo === 'PRACTICA' && esImporteParcialPorSubitem(p.incluyeCodigo)
                                                 const diferencialesActivos = resumenDiferenciales(p.diferenciales)
                                                 if (p.diferenciales?.dobleCirugia && p.diferenciales?.esPracticaBase) {
                                                     diferencialesActivos.push('Base 100% (doble cirugía)')
@@ -2735,9 +2730,11 @@ export function FacturacionPanel() {
                                                                 )}
                                                                 {p.tipo === 'PRACTICA' && (
                                                                     <div className="mt-1 flex flex-wrap gap-1">
-                                                                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                                                                            Incluye: {resumenIncluye}
-                                                                        </span>
+                                                                        {resumenIncluye && (
+                                                                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                                                                                Incluye: {resumenIncluye}
+                                                                            </span>
+                                                                        )}
                                                                         {autorizacionesVinculadasOrdenadas.slice(0, 2).map((aut) => (
                                                                             <span
                                                                                 key={`${p.uid}:resumen:${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`}
@@ -3047,7 +3044,9 @@ export function FacturacionPanel() {
                                                                     </div>
 
                                                                     <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-700">
-                                                                        <span className="rounded-full bg-slate-100 px-2 py-0.5">Incluye: {resumenIncluye}</span>
+                                                                        {resumenIncluye && (
+                                                                            <span className="rounded-full bg-slate-100 px-2 py-0.5">Incluye: {resumenIncluye}</span>
+                                                                        )}
                                                                         {itemsOrdenRelacionados.map((item) => {
                                                                             const keyItem = keyItemOrdenRelacionado(item)
                                                                             const esPrincipal = itemOrdenPrincipalKey === keyItem
@@ -3070,11 +3069,6 @@ export function FacturacionPanel() {
                                                                             <span key={texto} className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">{texto}</span>
                                                                         ))}
                                                                     </div>
-                                                                    {importeParcialPorSubitem && (
-                                                                        <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                                                                            Este importe corresponde solo al subitem incluido; no representa el gasto total del código.
-                                                                        </div>
-                                                                    )}
 
                                                                     {(tieneComponentes || mostrarSelectorComponentes) && selComp && (
                                                                         <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-2">
@@ -3220,7 +3214,6 @@ export function FacturacionPanel() {
                                                             const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
                                                             const desgloseSelector = obtenerDesgloseSelector(p)
                                                             const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
-                                                            const importeParcialPorSubitem = esImporteParcialPorSubitem(p.incluyeCodigo)
                                                             const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
                                                             const fechaDraft = draft.fecha ? new Date(draft.fecha) : null
                                                             const fechaResumen = fechaDraft && !Number.isNaN(fechaDraft.getTime())
@@ -3473,16 +3466,13 @@ export function FacturacionPanel() {
                                                                                     </div>
                                                                                 </div>
                                                                                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-700">
-                                                                                    <span className="rounded-full bg-slate-100 px-2 py-0.5">Incluye: {resumenIncluye}</span>
+                                                                                    {resumenIncluye && (
+                                                                                        <span className="rounded-full bg-slate-100 px-2 py-0.5">Incluye: {resumenIncluye}</span>
+                                                                                    )}
                                                                                     {etiquetasDiferencial.length > 0 && etiquetasDiferencial.map((etq) => (
                                                                                         <span key={etq} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">{etq}</span>
                                                                                     ))}
                                                                                 </div>
-                                                                                {importeParcialPorSubitem && (
-                                                                                    <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                                                                                        Este importe corresponde solo al subitem incluido; no representa el gasto total del código.
-                                                                                    </div>
-                                                                                )}
                                                                             </td>
                                                                         </tr>
                                                                     )}

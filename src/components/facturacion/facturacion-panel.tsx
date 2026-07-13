@@ -2410,7 +2410,12 @@ export function FacturacionPanel() {
 
     const criterioPacienteActivo =
         CRITERIOS_BUSQUEDA_PACIENTE.find((criterio) => criterio.value === criterioBusquedaPaciente) ??
-        CRITERIOS_BUSQUEDA_PACIENTE[0]
+        CRITERIOS_BUSQUEDA_PACIENTE.find((criterio) => criterio.value === 'NOMBRE') ??
+        {
+            value: 'NOMBRE' as const,
+            label: 'Nombre paciente',
+            placeholder: 'Ej: Perez, Ana',
+        }
     const tieneBusquedaPacienteActiva = busquedaPaciente.trim().length > 0
     const mostrarListaCoincidencias =
         mostrarCoincidenciasBusqueda || !autoSeleccionBusquedaDirecta || !tieneBusquedaPacienteActiva
@@ -2582,7 +2587,9 @@ export function FacturacionPanel() {
 
                     <div className="flex items-end gap-2 xl:col-span-7">
                         <button
-                            onClick={buscarAdmisiones}
+                            onClick={() => {
+                                void buscarAdmisiones()
+                            }}
                             className="inline-flex h-10 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={buscando}
                         >

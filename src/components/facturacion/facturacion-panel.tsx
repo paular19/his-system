@@ -95,7 +95,8 @@ type BusquedaFacturacionState = {
     criterioBusquedaPaciente: CriterioBusquedaPaciente
     busquedaPaciente: string
     usarFiltroFechaIngreso: boolean
-    fechaIngreso: string
+    fechaDesdeIngreso: string
+    fechaHastaIngreso: string
     usarFiltroTipoIngreso: boolean
     tipoIngresoCodigo: string
     codigoPractica: string
@@ -202,19 +203,18 @@ function resolverEstadoBusquedaDesdeQuery(searchParams: { get(name: string): str
         )
     })()
 
-    const fechaIngreso = (
-        searchParams.get('fechaIngreso') ??
-        searchParams.get('fechaDesde') ??
-        ''
-    ).trim()
+    const fechaIngresoLegacy = (searchParams.get('fechaIngreso') ?? '').trim()
+    const fechaDesdeIngreso = (searchParams.get('fechaDesde') ?? fechaIngresoLegacy).trim()
+    const fechaHastaIngreso = (searchParams.get('fechaHasta') ?? fechaIngresoLegacy).trim()
 
     return {
         criterioBusquedaPaciente,
         busquedaPaciente,
         usarFiltroFechaIngreso:
             searchParams.get('filtrarFecha') === '1' ||
-            Boolean(fechaIngreso),
-        fechaIngreso,
+            Boolean(fechaDesdeIngreso || fechaHastaIngreso),
+        fechaDesdeIngreso,
+        fechaHastaIngreso,
         usarFiltroTipoIngreso:
             searchParams.get('filtrarTipoIngreso') === '1' ||
             Boolean(searchParams.get('tipoIngresoCodigo')),
@@ -228,7 +228,8 @@ function buildBusquedaStateKey(state: BusquedaFacturacionState): string {
         state.criterioBusquedaPaciente,
         state.busquedaPaciente.trim(),
         state.usarFiltroFechaIngreso ? '1' : '0',
-        state.fechaIngreso,
+        state.fechaDesdeIngreso,
+        state.fechaHastaIngreso,
         state.usarFiltroTipoIngreso ? '1' : '0',
         state.tipoIngresoCodigo,
         state.codigoPractica,
@@ -934,7 +935,8 @@ export function FacturacionPanel() {
     )
     const [busquedaPaciente, setBusquedaPaciente] = useState(estadoBusquedaInicial.busquedaPaciente)
     const [usarFiltroFechaIngreso, setUsarFiltroFechaIngreso] = useState(estadoBusquedaInicial.usarFiltroFechaIngreso)
-    const [fechaIngreso, setFechaIngreso] = useState(estadoBusquedaInicial.fechaIngreso)
+    const [fechaDesdeIngreso, setFechaDesdeIngreso] = useState(estadoBusquedaInicial.fechaDesdeIngreso)
+    const [fechaHastaIngreso, setFechaHastaIngreso] = useState(estadoBusquedaInicial.fechaHastaIngreso)
     const [usarFiltroTipoIngreso, setUsarFiltroTipoIngreso] = useState(estadoBusquedaInicial.usarFiltroTipoIngreso)
     const [tipoIngresoCodigo, setTipoIngresoCodigo] = useState(estadoBusquedaInicial.tipoIngresoCodigo)
     const [codigoPractica, setCodigoPractica] = useState(estadoBusquedaInicial.codigoPractica)
@@ -1392,7 +1394,8 @@ export function FacturacionPanel() {
             criterioBusquedaPaciente: overrides?.criterioBusquedaPaciente ?? criterioBusquedaPaciente,
             busquedaPaciente: overrides?.busquedaPaciente ?? busquedaPaciente,
             usarFiltroFechaIngreso: overrides?.usarFiltroFechaIngreso ?? usarFiltroFechaIngreso,
-            fechaIngreso: overrides?.fechaIngreso ?? fechaIngreso,
+            fechaDesdeIngreso: overrides?.fechaDesdeIngreso ?? fechaDesdeIngreso,
+            fechaHastaIngreso: overrides?.fechaHastaIngreso ?? fechaHastaIngreso,
             usarFiltroTipoIngreso: overrides?.usarFiltroTipoIngreso ?? usarFiltroTipoIngreso,
             tipoIngresoCodigo: overrides?.tipoIngresoCodigo ?? tipoIngresoCodigo,
             codigoPractica: overrides?.codigoPractica ?? codigoPractica,
@@ -1416,7 +1419,8 @@ export function FacturacionPanel() {
 
         if (state.usarFiltroFechaIngreso) {
             urlParams.set('filtrarFecha', '1')
-            if (state.fechaIngreso) urlParams.set('fechaIngreso', state.fechaIngreso)
+            if (state.fechaDesdeIngreso) urlParams.set('fechaDesde', state.fechaDesdeIngreso)
+            if (state.fechaHastaIngreso) urlParams.set('fechaHasta', state.fechaHastaIngreso)
         }
 
         if (state.usarFiltroTipoIngreso) {
@@ -1440,7 +1444,8 @@ export function FacturacionPanel() {
             criterioBusquedaPaciente: 'NOMBRE',
             busquedaPaciente: '',
             usarFiltroFechaIngreso: false,
-            fechaIngreso: '',
+            fechaDesdeIngreso: '',
+            fechaHastaIngreso: '',
             usarFiltroTipoIngreso: false,
             tipoIngresoCodigo: '',
             codigoPractica: '',
@@ -1449,7 +1454,8 @@ export function FacturacionPanel() {
         setCriterioBusquedaPaciente(stateLimpio.criterioBusquedaPaciente)
         setBusquedaPaciente(stateLimpio.busquedaPaciente)
         setUsarFiltroFechaIngreso(stateLimpio.usarFiltroFechaIngreso)
-        setFechaIngreso(stateLimpio.fechaIngreso)
+        setFechaDesdeIngreso(stateLimpio.fechaDesdeIngreso)
+        setFechaHastaIngreso(stateLimpio.fechaHastaIngreso)
         setUsarFiltroTipoIngreso(stateLimpio.usarFiltroTipoIngreso)
         setTipoIngresoCodigo(stateLimpio.tipoIngresoCodigo)
         setCodigoPractica(stateLimpio.codigoPractica)
@@ -1501,10 +1507,16 @@ export function FacturacionPanel() {
             }
 
             if (snapshot.usarFiltroFechaIngreso) {
-                if (!snapshot.fechaIngreso) {
-                    throw new Error('Debe seleccionar una fecha de ingreso para aplicar el filtro.')
+                const tieneDesde = Boolean(snapshot.fechaDesdeIngreso)
+                const tieneHasta = Boolean(snapshot.fechaHastaIngreso)
+                if (!tieneDesde && !tieneHasta) {
+                    throw new Error('Debe seleccionar al menos una fecha para aplicar el filtro.')
                 }
-                params.set('fechaIngreso', snapshot.fechaIngreso)
+                if (snapshot.fechaDesdeIngreso && snapshot.fechaHastaIngreso && snapshot.fechaDesdeIngreso > snapshot.fechaHastaIngreso) {
+                    throw new Error('La fecha desde no puede ser mayor a la fecha hasta.')
+                }
+                if (snapshot.fechaDesdeIngreso) params.set('fechaDesde', snapshot.fechaDesdeIngreso)
+                if (snapshot.fechaHastaIngreso) params.set('fechaHasta', snapshot.fechaHastaIngreso)
             }
 
             if (codigoPracticaFiltro) params.set('codigoPractica', codigoPracticaFiltro)
@@ -2383,7 +2395,8 @@ export function FacturacionPanel() {
         setCriterioBusquedaPaciente(estadoDesdeUrl.criterioBusquedaPaciente)
         setBusquedaPaciente(estadoDesdeUrl.busquedaPaciente)
         setUsarFiltroFechaIngreso(estadoDesdeUrl.usarFiltroFechaIngreso)
-        setFechaIngreso(estadoDesdeUrl.fechaIngreso)
+        setFechaDesdeIngreso(estadoDesdeUrl.fechaDesdeIngreso)
+        setFechaHastaIngreso(estadoDesdeUrl.fechaHastaIngreso)
         setUsarFiltroTipoIngreso(estadoDesdeUrl.usarFiltroTipoIngreso)
         setTipoIngresoCodigo(estadoDesdeUrl.tipoIngresoCodigo)
         setCodigoPractica(estadoDesdeUrl.codigoPractica)
@@ -2512,18 +2525,33 @@ export function FacturacionPanel() {
                             </label>
 
                             {usarFiltroFechaIngreso && (
-                                <label className="space-y-1">
-                                    <span className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">Fecha puntual</span>
-                                    <div className="relative">
-                                        <CalendarDays className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500" />
-                                        <input
-                                            type="date"
-                                            value={fechaIngreso}
-                                            onChange={(e) => setFechaIngreso(e.target.value)}
-                                            className="h-9 w-full rounded-md border border-emerald-200 bg-white pl-8 pr-2 text-sm text-gray-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                                        />
-                                    </div>
-                                </label>
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <label className="space-y-1">
+                                        <span className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">Desde</span>
+                                        <div className="relative">
+                                            <CalendarDays className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500" />
+                                            <input
+                                                type="date"
+                                                value={fechaDesdeIngreso}
+                                                onChange={(e) => setFechaDesdeIngreso(e.target.value)}
+                                                className="h-9 w-full rounded-md border border-emerald-200 bg-white pl-8 pr-2 text-sm text-gray-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                                            />
+                                        </div>
+                                    </label>
+
+                                    <label className="space-y-1">
+                                        <span className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">Hasta</span>
+                                        <div className="relative">
+                                            <CalendarDays className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500" />
+                                            <input
+                                                type="date"
+                                                value={fechaHastaIngreso}
+                                                onChange={(e) => setFechaHastaIngreso(e.target.value)}
+                                                className="h-9 w-full rounded-md border border-emerald-200 bg-white pl-8 pr-2 text-sm text-gray-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                                            />
+                                        </div>
+                                    </label>
+                                </div>
                             )}
 
                             <label className="flex items-center gap-2 text-sm text-emerald-900">
@@ -2612,14 +2640,14 @@ export function FacturacionPanel() {
                         )}
                     </div>
 
-                    {autoSeleccionBusquedaDirecta && !mostrarListaCoincidencias && admisiones.length > 1 && (
+                    {!mostrarListaCoincidencias && admisiones.length > 0 && (
                         <div className="xl:col-span-12">
                             <button
                                 type="button"
                                 onClick={() => setMostrarCoincidenciasBusqueda(true)}
                                 className="text-xs font-medium text-blue-700 underline decoration-blue-300 underline-offset-2"
                             >
-                                Ver coincidencias encontradas ({admisiones.length})
+                                Ver tabla de admisiones ({admisiones.length})
                             </button>
                         </div>
                     )}
@@ -2671,7 +2699,7 @@ export function FacturacionPanel() {
                                                                 type="button"
                                                                 onClick={() => {
                                                                     setAutoSeleccionBusquedaDirecta(false)
-                                                                    setMostrarCoincidenciasBusqueda(true)
+                                                                    setMostrarCoincidenciasBusqueda(false)
                                                                     setSelectedIngresoId(admision.id)
                                                                     actualizarQueryEstado(admision.id)
                                                                 }}

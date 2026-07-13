@@ -1081,19 +1081,7 @@ export async function buscarAdmisionesFacturacion(
         }
     }
 
-    const fechaExacta = fechaIngreso ?? fechaDesde
-    if (fechaExacta) {
-        const desde = new Date(`${fechaExacta}T00:00:00.000Z`)
-        const hasta = new Date(`${fechaExacta}T23:59:59.999Z`)
-        if (!Number.isNaN(desde.getTime()) && !Number.isNaN(hasta.getTime())) {
-            andFilters.push({
-                fechaIngreso: {
-                    gte: desde,
-                    lte: hasta,
-                },
-            })
-        }
-    } else if (fechaDesde || fechaHasta) {
+    if (fechaDesde || fechaHasta) {
         const filtroFecha: Prisma.DateTimeFilter = {}
 
         if (fechaDesde) {
@@ -1112,6 +1100,17 @@ export async function buscarAdmisionesFacturacion(
 
         if (Object.keys(filtroFecha).length > 0) {
             andFilters.push({ fechaIngreso: filtroFecha })
+        }
+    } else if (fechaIngreso) {
+        const desde = new Date(`${fechaIngreso}T00:00:00.000Z`)
+        const hasta = new Date(`${fechaIngreso}T23:59:59.999Z`)
+        if (!Number.isNaN(desde.getTime()) && !Number.isNaN(hasta.getTime())) {
+            andFilters.push({
+                fechaIngreso: {
+                    gte: desde,
+                    lte: hasta,
+                },
+            })
         }
     }
 

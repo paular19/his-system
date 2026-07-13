@@ -1590,9 +1590,14 @@ export function FacturacionPanel() {
                 .map((p) => {
                     const draft = editRows[p.uid]
                     const importeTotal = draft ? Number(draft.importeTotal) : (p.importeTotal ?? undefined)
-                    const sel = compSeleccion[p.uid]
                     const baseDesc = draft?.descripcion ?? p.descripcion
                     const desgloseSelector = obtenerDesgloseSelector(p)
+                    const sel =
+                        compSeleccion[p.uid] ??
+                        parseIncluyeCodigoSeleccion(p.incluyeCodigo) ??
+                        (desgloseSelector && tieneDesglose(desgloseSelector)
+                            ? seleccionPorDefecto(desgloseSelector)
+                            : null)
                     const incluyeCodigo = construirIncluyeCodigoDesdeSeleccion(
                         desgloseSelector,
                         sel,
@@ -1728,8 +1733,13 @@ export function FacturacionPanel() {
         try {
             let numeroAutorizacionPractica = draft.numeroAutorizacion || null
 
-            const sel = compSeleccion[p.uid]
             const desgloseSelector = obtenerDesgloseSelector(p)
+            const sel =
+                compSeleccion[p.uid] ??
+                parseIncluyeCodigoSeleccion(p.incluyeCodigo) ??
+                (desgloseSelector && tieneDesglose(desgloseSelector)
+                    ? seleccionPorDefecto(desgloseSelector)
+                    : null)
             const incluyeCodigo = sel
                 ? construirIncluyeCodigoDesdeSeleccion(
                     desgloseSelector,

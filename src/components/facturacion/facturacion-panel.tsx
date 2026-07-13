@@ -310,6 +310,10 @@ function normalizarClasificacionToken(
     return fallback
 }
 
+function normalizarClasificacionInput(value: string | null | undefined): string {
+    return (value ?? '').trim().toUpperCase().replace(/\s+/g, '')
+}
+
 function construirClasificacionesPorComponenteUI(
     seleccion: ComponenteSeleccion,
     estadoActual?: ClasificacionPorComponenteState,
@@ -331,7 +335,8 @@ function construirClasificacionesPorComponenteUI(
 
         for (let posicion = 0; posicion < cantidad; posicion += 1) {
             const fallback = clasificacionPorDefectoComponente(componente, posicion, codigoPractica)
-            const value = normalizarClasificacionToken(actuales[posicion], fallback)
+            const rawValue = normalizarClasificacionInput(actuales[posicion])
+            const value = rawValue.length > 0 ? rawValue : fallback
             const index = globalIndex
 
             filas.push({
@@ -3066,7 +3071,7 @@ export function FacturacionPanel() {
                                                                                                     const fallback = clasificacionPorDefectoComponente(target.componente, actuales.length, p.codigoPractica)
                                                                                                     actuales.push(fallback)
                                                                                                 }
-                                                                                                actuales[target.posicion] = normalizarClasificacionToken(value, target.fallback)
+                                                                                                actuales[target.posicion] = normalizarClasificacionInput(value)
 
                                                                                                 return {
                                                                                                     ...prev,

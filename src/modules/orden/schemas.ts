@@ -14,7 +14,7 @@ export const OrdenPracticaItemSchema = z.object({
     .optional()
     .nullable(),
   tipoFacturacion: z.string().length(1).default('H'),
-  incluyeCodigo: z.string().regex(/^(GA|HE|HA|A[1-3])(\+(GA|HE|HA|A[1-3]))*$/).optional().nullable(), // Permite GA, HE+GA, GA+HE, etc.
+  incluyeCodigo: z.string().regex(/^(GA|HE|HA|HP|A[1-3])(\+(GA|HE|HA|HP|A[1-3]))*$/).optional().nullable(), // Permite GA, HE+GA, HP+GA, etc.
   efectorMatricula: z.number().int().positive().optional().nullable(),
   numeroAutorizacion: z.string().max(50).optional().nullable(),
   titularModular: z.string().max(100).optional().nullable(),

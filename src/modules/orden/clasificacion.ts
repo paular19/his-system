@@ -67,8 +67,7 @@ export function clasificacionDesdeIncluyeCodigo(
     .replace(/\s+/g, '')
   if (!normalized) return null
 
-  // HP no forma parte de incluyeCodigo (subitem nomenclador), pero sí de clasificación lógica.
-  const permitidosIncluye = /^(GA|HE|HA|A[1-3])(\+(GA|HE|HA|A[1-3]))*$/
+  const permitidosIncluye = /^(GA|HE|HA|HP|A[1-3])(\+(GA|HE|HA|HP|A[1-3]))*$/
   if (!permitidosIncluye.test(normalized)) return null
 
   return normalizarClasificacionAgrupacion(normalized)

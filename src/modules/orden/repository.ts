@@ -142,8 +142,8 @@ function normalizarIncluyeCodigo(codigo: string | null | undefined): string | nu
   if (!codigo) return null
   const normalized = codigo.trim().toUpperCase()
 
-  // Validar formato: GA, HE, HA, A1-A3, o combinaciones con +
-  const codigosValidos = /^(GA|HE|HA|A[1-3])(\+(GA|HE|HA|A[1-3]))*$/
+  // Validar formato: GA, HE, HA, HP, A1-A3, o combinaciones con +
+  const codigosValidos = /^(GA|HE|HA|HP|A[1-3])(\+(GA|HE|HA|HP|A[1-3]))*$/
   if (!codigosValidos.test(normalized)) {
     return null
   }

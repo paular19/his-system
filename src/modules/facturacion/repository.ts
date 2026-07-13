@@ -253,12 +253,33 @@ function resolverMatriculaEspecialistaPorPatologia(
     incluye: IncluyeCodigoSeleccion | null | undefined,
     codigoPractica: string | null | undefined
 ): number | null {
-    const matricula = matriculaActual ?? null
-    if (matricula && matricula > 0) return matricula
     if (incluye?.patologia || esCodigoPatologiaPorDefecto(codigoPractica)) {
         return MATRICULA_PATOLOGIA_DEFAULT
     }
-    return matricula
+    const matricula = matriculaActual ?? null
+    return matricula && matricula > 0 ? matricula : null
+}
+
+function requiereActualizarPatologiaOrden(params: {
+    incluyeCodigo: string | null | undefined
+    codigoPractica: string
+}): boolean {
+    const seleccion = desglosarIncluyeCodigo(params.incluyeCodigo)
+    return Boolean(seleccion?.patologia || esCodigoPatologiaPorDefecto(params.codigoPractica))
+}
+
+function dataOrdenPracticaPatologia(): {
+    clasificacionAgrupacion: string
+    titularModular: string
+    efectorMatricula: number
+    modulo: string
+} {
+    return {
+        clasificacionAgrupacion: 'HP',
+        titularModular: 'HONORARIO PATOLOGO',
+        efectorMatricula: MATRICULA_PATOLOGIA_DEFAULT,
+        modulo: 'HP',
+    }
 }
 
 function esDesgloseSoloGastos(desglose: {
@@ -2453,9 +2474,14 @@ export async function cargarOrdenesDesdePrestaciones(
 
             const modulosCompatibles = expandirModulosCompatibles(prestacion.incluyeCodigo)
             const codigoNormalizado = normalizarCodigoPractica(prestacion.codigoPractica)
+            const actualizarPatologia = requiereActualizarPatologiaOrden({
+                incluyeCodigo: prestacion.incluyeCodigo,
+                codigoPractica: prestacion.codigoPractica,
+            })
+            const dataPatologia = dataOrdenPracticaPatologia()
 
             if (modulosCompatibles.length > 1) {
-                return [
+                const ops: Prisma.PrismaPromise<Prisma.BatchPayload>[] = [
                     prisma.ordenPractica.updateMany({
                         where: {
                             puestoNumero: vinculo.puestoNumero,
@@ -2471,9 +2497,32 @@ export async function cargarOrdenesDesdePrestaciones(
                         data: { practicaId },
                     }),
                 ]
+
+                if (actualizarPatologia) {
+                    ops.push(
+                        prisma.ordenPractica.updateMany({
+                            where: {
+                                puestoNumero: vinculo.puestoNumero,
+                                ordenNumero: vinculo.ordenNumero,
+                                convenioId: prestacion.convenioId,
+                                codigoPractica: { startsWith: codigoNormalizado },
+                                practicaId,
+                                OR: [
+                                    { modulo: { contains: 'HE' } },
+                                    { modulo: { contains: 'HP' } },
+                                    { modulo: null },
+                                    { clasificacionAgrupacion: { in: ['HE', 'HP'] } },
+                                ],
+                            },
+                            data: dataPatologia,
+                        })
+                    )
+                }
+
+                return ops
             }
 
-            return [
+            const ops: Prisma.PrismaPromise<Prisma.BatchPayload>[] = [
                 prisma.ordenPractica.updateMany({
                     where: {
                         puestoNumero: vinculo.puestoNumero,
@@ -2487,6 +2536,28 @@ export async function cargarOrdenesDesdePrestaciones(
                     data: { practicaId },
                 }),
             ]
+
+            if (actualizarPatologia) {
+                ops.push(
+                    prisma.ordenPractica.updateMany({
+                        where: {
+                            puestoNumero: vinculo.puestoNumero,
+                            ordenNumero: vinculo.ordenNumero,
+                            item: vinculo.item,
+                            practicaId,
+                            OR: [
+                                { modulo: { contains: 'HE' } },
+                                { modulo: { contains: 'HP' } },
+                                { modulo: null },
+                                { clasificacionAgrupacion: { in: ['HE', 'HP'] } },
+                            ],
+                        },
+                        data: dataPatologia,
+                    })
+                )
+            }
+
+            return ops
         })
         if (updatesOrdenPractica.length > 0) {
             await prisma.$transaction(updatesOrdenPractica)

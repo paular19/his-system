@@ -2826,6 +2826,7 @@ export async function actualizarPrestacionFacturacion(
     )
 
     if (data.tipo === 'PRACTICA') {
+        const aplicarOrdenCompleta = Boolean(data.aplicarOrdenCompleta)
         const actual = await prisma.practica.findUnique({
             where: { id: data.practicaId },
             select: {
@@ -2900,44 +2901,63 @@ export async function actualizarPrestacionFacturacion(
                 })
             }
 
-            const ordenBloqueadaPorAutorizacion = Boolean(
-                ordenItemVinculado &&
-                    tieneAutorizacionBloqueanteOrdenItem(
-                        ordenItemVinculado.numeroAutorizacion,
-                        ordenItemVinculado.orden.numeroAutorizacion,
-                        ordenItemVinculado.puestoNumero,
-                        ordenItemVinculado.ordenNumero,
-                        ordenItemVinculado.item
-                    )
-            )
+            let ordenPuestoNumeroObjetivo =
+                data.ordenPuestoNumero ??
+                actual.puestoNumero ??
+                ordenItemVinculado?.puestoNumero ??
+                null
+            let ordenNumeroObjetivo =
+                data.ordenNumero ??
+                actual.ordenNumero ??
+                ordenItemVinculado?.ordenNumero ??
+                null
+
+            const usarActualizacionGlobal =
+                aplicarOrdenCompleta && Boolean(ordenPuestoNumeroObjetivo && ordenNumeroObjetivo)
+
+            if (aplicarOrdenCompleta && !usarActualizacionGlobal) {
+                throw new Error('No se pudo determinar la orden para aplicar edición global')
+            }
 
             const numeroAutorizacionOrden =
                 data.numeroAutorizacion?.trim()
                     ? data.numeroAutorizacion.trim().slice(0, 15)
                     : null
 
-            await tx.practica.update({
-                where: { id: data.practicaId },
-                data: {
-                    fecha: data.fecha,
-                    convenioId: resolved.convenioId,
-                    codigoPractica: resolved.codigoPractica.trim(),
-                    cantidad: data.cantidad,
-                    numeroAutorizacion: data.numeroAutorizacion ?? null,
-                    importeTotal: data.importeTotal,
-                    matriculaEspecialista: matriculaEspecialistaFinal,
-                    matriculaAnestesista: data.matriculaAnestesista ?? null,
-                },
-            })
+            const dataPractica: Prisma.PracticaUncheckedUpdateManyInput = {
+                fecha: data.fecha,
+                convenioId: resolved.convenioId,
+                codigoPractica: resolved.codigoPractica.trim(),
+                cantidad: data.cantidad,
+                numeroAutorizacion: data.numeroAutorizacion ?? null,
+                importeTotal: data.importeTotal,
+                matriculaEspecialista: matriculaEspecialistaFinal,
+                matriculaAnestesista: data.matriculaAnestesista ?? null,
+            }
 
-            if (ordenItemVinculado) {
+            if (usarActualizacionGlobal && ordenPuestoNumeroObjetivo && ordenNumeroObjetivo) {
+                await tx.practica.updateMany({
+                    where: {
+                        puestoNumero: ordenPuestoNumeroObjetivo,
+                        ordenNumero: ordenNumeroObjetivo,
+                    },
+                    data: dataPractica,
+                })
+            } else {
+                await tx.practica.update({
+                    where: { id: data.practicaId },
+                    data: dataPractica,
+                })
+            }
+
+            if (ordenPuestoNumeroObjetivo && ordenNumeroObjetivo) {
                 const codigoResueltoNormalizado = normalizarCodigoPractica(resolved.codigoPractica)
 
-                if (esPatologia) {
+                if (esPatologia && !usarActualizacionGlobal) {
                     await tx.ordenPractica.updateMany({
                         where: {
-                            puestoNumero: ordenItemVinculado.puestoNumero,
-                            ordenNumero: ordenItemVinculado.ordenNumero,
+                            puestoNumero: ordenPuestoNumeroObjetivo,
+                            ordenNumero: ordenNumeroObjetivo,
                             codigoPractica: { startsWith: codigoResueltoNormalizado },
                         },
                         data: {
@@ -2949,37 +2969,87 @@ export async function actualizarPrestacionFacturacion(
                     })
                 }
 
-                const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
-                    modulo: incluyeCodigoNormalizado,
-                    clasificacionAgrupacion: esPatologia ? 'HP' : null,
-                    titularModular: esPatologia ? 'HONORARIO PATOLOGO' : null,
-                    efectorMatricula: esPatologia
-                        ? MATRICULA_PATOLOGIA_DEFAULT
-                        : (data.matriculaEspecialista ?? undefined),
-                }
-
-                if (!ordenBloqueadaPorAutorizacion) {
-                    dataOrdenPractica.fecha = data.fecha
-                    dataOrdenPractica.convenioId = resolved.convenioId
-                    dataOrdenPractica.codigoPractica = resolved.codigoPractica.trim()
-                    dataOrdenPractica.cantidad = data.cantidad
-                    dataOrdenPractica.numeroAutorizacion = numeroAutorizacionOrden
-                    dataOrdenPractica.importeTotal = data.importeTotal
-                }
-
-                await tx.ordenPractica.update({
+                const ordenCabecera = await tx.orden.findUnique({
                     where: {
-                        puestoNumero_ordenNumero_item: {
-                            puestoNumero: ordenItemVinculado.puestoNumero,
-                            ordenNumero: ordenItemVinculado.ordenNumero,
-                            item: ordenItemVinculado.item,
+                        puestoNumero_numero: {
+                            puestoNumero: ordenPuestoNumeroObjetivo,
+                            numero: ordenNumeroObjetivo,
                         },
                     },
-                    data: dataOrdenPractica,
+                    select: {
+                        ingresoId: true,
+                        numeroAutorizacion: true,
+                    },
                 })
 
-                if (!ordenBloqueadaPorAutorizacion) {
-                    if (data.matriculaProfesional) {
+                if (ordenCabecera) {
+                    const itemsObjetivo = usarActualizacionGlobal
+                        ? await tx.ordenPractica.findMany({
+                            where: {
+                                puestoNumero: ordenPuestoNumeroObjetivo,
+                                ordenNumero: ordenNumeroObjetivo,
+                            },
+                            select: {
+                                item: true,
+                                numeroAutorizacion: true,
+                            },
+                            orderBy: [{ item: 'asc' }],
+                        })
+                        : (ordenItemVinculado
+                            ? [{
+                                item: ordenItemVinculado.item,
+                                numeroAutorizacion: ordenItemVinculado.numeroAutorizacion,
+                            }]
+                            : [])
+
+                    let tieneItemsBloqueados = false
+                    let actualizarImportesOrden = false
+
+                    for (const itemObjetivo of itemsObjetivo) {
+                        const ordenBloqueadaPorAutorizacion = tieneAutorizacionBloqueanteOrdenItem(
+                            itemObjetivo.numeroAutorizacion,
+                            ordenCabecera.numeroAutorizacion,
+                            ordenPuestoNumeroObjetivo,
+                            ordenNumeroObjetivo,
+                            itemObjetivo.item
+                        )
+
+                        if (ordenBloqueadaPorAutorizacion) {
+                            tieneItemsBloqueados = true
+                        }
+
+                        const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
+                            modulo: incluyeCodigoNormalizado,
+                            clasificacionAgrupacion: esPatologia ? 'HP' : null,
+                            titularModular: esPatologia ? 'HONORARIO PATOLOGO' : null,
+                            efectorMatricula: esPatologia
+                                ? MATRICULA_PATOLOGIA_DEFAULT
+                                : (data.matriculaEspecialista ?? undefined),
+                        }
+
+                        if (!ordenBloqueadaPorAutorizacion) {
+                            dataOrdenPractica.fecha = data.fecha
+                            dataOrdenPractica.convenioId = resolved.convenioId
+                            dataOrdenPractica.codigoPractica = resolved.codigoPractica.trim()
+                            dataOrdenPractica.cantidad = data.cantidad
+                            dataOrdenPractica.numeroAutorizacion = numeroAutorizacionOrden
+                            dataOrdenPractica.importeTotal = data.importeTotal
+                            actualizarImportesOrden = true
+                        }
+
+                        await tx.ordenPractica.update({
+                            where: {
+                                puestoNumero_ordenNumero_item: {
+                                    puestoNumero: ordenPuestoNumeroObjetivo,
+                                    ordenNumero: ordenNumeroObjetivo,
+                                    item: itemObjetivo.item,
+                                },
+                            },
+                            data: dataOrdenPractica,
+                        })
+                    }
+
+                    if (data.matriculaProfesional && !tieneItemsBloqueados) {
                         const profesional = await tx.profesional.findFirst({
                             where: { matricula: data.matriculaProfesional },
                             select: { id: true },
@@ -2989,8 +3059,8 @@ export async function actualizarPrestacionFacturacion(
                             await tx.orden.update({
                                 where: {
                                     puestoNumero_numero: {
-                                        puestoNumero: ordenItemVinculado.puestoNumero,
-                                        numero: ordenItemVinculado.ordenNumero,
+                                        puestoNumero: ordenPuestoNumeroObjetivo,
+                                        numero: ordenNumeroObjetivo,
                                     },
                                 },
                                 data: { profesionalId: profesional.id },
@@ -2998,28 +3068,25 @@ export async function actualizarPrestacionFacturacion(
                         }
                     }
 
-                    const orden = await tx.orden.findUnique({
-                        where: {
-                            puestoNumero_numero: {
-                                puestoNumero: ordenItemVinculado.puestoNumero,
-                                numero: ordenItemVinculado.ordenNumero,
+                    if (actualizarImportesOrden) {
+                        const itemsOrden = await tx.ordenPractica.findMany({
+                            where: {
+                                puestoNumero: ordenPuestoNumeroObjetivo,
+                                ordenNumero: ordenNumeroObjetivo,
                             },
-                        },
-                        select: { ingresoId: true, items: { select: { importeTotal: true } } },
-                    })
-
-                    if (orden) {
-                        const total = orden.items.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
+                            select: { importeTotal: true },
+                        })
+                        const total = itemsOrden.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
                         await tx.orden.update({
                             where: {
                                 puestoNumero_numero: {
-                                    puestoNumero: ordenItemVinculado.puestoNumero,
-                                    numero: ordenItemVinculado.ordenNumero,
+                                    puestoNumero: ordenPuestoNumeroObjetivo,
+                                    numero: ordenNumeroObjetivo,
                                 },
                             },
                             data: { importeTotal: total },
                         })
-                        ingresoIdParaRecalculo = orden.ingresoId
+                        ingresoIdParaRecalculo = ordenCabecera.ingresoId
                     }
                 }
             }
@@ -3039,7 +3106,10 @@ export async function actualizarPrestacionFacturacion(
                 item: data.item,
             },
         },
-        select: { convenioId: true },
+        select: {
+            convenioId: true,
+            numeroAutorizacion: true,
+        },
     })
     if (!actualItem) throw new Error('Ítem de orden no encontrado')
 
@@ -3049,62 +3119,151 @@ export async function actualizarPrestacionFacturacion(
         actualItem.convenioId
     )
 
-    await prisma.ordenPractica.update({
-        where: {
-            puestoNumero_ordenNumero_item: {
-                puestoNumero: data.puestoNumero,
-                ordenNumero: data.ordenNumero,
-                item: data.item,
-            },
-        },
-        data: {
-            fecha: data.fecha,
-            convenioId: resolved.convenioId,
-            codigoPractica: resolved.codigoPractica.trim(),
-            cantidad: data.cantidad,
-            modulo: incluyeCodigoNormalizado,
-            clasificacionAgrupacion: esPatologia ? 'HP' : undefined,
-            titularModular: esPatologia ? 'HONORARIO PATOLOGO' : undefined,
-            efectorMatricula: esPatologia
-                ? MATRICULA_PATOLOGIA_DEFAULT
-                : (data.matriculaEspecialista ?? undefined),
-            numeroAutorizacion: data.numeroAutorizacion ?? null,
-            importeTotal: data.importeTotal,
-        },
-    })
+    const aplicarOrdenCompleta = Boolean(data.aplicarOrdenCompleta)
+    let ingresoIdParaRecalculo: number | null = null
 
-    if (data.matriculaProfesional) {
-        const profesional = await prisma.profesional.findFirst({
-            where: { matricula: data.matriculaProfesional },
-            select: { id: true },
+    await prisma.$transaction(async (tx) => {
+        const ordenCabecera = await tx.orden.findUnique({
+            where: {
+                puestoNumero_numero: {
+                    puestoNumero: data.puestoNumero,
+                    numero: data.ordenNumero,
+                },
+            },
+            select: {
+                ingresoId: true,
+                numeroAutorizacion: true,
+            },
         })
-        if (profesional) {
-            await prisma.orden.update({
+
+        if (!ordenCabecera) {
+            throw new Error('Orden no encontrada')
+        }
+
+        if (aplicarOrdenCompleta) {
+            await tx.practica.updateMany({
+                where: {
+                    puestoNumero: data.puestoNumero,
+                    ordenNumero: data.ordenNumero,
+                },
+                data: {
+                    fecha: data.fecha,
+                    convenioId: resolved.convenioId,
+                    codigoPractica: resolved.codigoPractica.trim(),
+                    cantidad: data.cantidad,
+                    numeroAutorizacion: data.numeroAutorizacion ?? null,
+                    importeTotal: data.importeTotal,
+                    matriculaEspecialista: matriculaEspecialistaFinal,
+                    matriculaAnestesista: data.matriculaAnestesista ?? null,
+                },
+            })
+        }
+
+        const itemsObjetivo = aplicarOrdenCompleta
+            ? await tx.ordenPractica.findMany({
+                where: {
+                    puestoNumero: data.puestoNumero,
+                    ordenNumero: data.ordenNumero,
+                },
+                select: {
+                    item: true,
+                    numeroAutorizacion: true,
+                },
+                orderBy: [{ item: 'asc' }],
+            })
+            : [{ item: data.item, numeroAutorizacion: actualItem.numeroAutorizacion }]
+
+        let tieneItemsBloqueados = false
+        let actualizarImportesOrden = false
+
+        for (const itemObjetivo of itemsObjetivo) {
+            const ordenBloqueadaPorAutorizacion = tieneAutorizacionBloqueanteOrdenItem(
+                itemObjetivo.numeroAutorizacion,
+                ordenCabecera.numeroAutorizacion,
+                data.puestoNumero,
+                data.ordenNumero,
+                itemObjetivo.item
+            )
+
+            if (ordenBloqueadaPorAutorizacion) {
+                tieneItemsBloqueados = true
+            }
+
+            const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
+                modulo: incluyeCodigoNormalizado,
+                clasificacionAgrupacion: esPatologia ? 'HP' : null,
+                titularModular: esPatologia ? 'HONORARIO PATOLOGO' : null,
+                efectorMatricula: esPatologia
+                    ? MATRICULA_PATOLOGIA_DEFAULT
+                    : (data.matriculaEspecialista ?? undefined),
+            }
+
+            if (!ordenBloqueadaPorAutorizacion) {
+                dataOrdenPractica.fecha = data.fecha
+                dataOrdenPractica.convenioId = resolved.convenioId
+                dataOrdenPractica.codigoPractica = resolved.codigoPractica.trim()
+                dataOrdenPractica.cantidad = data.cantidad
+                dataOrdenPractica.numeroAutorizacion = data.numeroAutorizacion ?? null
+                dataOrdenPractica.importeTotal = data.importeTotal
+                actualizarImportesOrden = true
+            }
+
+            await tx.ordenPractica.update({
+                where: {
+                    puestoNumero_ordenNumero_item: {
+                        puestoNumero: data.puestoNumero,
+                        ordenNumero: data.ordenNumero,
+                        item: itemObjetivo.item,
+                    },
+                },
+                data: dataOrdenPractica,
+            })
+        }
+
+        if (data.matriculaProfesional && !tieneItemsBloqueados) {
+            const profesional = await tx.profesional.findFirst({
+                where: { matricula: data.matriculaProfesional },
+                select: { id: true },
+            })
+            if (profesional) {
+                await tx.orden.update({
+                    where: {
+                        puestoNumero_numero: {
+                            puestoNumero: data.puestoNumero,
+                            numero: data.ordenNumero,
+                        },
+                    },
+                    data: { profesionalId: profesional.id },
+                })
+            }
+        }
+
+        if (actualizarImportesOrden) {
+            const itemsOrden = await tx.ordenPractica.findMany({
+                where: {
+                    puestoNumero: data.puestoNumero,
+                    ordenNumero: data.ordenNumero,
+                },
+                select: { importeTotal: true },
+            })
+
+            const total = itemsOrden.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
+            await tx.orden.update({
                 where: {
                     puestoNumero_numero: {
                         puestoNumero: data.puestoNumero,
                         numero: data.ordenNumero,
                     },
                 },
-                data: { profesionalId: profesional.id },
+                data: { importeTotal: total },
             })
-        }
-    }
 
-    const orden = await prisma.orden.findUnique({
-        where: { puestoNumero_numero: { puestoNumero: data.puestoNumero, numero: data.ordenNumero } },
-        select: { ingresoId: true, items: { select: { importeTotal: true } } },
+            ingresoIdParaRecalculo = ordenCabecera.ingresoId
+        }
     })
-    if (orden) {
-        const total = orden.items.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
-        await prisma.orden.update({
-            where: { puestoNumero_numero: { puestoNumero: data.puestoNumero, numero: data.ordenNumero } },
-            data: { importeTotal: total },
-        })
 
-        if (orden.ingresoId) {
-            await recalcularTotalesLotesPendientesPracticasPorIngreso(orden.ingresoId)
-        }
+    if (ingresoIdParaRecalculo) {
+        await recalcularTotalesLotesPendientesPracticasPorIngreso(ingresoIdParaRecalculo)
     }
 }
 

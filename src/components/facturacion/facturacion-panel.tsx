@@ -851,6 +851,7 @@ export function FacturacionPanel() {
     const [editRows, setEditRows] = useState<Record<string, EditState>>({})
     const [editAutorizacionesVinculadas, setEditAutorizacionesVinculadas] = useState<Record<string, Record<string, string>>>({})
     const [rowEditMode, setRowEditMode] = useState<Record<string, boolean>>({})
+    const [aplicarOrdenCompletaPorFila, setAplicarOrdenCompletaPorFila] = useState<Record<string, boolean>>({})
     const [detallePrestacionesExpand, setDetallePrestacionesExpand] = useState<Record<string, boolean>>({})
     const [guardandoRowUid, setGuardandoRowUid] = useState<string | null>(null)
     const [ordenesExpand, setOrdenesExpand] = useState<Record<string, boolean>>({})
@@ -1280,6 +1281,7 @@ export function FacturacionPanel() {
             setSeleccion({})
             setOrdenesExpand({})
             setRowEditMode({})
+            setAplicarOrdenCompletaPorFila({})
             setDetallePrestacionesExpand({})
             setEditandoFicha(false)
         } catch (err) {
@@ -1712,6 +1714,12 @@ export function FacturacionPanel() {
             })
         }
 
+        setAplicarOrdenCompletaPorFila((prev) => {
+            const next = { ...prev }
+            delete next[p.uid]
+            return next
+        })
+
         setRowEditMode((prev) => ({ ...prev, [p.uid]: false }))
     }
 
@@ -1719,6 +1727,10 @@ export function FacturacionPanel() {
         const draft = editRows[p.uid]
         if (!draft) return
         if (p.tipo !== 'PRACTICA' && p.tipo !== 'ORDEN_ITEM') return
+        const ordenParaEdicionGlobal = obtenerOrdenParaOrdenamiento(p)
+        const aplicarOrdenCompleta = Boolean(
+            aplicarOrdenCompletaPorFila[p.uid] && ordenParaEdicionGlobal
+        )
 
         // Ensure latest selector/sigla edits are committed before reading state.
         flushSync(() => {})
@@ -1826,10 +1838,14 @@ export function FacturacionPanel() {
                     ? {
                         tipo: 'PRACTICA' as const,
                         practicaId: p.origen.practicaId,
+                        aplicarOrdenCompleta,
+                        ordenPuestoNumero: aplicarOrdenCompleta ? ordenParaEdicionGlobal?.puestoNumero : undefined,
+                        ordenNumero: aplicarOrdenCompleta ? ordenParaEdicionGlobal?.ordenNumero : undefined,
                         ...common,
                     }
                     : {
                         tipo: 'ORDEN_ITEM' as const,
+                        aplicarOrdenCompleta,
                         puestoNumero: p.origen.ordenPuestoNumero,
                         ordenNumero: p.origen.ordenNumero,
                         item: p.origen.ordenItem,
@@ -1846,6 +1862,11 @@ export function FacturacionPanel() {
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo guardar prestación')
 
             setRowEditMode((prev) => ({ ...prev, [p.uid]: false }))
+            setAplicarOrdenCompletaPorFila((prev) => {
+                const next = { ...prev }
+                delete next[p.uid]
+                return next
+            })
             if (contexto) await cargarContexto(contexto.ingreso.id, { silent: true })
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al guardar prestación')
@@ -2667,6 +2688,10 @@ export function FacturacionPanel() {
                                                     : '—'
                                                 const mostrarMatriculaAyudante = mostrarCampoMatriculaAyudante(p, desgloseSelector)
                                                 const mostrarMatriculaAnestesista = mostrarCampoMatriculaAnestesista(p, desgloseSelector)
+                                                const ordenParaEdicionGlobal = obtenerOrdenParaOrdenamiento(p)
+                                                const aplicaOrdenCompleta = Boolean(
+                                                    aplicarOrdenCompletaPorFila[p.uid] && ordenParaEdicionGlobal
+                                                )
                                                 return (
                                                     <Fragment key={p.uid}>
                                                         <tr className={yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
@@ -2839,6 +2864,21 @@ export function FacturacionPanel() {
                                                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Detalle de prestación</p>
                                                                         {filaEnEdicion ? (
                                                                             <div className="flex items-center gap-2">
+                                                                                {ordenParaEdicionGlobal && (
+                                                                                    <label className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-800">
+                                                                                        <input
+                                                                                            type="checkbox"
+                                                                                            checked={aplicaOrdenCompleta}
+                                                                                            onChange={(e) =>
+                                                                                                setAplicarOrdenCompletaPorFila((prev) => ({
+                                                                                                    ...prev,
+                                                                                                    [p.uid]: e.target.checked,
+                                                                                                }))
+                                                                                            }
+                                                                                        />
+                                                                                        Aplicar a toda la orden {formatOrderNumber(ordenParaEdicionGlobal.puestoNumero, ordenParaEdicionGlobal.ordenNumero)}
+                                                                                    </label>
+                                                                                )}
                                                                                 <button
                                                                                     onClick={() => guardarPrestacion(p)}
                                                                                     disabled={guardandoRowUid === p.uid}
@@ -3232,6 +3272,10 @@ export function FacturacionPanel() {
                                                                 : '—'
                                                             const mostrarMatriculaAyudante = mostrarCampoMatriculaAyudante(p, desgloseSelector)
                                                             const mostrarMatriculaAnestesista = mostrarCampoMatriculaAnestesista(p, desgloseSelector)
+                                                            const ordenParaEdicionGlobal = obtenerOrdenParaOrdenamiento(p)
+                                                            const aplicaOrdenCompleta = Boolean(
+                                                                aplicarOrdenCompletaPorFila[p.uid] && ordenParaEdicionGlobal
+                                                            )
 
                                                             return (
                                                                 <Fragment key={p.uid}>
@@ -3354,6 +3398,21 @@ export function FacturacionPanel() {
                                                                                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Detalle de prestación</p>
                                                                                     {filaEnEdicion ? (
                                                                                         <div className="flex items-center gap-2">
+                                                                                            {ordenParaEdicionGlobal && (
+                                                                                                <label className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-800">
+                                                                                                    <input
+                                                                                                        type="checkbox"
+                                                                                                        checked={aplicaOrdenCompleta}
+                                                                                                        onChange={(e) =>
+                                                                                                            setAplicarOrdenCompletaPorFila((prev) => ({
+                                                                                                                ...prev,
+                                                                                                                [p.uid]: e.target.checked,
+                                                                                                            }))
+                                                                                                        }
+                                                                                                    />
+                                                                                                    Aplicar a toda la orden {formatOrderNumber(ordenParaEdicionGlobal.puestoNumero, ordenParaEdicionGlobal.ordenNumero)}
+                                                                                                </label>
+                                                                                            )}
                                                                                             <button
                                                                                                 onClick={() => guardarPrestacion(p)}
                                                                                                 disabled={guardandoRowUid === p.uid}

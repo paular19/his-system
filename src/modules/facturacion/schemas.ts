@@ -141,6 +141,9 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
     z.object({
         tipo: z.literal('PRACTICA'),
         practicaId: z.number().int().positive(),
+        aplicarOrdenCompleta: z.boolean().optional(),
+        ordenPuestoNumero: z.number().int().positive().optional(),
+        ordenNumero: z.number().int().positive().optional(),
         fecha: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
         codigoPractica: z.string().trim().min(1).max(8),
         descripcionPractica: z.string().trim().max(500).optional().nullable(),
@@ -159,6 +162,7 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
     }),
     z.object({
         tipo: z.literal('ORDEN_ITEM'),
+        aplicarOrdenCompleta: z.boolean().optional(),
         puestoNumero: z.number().int().positive(),
         ordenNumero: z.number().int().positive(),
         item: z.number().int().positive(),

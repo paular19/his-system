@@ -1728,6 +1728,19 @@ export function FacturacionPanel() {
         try {
             let numeroAutorizacionPractica = draft.numeroAutorizacion || null
 
+            const sel = compSeleccion[p.uid]
+            const desgloseSelector = obtenerDesgloseSelector(p)
+            const incluyeCodigo = sel
+                ? construirIncluyeCodigoDesdeSeleccion(
+                    desgloseSelector,
+                    sel,
+                    p.incluyeCodigo,
+                    clasificacionPorComponenteUid[p.uid],
+                    draft.codigoPractica || p.codigoPractica
+                )
+                : (p.incluyeCodigo ?? null)
+            const incluyeCodigoFinal = incluyeCodigo ?? null
+
             if (p.tipo === 'PRACTICA' && !p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
                 const draftPorOrden = editAutorizacionesVinculadas[p.uid] ?? buildAutorizacionesVinculadasEditState(p)
                 const updates = p.autorizacionesVinculadas!.map((aut) => {
@@ -1769,16 +1782,17 @@ export function FacturacionPanel() {
             }
 
             const usaMatriculaAyudante =
-                incluyeSoloAyudante(p.incluyeCodigo) ||
-                (!p.incluyeCodigo && descripcionEsAyudante(draft.descripcion || p.descripcion))
+                incluyeSoloAyudante(incluyeCodigoFinal) ||
+                (!incluyeCodigoFinal && descripcionEsAyudante(draft.descripcion || p.descripcion))
             const usaMatriculaPatologia =
                 !usaMatriculaAyudante &&
-                (incluyeTienePatologia(p.incluyeCodigo) || esCodigoPatologiaPorDefecto(draft.codigoPractica || p.codigoPractica))
+                (incluyeTienePatologia(incluyeCodigoFinal) || esCodigoPatologiaPorDefecto(draft.codigoPractica || p.codigoPractica))
             const common = {
                 fecha: new Date(draft.fecha || p.fecha).toISOString(),
                 codigoPractica: (draft.codigoPractica || p.codigoPractica || '').trim(),
                 descripcionPractica: draft.descripcion,
                 cantidad: Number(draft.cantidad || 1),
+                incluyeCodigo: incluyeCodigoFinal,
                 numeroAutorizacion:
                     p.tipo === 'PRACTICA'
                         ? numeroAutorizacionPractica

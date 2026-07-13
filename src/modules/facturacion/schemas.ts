@@ -145,6 +145,12 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
         codigoPractica: z.string().trim().min(1).max(8),
         descripcionPractica: z.string().trim().max(500).optional().nullable(),
         cantidad: z.coerce.number().positive(),
+        incluyeCodigo: z
+            .string()
+            .trim()
+            .regex(/^(GA|HE|HA|HP|A[1-3])(\+(GA|HE|HA|HP|A[1-3]))*$/)
+            .optional()
+            .nullable(),
         numeroAutorizacion: z.string().trim().max(50).optional().nullable(),
         importeTotal: z.coerce.number().min(0),
         matriculaProfesional: z.number().int().positive().optional().nullable(),
@@ -160,6 +166,12 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
         codigoPractica: z.string().trim().min(1).max(8),
         descripcionPractica: z.string().trim().max(500).optional().nullable(),
         cantidad: z.coerce.number().positive(),
+        incluyeCodigo: z
+            .string()
+            .trim()
+            .regex(/^(GA|HE|HA|HP|A[1-3])(\+(GA|HE|HA|HP|A[1-3]))*$/)
+            .optional()
+            .nullable(),
         numeroAutorizacion: z.string().trim().max(15).optional().nullable(),
         importeTotal: z.coerce.number().min(0),
         matriculaProfesional: z.number().int().positive().optional().nullable(),

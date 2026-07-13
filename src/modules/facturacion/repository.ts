@@ -2797,6 +2797,17 @@ async function resolverPracticaDesdeInput(
 export async function actualizarPrestacionFacturacion(
     data: ActualizarPrestacionFacturacionInput
 ): Promise<void> {
+    const incluyeCodigoNormalizado = normalizarIncluyeCodigo(data.incluyeCodigo)
+    const incluyeSeleccion = desglosarIncluyeCodigo(incluyeCodigoNormalizado)
+    const esPatologia = Boolean(
+        incluyeSeleccion?.patologia || esCodigoPatologiaPorDefecto(data.codigoPractica)
+    )
+    const matriculaEspecialistaFinal = resolverMatriculaEspecialistaPorPatologia(
+        data.matriculaEspecialista ?? null,
+        incluyeSeleccion,
+        data.codigoPractica
+    )
+
     if (data.tipo === 'PRACTICA') {
         const actual = await prisma.practica.findUnique({
             where: { id: data.practicaId },
@@ -2897,7 +2908,7 @@ export async function actualizarPrestacionFacturacion(
                     cantidad: data.cantidad,
                     numeroAutorizacion: data.numeroAutorizacion ?? null,
                     importeTotal: data.importeTotal,
-                    matriculaEspecialista: data.matriculaEspecialista ?? null,
+                    matriculaEspecialista: matriculaEspecialistaFinal,
                     matriculaAnestesista: data.matriculaAnestesista ?? null,
                 },
             })
@@ -2916,6 +2927,10 @@ export async function actualizarPrestacionFacturacion(
                         convenioId: resolved.convenioId,
                         codigoPractica: resolved.codigoPractica.trim(),
                         cantidad: data.cantidad,
+                        modulo: incluyeCodigoNormalizado,
+                        clasificacionAgrupacion: esPatologia ? 'HP' : undefined,
+                        titularModular: esPatologia ? 'HONORARIO PATOLOGO' : undefined,
+                        efectorMatricula: esPatologia ? MATRICULA_PATOLOGIA_DEFAULT : undefined,
                         numeroAutorizacion: numeroAutorizacionOrden,
                         importeTotal: data.importeTotal,
                     },
@@ -3003,6 +3018,10 @@ export async function actualizarPrestacionFacturacion(
             convenioId: resolved.convenioId,
             codigoPractica: resolved.codigoPractica.trim(),
             cantidad: data.cantidad,
+            modulo: incluyeCodigoNormalizado,
+            clasificacionAgrupacion: esPatologia ? 'HP' : undefined,
+            titularModular: esPatologia ? 'HONORARIO PATOLOGO' : undefined,
+            efectorMatricula: esPatologia ? MATRICULA_PATOLOGIA_DEFAULT : undefined,
             numeroAutorizacion: data.numeroAutorizacion ?? null,
             importeTotal: data.importeTotal,
         },

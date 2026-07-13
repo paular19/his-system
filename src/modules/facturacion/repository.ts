@@ -2936,10 +2936,36 @@ export async function actualizarPrestacionFacturacion(
             }
 
             if (usarActualizacionGlobal && ordenPuestoNumeroObjetivo && ordenNumeroObjetivo) {
-                await tx.practica.updateMany({
+                const practicaIdsGlobal = new Set<number>([data.practicaId])
+
+                const practicasConOrdenExplicita = await tx.practica.findMany({
                     where: {
                         puestoNumero: ordenPuestoNumeroObjetivo,
                         ordenNumero: ordenNumeroObjetivo,
+                    },
+                    select: { id: true },
+                })
+                for (const pr of practicasConOrdenExplicita) {
+                    practicaIdsGlobal.add(pr.id)
+                }
+
+                const practicasVinculadasPorItem = await tx.ordenPractica.findMany({
+                    where: {
+                        puestoNumero: ordenPuestoNumeroObjetivo,
+                        ordenNumero: ordenNumeroObjetivo,
+                        practicaId: { not: null },
+                    },
+                    select: { practicaId: true },
+                })
+                for (const it of practicasVinculadasPorItem) {
+                    if (typeof it.practicaId === 'number') {
+                        practicaIdsGlobal.add(it.practicaId)
+                    }
+                }
+
+                await tx.practica.updateMany({
+                    where: {
+                        id: { in: Array.from(practicaIdsGlobal) },
                     },
                     data: dataPractica,
                 })
@@ -3141,10 +3167,36 @@ export async function actualizarPrestacionFacturacion(
         }
 
         if (aplicarOrdenCompleta) {
-            await tx.practica.updateMany({
+            const practicaIdsGlobal = new Set<number>()
+
+            const practicasConOrdenExplicita = await tx.practica.findMany({
                 where: {
                     puestoNumero: data.puestoNumero,
                     ordenNumero: data.ordenNumero,
+                },
+                select: { id: true },
+            })
+            for (const pr of practicasConOrdenExplicita) {
+                practicaIdsGlobal.add(pr.id)
+            }
+
+            const practicasVinculadasPorItem = await tx.ordenPractica.findMany({
+                where: {
+                    puestoNumero: data.puestoNumero,
+                    ordenNumero: data.ordenNumero,
+                    practicaId: { not: null },
+                },
+                select: { practicaId: true },
+            })
+            for (const it of practicasVinculadasPorItem) {
+                if (typeof it.practicaId === 'number') {
+                    practicaIdsGlobal.add(it.practicaId)
+                }
+            }
+
+            await tx.practica.updateMany({
+                where: {
+                    id: { in: Array.from(practicaIdsGlobal) },
                 },
                 data: {
                     fecha: data.fecha,

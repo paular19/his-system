@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import Link from 'next/link'
 import { ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, Loader2, Pencil, Plus, Search, Upload, X, XCircle } from 'lucide-react'
 import type { AdmisionFacturacionListItem, FacturacionContexto, PrestacionFacturableItem } from '@/modules/facturacion/types'
@@ -1567,6 +1568,8 @@ export function FacturacionPanel() {
 
     async function facturarPaciente() {
         if (!contexto) return
+        // Ensure latest selector/sigla edits are committed before building payload.
+        flushSync(() => {})
         setCargandoOrdenes(true)
         setError(null)
         setMensaje(null)
@@ -1720,6 +1723,9 @@ export function FacturacionPanel() {
         const draft = editRows[p.uid]
         if (!draft) return
         if (p.tipo !== 'PRACTICA' && p.tipo !== 'ORDEN_ITEM') return
+
+        // Ensure latest selector/sigla edits are committed before reading state.
+        flushSync(() => {})
 
         if (p.tipo === 'PRACTICA' && p.facturada) {
             const ok = window.confirm(

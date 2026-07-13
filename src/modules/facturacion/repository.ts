@@ -1583,8 +1583,9 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null) ||
                     esDesgloseSoloGastos(desgloseVinculo)
                 ))
+            const matriculaGastoManualVinculo = it.practica?.matriculaEspecialista ?? it.efectorMatricula ?? null
             const matriculaEspecialistaVinculo = esGastoVinculo
-                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                ? (matriculaGastoManualVinculo ?? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo))
                 : (esCodigoAnestesistaVinculo
                     ? null
                     : resolverMatriculaEspecialistaPorPatologia(
@@ -1642,7 +1643,9 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 matriculaEspecialista: (() => {
                     const incluye = desglosarIncluyeCodigo(it.modulo)
                     const esGasto = esSeleccionSoloGastos(incluye) || (!incluye && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
-                    if (esGasto) return resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                    if (esGasto) {
+                        return it.practica?.matriculaEspecialista ?? it.efectorMatricula ?? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                    }
                     const incluyeSoloAyudante = Boolean(
                         incluye &&
                         incluye.ayudantes > 0 &&
@@ -1863,7 +1866,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 esDesgloseSoloGastos(desgloseFiltradoPorIncluye ?? desgloseConDiferencial ?? desgloseBase)
             ))
         const matriculaEspecialistaFinal = esGastoPractica
-            ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+            ? (matriculaEspecialista ?? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo))
             : matriculaEspecialista
         const matriculaAnestesistaFinal = esGastoPractica
             ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
@@ -2026,7 +2029,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         ? MATRICULA_AYUDANTE_INT_DEFAULT
                         : null
             const matriculaEspecialistaItem = esGastoItem
-                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                ? (it.practica?.matriculaEspecialista ?? it.efectorMatricula ?? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo))
                 : (incluyeSoloAyudante
                     ? MATRICULA_AYUDANTE_INT_DEFAULT
                     : resolverMatriculaEspecialistaPorPatologia(
@@ -2950,7 +2953,9 @@ export async function actualizarPrestacionFacturacion(
                     modulo: incluyeCodigoNormalizado,
                     clasificacionAgrupacion: esPatologia ? 'HP' : null,
                     titularModular: esPatologia ? 'HONORARIO PATOLOGO' : null,
-                    efectorMatricula: esPatologia ? MATRICULA_PATOLOGIA_DEFAULT : undefined,
+                    efectorMatricula: esPatologia
+                        ? MATRICULA_PATOLOGIA_DEFAULT
+                        : (data.matriculaEspecialista ?? undefined),
                 }
 
                 if (!ordenBloqueadaPorAutorizacion) {
@@ -3060,7 +3065,9 @@ export async function actualizarPrestacionFacturacion(
             modulo: incluyeCodigoNormalizado,
             clasificacionAgrupacion: esPatologia ? 'HP' : undefined,
             titularModular: esPatologia ? 'HONORARIO PATOLOGO' : undefined,
-            efectorMatricula: esPatologia ? MATRICULA_PATOLOGIA_DEFAULT : undefined,
+            efectorMatricula: esPatologia
+                ? MATRICULA_PATOLOGIA_DEFAULT
+                : (data.matriculaEspecialista ?? undefined),
             numeroAutorizacion: data.numeroAutorizacion ?? null,
             importeTotal: data.importeTotal,
         },

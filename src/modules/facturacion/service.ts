@@ -126,10 +126,15 @@ export async function actualizarNumeroAutorizacion(
 ) {
     await repo.actualizarNumeroAutorizacion(data)
 
+    const entidad =
+        data.tipo === 'PRACTICA'
+            ? 'Practica'
+            : (data.tipo === 'ORDEN' ? 'Orden' : 'OrdenPrac')
+
     await registrarAudit({
         usuario,
         accion: 'MODIFICAR',
-        entidad: data.tipo === 'PRACTICA' ? 'Practica' : 'OrdenPrac',
+        entidad,
         detalle: 'Actualizacion de numero de autorizacion',
         direccionIp: ip,
     })

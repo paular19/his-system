@@ -127,6 +127,12 @@ export const ActualizarAutorizacionSchema = z.discriminatedUnion('tipo', [
         numeroAutorizacion: z.string().trim().max(50).optional().nullable(),
     }),
     z.object({
+        tipo: z.literal('ORDEN'),
+        puestoNumero: z.number().int().positive(),
+        ordenNumero: z.number().int().positive(),
+        numeroAutorizacion: z.string().trim().max(15).optional().nullable(),
+    }),
+    z.object({
         tipo: z.literal('ORDEN_ITEM'),
         puestoNumero: z.number().int().positive(),
         ordenNumero: z.number().int().positive(),

@@ -724,6 +724,34 @@ function keyAutorizacionVinculada(aut: AutorizacionVinculada): string {
     return `${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`
 }
 
+function keyAutorizacionOrden(puestoNumero: number, ordenNumero: number): string {
+    return `ORD:${puestoNumero}:${ordenNumero}`
+}
+
+function obtenerNumeroAutorizacionOrdenDesdeItems(
+    items: PrestacionFacturableItem[],
+    puestoNumero: number,
+    ordenNumero: number
+): string {
+    for (const item of items) {
+        if (tieneNumeroAutorizacionValido(item.numeroAutorizacion)) {
+            return item.numeroAutorizacion!.trim()
+        }
+
+        for (const aut of item.autorizacionesVinculadas ?? []) {
+            if (
+                aut.ordenPuestoNumero === puestoNumero &&
+                aut.ordenNumero === ordenNumero &&
+                tieneNumeroAutorizacionValido(aut.numeroAutorizacion)
+            ) {
+                return aut.numeroAutorizacion!.trim()
+            }
+        }
+    }
+
+    return ''
+}
+
 function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Record<string, string> {
     const state: Record<string, string> = {}
     for (const aut of p.autorizacionesVinculadas ?? []) {
@@ -850,6 +878,8 @@ export function FacturacionPanel() {
 
     const [editRows, setEditRows] = useState<Record<string, EditState>>({})
     const [editAutorizacionesVinculadas, setEditAutorizacionesVinculadas] = useState<Record<string, Record<string, string>>>({})
+    const [editAutorizacionOrden, setEditAutorizacionOrden] = useState<Record<string, string>>({})
+    const [guardandoAutorizacionOrdenKey, setGuardandoAutorizacionOrdenKey] = useState<string | null>(null)
     const [rowEditMode, setRowEditMode] = useState<Record<string, boolean>>({})
     const [aplicarOrdenCompletaPorFila, setAplicarOrdenCompletaPorFila] = useState<Record<string, boolean>>({})
     const [detallePrestacionesExpand, setDetallePrestacionesExpand] = useState<Record<string, boolean>>({})
@@ -1278,6 +1308,7 @@ export function FacturacionPanel() {
             setContexto(json.data)
             cargarFormDesdeContexto(json.data)
             initEditRows(json.data)
+            setEditAutorizacionOrden({})
             setSeleccion({})
             setOrdenesExpand({})
             setRowEditMode({})
@@ -1661,6 +1692,50 @@ export function FacturacionPanel() {
             setError(err instanceof Error ? err.message : 'Error al facturar paciente')
         } finally {
             setCargandoOrdenes(false)
+        }
+    }
+
+    async function guardarAutorizacionOrden(
+        puestoNumero: number,
+        ordenNumero: number,
+        valor: string,
+        options?: { silent?: boolean }
+    ) {
+        if (!contexto) return
+
+        const authKey = keyAutorizacionOrden(puestoNumero, ordenNumero)
+        const numeroAutorizacion = valor.trim() || null
+
+        setGuardandoAutorizacionOrdenKey(authKey)
+        setError(null)
+        if (!options?.silent) setMensaje(null)
+
+        try {
+            const res = await fetch('/api/facturacion/autorizaciones', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tipo: 'ORDEN' as const,
+                    puestoNumero,
+                    ordenNumero,
+                    numeroAutorizacion,
+                }),
+            })
+
+            const json = (await res.json()) as ApiResponse<{ ok: boolean }>
+            if (!res.ok || !json.ok) {
+                throw new Error(json.error ?? 'No se pudo actualizar el número de autorización de la orden')
+            }
+
+            if (!options?.silent) {
+                setMensaje(`Autorización actualizada para orden ${formatOrderNumber(puestoNumero, ordenNumero)}`)
+            }
+
+            await cargarContexto(contexto.ingreso.id, { silent: true })
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al actualizar autorización de la orden')
+        } finally {
+            setGuardandoAutorizacionOrdenKey(null)
         }
     }
 
@@ -2565,6 +2640,24 @@ export function FacturacionPanel() {
                                         <tbody className="divide-y">
                                             {gruposPrestacionesNoOrdenadasPaginadas.map((grupo) => {
                                                 const grupoExpandido = ordenesPendientesExpand[grupo.key] ?? true
+                                                const tieneNumeroOrden = Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
+                                                const authOrdenKey =
+                                                    tieneNumeroOrden && grupo.ordenPuestoNumero && grupo.ordenNumero
+                                                        ? keyAutorizacionOrden(grupo.ordenPuestoNumero, grupo.ordenNumero)
+                                                        : null
+                                                const numeroAutorizacionOrdenActual =
+                                                    tieneNumeroOrden && grupo.ordenPuestoNumero && grupo.ordenNumero
+                                                        ? obtenerNumeroAutorizacionOrdenDesdeItems(
+                                                            grupo.items,
+                                                            grupo.ordenPuestoNumero,
+                                                            grupo.ordenNumero
+                                                        )
+                                                        : ''
+                                                const numeroAutorizacionOrdenDraft = authOrdenKey
+                                                    ? (editAutorizacionOrden[authOrdenKey] ?? numeroAutorizacionOrdenActual)
+                                                    : ''
+                                                const guardandoAutorizacionOrden =
+                                                    Boolean(authOrdenKey) && guardandoAutorizacionOrdenKey === authOrdenKey
                                                 const etiquetaOrden =
                                                     grupo.ordenPuestoNumero && grupo.ordenNumero
                                                         ? formatOrderNumber(grupo.ordenPuestoNumero, grupo.ordenNumero)
@@ -2578,7 +2671,7 @@ export function FacturacionPanel() {
                                                     <Fragment key={grupo.key}>
                                                         <tr className="bg-slate-50">
                                                             <td colSpan={10} className="px-3 py-2">
-                                                                <div className="inline-flex items-center gap-2 rounded border border-slate-200 bg-white px-2 py-1">
+                                                                <div className="flex flex-wrap items-center gap-2 rounded border border-slate-200 bg-white px-2 py-1">
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => setOrdenesPendientesExpand((prev) => ({ ...prev, [grupo.key]: !grupoExpandido }))}
@@ -2601,6 +2694,36 @@ export function FacturacionPanel() {
                                                                         <span className="text-xs font-medium text-slate-600">{etiquetaOrden}</span>
                                                                     )}
                                                                     <span className="text-[11px] text-slate-500">({grupo.items.length} práctica{grupo.items.length === 1 ? '' : 's'})</span>
+
+                                                                    {authOrdenKey && grupo.ordenPuestoNumero && grupo.ordenNumero && (
+                                                                        <div className="ml-auto flex flex-wrap items-center gap-1">
+                                                                            <input
+                                                                                value={numeroAutorizacionOrdenDraft}
+                                                                                onChange={(e) =>
+                                                                                    setEditAutorizacionOrden((prev) => ({
+                                                                                        ...prev,
+                                                                                        [authOrdenKey]: e.target.value,
+                                                                                    }))
+                                                                                }
+                                                                                placeholder="Nro autorización orden"
+                                                                                className="w-40 rounded border border-gray-300 px-2 py-1 text-xs"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    guardarAutorizacionOrden(
+                                                                                        grupo.ordenPuestoNumero as number,
+                                                                                        grupo.ordenNumero as number,
+                                                                                        numeroAutorizacionOrdenDraft
+                                                                                    )
+                                                                                }
+                                                                                disabled={guardandoAutorizacionOrden}
+                                                                                className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                                                                            >
+                                                                                {guardandoAutorizacionOrden ? 'Guardando...' : 'Guardar auth'}
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -3186,6 +3309,13 @@ export function FacturacionPanel() {
 
                                             {ordenesConItems.map((orden) => {
                                                 const expand = ordenesExpand[orden.key] ?? true
+                                                const authOrdenKey = keyAutorizacionOrden(orden.puesto, orden.numero)
+                                                const numeroAutorizacionOrdenActual =
+                                                    orden.items.find((it) => tieneNumeroAutorizacionValido(it.numeroAutorizacion))
+                                                        ?.numeroAutorizacion?.trim() ?? ''
+                                                const numeroAutorizacionOrdenDraft =
+                                                    editAutorizacionOrden[authOrdenKey] ?? numeroAutorizacionOrdenActual
+                                                const guardandoAutorizacionOrden = guardandoAutorizacionOrdenKey === authOrdenKey
                                                 return (
                                                     <Fragment key={orden.key}>
                                                         <tr key={`head-${orden.key}`} className="bg-green-50">
@@ -3239,6 +3369,35 @@ export function FacturacionPanel() {
                                                                         className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60"
                                                                     >
                                                                         {renumerandoOrdenKey === orden.key ? 'Renumerando...' : 'Renumerar'}
+                                                                    </button>
+
+                                                                    <label className="text-[11px] text-gray-600">
+                                                                        Nro autorización orden
+                                                                        <input
+                                                                            value={numeroAutorizacionOrdenDraft}
+                                                                            onChange={(e) =>
+                                                                                setEditAutorizacionOrden((prev) => ({
+                                                                                    ...prev,
+                                                                                    [authOrdenKey]: e.target.value,
+                                                                                }))
+                                                                            }
+                                                                            className="mt-1 w-40 rounded border border-gray-300 px-2 py-1 text-xs"
+                                                                            placeholder="Nro autorización"
+                                                                        />
+                                                                    </label>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            guardarAutorizacionOrden(
+                                                                                orden.puesto,
+                                                                                orden.numero,
+                                                                                numeroAutorizacionOrdenDraft
+                                                                            )
+                                                                        }
+                                                                        disabled={guardandoAutorizacionOrden}
+                                                                        className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                                                                    >
+                                                                        {guardandoAutorizacionOrden ? 'Guardando auth...' : 'Guardar auth'}
                                                                     </button>
                                                                 </div>
                                                             </td>

@@ -2738,10 +2738,66 @@ export async function cargarOrdenesDesdePrestaciones(
 export async function actualizarNumeroAutorizacion(
     data: ActualizarAutorizacionInput
 ): Promise<void> {
+    const numeroAutorizacion =
+        typeof data.numeroAutorizacion === 'string' && data.numeroAutorizacion.trim().length > 0
+            ? data.numeroAutorizacion.trim()
+            : null
+
     if (data.tipo === 'PRACTICA') {
         await prisma.practica.update({
             where: { id: data.practicaId },
-            data: { numeroAutorizacion: data.numeroAutorizacion ?? null },
+            data: { numeroAutorizacion },
+        })
+        return
+    }
+
+    if (data.tipo === 'ORDEN') {
+        await prisma.$transaction(async (tx) => {
+            await tx.orden.update({
+                where: {
+                    puestoNumero_numero: {
+                        puestoNumero: data.puestoNumero,
+                        numero: data.ordenNumero,
+                    },
+                },
+                data: {
+                    numeroAutorizacion,
+                    estado: numeroAutorizacion ? 'A' : undefined,
+                    fechaEstado: numeroAutorizacion ? new Date() : undefined,
+                },
+            })
+
+            await tx.ordenPractica.updateMany({
+                where: {
+                    puestoNumero: data.puestoNumero,
+                    ordenNumero: data.ordenNumero,
+                },
+                data: { numeroAutorizacion },
+            })
+
+            const itemsOrden = await tx.ordenPractica.findMany({
+                where: {
+                    puestoNumero: data.puestoNumero,
+                    ordenNumero: data.ordenNumero,
+                    practicaId: { not: null },
+                },
+                select: { practicaId: true },
+            })
+
+            const practicaIds = Array.from(
+                new Set(
+                    itemsOrden
+                        .map((item) => item.practicaId)
+                        .filter((id): id is number => typeof id === 'number')
+                )
+            )
+
+            if (practicaIds.length > 0) {
+                await tx.practica.updateMany({
+                    where: { id: { in: practicaIds } },
+                    data: { numeroAutorizacion },
+                })
+            }
         })
         return
     }
@@ -2754,7 +2810,7 @@ export async function actualizarNumeroAutorizacion(
                 item: data.item,
             },
         },
-        data: { numeroAutorizacion: data.numeroAutorizacion ?? null },
+        data: { numeroAutorizacion },
     })
 }
 

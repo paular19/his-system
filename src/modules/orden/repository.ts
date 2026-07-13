@@ -12,9 +12,10 @@ import { generarCodigoBarras } from './types'
 import { normalizarClasificacionAgrupacion } from './clasificacion'
 
 const PUESTO_NUMERO = 1 // Número de puesto fijo (configurable a futuro)
+const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const EFECTOR_FALLBACK_POR_MATRICULA: Record<number, string> = {
   6: 'ASOSIACION ANESTESISTA',
-  2675: 'ANA MARIA VEGA',
+  [MATRICULA_PATOLOGIA_DEFAULT]: 'ANA MARIA VEGA',
   9110: 'CLINICA SAN RAFAEL',
   9995: 'GASTOS INTERNACION',
 }
@@ -403,32 +404,39 @@ export async function obtenerOrden(
       }
       : null,
     tipoOrden: orden.tipoOrden,
-    items: orden.items.map((it) => ({
-      puestoNumero: it.puestoNumero,
-      ordenNumero: it.ordenNumero,
-      item: it.item,
-      convenioId: it.convenioId,
-      codigoPractica: it.codigoPractica.trim(),
-      descripcionPractica: it.nomencladorPractica?.descripcion ?? it.codigoPractica.trim(),
-      cantidad: Number(it.cantidad),
-      tipoFacturacion: it.tipoFacturacion,
-      clasificacionAgrupacion: normalizarClasificacion(it.clasificacionAgrupacion),
-      incluyeCodigo: normalizarIncluyeCodigo(it.modulo),
-      titularModular: it.titularModular,
-      imprimirPorDuplicado: it.imprimirPorDuplicado,
-      efectorMatricula: it.efectorMatricula,
-      efectorProfesional:
-        it.efectorMatricula && profesionalPorMatricula.has(it.efectorMatricula)
-          ? {
-            nombre: profesionalPorMatricula.get(it.efectorMatricula)!.nombre,
-            matricula: it.efectorMatricula,
-          }
-          : null,
-      numeroAutorizacion: it.numeroAutorizacion,
-      importeTotal: it.importeTotal ? Number(it.importeTotal) : null,
-      porcentajeCargoPac: it.porcentajeCargoPac ? Number(it.porcentajeCargoPac) : null,
-      fecha: it.fecha,
-    })),
+    items: orden.items.map((it) => {
+      const esPatologiaCodigo = it.codigoPractica.trim().startsWith('15')
+      const efectorMatriculaFinal = esPatologiaCodigo
+        ? MATRICULA_PATOLOGIA_DEFAULT
+        : it.efectorMatricula
+
+      return {
+        puestoNumero: it.puestoNumero,
+        ordenNumero: it.ordenNumero,
+        item: it.item,
+        convenioId: it.convenioId,
+        codigoPractica: it.codigoPractica.trim(),
+        descripcionPractica: it.nomencladorPractica?.descripcion ?? it.codigoPractica.trim(),
+        cantidad: Number(it.cantidad),
+        tipoFacturacion: it.tipoFacturacion,
+        clasificacionAgrupacion: normalizarClasificacion(it.clasificacionAgrupacion),
+        incluyeCodigo: normalizarIncluyeCodigo(it.modulo),
+        titularModular: it.titularModular,
+        imprimirPorDuplicado: it.imprimirPorDuplicado,
+        efectorMatricula: efectorMatriculaFinal,
+        efectorProfesional:
+          efectorMatriculaFinal && profesionalPorMatricula.has(efectorMatriculaFinal)
+            ? {
+              nombre: profesionalPorMatricula.get(efectorMatriculaFinal)!.nombre,
+              matricula: efectorMatriculaFinal,
+            }
+            : null,
+        numeroAutorizacion: it.numeroAutorizacion,
+        importeTotal: it.importeTotal ? Number(it.importeTotal) : null,
+        porcentajeCargoPac: it.porcentajeCargoPac ? Number(it.porcentajeCargoPac) : null,
+        fecha: it.fecha,
+      }
+    }),
   }
 }
 

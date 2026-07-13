@@ -19,6 +19,8 @@ export function AutorizacionPrint({
   usuario,
   mostrarAcciones = true,
 }: AutorizacionPrintProps) {
+  const MATRICULA_PATOLOGIA_DEFAULT = 2675
+  const NOMBRE_PATOLOGIA_DEFAULT = 'ANA MARIA VEGA'
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([])
   const limpiarEspecialidadEntreParentesis = (nombre: string): string => {
     return nombre.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
@@ -31,6 +33,7 @@ export function AutorizacionPrint({
 
   const esTituloPatologia = (item: OrdenConItems['items'][number]): boolean => {
     if (contieneClasificacion(item.clasificacionAgrupacion, 'HP')) return true
+    if (item.codigoPractica.trim().startsWith('15')) return true
     return (item.titularModular ?? '').toUpperCase().includes('PATOLOG')
   }
 
@@ -79,12 +82,8 @@ export function AutorizacionPrint({
     }
 
     if (esTituloPatologia(item)) {
-      const nombrePatologia = (
-        item.efectorProfesional?.nombre ??
-        (item.efectorMatricula ? nombreFallbackPorMatricula(item.efectorMatricula) : null) ??
-        'PROFESIONAL'
-      ).toUpperCase()
-      const matriculaPatologia = item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null
+      const nombrePatologia = NOMBRE_PATOLOGIA_DEFAULT
+      const matriculaPatologia = MATRICULA_PATOLOGIA_DEFAULT
       return `${nombrePatologia} · MP ${matriculaPatologia ?? '-'}`
     }
 
@@ -125,12 +124,9 @@ export function AutorizacionPrint({
     const matriculaEfector = item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null
 
     if (esTituloPatologia(item)) {
-      const nombreFallbackPatologia = item.efectorMatricula === 2675
-        ? 'ANA MARIA VEGA'
-        : 'PROFESIONAL'
       return {
-        nombre: item.efectorProfesional?.nombre ?? nombreFallbackPatologia,
-        matricula: item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null,
+        nombre: NOMBRE_PATOLOGIA_DEFAULT,
+        matricula: MATRICULA_PATOLOGIA_DEFAULT,
       }
     }
 

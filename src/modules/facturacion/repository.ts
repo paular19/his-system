@@ -2928,6 +2928,24 @@ export async function actualizarPrestacionFacturacion(
             })
 
             if (ordenItemVinculado) {
+                const codigoResueltoNormalizado = normalizarCodigoPractica(resolved.codigoPractica)
+
+                if (esPatologia) {
+                    await tx.ordenPractica.updateMany({
+                        where: {
+                            puestoNumero: ordenItemVinculado.puestoNumero,
+                            ordenNumero: ordenItemVinculado.ordenNumero,
+                            codigoPractica: { startsWith: codigoResueltoNormalizado },
+                        },
+                        data: {
+                            modulo: 'HP',
+                            clasificacionAgrupacion: 'HP',
+                            titularModular: 'HONORARIO PATOLOGO',
+                            efectorMatricula: MATRICULA_PATOLOGIA_DEFAULT,
+                        },
+                    })
+                }
+
                 const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
                     modulo: incluyeCodigoNormalizado,
                     clasificacionAgrupacion: esPatologia ? 'HP' : null,

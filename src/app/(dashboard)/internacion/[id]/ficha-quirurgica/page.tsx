@@ -5,6 +5,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { prisma } from '@/lib/db'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 import { calcularEdad } from '@/lib/utils'
+import { FichaQuirurgicaNotasCirujano } from '@/components/internacion/ficha-quirurgica-notas-cirujano'
 import {
   formatearFechaArgentina,
   formatearFechaHoraArgentina,
@@ -561,6 +562,14 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
                       )}
                     </div>
                   )}
+
+                  <FichaQuirurgicaNotasCirujano
+                    ingresoId={ingresoId}
+                    cirugiaId={cirugia.id}
+                    fechaCirugiaLabel={fmtDate(cirugia.fechaCirugia)}
+                    diagnosticoInicial={cirugia.meta.diagnostico}
+                    observacionesIniciales={cirugia.meta.observaciones}
+                  />
                 </article>
               )
             })

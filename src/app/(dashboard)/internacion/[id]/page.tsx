@@ -61,6 +61,10 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const puedeModificar = tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')
     const puedeCrear = puedeModificar || tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
     const puedeCambiarCama = puedeModificar || tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+    const puedeEditarPracticas =
+        puedeCrear ||
+        tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
 
     // Load profesionales y camas disponibles para los formularios
     const [profesionales, camasDisponibles, obrasSocialesRows, planesRows, coseguros] = await Promise.all([
@@ -283,7 +287,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             ingresoId={ingresoId}
                             convenioId={detalle.obraSocial?.id ?? null}
                             practicas={detalle.practicas}
-                            puedeCrear={puedeCrear}
+                            puedeCrear={puedeEditarPracticas}
                             matriculaTratanteDefault={matriculaTratanteDefault}
                         />
 

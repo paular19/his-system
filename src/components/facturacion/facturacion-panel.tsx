@@ -3247,7 +3247,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                     <table className="w-full table-fixed text-sm">
                                         <thead>
                                             <tr className="border-b bg-white text-left">
-                                                <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Sel</th>
+                                                <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Orden</th>
                                                 <th className="w-40 px-3 py-2 text-xs font-medium text-gray-500">Fecha</th>
                                                 <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Código</th>
                                                 <th className="px-3 py-2 text-xs font-medium text-gray-500">Descripción</th>
@@ -3470,13 +3470,15 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 {yaFacturada ? (
                                                                     <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>
                                                                 ) : seleccionable ? (
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className="flex flex-wrap items-center gap-2">
                                                                         {p.esPracticaCirugia && (
                                                                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800" title={diferencialesActivos.join(' · ') || 'Práctica vinculada a cirugía'}>
                                                                                 Cirugía
                                                                             </span>
                                                                         )}
-                                                                        <input type="checkbox" checked={Boolean(seleccion[p.uid])} onChange={(e) => setSeleccion((prev) => ({ ...prev, [p.uid]: e.target.checked }))} />
+                                                                        <span className={`text-[11px] font-medium ${seleccion[p.uid] ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                                                            {seleccion[p.uid] ? 'Incluida por orden' : 'Seleccionar en cabecera de orden'}
+                                                                        </span>
                                                                     </div>
                                                                 ) : (
                                                                     <div className="flex flex-wrap items-center gap-2">

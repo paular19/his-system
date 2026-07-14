@@ -1576,6 +1576,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             }
 
             if (codigoPracticaFiltro) params.set('codigoPractica', codigoPracticaFiltro)
+            if (esVistaFacturadas) params.set('soloFacturadas', '1')
             params.set('pagina', String(paginaObjetivo))
             params.set('porPagina', String(porPaginaAdmisiones))
 

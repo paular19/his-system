@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
             pacienteNombre: searchParams.get('pacienteNombre') ?? undefined,
             historiaClinica: searchParams.get('historiaClinica') ?? undefined,
             numeroDocumento: searchParams.get('numeroDocumento') ?? undefined,
+            soloFacturadas: searchParams.get('soloFacturadas') ?? undefined,
             obraSocialId: searchParams.get('obraSocialId') ?? undefined,
             tipoIngresoCodigo: searchParams.get('tipoIngresoCodigo') ?? undefined,
             codigoPractica: searchParams.get('codigoPractica') ?? undefined,

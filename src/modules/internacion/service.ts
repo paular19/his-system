@@ -16,6 +16,7 @@ import type {
   RegistrarAltaInternacionInput,
   ActualizarDiagnosticoInternacionInput,
   CrearCirugiaUrgenciaInput,
+  CrearCirugiaSimpleInput,
 } from './schemas'
 import type {
   CamaConOcupante,
@@ -389,6 +390,25 @@ export async function crearCirugiaUrgencia(
     entidad: 'CirugiaProgramada',
     registroId: cirugia.id,
     detalle: `Cirugía de urgencia registrada en internación ${data.ingresoId}`,
+    direccionIp: ip,
+  })
+
+  return cirugia
+}
+
+export async function crearCirugiaSimpleConDescripcion(
+  data: CrearCirugiaSimpleInput,
+  usuario: string,
+  ip?: string
+): Promise<CirugiaUrgenciaItem> {
+  const cirugia = await repo.crearCirugiaSimpleConDescripcion(data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'CREAR',
+    entidad: 'CirugiaProgramada',
+    registroId: cirugia.id,
+    detalle: `Cirugía registrada desde ficha quirúrgica en internación ${data.ingresoId}`,
     direccionIp: ip,
   })
 

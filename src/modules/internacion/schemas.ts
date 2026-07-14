@@ -218,6 +218,16 @@ export const CrearCirugiaUrgenciaSchema = z.object({
 
 export type CrearCirugiaUrgenciaInput = z.infer<typeof CrearCirugiaUrgenciaSchema>
 
+export const CrearCirugiaSimpleSchema = z.object({
+  ingresoId: z.number().int().positive(),
+  pacienteId: z.number().int().positive(),
+  fechaCirugia: z.string().min(1),
+  horaCirugia: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  descripcion: z.string().trim().min(1, 'La descripción es requerida').max(2000),
+})
+
+export type CrearCirugiaSimpleInput = z.infer<typeof CrearCirugiaSimpleSchema>
+
 // ============================================
 // ALTA / DIAGNÓSTICOS
 // ============================================

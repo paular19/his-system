@@ -30,6 +30,7 @@ import type {
   RegistrarAltaInternacionInput,
   ActualizarDiagnosticoInternacionInput,
   CrearCirugiaUrgenciaInput,
+  CrearCirugiaSimpleInput,
 } from './schemas'
 import type { ResultadoPaginado } from '@/types'
 
@@ -1814,6 +1815,72 @@ export async function crearCirugiaUrgencia(
     )
 
     return creada
+  })
+
+  return {
+    ...cirugia,
+    practicas: cirugia.practicas.map((p) => ({
+      ...p,
+      cantidad: Number(p.cantidad),
+    })),
+  } as CirugiaUrgenciaItem
+}
+
+export async function crearCirugiaSimpleConDescripcion(
+  data: CrearCirugiaSimpleInput,
+  usuario: string
+): Promise<CirugiaUrgenciaItem> {
+  const observacionesStructured = [
+    'Tipo: FICHA_QUIRURGICA',
+    `Observaciones: ${data.descripcion.trim()}`,
+    `Usuario: ${usuario}`,
+  ]
+    .filter(Boolean)
+    .join(' | ')
+    .slice(0, 500)
+
+  const cirugia = await prisma.cirugiaProgramada.create({
+    data: {
+      pacienteId: data.pacienteId,
+      internacionId: data.ingresoId,
+      fechaCirugia: new Date(data.fechaCirugia),
+      horaCirugia: data.horaCirugia ?? null,
+      observaciones: observacionesStructured,
+    },
+    select: {
+      id: true,
+      fechaCirugia: true,
+      horaCirugia: true,
+      numeroAutorizacion: true,
+      observaciones: true,
+      cama: {
+        select: {
+          id: true,
+          identificador: true,
+          sector: true,
+          habitacion: true,
+        },
+      },
+      practicas: {
+        select: {
+          id: true,
+          codigo: true,
+          descripcion: true,
+          cantidad: true,
+          numeroAutorizacion: true,
+        },
+        orderBy: { id: 'asc' },
+      },
+      diferenciales: {
+        select: {
+          esFeriado: true,
+          esNocturna: true,
+          mismaViaPatologia: true,
+          diferentesViasPatologia: true,
+          diferentesViasDiferentesPatologia: true,
+        },
+      },
+    },
   })
 
   return {

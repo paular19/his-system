@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 import { calcularEdad } from '@/lib/utils'
 import { FichaQuirurgicaNotasCirujano } from '@/components/internacion/ficha-quirurgica-notas-cirujano'
+import { FichaQuirurgicaAltaCirugia } from '@/components/internacion/ficha-quirurgica-alta-cirugia'
 import {
   formatearFechaArgentina,
   formatearFechaHoraArgentina,
@@ -125,6 +126,9 @@ function boolToLabel(value: boolean): string {
 export default async function FichaQuirurgicaPage({ params }: PageProps) {
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'INTERNACION', 'LEER')) redirect('/dashboard')
+  const puedeCrearCirugia =
+    tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||
+    tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')
 
   const { id } = await params
   const ingresoId = Number.parseInt(id, 10)
@@ -423,6 +427,10 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
             </div>
           )}
         </section>
+
+        {puedeCrearCirugia && ingreso.paciente?.id != null && (
+          <FichaQuirurgicaAltaCirugia ingresoId={ingresoId} pacienteId={ingreso.paciente.id} />
+        )}
 
         <section className="space-y-4">
           <h2 className="text-base font-semibold text-gray-900">Informacion quirurgica</h2>

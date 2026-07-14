@@ -314,6 +314,17 @@ function practicaTieneAutorizacionConOrden(p: PrestacionFacturableItem): boolean
     )
 }
 
+function esPrestacionSeleccionableParaFacturar(p: PrestacionFacturableItem): boolean {
+    return (
+        p.tipo === 'PRACTICA' &&
+        Boolean(p.codigoPractica) &&
+        p.convenioId !== null &&
+        !p.facturada &&
+        practicaTieneOrdenGenerada(p) &&
+        practicaTieneAutorizacionConOrden(p)
+    )
+}
+
 function tieneDesglose(d: { valorEspecialista: number | null, valorAyudante: number | null, valorAnestesista: number | null, valorGastos: number | null }): boolean {
     return d.valorEspecialista !== null || d.valorAyudante !== null || d.valorAnestesista !== null || d.valorGastos !== null
 }
@@ -1098,15 +1109,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
     const prestacionesSeleccionables = useMemo(() => {
         if (!contexto) return []
-        return contexto.prestaciones.filter(
-            (p) =>
-                p.tipo === 'PRACTICA' &&
-                p.codigoPractica &&
-                p.convenioId !== null &&
-                !p.facturada &&
-                practicaTieneOrdenGenerada(p) &&
-                practicaTieneAutorizacionConOrden(p)
-        )
+        return contexto.prestaciones.filter((p) => esPrestacionSeleccionableParaFacturar(p))
     }, [contexto])
 
     const prestacionesSeleccionadas = useMemo(() => {
@@ -3260,6 +3263,12 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                             {!esVistaFacturadas && gruposPrestacionesNoOrdenadasPaginadas.map((grupo) => {
                                                 const grupoExpandido = ordenesPendientesExpand[grupo.key] ?? true
                                                 const tieneNumeroOrden = Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
+                                                const practicasSeleccionablesOrden = grupo.items.filter((it) => esPrestacionSeleccionableParaFacturar(it))
+                                                const practicasSeleccionablesOrdenUids = practicasSeleccionablesOrden.map((it) => it.uid)
+                                                const totalSeleccionablesOrden = practicasSeleccionablesOrdenUids.length
+                                                const totalSeleccionadasOrden = practicasSeleccionablesOrdenUids.filter((uid) => Boolean(seleccion[uid])).length
+                                                const ordenCompletaSeleccionada = totalSeleccionablesOrden > 0 && totalSeleccionadasOrden === totalSeleccionablesOrden
+                                                const ordenSeleccionParcial = totalSeleccionadasOrden > 0 && totalSeleccionadasOrden < totalSeleccionablesOrden
                                                 const authOrdenKey =
                                                     tieneNumeroOrden && grupo.ordenPuestoNumero && grupo.ordenNumero
                                                         ? keyAutorizacionOrden(grupo.ordenPuestoNumero, grupo.ordenNumero)
@@ -3313,6 +3322,31 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         <span className="text-xs font-medium text-slate-600">{etiquetaOrden}</span>
                                                                     )}
                                                                     <span className="text-[11px] text-slate-500">({grupo.items.length} práctica{grupo.items.length === 1 ? '' : 's'})</span>
+                                                                    {totalSeleccionablesOrden > 0 && (
+                                                                        <label className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={ordenCompletaSeleccionada}
+                                                                                onChange={(e) => {
+                                                                                    const nextChecked = e.target.checked
+                                                                                    setSeleccion((prev) => {
+                                                                                        const next = { ...prev }
+                                                                                        for (const uid of practicasSeleccionablesOrdenUids) {
+                                                                                            next[uid] = nextChecked
+                                                                                        }
+                                                                                        return next
+                                                                                    })
+                                                                                }}
+                                                                            />
+                                                                            Facturar orden completa
+                                                                            <span className="text-[10px] text-emerald-700">
+                                                                                ({totalSeleccionadasOrden}/{totalSeleccionablesOrden})
+                                                                            </span>
+                                                                            {ordenSeleccionParcial && (
+                                                                                <span className="text-[10px] font-semibold text-amber-700">Parcial</span>
+                                                                            )}
+                                                                        </label>
+                                                                    )}
 
                                                                     {authOrdenKey && grupo.ordenPuestoNumero && grupo.ordenNumero && (
                                                                         <div className="ml-auto flex flex-wrap items-center gap-1">
@@ -3373,12 +3407,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const draftAutorizacionesVinculadas =
                                                     editAutorizacionesVinculadas[p.uid] ?? buildAutorizacionesVinculadasEditState(p)
                                                 const desgloseSelector = obtenerDesgloseSelector(p)
-                                                const seleccionable =
-                                                    p.tipo === 'PRACTICA' &&
-                                                    !p.facturada &&
-                                                    Boolean(p.codigoPractica && p.convenioId !== null) &&
-                                                    tieneOrdenGenerada &&
-                                                    tieneAutorizacionConOrden
+                                                const seleccionable = esPrestacionSeleccionableParaFacturar(p)
                                                 const yaFacturada = p.tipo === 'PRACTICA' && p.facturada
                                                 const tieneComponentes = p.tipo === 'PRACTICA' && !p.facturada && desgloseSelector != null && tieneDesglose(desgloseSelector)
                                                 const mostrarSelectorComponentes = p.tipo === 'PRACTICA' && !p.facturada

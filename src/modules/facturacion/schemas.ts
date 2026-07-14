@@ -5,6 +5,7 @@ export const BusquedaFacturacionSchema = z.object({
     pacienteNombre: z.string().trim().max(200).optional(),
     historiaClinica: z.coerce.number().int().positive().optional(),
     numeroDocumento: z.coerce.number().int().positive().optional(),
+    numeroOrden: z.coerce.number().int().positive().optional(),
     soloFacturadas: z
         .enum(['1', '0', 'true', 'false'])
         .optional()

@@ -60,6 +60,7 @@ export type IngresoDetalle = IngresoConRelaciones & {
     puestoNumero?: number | null
     ordenNumero?: number | null
     ordenItem?: number | null
+    facturada?: boolean
     ordenPractica: Array<{
       puestoNumero: number
       ordenNumero: number

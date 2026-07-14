@@ -26,6 +26,7 @@ import type {
   ActualizarDescartableInput,
   TransferirCamaInput,
   CrearPracticaInput,
+  ActualizarPracticaInput,
   RegistrarAltaInternacionInput,
   ActualizarDiagnosticoInternacionInput,
   CrearCirugiaUrgenciaInput,
@@ -761,6 +762,11 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
     practicas: practicasOrdenadas.map((p) => ({
       ...p,
       usuario: p.usuarioRegistro,
+      facturada:
+        p.puestoNumero != null &&
+        p.ordenNumero != null &&
+        Number(p.puestoNumero) > 0 &&
+        ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`),
       descripcionPractica: (() => {
         const key = `${p.convenioId}:${p.codigoPractica.trim()}`
         const descripcionBase = descripcionPorClave.get(key) ?? p.codigoPractica.trim()
@@ -1009,6 +1015,10 @@ export async function crearPractica(
     importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : null,
     matriculaEspecialista: practica.matriculaEspecialista,
     matriculaAnestesista: practica.matriculaAnestesista,
+    puestoNumero: null,
+    ordenNumero: null,
+    ordenItem: null,
+    facturada: false,
     ordenPractica: Array.isArray(practica.ordenPractica)
       ? practica.ordenPractica.map((op) => ({
         puestoNumero: op.puestoNumero,
@@ -1018,6 +1028,331 @@ export async function crearPractica(
       }))
       : [],
   } as PracticaItem
+}
+
+export async function actualizarPractica(
+  ingresoId: number,
+  practicaId: number,
+  data: ActualizarPracticaInput,
+  usuario: string
+): Promise<PracticaItem> {
+  const cantidad = Number.isFinite(Number(data.cantidad)) && Number(data.cantidad) > 0
+    ? Math.floor(Number(data.cantidad))
+    : 1
+  const codigoPractica = data.codigoPractica.padEnd(8).slice(0, 8)
+  const numeroAutorizacion = normalizarNumeroAutorizacion(data.numeroAutorizacion)
+  const numeroAutorizacionPractica = numeroAutorizacion != null ? numeroAutorizacion.slice(0, 15) : null
+  const numeroAutorizacionOrden = numeroAutorizacion != null ? numeroAutorizacion.slice(0, 15) : null
+  const numeroProtocoloLaboratorio = normalizarTextoOpcional(data.numeroProtocoloLaboratorio)
+  const diagnosticoLaboratorio = normalizarTextoOpcional(data.diagnosticoLaboratorio)
+  const convenioSolicitado =
+    data.convenioId != null && Number.isFinite(Number(data.convenioId)) && Number(data.convenioId) > 0
+      ? Math.floor(Number(data.convenioId))
+      : null
+  const importeBaseUnitario =
+    data.importeBaseUnitario != null && Number.isFinite(Number(data.importeBaseUnitario))
+      ? Number(data.importeBaseUnitario)
+      : null
+
+  return prisma.$transaction(async (tx) => {
+    const practicaActual = await tx.practica.findFirst({
+      where: {
+        id: practicaId,
+        ingresoId,
+      },
+      select: {
+        id: true,
+        ingresoId: true,
+        convenioId: true,
+        codigoPractica: true,
+        fecha: true,
+        cantidad: true,
+        numeroAutorizacion: true,
+        numeroProtocoloLab: true,
+        diagnosticoLab: true,
+        matriculaEspecialista: true,
+        matriculaAnestesista: true,
+        facturable: true,
+        importeTotal: true,
+        estado: true,
+        usuarioRegistro: true,
+        puestoNumero: true,
+        ordenNumero: true,
+        ordenItem: true,
+        ordenPractica: {
+          where: {
+            orden: {
+              NOT: { estado: 'X' },
+            },
+          },
+          select: {
+            puestoNumero: true,
+            ordenNumero: true,
+            item: true,
+            numeroAutorizacion: true,
+          },
+        },
+      },
+    })
+
+    if (!practicaActual) {
+      throw new Error('Práctica no encontrada')
+    }
+
+    const estadoActual = (practicaActual.estado ?? '').trim().toUpperCase()
+    if (estadoActual === 'X') {
+      throw new Error('No se puede editar una práctica anulada')
+    }
+
+    if (
+      practicaActual.puestoNumero != null &&
+      practicaActual.ordenNumero != null &&
+      Number(practicaActual.puestoNumero) > 0
+    ) {
+      const ordenFacturada = await tx.orden.findFirst({
+        where: {
+          ingresoId,
+          puestoNumero: Number(practicaActual.puestoNumero),
+          numero: Number(practicaActual.ordenNumero),
+          NOT: { estado: 'X' },
+        },
+        select: { puestoNumero: true },
+      })
+
+      if (ordenFacturada) {
+        throw new Error(
+          'No se puede editar una práctica ya facturada. Anule la orden en Facturación para habilitar la edición.'
+        )
+      }
+    }
+
+    const ingreso = await tx.ingreso.findUnique({
+      where: { id: ingresoId },
+      select: {
+        obraSocialId: true,
+        obraSocialCoseguroId: true,
+        obraSocial: { select: { nombre: true } },
+      },
+    })
+
+    const convenioIngreso =
+      ingreso?.obraSocialId != null && Number(ingreso.obraSocialId) > 0
+        ? Number(ingreso.obraSocialId)
+        : null
+
+    let convenioResuelto = convenioSolicitado ?? practicaActual.convenioId ?? convenioIngreso
+    if (convenioResuelto == null || convenioResuelto <= 0) {
+      throw new Error('Convenio no encontrado para la internación')
+    }
+
+    const codigoTrim = codigoPractica.trim()
+    if (codigoTrim === '66') {
+      const descripcion = normalizarTextoOpcional(data.descripcionPractica) ?? 'PROTOCOLO BIOQUIMICO'
+      await tx.nomencladorPractica.upsert({
+        where: {
+          convenioId_codigo: {
+            convenioId: convenioResuelto,
+            codigo: codigoPractica,
+          },
+        },
+        update: {},
+        create: {
+          convenioId: convenioResuelto,
+          codigo: codigoPractica,
+          descripcion,
+        },
+      })
+    }
+
+    let importeTotal: number | null = null
+    if (importeBaseUnitario != null && importeBaseUnitario > 0) {
+      importeTotal = Number((importeBaseUnitario * cantidad).toFixed(2))
+    } else {
+      const cantidadActual = Number(practicaActual.cantidad)
+      if (practicaActual.importeTotal != null && Number.isFinite(cantidadActual) && cantidadActual > 0) {
+        const importeUnitarioPrevio = Number(practicaActual.importeTotal) / cantidadActual
+        if (Number.isFinite(importeUnitarioPrevio) && importeUnitarioPrevio > 0) {
+          importeTotal = Number((importeUnitarioPrevio * cantidad).toFixed(2))
+        }
+      }
+
+      if (importeTotal == null && ingreso) {
+        const regla = resolverReglaFacturacion(
+          ingreso.obraSocial?.nombre,
+          Boolean(ingreso.obraSocialCoseguroId)
+        )
+        const valorPractica = await obtenerValorPractica(codigoTrim)
+        if (valorPractica > 0) {
+          const cobertura = calcularImporteFacturable(valorPractica, cantidad, regla)
+          importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null
+        }
+      }
+    }
+
+    const actualizada = await tx.practica.update({
+      where: { id: practicaActual.id },
+      data: {
+        convenioId: convenioResuelto,
+        codigoPractica,
+        fecha: data.fecha,
+        cantidad,
+        numeroAutorizacion: numeroAutorizacionPractica,
+        numeroProtocoloLab: numeroProtocoloLaboratorio,
+        diagnosticoLab: diagnosticoLaboratorio,
+        matriculaEspecialista: data.matriculaEspecialista ?? null,
+        matriculaAnestesista: data.matriculaAnestesista ?? null,
+        facturable: data.facturable,
+        importeTotal,
+        usuarioRegistro: usuario.slice(0, 10),
+        fechaUsuario: new Date(),
+      },
+      select: {
+        id: true,
+        ingresoId: true,
+        convenioId: true,
+        codigoPractica: true,
+        fecha: true,
+        cantidad: true,
+        numeroAutorizacion: true,
+        numeroProtocoloLab: true,
+        diagnosticoLab: true,
+        matriculaEspecialista: true,
+        matriculaAnestesista: true,
+        facturable: true,
+        importeTotal: true,
+        estado: true,
+        usuarioRegistro: true,
+        puestoNumero: true,
+        ordenNumero: true,
+        ordenItem: true,
+      },
+    })
+
+    const ordenesVinculadas = practicaActual.ordenPractica ?? []
+    if (ordenesVinculadas.length > 0) {
+      for (const item of ordenesVinculadas) {
+        await tx.ordenPractica.update({
+          where: {
+            puestoNumero_ordenNumero_item: {
+              puestoNumero: item.puestoNumero,
+              ordenNumero: item.ordenNumero,
+              item: item.item,
+            },
+          },
+          data: {
+            convenioId: convenioResuelto,
+            codigoPractica: codigoTrim,
+            fecha: data.fecha,
+            cantidad,
+            numeroAutorizacion: numeroAutorizacionOrden,
+            importeTotal,
+          },
+        })
+      }
+
+      const ordenesRecalcular = Array.from(
+        new Set(ordenesVinculadas.map((item) => `${item.puestoNumero}:${item.ordenNumero}`))
+      )
+
+      for (const clave of ordenesRecalcular) {
+        const [puestoRaw, numeroRaw] = clave.split(':')
+        const puestoNumero = Number.parseInt(puestoRaw ?? '0', 10)
+        const ordenNumero = Number.parseInt(numeroRaw ?? '0', 10)
+        if (!Number.isFinite(puestoNumero) || !Number.isFinite(ordenNumero)) continue
+
+        const itemsOrden = await tx.ordenPractica.findMany({
+          where: {
+            puestoNumero,
+            ordenNumero,
+          },
+          select: { importeTotal: true },
+        })
+
+        const total = itemsOrden.reduce((sum, row) => sum + Number(row.importeTotal ?? 0), 0)
+
+        await tx.orden.update({
+          where: {
+            puestoNumero_numero: {
+              puestoNumero,
+              numero: ordenNumero,
+            },
+          },
+          data: {
+            importeTotal: total,
+          },
+        })
+      }
+    }
+
+    const ordenesPracticaActualizada = await tx.ordenPractica.findMany({
+      where: {
+        practicaId: actualizada.id,
+        orden: {
+          NOT: { estado: 'X' },
+        },
+      },
+      select: {
+        puestoNumero: true,
+        ordenNumero: true,
+        item: true,
+        numeroAutorizacion: true,
+      },
+      orderBy: [{ item: 'asc' }],
+    })
+
+    const nomenclador = await tx.nomencladorPractica.findFirst({
+      where: {
+        convenioId: actualizada.convenioId,
+        codigo: actualizada.codigoPractica.trim(),
+      },
+      select: {
+        descripcion: true,
+        valorEspecialista: true,
+        valorAyudante: true,
+        valorAnestesista: true,
+        valorGastos: true,
+      },
+    })
+
+    const descripcionBase = nomenclador?.descripcion ?? actualizada.codigoPractica.trim()
+    const componentes: ComponentesPractica | null = nomenclador
+      ? {
+        valorEspecialista: nomenclador.valorEspecialista != null ? Number(nomenclador.valorEspecialista) : null,
+        valorAyudante: nomenclador.valorAyudante != null ? Number(nomenclador.valorAyudante) : null,
+        valorAnestesista: nomenclador.valorAnestesista != null ? Number(nomenclador.valorAnestesista) : null,
+        valorGastos: nomenclador.valorGastos != null ? Number(nomenclador.valorGastos) : null,
+      }
+      : null
+
+    return {
+      ...actualizada,
+      usuario: actualizada.usuarioRegistro,
+      descripcionPractica: construirDescripcionPractica({
+        descripcionBase,
+        matriculaEspecialista: actualizada.matriculaEspecialista,
+        matriculaAnestesista: actualizada.matriculaAnestesista,
+        importeTotal: actualizada.importeTotal != null ? Number(actualizada.importeTotal) : null,
+        cantidad: Number(actualizada.cantidad),
+        componentes,
+      }),
+      numeroProtocoloLaboratorio: actualizada.numeroProtocoloLab,
+      diagnosticoLaboratorio: actualizada.diagnosticoLab,
+      cantidad: Number(actualizada.cantidad),
+      importeTotal: actualizada.importeTotal != null ? Number(actualizada.importeTotal) : null,
+      matriculaEspecialista: actualizada.matriculaEspecialista,
+      matriculaAnestesista: actualizada.matriculaAnestesista,
+      puestoNumero: actualizada.puestoNumero,
+      ordenNumero: actualizada.ordenNumero,
+      ordenItem: actualizada.ordenItem,
+      facturada: false,
+      ordenPractica: ordenesPracticaActualizada.map((op) => ({
+        puestoNumero: op.puestoNumero,
+        ordenNumero: op.ordenNumero,
+        item: op.item,
+        numeroAutorizacion: op.numeroAutorizacion,
+      })),
+    } as PracticaItem
+  })
 }
 
 export async function desagruparPracticaNoAutorizada(

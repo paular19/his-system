@@ -12,6 +12,7 @@ import type {
   ActualizarDescartableInput,
   TransferirCamaInput,
   CrearPracticaInput,
+  ActualizarPracticaInput,
   RegistrarAltaInternacionInput,
   ActualizarDiagnosticoInternacionInput,
   CrearCirugiaUrgenciaInput,
@@ -308,6 +309,27 @@ export async function crearPractica(
     entidad: 'Practica',
     registroId: practica.id,
     detalle: `Práctica "${data.codigoPractica}" registrada en internación ${data.ingresoId}`,
+    direccionIp: ip,
+  })
+
+  return practica
+}
+
+export async function actualizarPractica(
+  ingresoId: number,
+  practicaId: number,
+  data: ActualizarPracticaInput,
+  usuario: string,
+  ip?: string
+): Promise<PracticaItem> {
+  const practica = await repo.actualizarPractica(ingresoId, practicaId, data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'Practica',
+    registroId: practica.id,
+    detalle: `Práctica ${practica.codigoPractica} actualizada en internación ${ingresoId}`,
     direccionIp: ip,
   })
 

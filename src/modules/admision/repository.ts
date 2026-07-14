@@ -324,7 +324,7 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
 
   if (!ingresoBase) return null
 
-  const [ingresoPatologias, movimientosIngreso, evoluciones, practicasBase] = await Promise.all([
+  const [ingresoPatologias, movimientosIngreso, evoluciones, practicasBase, ordenesActivas] = await Promise.all([
     prisma.ingresoPatologia.findMany({
       where: { ingresoId: id },
       orderBy: { fecha: 'desc' },
@@ -367,7 +367,21 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
         usuarioRegistro: true,
       },
     }),
+    prisma.orden.findMany({
+      where: {
+        ingresoId: id,
+        NOT: { estado: 'X' },
+      },
+      select: {
+        puestoNumero: true,
+        numero: true,
+      },
+    }),
   ])
+
+  const ordenesActivasSet = new Set(
+    ordenesActivas.map((orden) => `${orden.puestoNumero}:${orden.numero}`)
+  )
 
   const practicasOrdenadas = [...practicasBase].sort((a, b) => {
     const diffFecha = b.fecha.getTime() - a.fecha.getTime()
@@ -443,6 +457,11 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
     ...p,
     cantidad: Number(p.cantidad),
     importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
+    facturada:
+      p.puestoNumero != null &&
+      p.ordenNumero != null &&
+      Number(p.puestoNumero) > 0 &&
+      ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`),
     usuario: p.usuarioRegistro,
     descripcionPractica: (() => {
       const key = `${p.convenioId}:${p.codigoPractica.trim()}`

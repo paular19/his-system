@@ -169,6 +169,23 @@ export const CrearPracticaSchema = z.object({
 
 export type CrearPracticaInput = z.infer<typeof CrearPracticaSchema>
 
+export const ActualizarPracticaSchema = z.object({
+  convenioId: z.number().int().positive().optional().nullable(),
+  codigoPractica: z.string().min(1).max(8).trim().toUpperCase(),
+  descripcionPractica: z.string().max(200).trim().optional().nullable(),
+  numeroProtocoloLaboratorio: z.string().max(50).trim().optional().nullable(),
+  diagnosticoLaboratorio: z.string().max(300).trim().optional().nullable(),
+  fecha: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
+  cantidad: z.coerce.number().int().min(1).max(999),
+  numeroAutorizacion: z.string().max(50).trim().optional().nullable(),
+  facturable: z.boolean().default(true),
+  importeBaseUnitario: z.coerce.number().positive().optional().nullable(),
+  matriculaEspecialista: z.number().int().positive().optional().nullable(),
+  matriculaAnestesista: z.number().int().positive().optional().nullable(),
+})
+
+export type ActualizarPracticaInput = z.infer<typeof ActualizarPracticaSchema>
+
 export const CrearCirugiaUrgenciaSchema = z.object({
   ingresoId: z.number().int().positive(),
   pacienteId: z.number().int().positive(),

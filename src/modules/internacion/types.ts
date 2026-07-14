@@ -226,6 +226,10 @@ export interface PracticaItem {
   numeroAutorizacion: string | null
   matriculaEspecialista?: number | null
   matriculaAnestesista?: number | null
+  puestoNumero?: number | null
+  ordenNumero?: number | null
+  ordenItem?: number | null
+  facturada?: boolean
   ordenPractica: Array<{
     puestoNumero: number
     ordenNumero: number

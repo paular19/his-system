@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { CalendarDays, ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, ListFilter, Loader2, Pencil, Plus, Search, Upload, X, XCircle } from 'lucide-react'
+import { CalendarDays, ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, ListFilter, Loader2, Plus, Search, Upload, X, XCircle } from 'lucide-react'
 import type { AdmisionFacturacionListItem, FacturacionContexto, PrestacionFacturableItem } from '@/modules/facturacion/types'
 import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
 import {
@@ -817,11 +817,6 @@ function prioridadTipoPrestacionParaGrilla(p: PrestacionFacturableItem): number 
     return 3
 }
 
-type OrdenRenumerarState = {
-    nuevoPuestoNumero: string
-    nuevoNumero: string
-}
-
 type AutorizacionVinculada = NonNullable<PrestacionFacturableItem['autorizacionesVinculadas']>[number]
 
 function keyAutorizacionVinculada(aut: AutorizacionVinculada): string {
@@ -866,6 +861,7 @@ function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Re
 
 const MATRICULA_AYUDANTE_DEFAULT = 995
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
+const ADMISIONES_POR_PAGINA_DEFAULT = 12
 const PRESTACIONES_POR_PAGINA_DEFAULT = 12
 const CRITERIOS_BUSQUEDA_PACIENTE: Array<{ value: CriterioBusquedaPaciente; label: string; placeholder: string }> = [
     { value: 'NOMBRE', label: 'Nombre paciente', placeholder: 'Ej: Perez, Ana' },
@@ -924,7 +920,11 @@ function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): Diferenc
     }
 }
 
-export function FacturacionPanel() {
+type FacturacionPanelProps = {
+    vista?: 'PENDIENTES' | 'FACTURADAS'
+}
+
+export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -944,6 +944,8 @@ export function FacturacionPanel() {
     const [buscando, setBuscando] = useState(false)
     const [admisiones, setAdmisiones] = useState<AdmisionFacturacionListItem[]>([])
     const [totalAdmisiones, setTotalAdmisiones] = useState(0)
+    const [paginaAdmisiones, setPaginaAdmisiones] = useState(1)
+    const [porPaginaAdmisiones] = useState(ADMISIONES_POR_PAGINA_DEFAULT)
     const [selectedIngresoId, setSelectedIngresoId] = useState<number | null>(() =>
         parseEnteroPositivo(searchParams.get('ingresoId'))
     )
@@ -1020,8 +1022,6 @@ export function FacturacionPanel() {
     const [guardandoDiferencialCirugiaId, setGuardandoDiferencialCirugiaId] = useState<number | null>(null)
     const [mostrarImportadorNomenclador, setMostrarImportadorNomenclador] = useState(false)
     const [creandoOrdenPracticaUid, setCreandoOrdenPracticaUid] = useState<string | null>(null)
-    const [renumerandoOrdenKey, setRenumerandoOrdenKey] = useState<string | null>(null)
-    const [renumerarOrdenDraft, setRenumerarOrdenDraft] = useState<Record<string, OrdenRenumerarState>>({})
 
     // Component selection per practice uid
     const [compSeleccion, setCompSeleccion] = useState<Record<string, ComponenteSeleccion>>({})
@@ -1466,18 +1466,26 @@ export function FacturacionPanel() {
         setSeleccion({})
         setAdmisiones([])
         setTotalAdmisiones(0)
+        setPaginaAdmisiones(1)
         router.replace(pathname)
     }
 
     async function buscarAdmisiones(
         overrides?: Partial<BusquedaFacturacionState>,
-        options?: { actualizarUrl?: boolean }
+        options?: {
+            actualizarUrl?: boolean
+            pagina?: number
+            preservarSeleccionActual?: boolean
+            forzarMostrarCoincidencias?: boolean
+            permitirAutoSeleccion?: boolean
+        }
     ) {
         setError(null)
         setMensaje(null)
         setBuscando(true)
         try {
             const snapshot = obtenerBusquedaStateActual(overrides)
+            const paginaObjetivo = options?.pagina ?? paginaAdmisiones
             const terminoPaciente = snapshot.busquedaPaciente.trim()
             const codigoTipo = snapshot.tipoIngresoCodigo.trim().toUpperCase()
             const codigoPracticaFiltro = snapshot.codigoPractica.trim().toUpperCase()
@@ -1520,7 +1528,8 @@ export function FacturacionPanel() {
             }
 
             if (codigoPracticaFiltro) params.set('codigoPractica', codigoPracticaFiltro)
-            params.set('porPagina', '30')
+            params.set('pagina', String(paginaObjetivo))
+            params.set('porPagina', String(porPaginaAdmisiones))
 
             const res = await fetch(`/api/facturacion/busqueda?${params.toString()}`)
             const json = (await res.json()) as ApiResponse<{ items: AdmisionFacturacionListItem[]; total: number }>
@@ -1528,11 +1537,13 @@ export function FacturacionPanel() {
 
             setAdmisiones(json.data.items)
             setTotalAdmisiones(json.data.total)
+            setPaginaAdmisiones(paginaObjetivo)
 
             let ingresoSugeridoId: number | null = selectedIngresoId
             let autoSeleccion = false
+            const permitirAutoSeleccion = options?.permitirAutoSeleccion ?? paginaObjetivo === 1
 
-            if (terminoPaciente) {
+            if (terminoPaciente && permitirAutoSeleccion) {
                 const candidatoDirecto = json.data.items.find((item) =>
                     coincideBusquedaDirectaPaciente(item, snapshot.criterioBusquedaPaciente, terminoPaciente)
                 )
@@ -1548,18 +1559,21 @@ export function FacturacionPanel() {
             const mantenerSeleccion =
                 ingresoSugeridoId !== null &&
                 json.data.items.some((item) => item.id === ingresoSugeridoId)
+            const preservarSeleccionActual = Boolean(options?.preservarSeleccionActual)
 
             if (!mantenerSeleccion) {
-                ingresoSugeridoId = null
-                setSelectedIngresoId(null)
-                setContexto(null)
-                setSeleccion({})
+                if (!preservarSeleccionActual) {
+                    ingresoSugeridoId = null
+                    setSelectedIngresoId(null)
+                    setContexto(null)
+                    setSeleccion({})
+                }
             } else if (ingresoSugeridoId !== selectedIngresoId) {
                 setSelectedIngresoId(ingresoSugeridoId)
             }
 
             setAutoSeleccionBusquedaDirecta(autoSeleccion)
-            setMostrarCoincidenciasBusqueda(!autoSeleccion)
+            setMostrarCoincidenciasBusqueda(options?.forzarMostrarCoincidencias ?? !autoSeleccion)
             if (options?.actualizarUrl !== false) {
                 actualizarQueryEstado(ingresoSugeridoId, snapshot)
             }
@@ -2256,64 +2270,6 @@ export function FacturacionPanel() {
         }
     }
 
-    async function renumerarOrden(puestoNumero: number, numero: number) {
-        if (!contexto) return
-        const key = `${puestoNumero}:${numero}`
-        const draft = renumerarOrdenDraft[key] ?? {
-            nuevoPuestoNumero: String(puestoNumero),
-            nuevoNumero: String(numero),
-        }
-
-        const nuevoPuestoNumero = Number.parseInt(draft.nuevoPuestoNumero, 10)
-        const nuevoNumero = Number.parseInt(draft.nuevoNumero, 10)
-
-        if (!Number.isFinite(nuevoPuestoNumero) || nuevoPuestoNumero <= 0) {
-            setError('Nuevo puesto inválido')
-            return
-        }
-        if (!Number.isFinite(nuevoNumero) || nuevoNumero <= 0) {
-            setError('Nuevo número de orden inválido')
-            return
-        }
-
-        if (nuevoPuestoNumero === puestoNumero && nuevoNumero === numero) {
-            setMensaje('No hubo cambios en la numeración de la orden')
-            return
-        }
-
-        const confirmar = window.confirm(
-            `¿Renumerar orden ${formatOrderNumber(puestoNumero, numero)} a ${formatOrderNumber(nuevoPuestoNumero, nuevoNumero)}?`
-        )
-        if (!confirmar) return
-
-        setRenumerandoOrdenKey(key)
-        setError(null)
-        try {
-            const res = await fetch('/api/facturacion/ordenes/renumerar', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    puestoNumero,
-                    numero,
-                    nuevoPuestoNumero,
-                    nuevoNumero,
-                }),
-            })
-
-            const json = (await res.json()) as ApiResponse<{ puestoNumero: number; numero: number }>
-            if (!res.ok || !json.ok || !json.data) {
-                throw new Error(json.error ?? 'No se pudo renumerar la orden')
-            }
-
-            setMensaje(`Orden renumerada a ${formatOrderNumber(json.data.puestoNumero, json.data.numero)}`)
-            await cargarContexto(contexto.ingreso.id)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Error al renumerar orden')
-        } finally {
-            setRenumerandoOrdenKey(null)
-        }
-    }
-
     async function guardarDiferencialesCirugia(cirugia: CirugiaEditableGroup) {
         if (!contexto) return
         if (diferencialesCirugiaCongelados) {
@@ -2401,12 +2357,13 @@ export function FacturacionPanel() {
         setTipoIngresoCodigo(estadoDesdeUrl.tipoIngresoCodigo)
         setCodigoPractica(estadoDesdeUrl.codigoPractica)
         setSelectedIngresoId(ingresoIdDesdeUrl)
+        setPaginaAdmisiones(1)
 
         const estadoKey = buildBusquedaStateKey(estadoDesdeUrl)
         if (estadoKey === ultimoEstadoBusquedaAutoRef.current) return
         ultimoEstadoBusquedaAutoRef.current = estadoKey
 
-        void buscarAdmisiones(estadoDesdeUrl, { actualizarUrl: false })
+        void buscarAdmisiones(estadoDesdeUrl, { actualizarUrl: false, pagina: 1 })
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams])
 
@@ -2432,6 +2389,15 @@ export function FacturacionPanel() {
     const tieneBusquedaPacienteActiva = busquedaPaciente.trim().length > 0
     const mostrarListaCoincidencias =
         mostrarCoincidenciasBusqueda || !autoSeleccionBusquedaDirecta || !tieneBusquedaPacienteActiva
+    const totalPaginasAdmisiones = Math.max(1, Math.ceil(totalAdmisiones / porPaginaAdmisiones))
+    const paginaAdmisionesActual = Math.min(paginaAdmisiones, totalPaginasAdmisiones)
+    const esVistaFacturadas = vista === 'FACTURADAS'
+    const hrefVistaPendientes = searchParams.toString()
+        ? `/facturacion?${searchParams.toString()}`
+        : '/facturacion'
+    const hrefVistaFacturadas = searchParams.toString()
+        ? `/facturacion/facturadas?${searchParams.toString()}`
+        : '/facturacion/facturadas'
 
     return (
         <div className="p-6 space-y-4">
@@ -2444,6 +2410,16 @@ export function FacturacionPanel() {
                         <p className="mt-2 text-sm text-gray-600">Buscá admisiones por paciente, documento, tipo de ingreso o código de práctica.</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
+                        <Link
+                            href={esVistaFacturadas ? hrefVistaPendientes : hrefVistaFacturadas}
+                            className={`inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium shadow-sm transition-colors ${
+                                esVistaFacturadas
+                                    ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
+                                    : 'border-green-600 bg-green-600 text-white hover:bg-green-700'
+                            }`}
+                        >
+                            {esVistaFacturadas ? 'Ver pendientes' : 'Ver facturadas'}
+                        </Link>
                         <Link
                             href="/facturacion/lotes"
                             className="inline-flex h-10 items-center justify-center rounded-md bg-indigo-600 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
@@ -2499,7 +2475,7 @@ export function FacturacionPanel() {
                                 onChange={(e) => setBusquedaPaciente(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
-                                        void buscarAdmisiones()
+                                        void buscarAdmisiones(undefined, { pagina: 1 })
                                     }
                                 }}
                                 placeholder={criterioPacienteActivo.placeholder}
@@ -2605,7 +2581,7 @@ export function FacturacionPanel() {
                             onChange={(e) => setCodigoPractica(e.target.value)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
-                                    void buscarAdmisiones()
+                                    void buscarAdmisiones(undefined, { pagina: 1 })
                                 }
                             }}
                             placeholder="Ej: 420303"
@@ -2616,7 +2592,7 @@ export function FacturacionPanel() {
                     <div className="flex items-end gap-2 xl:col-span-7">
                         <button
                             onClick={() => {
-                                void buscarAdmisiones()
+                                void buscarAdmisiones(undefined, { pagina: 1 })
                             }}
                             className="inline-flex h-10 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={buscando}
@@ -2645,9 +2621,9 @@ export function FacturacionPanel() {
                             <button
                                 type="button"
                                 onClick={() => setMostrarCoincidenciasBusqueda(true)}
-                                className="text-xs font-medium text-blue-700 underline decoration-blue-300 underline-offset-2"
+                                className="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-left text-xs font-medium text-blue-800 hover:bg-blue-100"
                             >
-                                Ver tabla de admisiones ({admisiones.length})
+                                Tabla de admisiones oculta. Hacé click en esta card para volver a abrirla ({admisiones.length} en esta página).
                             </button>
                         </div>
                     )}
@@ -2717,6 +2693,50 @@ export function FacturacionPanel() {
                                             })}
                                         </tbody>
                                     </table>
+
+                                    {totalAdmisiones > porPaginaAdmisiones && (
+                                        <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-gray-600">
+                                            <span>
+                                                Página {paginaAdmisionesActual} de {totalPaginasAdmisiones} · {totalAdmisiones} resultados
+                                            </span>
+                                            <div className="inline-flex items-center gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const siguiente = Math.max(1, paginaAdmisionesActual - 1)
+                                                        void buscarAdmisiones(undefined, {
+                                                            pagina: siguiente,
+                                                            actualizarUrl: false,
+                                                            preservarSeleccionActual: true,
+                                                            forzarMostrarCoincidencias: true,
+                                                            permitirAutoSeleccion: false,
+                                                        })
+                                                    }}
+                                                    disabled={paginaAdmisionesActual <= 1 || buscando}
+                                                    className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                >
+                                                    Anterior
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const siguiente = Math.min(totalPaginasAdmisiones, paginaAdmisionesActual + 1)
+                                                        void buscarAdmisiones(undefined, {
+                                                            pagina: siguiente,
+                                                            actualizarUrl: false,
+                                                            preservarSeleccionActual: true,
+                                                            forzarMostrarCoincidencias: true,
+                                                            permitirAutoSeleccion: false,
+                                                        })
+                                                    }}
+                                                    disabled={paginaAdmisionesActual >= totalPaginasAdmisiones || buscando}
+                                                    className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                >
+                                                    Siguiente
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -2930,6 +2950,7 @@ export function FacturacionPanel() {
                                 </div>
                             )}
 
+                            {!esVistaFacturadas && (
                             <div className="his-card p-3 space-y-2">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                     <button
@@ -3067,16 +3088,23 @@ export function FacturacionPanel() {
                                     </div>
                                 )}
                             </div>
+                            )}
 
                             <div className="his-card overflow-hidden">
                                 <div className="p-4 border-b bg-gray-50 flex items-center justify-between gap-3">
                                     <div>
-                                        <h4 className="text-sm font-semibold text-gray-900">Prestaciones</h4>
-                                        <p className="text-xs text-gray-500">Editar y validar antes del armado de lotes.</p>
+                                        <h4 className="text-sm font-semibold text-gray-900">
+                                            {esVistaFacturadas ? 'Prestaciones facturadas' : 'Prestaciones pendientes'}
+                                        </h4>
+                                        <p className="text-xs text-gray-500">
+                                            {esVistaFacturadas
+                                                ? 'Visualización de órdenes y prácticas ya facturadas.'
+                                                : 'Editar y validar antes del armado de lotes.'}
+                                        </p>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    {!esVistaFacturadas && <div className="flex items-center gap-2">
                                         <button onClick={facturarPaciente} disabled={cargandoOrdenes} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60">{cargandoOrdenes ? 'Facturando...' : 'Facturar paciente'}</button>
-                                    </div>
+                                    </div>}
                                 </div>
 
                                 <div className="border-b px-4 py-3 bg-white">
@@ -3087,7 +3115,7 @@ export function FacturacionPanel() {
                                                 type="text"
                                                 value={filtroPrestaciones}
                                                 onChange={(e) => setFiltroPrestaciones(e.target.value)}
-                                                placeholder="Filtrar prestaciones pendientes..."
+                                                placeholder={esVistaFacturadas ? 'Filtrar prestaciones facturadas...' : 'Filtrar prestaciones pendientes...'}
                                                 className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             />
                                         </div>
@@ -3101,7 +3129,9 @@ export function FacturacionPanel() {
                                             <option value={20}>20 órdenes por página</option>
                                         </select>
                                         <p className="text-xs text-gray-500 whitespace-nowrap">
-                                            Órdenes: {gruposPrestacionesNoOrdenadasFiltradas.length} · Prácticas: {prestacionesNoOrdenadasFiltradas.length} de {prestacionesNoOrdenadas.length}
+                                            {esVistaFacturadas
+                                                ? `Órdenes facturadas: ${ordenesConItems.length}`
+                                                : `Órdenes: ${gruposPrestacionesNoOrdenadasFiltradas.length} · Prácticas: ${prestacionesNoOrdenadasFiltradas.length} de ${prestacionesNoOrdenadas.length}`}
                                         </p>
                                     </div>
                                 </div>
@@ -3123,7 +3153,7 @@ export function FacturacionPanel() {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
-                                            {gruposPrestacionesNoOrdenadasPaginadas.map((grupo) => {
+                                            {!esVistaFacturadas && gruposPrestacionesNoOrdenadasPaginadas.map((grupo) => {
                                                 const grupoExpandido = ordenesPendientesExpand[grupo.key] ?? true
                                                 const tieneNumeroOrden = Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
                                                 const authOrdenKey =
@@ -3784,7 +3814,7 @@ export function FacturacionPanel() {
                                                 )
                                             })}
 
-                                            {prestacionesNoOrdenadasFiltradas.length === 0 && prestacionesNoOrdenadas.length > 0 && (
+                                            {!esVistaFacturadas && prestacionesNoOrdenadasFiltradas.length === 0 && prestacionesNoOrdenadas.length > 0 && (
                                                 <tr>
                                                     <td colSpan={10} className="px-3 py-4 text-center text-xs text-gray-500">
                                                         No hay prestaciones pendientes para el filtro aplicado.
@@ -3792,7 +3822,7 @@ export function FacturacionPanel() {
                                                 </tr>
                                             )}
 
-                                            {ordenesConItems.map((orden) => {
+                                            {esVistaFacturadas && ordenesConItems.map((orden) => {
                                                 const expand = ordenesExpand[orden.key] ?? true
                                                 const authOrdenKey = keyAutorizacionOrden(orden.puesto, orden.numero)
                                                 const numeroAutorizacionOrdenActual =
@@ -3811,51 +3841,6 @@ export function FacturacionPanel() {
                                                                     Orden {formatOrderNumber(orden.puesto, orden.numero)}
                                                                 </button>
                                                                 <div className="mt-2 flex flex-wrap items-end gap-2">
-                                                                    <label className="text-[11px] text-gray-600">
-                                                                        Nuevo puesto
-                                                                        <input
-                                                                            type="number"
-                                                                            min={1}
-                                                                            value={renumerarOrdenDraft[orden.key]?.nuevoPuestoNumero ?? String(orden.puesto)}
-                                                                            onChange={(e) =>
-                                                                                setRenumerarOrdenDraft((prev) => ({
-                                                                                    ...prev,
-                                                                                    [orden.key]: {
-                                                                                        nuevoPuestoNumero: e.target.value,
-                                                                                        nuevoNumero: prev[orden.key]?.nuevoNumero ?? String(orden.numero),
-                                                                                    },
-                                                                                }))
-                                                                            }
-                                                                            className="mt-1 w-24 rounded border border-gray-300 px-2 py-1 text-xs"
-                                                                        />
-                                                                    </label>
-                                                                    <label className="text-[11px] text-gray-600">
-                                                                        Nuevo número
-                                                                        <input
-                                                                            type="number"
-                                                                            min={1}
-                                                                            value={renumerarOrdenDraft[orden.key]?.nuevoNumero ?? String(orden.numero)}
-                                                                            onChange={(e) =>
-                                                                                setRenumerarOrdenDraft((prev) => ({
-                                                                                    ...prev,
-                                                                                    [orden.key]: {
-                                                                                        nuevoPuestoNumero: prev[orden.key]?.nuevoPuestoNumero ?? String(orden.puesto),
-                                                                                        nuevoNumero: e.target.value,
-                                                                                    },
-                                                                                }))
-                                                                            }
-                                                                            className="mt-1 w-28 rounded border border-gray-300 px-2 py-1 text-xs"
-                                                                        />
-                                                                    </label>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => renumerarOrden(orden.puesto, orden.numero)}
-                                                                        disabled={renumerandoOrdenKey === orden.key}
-                                                                        className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60"
-                                                                    >
-                                                                        {renumerandoOrdenKey === orden.key ? 'Renumerando...' : 'Renumerar'}
-                                                                    </button>
-
                                                                     <label className="text-[11px] text-gray-600">
                                                                         Nro autorización orden
                                                                         <input
@@ -4186,7 +4171,20 @@ export function FacturacionPanel() {
                                                 )
                                             })}
 
-                                                    {gruposPrestacionesNoOrdenadasFiltradas.length === 0 && <tr><td colSpan={10} className="px-3 py-6 text-center text-sm text-gray-500">Sin prestaciones pendientes</td></tr>}
+                                                    {esVistaFacturadas && ordenesConItems.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan={10} className="px-3 py-6 text-center text-sm text-gray-500">
+                                                                Sin prestaciones facturadas
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                    {!esVistaFacturadas && gruposPrestacionesNoOrdenadasFiltradas.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan={10} className="px-3 py-6 text-center text-sm text-gray-500">
+                                                                Sin prestaciones pendientes
+                                                            </td>
+                                                        </tr>
+                                                    )}
                                         </tbody>
                                     </table>
                                 </div>
@@ -4202,8 +4200,12 @@ export function FacturacionPanel() {
                                 </datalist>
 
                                 <div className="px-4 py-2 border-t text-xs text-gray-500 flex flex-wrap items-center justify-between gap-2">
-                                    <span>Seleccionables para facturar: {prestacionesSeleccionables.length} · Seleccionadas: {prestacionesSeleccionadas.length}</span>
-                                    {gruposPrestacionesNoOrdenadasFiltradas.length > porPaginaPrestaciones && (
+                                    {esVistaFacturadas ? (
+                                        <span>Órdenes facturadas: {ordenesConItems.length}</span>
+                                    ) : (
+                                        <span>Seleccionables para facturar: {prestacionesSeleccionables.length} · Seleccionadas: {prestacionesSeleccionadas.length}</span>
+                                    )}
+                                    {!esVistaFacturadas && gruposPrestacionesNoOrdenadasFiltradas.length > porPaginaPrestaciones && (
                                         <span className="inline-flex items-center gap-1">
                                             <button
                                                 type="button"

@@ -1022,6 +1022,7 @@ export async function buscarAdmisionesFacturacion(
         pacienteNombre,
         historiaClinica,
         numeroDocumento,
+        obraSocialId,
         tipoIngresoCodigo,
         codigoPractica,
         fechaIngreso,
@@ -1057,6 +1058,10 @@ export async function buscarAdmisionesFacturacion(
 
     if (typeof numeroDocumento === 'number' && Number.isFinite(numeroDocumento)) {
         andFilters.push({ paciente: { numeroDocumento } })
+    }
+
+    if (typeof obraSocialId === 'number' && Number.isFinite(obraSocialId)) {
+        andFilters.push({ obraSocialId })
     }
 
     if (q) {

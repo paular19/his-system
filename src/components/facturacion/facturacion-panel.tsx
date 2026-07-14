@@ -99,7 +99,13 @@ type BusquedaFacturacionState = {
     fechaHastaIngreso: string
     usarFiltroTipoIngreso: boolean
     tipoIngresoCodigo: string
+    obraSocialId: string
     codigoPractica: string
+}
+
+type ObraSocialFiltroItem = {
+    id: number
+    nombre: string
 }
 
 type ClasificacionPorComponenteState = Partial<Record<keyof ComponenteSeleccion, string[]>>
@@ -219,6 +225,7 @@ function resolverEstadoBusquedaDesdeQuery(searchParams: { get(name: string): str
             searchParams.get('filtrarTipoIngreso') === '1' ||
             Boolean(searchParams.get('tipoIngresoCodigo')),
         tipoIngresoCodigo: (searchParams.get('tipoIngresoCodigo') ?? '').trim().toUpperCase(),
+        obraSocialId: (searchParams.get('obraSocialId') ?? '').trim(),
         codigoPractica: (searchParams.get('codigoPractica') ?? '').trim().toUpperCase(),
     }
 }
@@ -232,6 +239,7 @@ function buildBusquedaStateKey(state: BusquedaFacturacionState): string {
         state.fechaHastaIngreso,
         state.usarFiltroTipoIngreso ? '1' : '0',
         state.tipoIngresoCodigo,
+        state.obraSocialId,
         state.codigoPractica,
     ].join('|')
 }
@@ -939,6 +947,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const [fechaHastaIngreso, setFechaHastaIngreso] = useState(estadoBusquedaInicial.fechaHastaIngreso)
     const [usarFiltroTipoIngreso, setUsarFiltroTipoIngreso] = useState(estadoBusquedaInicial.usarFiltroTipoIngreso)
     const [tipoIngresoCodigo, setTipoIngresoCodigo] = useState(estadoBusquedaInicial.tipoIngresoCodigo)
+    const [obraSocialId, setObraSocialId] = useState(estadoBusquedaInicial.obraSocialId)
     const [codigoPractica, setCodigoPractica] = useState(estadoBusquedaInicial.codigoPractica)
 
     const [buscando, setBuscando] = useState(false)
@@ -966,6 +975,8 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
     const [mensaje, setMensaje] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [opcionesObraSociales, setOpcionesObraSociales] = useState<ObraSocialFiltroItem[]>([])
+    const [cargandoObraSociales, setCargandoObraSociales] = useState(false)
 
     const [seleccion, setSeleccion] = useState<Record<string, boolean>>({})
 
@@ -1053,6 +1064,29 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
 
         void cargarInsumos()
+        return () => {
+            activo = false
+        }
+    }, [])
+
+    useEffect(() => {
+        let activo = true
+
+        const cargarObrasSociales = async () => {
+            setCargandoObraSociales(true)
+            try {
+                const res = await fetch('/api/facturacion/obras-sociales?porPagina=300')
+                const json = (await res.json()) as ApiResponse<{ items: ObraSocialFiltroItem[] }>
+                if (!activo) return
+                setOpcionesObraSociales(Array.isArray(json.data?.items) ? json.data.items : [])
+            } catch {
+                if (activo) setOpcionesObraSociales([])
+            } finally {
+                if (activo) setCargandoObraSociales(false)
+            }
+        }
+
+        void cargarObrasSociales()
         return () => {
             activo = false
         }
@@ -1398,6 +1432,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             fechaHastaIngreso: overrides?.fechaHastaIngreso ?? fechaHastaIngreso,
             usarFiltroTipoIngreso: overrides?.usarFiltroTipoIngreso ?? usarFiltroTipoIngreso,
             tipoIngresoCodigo: overrides?.tipoIngresoCodigo ?? tipoIngresoCodigo,
+            obraSocialId: overrides?.obraSocialId ?? obraSocialId,
             codigoPractica: overrides?.codigoPractica ?? codigoPractica,
         }
     }
@@ -1410,6 +1445,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         const urlParams = new URLSearchParams()
         const terminoPaciente = state.busquedaPaciente.trim()
         const codigoTipo = state.tipoIngresoCodigo.trim().toUpperCase()
+        const obraSocialIdFiltro = state.obraSocialId.trim()
         const codigoPracticaFiltro = state.codigoPractica.trim().toUpperCase()
 
         if (terminoPaciente) {
@@ -1428,6 +1464,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             if (codigoTipo) urlParams.set('tipoIngresoCodigo', codigoTipo)
         }
 
+        if (obraSocialIdFiltro) urlParams.set('obraSocialId', obraSocialIdFiltro)
         if (codigoPracticaFiltro) urlParams.set('codigoPractica', codigoPracticaFiltro)
         if (ingresoId) urlParams.set('ingresoId', String(ingresoId))
 
@@ -1448,6 +1485,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             fechaHastaIngreso: '',
             usarFiltroTipoIngreso: false,
             tipoIngresoCodigo: '',
+            obraSocialId: '',
             codigoPractica: '',
         }
 
@@ -1458,6 +1496,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setFechaHastaIngreso(stateLimpio.fechaHastaIngreso)
         setUsarFiltroTipoIngreso(stateLimpio.usarFiltroTipoIngreso)
         setTipoIngresoCodigo(stateLimpio.tipoIngresoCodigo)
+        setObraSocialId(stateLimpio.obraSocialId)
         setCodigoPractica(stateLimpio.codigoPractica)
         setAutoSeleccionBusquedaDirecta(false)
         setMostrarCoincidenciasBusqueda(true)
@@ -1488,6 +1527,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             const paginaObjetivo = options?.pagina ?? paginaAdmisiones
             const terminoPaciente = snapshot.busquedaPaciente.trim()
             const codigoTipo = snapshot.tipoIngresoCodigo.trim().toUpperCase()
+            const obraSocialIdFiltro = snapshot.obraSocialId.trim()
             const codigoPracticaFiltro = snapshot.codigoPractica.trim().toUpperCase()
             const params = new URLSearchParams()
 
@@ -1512,6 +1552,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
             if (snapshot.usarFiltroTipoIngreso && codigoTipo) {
                 params.set('tipoIngresoCodigo', codigoTipo)
+            }
+
+            const obraSocialIdNumerico = parseEnteroPositivo(obraSocialIdFiltro)
+            if (obraSocialIdFiltro && !obraSocialIdNumerico) {
+                throw new Error('La obra social seleccionada no es válida.')
+            }
+            if (obraSocialIdNumerico) {
+                params.set('obraSocialId', String(obraSocialIdNumerico))
             }
 
             if (snapshot.usarFiltroFechaIngreso) {
@@ -2355,6 +2403,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setFechaHastaIngreso(estadoDesdeUrl.fechaHastaIngreso)
         setUsarFiltroTipoIngreso(estadoDesdeUrl.usarFiltroTipoIngreso)
         setTipoIngresoCodigo(estadoDesdeUrl.tipoIngresoCodigo)
+        setObraSocialId(estadoDesdeUrl.obraSocialId)
         setCodigoPractica(estadoDesdeUrl.codigoPractica)
         setSelectedIngresoId(ingresoIdDesdeUrl)
         setPaginaAdmisiones(1)
@@ -2386,9 +2435,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             label: 'Nombre paciente',
             placeholder: 'Ej: Perez, Ana',
         }
-    const tieneBusquedaPacienteActiva = busquedaPaciente.trim().length > 0
-    const mostrarListaCoincidencias =
-        mostrarCoincidenciasBusqueda || !autoSeleccionBusquedaDirecta || !tieneBusquedaPacienteActiva
+    const mostrarListaCoincidencias = mostrarCoincidenciasBusqueda
     const totalPaginasAdmisiones = Math.max(1, Math.ceil(totalAdmisiones / porPaginaAdmisiones))
     const paginaAdmisionesActual = Math.min(paginaAdmisiones, totalPaginasAdmisiones)
     const esVistaFacturadas = vista === 'FACTURADAS'
@@ -2405,14 +2452,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                         <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                            <Search className="h-3.5 w-3.5" /> Cargar órdenes
+                            <Search className="h-3.5 w-3.5" /> Buscar admisión
                         </div>
                         <p className="mt-2 text-sm text-gray-600">Buscá admisiones por paciente, documento, tipo de ingreso o código de práctica.</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
                         <Link
                             href={esVistaFacturadas ? hrefVistaPendientes : hrefVistaFacturadas}
-                            className={`inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium shadow-sm transition-colors ${
+                            className={`inline-flex h-9 items-center justify-center rounded-md border px-3 text-xs font-medium shadow-sm transition-colors ${
                                 esVistaFacturadas
                                     ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
                                     : 'border-green-600 bg-green-600 text-white hover:bg-green-700'
@@ -2422,22 +2469,22 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         </Link>
                         <Link
                             href="/facturacion/lotes"
-                            className="inline-flex h-10 items-center justify-center rounded-md bg-indigo-600 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
+                            className="inline-flex h-9 items-center justify-center rounded-md bg-indigo-600 px-3 text-xs font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
                         >
                             Generar lote
                         </Link>
                         <Link
                             href="/facturacion/lotes?nuevo=ips"
-                            className="inline-flex h-10 items-center justify-center rounded-md border border-green-600 bg-green-50 px-4 text-sm font-medium text-green-700 shadow-sm transition-colors hover:bg-green-100"
+                            className="inline-flex h-9 items-center justify-center rounded-md border border-green-600 bg-green-50 px-3 text-xs font-medium text-green-700 shadow-sm transition-colors hover:bg-green-100"
                         >
                             📄 Importar Planilla IPS
                         </Link>
                         <button
                             type="button"
                             onClick={() => setMostrarImportadorNomenclador(true)}
-                            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-blue-600 bg-blue-50 px-4 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-100"
+                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-blue-600 bg-blue-50 px-3 text-xs font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-100"
                         >
-                            <Upload className="h-4 w-4" /> Actualizar Nomenclador
+                            <Upload className="h-3.5 w-3.5" /> Actualizar Nomenclador
                         </button>
                     </div>
                 </div>
@@ -2456,7 +2503,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                         key={criterio.value}
                                         type="button"
                                         onClick={() => setCriterioBusquedaPaciente(criterio.value)}
-                                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                                        className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
                                             activo
                                                 ? 'border-blue-600 bg-blue-600 text-white'
                                                 : 'border-blue-200 bg-white text-blue-700 hover:bg-blue-100'
@@ -2479,7 +2526,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                     }
                                 }}
                                 placeholder={criterioPacienteActivo.placeholder}
-                                className="h-10 w-full rounded-md border border-blue-200 bg-white pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                className="h-9 w-full rounded-md border border-blue-200 bg-white pl-8 pr-2 text-xs text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                             />
                         </div>
                     </div>
@@ -2490,10 +2537,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         </div>
 
                         <div className="space-y-2">
-                            <label className="flex items-center gap-2 text-sm text-emerald-900">
+                            <label className="flex items-center gap-2 text-xs text-emerald-900">
                                 <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-400"
+                                    className="h-3.5 w-3.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-400"
                                     checked={usarFiltroFechaIngreso}
                                     onChange={(e) => setUsarFiltroFechaIngreso(e.target.checked)}
                                 />
@@ -2510,7 +2557,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 type="date"
                                                 value={fechaDesdeIngreso}
                                                 onChange={(e) => setFechaDesdeIngreso(e.target.value)}
-                                                className="h-9 w-full rounded-md border border-emerald-200 bg-white pl-8 pr-2 text-sm text-gray-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                                                className="h-8 w-full rounded-md border border-emerald-200 bg-white pl-7 pr-2 text-xs text-gray-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                                             />
                                         </div>
                                     </label>
@@ -2523,17 +2570,17 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 type="date"
                                                 value={fechaHastaIngreso}
                                                 onChange={(e) => setFechaHastaIngreso(e.target.value)}
-                                                className="h-9 w-full rounded-md border border-emerald-200 bg-white pl-8 pr-2 text-sm text-gray-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                                                className="h-8 w-full rounded-md border border-emerald-200 bg-white pl-7 pr-2 text-xs text-gray-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                                             />
                                         </div>
                                     </label>
                                 </div>
                             )}
 
-                            <label className="flex items-center gap-2 text-sm text-emerald-900">
+                            <label className="flex items-center gap-2 text-xs text-emerald-900">
                                 <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-400"
+                                    className="h-3.5 w-3.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-400"
                                     checked={usarFiltroTipoIngreso}
                                     onChange={(e) => setUsarFiltroTipoIngreso(e.target.checked)}
                                 />
@@ -2547,7 +2594,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                         return (
                                             <label
                                                 key={tipo}
-                                                className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-medium ${
+                                                className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium ${
                                                     activo
                                                         ? 'border-emerald-600 bg-emerald-600 text-white'
                                                         : 'border-emerald-200 bg-white text-emerald-800'
@@ -2574,7 +2621,26 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         </div>
                     </div>
 
-                    <label className="space-y-1 xl:col-span-5">
+                    <label className="space-y-1 xl:col-span-4">
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Obra social (opcional)</span>
+                        <select
+                            value={obraSocialId}
+                            onChange={(e) => setObraSocialId(e.target.value)}
+                            className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 text-xs text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        >
+                            <option value="">Todas</option>
+                            {opcionesObraSociales.map((obraSocial) => (
+                                <option key={obraSocial.id} value={String(obraSocial.id)}>
+                                    {obraSocial.nombre}
+                                </option>
+                            ))}
+                        </select>
+                        {cargandoObraSociales && (
+                            <span className="text-[11px] text-gray-500">Cargando obras sociales...</span>
+                        )}
+                    </label>
+
+                    <label className="space-y-1 xl:col-span-4">
                         <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Código de práctica (opcional)</span>
                         <input
                             value={codigoPractica}
@@ -2585,16 +2651,16 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                 }
                             }}
                             placeholder="Ej: 420303"
-                            className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                            className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 text-xs text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                         />
                     </label>
 
-                    <div className="flex items-end gap-2 xl:col-span-7">
+                    <div className="flex items-end gap-2 xl:col-span-4">
                         <button
                             onClick={() => {
                                 void buscarAdmisiones(undefined, { pagina: 1 })
                             }}
-                            className="inline-flex h-10 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex h-9 items-center justify-center rounded-md bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={buscando}
                         >
                             {buscando ? 'Buscando...' : 'Aplicar búsqueda'}
@@ -2602,35 +2668,34 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         <button
                             type="button"
                             onClick={limpiarBusqueda}
-                            className="inline-flex h-10 items-center justify-center rounded-md border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                            className="inline-flex h-9 items-center justify-center rounded-md border border-gray-300 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
                         >
                             Limpiar
                         </button>
-                        <div className="inline-flex h-10 items-center rounded-md bg-gray-100 px-3 text-xs font-medium text-gray-700">
+                        <div className="inline-flex h-9 items-center rounded-md bg-gray-100 px-2.5 text-[11px] font-medium text-gray-700">
                             {totalAdmisiones} opciones encontradas
                         </div>
                         {autoSeleccionBusquedaDirecta && selectedIngresoId && (
-                            <div className="inline-flex h-10 items-center rounded-md bg-emerald-100 px-3 text-xs font-medium text-emerald-800">
+                            <div className="inline-flex h-9 items-center rounded-md bg-emerald-100 px-2.5 text-[11px] font-medium text-emerald-800">
                                 Selección automática aplicada
                             </div>
                         )}
                     </div>
 
-                    {!mostrarListaCoincidencias && admisiones.length > 0 && (
-                        <div className="xl:col-span-12">
+                    <div className="xl:col-span-12 space-y-2">
+                        <div className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-700">Tabla de admisiones</span>
                             <button
                                 type="button"
-                                onClick={() => setMostrarCoincidenciasBusqueda(true)}
-                                className="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-left text-xs font-medium text-blue-800 hover:bg-blue-100"
+                                onClick={() => setMostrarCoincidenciasBusqueda((actual) => !actual)}
+                                className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100"
                             >
-                                Tabla de admisiones oculta. Hacé click en esta card para volver a abrirla ({admisiones.length} en esta página).
+                                {mostrarListaCoincidencias ? 'Cerrar tabla' : 'Abrir tabla'}
                             </button>
                         </div>
-                    )}
 
-                    {mostrarListaCoincidencias && (
-                        <div className="xl:col-span-12">
-                            {admisiones.length === 0 ? (
+                        {mostrarListaCoincidencias ? (
+                            admisiones.length === 0 ? (
                                 <div className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-4 text-sm text-gray-500">
                                     No se encontraron admisiones para los filtros actuales.
                                 </div>
@@ -2738,9 +2803,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                         </div>
                                     )}
                                 </div>
-                            )}
-                        </div>
-                    )}
+                            )
+                        ) : (
+                            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-800">
+                                Tabla de admisiones oculta. Hacé click en Abrir tabla para volver a verla.
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

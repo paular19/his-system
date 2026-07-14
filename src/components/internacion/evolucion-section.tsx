@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { ChevronDown, ChevronUp, Plus, Stethoscope } from 'lucide-react'
 import type { EvolucionItem } from '@/modules/internacion/types'
 import { TIPO_EVOLUCION_LABEL } from '@/modules/internacion/types'
@@ -114,15 +115,23 @@ export function EvolucionSection({
                         {evoluciones.length}
                     </span>
                 </div>
-                {puedeCrear && (
-                    <button
-                        onClick={() => setMostrarFormulario(!mostrarFormulario)}
-                        className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800"
+                <div className="flex items-center gap-2">
+                    <Link
+                        href={`/dashboard/internacion/${ingresoId}/ficha-quirurgica`}
+                        className="text-xs font-medium border rounded-lg px-2.5 py-1 hover:bg-gray-50 text-gray-700"
                     >
-                        <Plus className="h-3.5 w-3.5" />
-                        Nueva nota
-                    </button>
-                )}
+                        Ficha Quirurgica
+                    </Link>
+                    {puedeCrear && (
+                        <button
+                            onClick={() => setMostrarFormulario(!mostrarFormulario)}
+                            className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800"
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            Nueva nota
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Formulario nueva evolución */}

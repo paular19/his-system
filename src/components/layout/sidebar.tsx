@@ -38,6 +38,7 @@ const NAV_ITEMS_ADMISION: NavItem[] = [
   { label: 'Pacientes', href: '/dashboard/pacientes', icon: Users },
   { label: 'Admisión', href: '/dashboard/admision', icon: ClipboardList },
   { label: 'Internación', href: '/dashboard/internacion', icon: BedDouble },
+  { label: 'Autorizaciones', href: '/dashboard/ambulatorio', icon: FilePlus },
   { label: 'Presupuesto', href: '/dashboard/cotizador', icon: Receipt },
 ]
 

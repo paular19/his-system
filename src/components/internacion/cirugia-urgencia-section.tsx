@@ -1105,7 +1105,7 @@ export function CirugiaUrgenciaSection({
                                                 />
                                                 <DatoCirugia
                                                     label="Doble cirugía"
-                                                    value={boolToLabel(diferencialesConsolidados.dobleCirugia)}
+                                                    value={boolToLabel(Boolean(diferencialesConsolidados.dobleCirugia))}
                                                 />
                                             </div>
                                         </div>

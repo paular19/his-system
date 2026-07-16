@@ -41,115 +41,146 @@ export default async function FichaPacientePage({ params }: PageProps) {
   const edad = calcularEdad(paciente.fechaNacimiento)
   const puedeModificar = tienePermiso(usuario.rol, 'PACIENTES', 'MODIFICAR')
 
-  // Evita un panic conocido de Prisma en prod al ordenar relaciones anidadas
-  const ingresosBase = await prisma.ingreso.findMany({
-    where: { pacienteId: paciente.id },
-    orderBy: [{ fechaIngreso: 'desc' }, { id: 'desc' }],
-    take: 10,
-    select: {
-      id: true,
-      numeroIngreso: true,
-      tipoIngresoCodigo: true,
-      fechaIngreso: true,
-      fechaEgreso: true,
-      fechaEgresoPrevista: true,
-      estado: true,
-      nombre: true,
-      profesionalGuardiaId: true,
-      profesionalTratanteId: true,
-      obraSocialId: true,
-      planId: true,
-      camaId: true,
-    },
-  })
+  // Workaround: evitar prisma.ingreso.findMany por panic de Query Engine en prod con casos puntuales.
+  type IngresoBaseRow = {
+    id: number
+    numeroIngreso: number
+    tipoIngresoCodigo: string
+    fechaIngreso: Date | null
+    fechaEgreso: Date | null
+    fechaEgresoPrevista: Date | null
+    estado: string | null
+    nombre: string | null
+    profesionalGuardiaId: number | null
+    profesionalTratanteId: number | null
+    obraSocialId: number | null
+    planId: number | null
+    camaId: number | null
+  }
 
-  const ingresoIds = ingresosBase.map((ing) => ing.id)
-  const tipoIngresoCodigos = Array.from(new Set(ingresosBase.map((ing) => ing.tipoIngresoCodigo)))
+  const ingresosBaseOrdenados = await prisma.$queryRaw<IngresoBaseRow[]>`
+    SELECT
+      "IngID" AS id,
+      "IngNro" AS "numeroIngreso",
+      "TigCodig" AS "tipoIngresoCodigo",
+      "IngFchIngreso" AS "fechaIngreso",
+      "IngFchEgreso" AS "fechaEgreso",
+      "IngFchEgresoPrevista" AS "fechaEgresoPrevista",
+      "IngEstad" AS estado,
+      "IngNom" AS nombre,
+      "PrfIDGuardia" AS "profesionalGuardiaId",
+      "PrfIDTratante" AS "profesionalTratanteId",
+      "OSID" AS "obraSocialId",
+      "PosID" AS "planId",
+      "CamID" AS "camaId"
+    FROM "Ingreso"
+    WHERE "PacID" = ${paciente.id}
+    ORDER BY "IngFchIngreso" DESC NULLS LAST, "IngID" DESC
+    LIMIT 10
+  `
+
+  const ingresoIds = ingresosBaseOrdenados.map((ing) => ing.id)
+  const tipoIngresoCodigos = Array.from(new Set(ingresosBaseOrdenados.map((ing) => ing.tipoIngresoCodigo)))
   const profesionalIds = Array.from(
     new Set(
-      ingresosBase
+      ingresosBaseOrdenados
         .flatMap((ing) => [ing.profesionalGuardiaId, ing.profesionalTratanteId])
         .filter((id): id is number => typeof id === 'number')
     )
   )
   const obraSocialIds = Array.from(
-    new Set(ingresosBase.map((ing) => ing.obraSocialId).filter((id): id is number => typeof id === 'number'))
+    new Set(ingresosBaseOrdenados.map((ing) => ing.obraSocialId).filter((id): id is number => typeof id === 'number'))
   )
   const planIds = Array.from(
-    new Set(ingresosBase.map((ing) => ing.planId).filter((id): id is number => typeof id === 'number'))
+    new Set(ingresosBaseOrdenados.map((ing) => ing.planId).filter((id): id is number => typeof id === 'number'))
   )
   const camaIds = Array.from(
-    new Set(ingresosBase.map((ing) => ing.camaId).filter((id): id is number => typeof id === 'number'))
+    new Set(ingresosBaseOrdenados.map((ing) => ing.camaId).filter((id): id is number => typeof id === 'number'))
   )
 
-  const [
-    patologiasRows,
-    practicasRows,
-    tiposIngresoRows,
-    ingresoSubtipoRows,
-    subtiposRows,
-    profesionalesRows,
-    obrasRows,
-    planesRows,
-    camasRows,
-  ] = ingresoIds.length > 0
-    ? await prisma.$transaction([
-      prisma.ingresoPatologia.findMany({
-        where: { ingresoId: { in: ingresoIds } },
-        select: {
-          id: true,
-          ingresoId: true,
-          descripcion: true,
-          fecha: true,
-        },
-        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
-      }),
-      prisma.practica.findMany({
-        where: {
-          ingresoId: { in: ingresoIds },
-          OR: [{ estado: 'A' }, { estado: null }],
-        },
-        select: {
-          id: true,
-          ingresoId: true,
-          codigoPractica: true,
-          cantidad: true,
-          fecha: true,
-          numeroAutorizacion: true,
-          nomencladorPractica: { select: { descripcion: true } },
-        },
-        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
-      }),
-      prisma.tipoIngreso.findMany({
-        where: { codigo: { in: tipoIngresoCodigos } },
-        select: { codigo: true, descripcion: true },
-      }),
-      prisma.ingresoSubtipo.findMany({
-        where: { ingresoId: { in: ingresoIds } },
-        select: { ingresoId: true, subtipoAdmisionCodigo: true },
-      }),
-      prisma.subtipoAdmision.findMany({
-        where: { estado: 'A' },
-        select: { codigo: true, descripcion: true },
-      }),
-      prisma.profesional.findMany({
-        where: { id: { in: profesionalIds } },
-        select: { id: true, nombre: true },
-      }),
-      prisma.obraSocial.findMany({
-        where: { id: { in: obraSocialIds } },
-        select: { id: true, nombre: true },
-      }),
-      prisma.planObraSocial.findMany({
-        where: { id: { in: planIds } },
-        select: { id: true, descripcion: true },
-      }),
-      prisma.cama.findMany({
-        where: { id: { in: camaIds } },
-        select: { id: true, identificador: true, sector: true, habitacion: true },
-      }),
-    ])
-    : [[], [], [], [], [], [], [], [], []]
+  const patologiasRows = ingresoIds.length > 0
+    ? await prisma.ingresoPatologia.findMany({
+      where: { ingresoId: { in: ingresoIds } },
+      select: {
+        id: true,
+        ingresoId: true,
+        descripcion: true,
+        fecha: true,
+      },
+    })
+    : []
+
+  const practicasBaseRows = ingresoIds.length > 0
+    ? await prisma.practica.findMany({
+      where: {
+        ingresoId: { in: ingresoIds },
+        OR: [{ estado: 'A' }, { estado: null }],
+      },
+      select: {
+        id: true,
+        ingresoId: true,
+        codigoPractica: true,
+        cantidad: true,
+        fecha: true,
+        numeroAutorizacion: true,
+      },
+    })
+    : []
+
+  const codigosPractica = Array.from(new Set(practicasBaseRows.map((row) => row.codigoPractica)))
+  const nomencladorRows = codigosPractica.length > 0
+    ? await prisma.nomencladorPractica.findMany({
+      where: { codigo: { in: codigosPractica } },
+      select: { codigo: true, descripcion: true },
+    })
+    : []
+
+  const tiposIngresoRows = tipoIngresoCodigos.length > 0
+    ? await prisma.tipoIngreso.findMany({
+      where: { codigo: { in: tipoIngresoCodigos } },
+      select: { codigo: true, descripcion: true },
+    })
+    : []
+
+  const ingresoSubtipoRows = ingresoIds.length > 0
+    ? await prisma.ingresoSubtipo.findMany({
+      where: { ingresoId: { in: ingresoIds } },
+      select: { ingresoId: true, subtipoAdmisionCodigo: true },
+    })
+    : []
+
+  const subtiposRows = await prisma.subtipoAdmision.findMany({
+    where: { estado: 'A' },
+    select: { codigo: true, descripcion: true },
+  })
+
+  const profesionalesRows = profesionalIds.length > 0
+    ? await prisma.profesional.findMany({
+      where: { id: { in: profesionalIds } },
+      select: { id: true, nombre: true },
+    })
+    : []
+
+  const obrasRows = obraSocialIds.length > 0
+    ? await prisma.obraSocial.findMany({
+      where: { id: { in: obraSocialIds } },
+      select: { id: true, nombre: true },
+    })
+    : []
+
+  const planesRows = planIds.length > 0
+    ? await prisma.planObraSocial.findMany({
+      where: { id: { in: planIds } },
+      select: { id: true, descripcion: true },
+    })
+    : []
+
+  const camasRows = camaIds.length > 0
+    ? await prisma.cama.findMany({
+      where: { id: { in: camaIds } },
+      select: { id: true, identificador: true, sector: true, habitacion: true },
+    })
+    : []
 
   const patologiasByIngreso = new Map<number, Array<{ id: number; descripcion: string | null; fecha: Date }>>()
   for (const row of patologiasRows) {
@@ -157,6 +188,25 @@ export default async function FichaPacientePage({ params }: PageProps) {
     lista.push({ id: row.id, descripcion: row.descripcion, fecha: row.fecha })
     patologiasByIngreso.set(row.ingresoId, lista)
   }
+
+  const nomencladorByCodigo = new Map(
+    nomencladorRows.map((row) => [row.codigo, row.descripcion])
+  )
+
+  const practicasRows = practicasBaseRows
+    .map((row) => ({
+      ...row,
+      nomencladorPractica: (() => {
+        const descripcion = nomencladorByCodigo.get(row.codigoPractica)
+        return descripcion ? { descripcion } : null
+      })(),
+    }))
+    .sort((a, b) => {
+      const aFecha = a.fecha.getTime()
+      const bFecha = b.fecha.getTime()
+      if (aFecha !== bFecha) return bFecha - aFecha
+      return b.id - a.id
+    })
 
   const practicasByIngreso = new Map<number, Array<(typeof practicasRows)[number]>>()
   for (const row of practicasRows) {
@@ -206,7 +256,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
     }])
   )
 
-  const ingresos = ingresosBase.map((ing) => ({
+  const ingresos = ingresosBaseOrdenados.map((ing) => ({
     ...ing,
     tipoIngreso: tiposIngresoByCodigo.get(ing.tipoIngresoCodigo) ?? null,
     ingresoSubtipo: ingresoSubtipoByIngresoId.get(ing.id) ?? null,

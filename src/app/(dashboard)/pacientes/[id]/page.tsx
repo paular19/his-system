@@ -55,23 +55,44 @@ export default async function FichaPacientePage({ params }: PageProps) {
       fechaEgresoPrevista: true,
       estado: true,
       nombre: true,
-      tipoIngreso: { select: { descripcion: true } },
-      ingresoSubtipo: {
-        include: {
-          subtipoAdmision: { select: { descripcion: true } },
-        },
-      },
-      profesionalGuardia: { select: { nombre: true } },
-      profesionalTratante: { select: { nombre: true } },
-      obraSocial: { select: { nombre: true } },
-      plan: { select: { descripcion: true } },
-      cama: { select: { identificador: true, sector: true, habitacion: true } },
+      profesionalGuardiaId: true,
+      profesionalTratanteId: true,
+      obraSocialId: true,
+      planId: true,
+      camaId: true,
     },
   })
 
   const ingresoIds = ingresosBase.map((ing) => ing.id)
+  const tipoIngresoCodigos = Array.from(new Set(ingresosBase.map((ing) => ing.tipoIngresoCodigo)))
+  const profesionalIds = Array.from(
+    new Set(
+      ingresosBase
+        .flatMap((ing) => [ing.profesionalGuardiaId, ing.profesionalTratanteId])
+        .filter((id): id is number => typeof id === 'number')
+    )
+  )
+  const obraSocialIds = Array.from(
+    new Set(ingresosBase.map((ing) => ing.obraSocialId).filter((id): id is number => typeof id === 'number'))
+  )
+  const planIds = Array.from(
+    new Set(ingresosBase.map((ing) => ing.planId).filter((id): id is number => typeof id === 'number'))
+  )
+  const camaIds = Array.from(
+    new Set(ingresosBase.map((ing) => ing.camaId).filter((id): id is number => typeof id === 'number'))
+  )
 
-  const [patologiasRows, practicasRows] = ingresoIds.length > 0
+  const [
+    patologiasRows,
+    practicasRows,
+    tiposIngresoRows,
+    ingresoSubtipoRows,
+    subtiposRows,
+    profesionalesRows,
+    obrasRows,
+    planesRows,
+    camasRows,
+  ] = ingresoIds.length > 0
     ? await prisma.$transaction([
       prisma.ingresoPatologia.findMany({
         where: { ingresoId: { in: ingresoIds } },
@@ -99,8 +120,36 @@ export default async function FichaPacientePage({ params }: PageProps) {
         },
         orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
       }),
+      prisma.tipoIngreso.findMany({
+        where: { codigo: { in: tipoIngresoCodigos } },
+        select: { codigo: true, descripcion: true },
+      }),
+      prisma.ingresoSubtipo.findMany({
+        where: { ingresoId: { in: ingresoIds } },
+        select: { ingresoId: true, subtipoAdmisionCodigo: true },
+      }),
+      prisma.subtipoAdmision.findMany({
+        where: { estado: 'A' },
+        select: { codigo: true, descripcion: true },
+      }),
+      prisma.profesional.findMany({
+        where: { id: { in: profesionalIds } },
+        select: { id: true, nombre: true },
+      }),
+      prisma.obraSocial.findMany({
+        where: { id: { in: obraSocialIds } },
+        select: { id: true, nombre: true },
+      }),
+      prisma.planObraSocial.findMany({
+        where: { id: { in: planIds } },
+        select: { id: true, descripcion: true },
+      }),
+      prisma.cama.findMany({
+        where: { id: { in: camaIds } },
+        select: { id: true, identificador: true, sector: true, habitacion: true },
+      }),
     ])
-    : [[], []]
+    : [[], [], [], [], [], [], [], [], []]
 
   const patologiasByIngreso = new Map<number, Array<{ id: number; descripcion: string | null; fecha: Date }>>()
   for (const row of patologiasRows) {
@@ -116,8 +165,71 @@ export default async function FichaPacientePage({ params }: PageProps) {
     practicasByIngreso.set(row.ingresoId, lista)
   }
 
+  const tiposIngresoByCodigo = new Map(
+    tiposIngresoRows.map((row) => [row.codigo, { descripcion: row.descripcion }])
+  )
+
+  const subtipoDescripcionByCodigo = new Map(
+    subtiposRows.map((row) => [row.codigo, row.descripcion])
+  )
+
+  const ingresoSubtipoByIngresoId = new Map<number, {
+    subtipoAdmisionCodigo: string
+    subtipoAdmision: { descripcion: string | null }
+  }>()
+  for (const row of ingresoSubtipoRows) {
+    ingresoSubtipoByIngresoId.set(row.ingresoId, {
+      subtipoAdmisionCodigo: row.subtipoAdmisionCodigo,
+      subtipoAdmision: {
+        descripcion: subtipoDescripcionByCodigo.get(row.subtipoAdmisionCodigo) ?? null,
+      },
+    })
+  }
+
+  const profesionalById = new Map(
+    profesionalesRows.map((row) => [row.id, { nombre: row.nombre }])
+  )
+
+  const obraSocialById = new Map(
+    obrasRows.map((row) => [row.id, { nombre: row.nombre }])
+  )
+
+  const planById = new Map(
+    planesRows.map((row) => [row.id, { descripcion: row.descripcion }])
+  )
+
+  const camaById = new Map(
+    camasRows.map((row) => [row.id, {
+      identificador: row.identificador,
+      sector: row.sector,
+      habitacion: row.habitacion,
+    }])
+  )
+
   const ingresos = ingresosBase.map((ing) => ({
     ...ing,
+    tipoIngreso: tiposIngresoByCodigo.get(ing.tipoIngresoCodigo) ?? null,
+    ingresoSubtipo: ingresoSubtipoByIngresoId.get(ing.id) ?? null,
+    profesionalGuardia:
+      ing.profesionalGuardiaId != null
+        ? (profesionalById.get(ing.profesionalGuardiaId) ?? null)
+        : null,
+    profesionalTratante:
+      ing.profesionalTratanteId != null
+        ? (profesionalById.get(ing.profesionalTratanteId) ?? null)
+        : null,
+    obraSocial:
+      ing.obraSocialId != null
+        ? (obraSocialById.get(ing.obraSocialId) ?? null)
+        : null,
+    plan:
+      ing.planId != null
+        ? (planById.get(ing.planId) ?? null)
+        : null,
+    cama:
+      ing.camaId != null
+        ? (camaById.get(ing.camaId) ?? null)
+        : null,
     ingresoPatologias: patologiasByIngreso.get(ing.id) ?? [],
     practicas: practicasByIngreso.get(ing.id) ?? [],
   }))

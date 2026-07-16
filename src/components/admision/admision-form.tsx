@@ -1,17 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { flushSync } from 'react-dom'
-import { Plus, Trash2, Search, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Loader2 } from 'lucide-react'
 import { BuscarPaciente } from './buscar-paciente'
 import { createIngresoAction } from '@/modules/admision/actions'
 import {
-  ComponenteSelector,
   calcularTotalSeleccionado,
-  seleccionPorDefecto,
-  type ComponenteSeleccion,
-  type ComponenteValores,
 } from '@/components/ui/componente-selector'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import type { PacienteResumen } from '@/modules/admision/types'
@@ -22,20 +17,11 @@ import {
   obtenerSubitemsSeleccionados,
   valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
-
-interface ItemPractica {
-  tempId: string
-  convenioId: number | null
-  codigo: string
-  descripcion: string
-  numeroAutorizacion?: string | null
-  desglose: ComponenteValores
-  seleccionComponentes: ComponenteSeleccion
-  requiereMatriculaEspecialista?: boolean
-  requiereMatriculaAnestesista?: boolean
-  matriculaEspecialista?: number | null
-  matriculaAnestesista?: number | null
-}
+import {
+  PracticasAdmisionCard,
+  type PracticaAdmisionItem,
+} from './practicas-admision-card'
+import { generarOrdenesPendientesAdmision } from './ordenes-auto'
 
 interface ItemMedicacion {
   nombre: string
@@ -97,20 +83,7 @@ function esNombreIPSS(nombre: string): boolean {
   return tokens.includes('IPSS') || tokens.includes('IPS')
 }
 
-function normalizarBusqueda(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-}
-
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
-const PRACTICAS_POR_PAGINA = 6
-
-function crearTempId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
 
 function ahoraLocalDateTimeInput(): string {
   const now = new Date()
@@ -172,26 +145,16 @@ export function AdmisionForm({
   const [descripcionIndicacion, setDescripcionIndicacion] = useState('')
 
   // Prácticas y medicamentos (para GUA/DER/IND)
-  const [practicas, setPracticas] = useState<ItemPractica[]>([])
+  const [practicas, setPracticas] = useState<PracticaAdmisionItem[]>([])
   const [medicaciones, setMedicaciones] = useState<ItemMedicacion[]>([])
   const [descartables, setDescartables] = useState<ItemDescartable[]>([])
+  const [busquedaPracticaPendiente, setBusquedaPracticaPendiente] = useState({
+    termino: '',
+    hayResultados: false,
+  })
 
   // Búsqueda de prácticas
-  const [buscandoPractica, setBuscandoPractica] = useState(false)
-  const [terminoBusquedaPractica, setTerminoBusquedaPractica] = useState('')
-  const [terminoFiltroPracticas, setTerminoFiltroPracticas] = useState('')
-  const [paginaPracticas, setPaginaPracticas] = useState(1)
-  const [resultadosPractica, setResultadosPractica] = useState<Array<{
-    convenioId: number
-    codigo: string
-    descripcion: string
-    valorEspecialista?: number | null
-    valorAyudante?: number | null
-    valorAnestesista?: number | null
-    valorGastos?: number | null
-  }>>([])
-
-  // Nueva medicación
+  // Nueva medicacion
   const [nuevaMedNombre, setNuevaMedNombre] = useState('')
   const [nuevoDesNombre, setNuevoDesNombre] = useState('')
   const [opcionesInsumosUti, setOpcionesInsumosUti] = useState<Array<{ id: number; nombre: string }>>([])
@@ -203,31 +166,12 @@ export function AdmisionForm({
   const esAtencionAmbulatoria = subtiposTurnoPractica.includes(subtipoAdmisionCodigo)
   const mostrarPanelPracticasMeds = subtiposConPracticasMeds.includes(subtipoAdmisionCodigo)
   const mostrarPracticasAmbulatorias = esAtencionAmbulatoria
-  const mostrarMedicacion = mostrarPanelPracticasMeds && !esAtencionAmbulatoria
+  const mostrarMedicacion = mostrarPanelPracticasMeds && !esAtencionAmbulatoria && !esIngresoGuardia
   const mostrarDescartables = mostrarMedicacion
-  const ocultarEgresoPrevisto = mostrarPracticasAmbulatorias || mostrarMedicacion
+  const ocultarEgresoPrevisto = mostrarPracticasAmbulatorias || mostrarMedicacion || esIngresoGuardia
   const etiquetaBusquedaPractica = subtipoAdmisionCodigo === 'CUR' || subtipoAdmisionCodigo === 'SUT'
     ? 'Buscar código de práctica...'
     : 'Buscar práctica en nomenclador...'
-
-  const practicasFiltradas = useMemo(() => {
-    const termino = normalizarBusqueda(terminoFiltroPracticas)
-    if (!termino) return practicas
-
-    return practicas.filter((p) => {
-      const codigo = normalizarBusqueda(p.codigo)
-      const descripcion = normalizarBusqueda(p.descripcion)
-      return codigo.includes(termino) || descripcion.includes(termino)
-    })
-  }, [practicas, terminoFiltroPracticas])
-
-  const totalPaginasPracticas = Math.max(1, Math.ceil(practicasFiltradas.length / PRACTICAS_POR_PAGINA))
-  const paginaPracticasActual = Math.min(paginaPracticas, totalPaginasPracticas)
-
-  const practicasPaginadas = useMemo(() => {
-    const desde = (paginaPracticasActual - 1) * PRACTICAS_POR_PAGINA
-    return practicasFiltradas.slice(desde, desde + PRACTICAS_POR_PAGINA)
-  }, [paginaPracticasActual, practicasFiltradas])
 
   const obtenerProfesionalSeleccionadoId = () => {
     if (subtiposTurnoPractica.includes(subtipoAdmisionCodigo)) {
@@ -249,52 +193,6 @@ export function AdmisionForm({
     }
     return MATRICULA_AMBULATORIO_DEFAULT
   }
-
-  const buscarPracticaNomenclador = async (termino: string) => {
-    if (termino.trim().length < 2) {
-      setResultadosPractica([])
-      return
-    }
-
-    setBuscandoPractica(true)
-    setResultadosPractica([])
-    try {
-      const params = new URLSearchParams({ q: termino.trim() })
-      const convenioId = Number.parseInt(obraSocialId, 10)
-      if (Number.isFinite(convenioId)) {
-        params.set('convenioId', String(convenioId))
-      }
-
-      const res = await fetch(`/api/practicas-nomenclador?${params.toString()}`)
-      const json = await res.json()
-      if (json.ok) {
-        const raw = json.data
-        setResultadosPractica(Array.isArray(raw) ? raw : (raw?.items ?? []))
-      }
-    } catch {
-      // ignorar error silencioso
-    } finally {
-      setBuscandoPractica(false)
-    }
-  }
-
-  useEffect(() => {
-    const termino = terminoBusquedaPractica.trim()
-    if (termino.length < 2) {
-      setResultadosPractica([])
-      return
-    }
-
-    const timer = setTimeout(() => {
-      void buscarPracticaNomenclador(termino)
-    }, 350)
-
-    return () => clearTimeout(timer)
-  }, [terminoBusquedaPractica, obraSocialId])
-
-  useEffect(() => {
-    setPaginaPracticas(1)
-  }, [terminoFiltroPracticas])
 
   useEffect(() => {
     let activo = true
@@ -318,55 +216,6 @@ export function AdmisionForm({
       activo = false
     }
   }, [])
-
-  const agregarPractica = (practica: {
-    convenioId: number
-    codigo: string
-    descripcion: string
-    valorEspecialista?: number | null
-    valorAyudante?: number | null
-    valorAnestesista?: number | null
-    valorGastos?: number | null
-  }) => {
-    const matriculaAmbulatoria = obtenerMatriculaAmbulatoria()
-
-    flushSync(() => {
-      setPracticas((prev) => [
-        ...prev,
-        {
-          tempId: crearTempId(),
-          convenioId: practica.convenioId,
-          codigo: practica.codigo,
-          descripcion: practica.descripcion,
-          numeroAutorizacion: '',
-          desglose: {
-            valorEspecialista: practica.valorEspecialista ?? null,
-            valorAyudante: practica.valorAyudante ?? null,
-            valorAnestesista: practica.valorAnestesista ?? null,
-            valorGastos: practica.valorGastos ?? null,
-            valorTotal: null,
-          },
-          seleccionComponentes: seleccionPorDefecto({
-            valorEspecialista: practica.valorEspecialista ?? null,
-            valorAyudante: practica.valorAyudante ?? null,
-            valorAnestesista: practica.valorAnestesista ?? null,
-            valorGastos: practica.valorGastos ?? null,
-            valorTotal: null,
-          }),
-          requiereMatriculaEspecialista: practica.valorEspecialista != null,
-          requiereMatriculaAnestesista: practica.valorAnestesista != null,
-          matriculaEspecialista: practica.valorEspecialista != null ? matriculaAmbulatoria : null,
-          matriculaAnestesista: practica.valorAnestesista != null ? matriculaAmbulatoria : null,
-        },
-      ])
-    })
-    setResultadosPractica([])
-    setTerminoBusquedaPractica('')
-  }
-
-  const quitarPractica = (tempId: string) => {
-    setPracticas((prev) => prev.filter((p) => p.tempId !== tempId))
-  }
 
   useEffect(() => {
     if (!mostrarPanelPracticasMeds || practicas.length === 0) return
@@ -459,7 +308,7 @@ export function AdmisionForm({
       return
     }
 
-    if (terminoBusquedaPractica.trim().length >= 2 && resultadosPractica.length > 0) {
+    if (busquedaPracticaPendiente.termino.trim().length >= 2 && busquedaPracticaPendiente.hayResultados) {
       setError('Seleccione una práctica del listado o limpie la búsqueda antes de registrar la admisión')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
@@ -592,6 +441,13 @@ export function AdmisionForm({
         setError(result.error)
         formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         return
+      }
+
+      if (practicasExpandida.length > 0) {
+        const autoOrdenResult = await generarOrdenesPendientesAdmision(result.id)
+        if (!autoOrdenResult.ok) {
+          console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
+        }
       }
 
       router.push(`/dashboard/admision/${result.id}`)
@@ -961,178 +817,15 @@ export function AdmisionForm({
 
       {mostrarPanelPracticasMeds && (
         <>
-          <div className="his-card p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">Prácticas realizadas</h3>
-            <div className="flex gap-2 mb-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={terminoBusquedaPractica}
-                  onChange={(e) => setTerminoBusquedaPractica(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      void buscarPracticaNomenclador(terminoBusquedaPractica)
-                    }
-                  }}
-                  placeholder={etiquetaBusquedaPractica}
-                  className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => void buscarPracticaNomenclador(terminoBusquedaPractica)}
-                disabled={buscandoPractica || terminoBusquedaPractica.trim().length < 2}
-                className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors"
-              >
-                {buscandoPractica ? 'Buscando...' : 'Buscar'}
-              </button>
-            </div>
-            {resultadosPractica.length > 0 && (
-              <div className="mb-3 rounded-md border bg-white shadow-sm max-h-48 overflow-y-auto divide-y">
-                {resultadosPractica.map((p) => (
-                  <button
-                    key={p.codigo}
-                    type="button"
-                    onClick={() => agregarPractica(p)}
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors text-sm"
-                  >
-                    <span className="font-mono text-xs text-gray-500 mr-2">{p.codigo}</span>
-                    {p.descripcion}
-                  </button>
-                ))}
-              </div>
-            )}
-            {practicas.length > 0 ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={terminoFiltroPracticas}
-                      onChange={(e) => setTerminoFiltroPracticas(e.target.value)}
-                      placeholder="Filtrar prácticas agregadas..."
-                      className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    {practicasFiltradas.length} de {practicas.length}
-                  </p>
-                </div>
-                <div className="divide-y border rounded-md">
-                  {practicasPaginadas.map((p) => (
-                    <div key={p.tempId} className="px-3 py-3 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
-                        <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <label className="text-xs text-gray-500">Aut.</label>
-                          <input
-                            type="text"
-                            value={p.numeroAutorizacion ?? ''}
-                            onChange={(e) => {
-                              const value = e.target.value
-                              setPracticas((prev) => prev.map((x) =>
-                                x.tempId === p.tempId
-                                  ? { ...x, numeroAutorizacion: value }
-                                  : x
-                              ))
-                            }}
-                            className="w-28 rounded border border-gray-300 px-2 py-1 text-xs"
-                            placeholder="Nro autorización"
-                            maxLength={50}
-                          />
-                        </div>
-                        {p.requiereMatriculaEspecialista && (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <label className="text-xs text-gray-500">Mat. HE</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={p.matriculaEspecialista ?? ''}
-                              onChange={(e) => {
-                                const value = e.target.value.trim()
-                                setPracticas((prev) => prev.map((x) =>
-                                  x.tempId === p.tempId
-                                    ? { ...x, matriculaEspecialista: value ? parseInt(value, 10) || null : null }
-                                    : x
-                                ))
-                              }}
-                              className="w-24 rounded border border-gray-300 px-2 py-1 text-xs"
-                              placeholder="Matrícula"
-                            />
-                          </div>
-                        )}
-                        {p.requiereMatriculaAnestesista && (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <label className="text-xs text-gray-500">Mat. HA</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={p.matriculaAnestesista ?? ''}
-                              onChange={(e) => {
-                                const value = e.target.value.trim()
-                                setPracticas((prev) => prev.map((x) =>
-                                  x.tempId === p.tempId
-                                    ? { ...x, matriculaAnestesista: value ? parseInt(value, 10) || null : null }
-                                    : x
-                                ))
-                              }}
-                              className="w-24 rounded border border-gray-300 px-2 py-1 text-xs"
-                              placeholder="Matrícula"
-                            />
-                          </div>
-                        )}
-                        <button type="button" onClick={() => quitarPractica(p.tempId)} className="text-red-400 hover:text-red-600 transition-colors">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                      <ComponenteSelector
-                        valores={p.desglose}
-                        seleccion={p.seleccionComponentes}
-                        onChange={(nuevaSeleccion) => {
-                          setPracticas((prev) => prev.map((x) =>
-                            x.tempId === p.tempId
-                              ? { ...x, seleccionComponentes: nuevaSeleccion }
-                              : x
-                          ))
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-                {practicasFiltradas.length > PRACTICAS_POR_PAGINA && (
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-gray-500">
-                      Página {paginaPracticasActual} de {totalPaginasPracticas}
-                    </p>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setPaginaPracticas((prev) => Math.max(1, prev - 1))}
-                        disabled={paginaPracticasActual <= 1}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Anterior
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPaginaPracticas((prev) => Math.min(totalPaginasPracticas, prev + 1))}
-                        disabled={paginaPracticasActual >= totalPaginasPracticas}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Siguiente
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400">No se han agregado prácticas.</p>
-            )}
-          </div>
+          <PracticasAdmisionCard
+            obraSocialId={obraSocialId}
+            etiquetaBusqueda={etiquetaBusquedaPractica}
+            practicas={practicas}
+            setPracticas={setPracticas}
+            obtenerMatriculaDefault={obtenerMatriculaAmbulatoria}
+            disabled={guardando}
+            onPendingSearchChange={setBusquedaPracticaPendiente}
+          />
 
           {mostrarMedicacion && (
             <div className="his-card p-5">

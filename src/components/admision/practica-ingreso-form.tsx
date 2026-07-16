@@ -1,23 +1,23 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
-import { X, Loader2, Search } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { Loader2 } from 'lucide-react'
 import { updateIngresoAction } from '@/modules/admision/actions'
 import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
 import type { IngresoDetalle } from '@/modules/admision/types'
-import {
-    ComponenteSelector,
-    calcularTotalSeleccionado,
-    seleccionPorDefecto,
-    type ComponenteSeleccion,
-    type ComponenteValores,
-} from '@/components/ui/componente-selector'
+import { calcularTotalSeleccionado } from '@/components/ui/componente-selector'
 import {
     esSubitemAnestesista,
     esSubitemEspecialista,
     obtenerSubitemsSeleccionados,
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
+import {
+    PracticasAdmisionCard,
+    type PracticaAdmisionItem,
+} from './practicas-admision-card'
+
+const MATRICULA_AMBULATORIO_DEFAULT = 9110
 
 interface PracticaIngresoFormProps {
     ingreso: IngresoDetalle
@@ -25,133 +25,32 @@ interface PracticaIngresoFormProps {
     onCancel: () => void
 }
 
-interface PracticaBusquedaItem {
-    convenioId: number
-    codigo: string
-    descripcion: string
-    valorEspecialista?: number | null
-    valorAnestesista?: number | null
-    valorAyudante?: number | null
-    valorGastos?: number | null
-}
-
-interface PracticaIngresoItem {
-    _key: string
-    convenioId: number
-    codigo: string
-    descripcion: string
-    numeroAutorizacion: string
-    desglose: ComponenteValores
-    seleccionComponentes: ComponenteSeleccion
-    requiereMatriculaEspecialista: boolean
-    requiereMatriculaAnestesista: boolean
-    matriculaEspecialista: number | null
-    matriculaAnestesista: number | null
-}
-
 export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIngresoFormProps) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
-    const [buscandoPractica, setBuscandoPractica] = useState(false)
-    const [busquedaTermino, setBusquedaTermino] = useState('')
-    const [resultados, setResultados] = useState<PracticaBusquedaItem[]>([])
-    const [practicas, setPracticas] = useState<PracticaIngresoItem[]>([])
+    const [practicas, setPracticas] = useState<PracticaAdmisionItem[]>([])
     const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
+    const [busquedaPracticaPendiente, setBusquedaPracticaPendiente] = useState({
+        termino: '',
+        hayResultados: false,
+    })
     const permiteNumeroAutorizacionManual = ingreso.tipoIngresoCodigo === 'AMB'
 
-    const buscarPractica = async (termino: string) => {
-        if (termino.trim().length < 2) {
-            setResultados([])
-            return
-        }
+    const subtipoAdmisionCodigo = ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
+    const etiquetaBusquedaPractica = subtipoAdmisionCodigo === 'CUR' || subtipoAdmisionCodigo === 'SUT'
+        ? 'Buscar codigo de practica...'
+        : 'Buscar practica en nomenclador...'
 
-        const convenioId = ingreso.obraSocialId
-        if (!convenioId) {
-            setResultados([])
-            setError('La admisión no tiene obra social asignada para buscar prácticas')
-            return
-        }
-
-        setError(null)
-        setBuscandoPractica(true)
-        setResultados([])
-        try {
-            const params = new URLSearchParams({
-                q: termino.trim(),
-                convenioId: String(convenioId),
-            })
-            const res = await fetch(`/api/practicas-nomenclador?${params.toString()}`)
-            const json = await res.json()
-            if (json.ok) {
-                const data = Array.isArray(json.data) ? json.data : []
-                setResultados(data as PracticaBusquedaItem[])
-            }
-        } catch (err) {
-            setResultados([])
-            setError('Error en la búsqueda')
-            console.error(err)
-        } finally {
-            setBuscandoPractica(false)
-        }
-    }
-
-    useEffect(() => {
-        if (!ingreso.obraSocialId) {
-            setResultados([])
-            return
-        }
-
-        const termino = busquedaTermino.trim()
-        if (termino.length < 2) {
-            setResultados([])
-            return
-        }
-
-        const timer = setTimeout(() => {
-            void buscarPractica(termino)
-        }, 350)
-
-        return () => clearTimeout(timer)
-    }, [busquedaTermino, ingreso.obraSocialId])
-
-    const agregarPractica = (practica: PracticaBusquedaItem) => {
-        setPracticas((prev) => [
-            ...prev,
-            {
-                _key: `${practica.convenioId}-${practica.codigo}-${Date.now()}`,
-                convenioId: practica.convenioId,
-                codigo: practica.codigo,
-                descripcion: practica.descripcion,
-                numeroAutorizacion: '',
-                desglose: {
-                    valorEspecialista: practica.valorEspecialista ?? null,
-                    valorAyudante: practica.valorAyudante ?? null,
-                    valorAnestesista: practica.valorAnestesista ?? null,
-                    valorGastos: practica.valorGastos ?? null,
-                    valorTotal: null,
-                },
-                seleccionComponentes: seleccionPorDefecto({
-                    valorEspecialista: practica.valorEspecialista ?? null,
-                    valorAyudante: practica.valorAyudante ?? null,
-                    valorAnestesista: practica.valorAnestesista ?? null,
-                    valorGastos: practica.valorGastos ?? null,
-                    valorTotal: null,
-                }),
-                requiereMatriculaEspecialista: Number(practica.valorEspecialista ?? 0) > 0,
-                requiereMatriculaAnestesista: Number(practica.valorAnestesista ?? 0) > 0,
-                matriculaEspecialista: null,
-                matriculaAnestesista: null,
-            },
-        ])
-        setResultados([])
-        setBusquedaTermino('')
-    }
-
-    const quitarPractica = (key: string) => {
-        setPracticas((prev) => prev.filter((x) => x._key !== key))
+    const obtenerMatriculaDefault = () => {
+        const matriculaTratante = ingreso.profesionalTratante?.matricula
+            ?? ingreso.profesionalTratanteFallback?.matricula
+            ?? ingreso.profesionalInterviniente?.matricula
+            ?? null
+        const matriculaGuardia = ingreso.profesionalGuardia?.matricula ?? null
+        return matriculaTratante ?? matriculaGuardia ?? MATRICULA_AMBULATORIO_DEFAULT
     }
 
     const limpiarPedidoLaboratorio = () => {
@@ -164,12 +63,12 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
         const diagnostico = diagnosticoLaboratorio.trim()
 
         if (!numeroProtocolo) {
-            setError('Ingresá el número de protocolo')
+            setError('Ingresa el numero de protocolo')
             return
         }
 
         if (!diagnostico) {
-            setError('Ingresá el diagnóstico')
+            setError('Ingresa el diagnostico')
             return
         }
 
@@ -204,9 +103,14 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (practicas.length === 0) {
-            setError('Debe agregar al menos una práctica')
+            setError('Debe agregar al menos una practica')
             return
         }
+        if (busquedaPracticaPendiente.termino.trim().length >= 2 && busquedaPracticaPendiente.hayResultados) {
+            setError('Seleccione una practica del listado o limpie la busqueda antes de guardar')
+            return
+        }
+
         setError(null)
         startTransition(async () => {
             try {
@@ -228,7 +132,7 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                             codigo: p.codigo.trim(),
                             descripcion: p.descripcion,
                             numeroAutorizacion: permiteNumeroAutorizacionManual
-                                ? (p.numeroAutorizacion.trim() || null)
+                                ? (p.numeroAutorizacion?.trim() || null)
                                 : null,
                             matriculaEspecialista: p.matriculaEspecialista,
                             matriculaAnestesista: p.matriculaAnestesista,
@@ -252,7 +156,7 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                             codigo: p.codigo.trim(),
                             descripcion: p.descripcion,
                             numeroAutorizacion: permiteNumeroAutorizacionManual
-                                ? (p.numeroAutorizacion.trim() || null)
+                                ? (p.numeroAutorizacion?.trim() || null)
                                 : null,
                             matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
                             matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
@@ -293,14 +197,14 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                                 type="text"
                                 value={numeroProtocoloLaboratorio}
                                 onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)}
-                                placeholder="Número de protocolo"
+                                placeholder="Numero de protocolo"
                                 className="rounded border border-gray-300 px-3 py-2 text-sm"
                             />
                             <input
                                 type="text"
                                 value={diagnosticoLaboratorio}
                                 onChange={(e) => setDiagnosticoLaboratorio(e.target.value)}
-                                placeholder="Diagnóstico"
+                                placeholder="Diagnostico"
                                 className="rounded border border-gray-300 px-3 py-2 text-sm"
                             />
                             <div className="md:col-span-2 flex gap-2">
@@ -328,163 +232,22 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                     )}
                 </div>
 
-                {/* Búsqueda de Práctica */}
-                <div>
-                    <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
-                        Buscar Práctica en el Nomenclador
-                    </label>
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={busquedaTermino}
-                            onChange={(e) => setBusquedaTermino(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault()
-                                    void buscarPractica(busquedaTermino)
-                                }
-                            }}
-                            disabled={buscandoPractica || isPending || !ingreso.obraSocialId}
-                            placeholder="Código o descripción..."
-                            className="flex-1 border rounded px-3 py-2 text-sm disabled:bg-gray-100"
-                        />
-                        <button
-                            type="button"
-                            onClick={() => void buscarPractica(busquedaTermino)}
-                            disabled={buscandoPractica || isPending || busquedaTermino.trim().length < 2 || !ingreso.obraSocialId}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                        >
-                            {buscandoPractica ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                                <Search className="h-4 w-4" />
-                            )}
-                            Buscar
-                        </button>
-                    </div>
-                </div>
-
                 {!ingreso.obraSocialId && (
-                    <p className="mb-3 text-xs text-amber-700">
-                        Asignar obra social a la admisión para buscar prácticas
+                    <p className="text-xs text-amber-700">
+                        Asignar obra social a la admision para buscar practicas
                     </p>
                 )}
-                {resultados.length > 0 && (
-                    <div className="mb-3 rounded-md border bg-white shadow-sm max-h-48 overflow-y-auto divide-y">
-                        {resultados.map((p) => (
-                            <button
-                                key={`${p.convenioId}-${p.codigo}`}
-                                type="button"
-                                onClick={() => agregarPractica(p)}
-                                className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors text-sm"
-                            >
-                                <span className="font-mono text-xs text-gray-500 mr-2">{p.codigo}</span>
-                                {p.descripcion}
-                            </button>
-                        ))}
-                    </div>
-                )}
-                {practicas.length > 0 ? (
-                    <div className="space-y-2">
-                        <div className="divide-y border rounded-md">
-                            {practicas.map((p) => (
-                                <div key={p._key} className="px-3 py-3 space-y-3">
-                                    <div className="flex items-center gap-3">
-                                        <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
-                                        <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
-                                        {permiteNumeroAutorizacionManual && (
-                                            <input
-                                                type="text"
-                                                value={p.numeroAutorizacion}
-                                                onChange={(e) => {
-                                                    const value = e.target.value.slice(0, 50)
-                                                    setPracticas((prev) =>
-                                                        prev.map((x) =>
-                                                            x._key === p._key
-                                                                ? {
-                                                                    ...x,
-                                                                    numeroAutorizacion: value,
-                                                                }
-                                                                : x
-                                                        )
-                                                    )
-                                                }}
-                                                className="w-36 rounded border border-gray-300 px-2 py-1 text-xs"
-                                                placeholder="N° Autorización"
-                                            />
-                                        )}
-                                        {p.requiereMatriculaEspecialista && (
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                value={p.matriculaEspecialista ?? ''}
-                                                onChange={(e) => {
-                                                    const value = e.target.value.trim()
-                                                    setPracticas((prev) =>
-                                                        prev.map((x) =>
-                                                            x._key === p._key
-                                                                ? {
-                                                                    ...x,
-                                                                    matriculaEspecialista: value ? Number.parseInt(value, 10) || null : null,
-                                                                }
-                                                                : x
-                                                        )
-                                                    )
-                                                }}
-                                                className="w-24 rounded border border-gray-300 px-2 py-1 text-xs"
-                                                placeholder="Mat. HE"
-                                            />
-                                        )}
-                                        {p.requiereMatriculaAnestesista && (
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                value={p.matriculaAnestesista ?? ''}
-                                                onChange={(e) => {
-                                                    const value = e.target.value.trim()
-                                                    setPracticas((prev) =>
-                                                        prev.map((x) =>
-                                                            x._key === p._key
-                                                                ? {
-                                                                    ...x,
-                                                                    matriculaAnestesista: value ? Number.parseInt(value, 10) || null : null,
-                                                                }
-                                                                : x
-                                                        )
-                                                    )
-                                                }}
-                                                className="w-24 rounded border border-gray-300 px-2 py-1 text-xs"
-                                                placeholder="Mat. HA"
-                                            />
-                                        )}
-                                        <button
-                                            type="button"
-                                            onClick={() => quitarPractica(p._key)}
-                                            className="text-red-400 hover:text-red-600"
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                    <ComponenteSelector
-                                        valores={p.desglose}
-                                        seleccion={p.seleccionComponentes}
-                                        onChange={(nuevaSeleccion) => {
-                                            setPracticas((prev) =>
-                                                prev.map((x) =>
-                                                    x._key === p._key
-                                                        ? { ...x, seleccionComponentes: nuevaSeleccion }
-                                                        : x
-                                                )
-                                            )
-                                        }}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ) : (
-                    <p className="text-xs text-gray-400">No se han agregado prácticas.</p>
-                )}
+
+                <PracticasAdmisionCard
+                    obraSocialId={ingreso.obraSocialId}
+                    etiquetaBusqueda={etiquetaBusquedaPractica}
+                    practicas={practicas}
+                    setPracticas={setPracticas}
+                    obtenerMatriculaDefault={obtenerMatriculaDefault}
+                    disabled={isPending || !ingreso.obraSocialId}
+                    onPendingSearchChange={setBusquedaPracticaPendiente}
+                />
+
                 {error && (
                     <div className="text-xs text-red-600">{error}</div>
                 )}
@@ -500,7 +263,7 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                     <button
                         type="submit"
                         className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                        disabled={isPending}
+                        disabled={isPending || !ingreso.obraSocialId}
                     >
                         Guardar
                     </button>

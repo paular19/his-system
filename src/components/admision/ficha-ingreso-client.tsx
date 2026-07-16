@@ -12,6 +12,7 @@ import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularE
 import { AdmisionEditForm } from './admision-edit-form'
 import { FichaAdmisionPrint } from './ficha-admision-print'
 import { PracticaIngresoForm } from './practica-ingreso-form'
+import { generarOrdenesPendientesAdmision } from './ordenes-auto'
 import type { IngresoDetalle } from '@/modules/admision/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
@@ -932,8 +933,13 @@ export function FichaIngresoClient({
                             ingreso={ingreso}
                             onSuccess={() => {
                                 setEditingCard(null)
-                                // Aquí se podría hacer un refresh de las prácticas
-                                window.location.reload()
+                                void (async () => {
+                                    const autoOrdenResult = await generarOrdenesPendientesAdmision(ingreso.id)
+                                    if (!autoOrdenResult.ok) {
+                                        console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
+                                    }
+                                    router.refresh()
+                                })()
                             }}
                             onCancel={() => setEditingCard(null)}
                         />

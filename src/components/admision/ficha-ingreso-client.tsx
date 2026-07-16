@@ -26,6 +26,22 @@ interface FichaIngresoClientProps {
     puedeGenerarAutorizacion: boolean
 }
 
+type PracticaEditable = {
+    id: number
+    ingresoId: number
+    convenioId: number
+    codigoPractica: string
+    descripcionPractica: string | null
+    fecha: Date | string
+    cantidad: number
+    importeTotal?: number | null
+    numeroAutorizacion: string | null
+    matriculaEspecialista?: number | null
+    matriculaAnestesista?: number | null
+    facturable: boolean
+    facturada?: boolean
+}
+
 const LABEL_ESTADO: Record<string, string> = {
     A: 'Activo',
     E: 'Egresado',
@@ -96,7 +112,7 @@ export function FichaIngresoClient({
     const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
     const [errorEliminarPractica, setErrorEliminarPractica] = useState<string | null>(null)
     const [errorGenerarOrdenes, setErrorGenerarOrdenes] = useState<string | null>(null)
-    const [practicaEditando, setPracticaEditando] = useState<IngresoDetalle['practicas'][number] | null>(null)
+    const [practicaEditando, setPracticaEditando] = useState<PracticaEditable | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})

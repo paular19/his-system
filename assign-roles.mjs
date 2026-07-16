@@ -47,6 +47,9 @@ if (!CLERK_SECRET_KEY) {
 
 // Asignación de roles por email
 const ROLES_POR_EMAIL = {
+  // ADMISION
+  'ficacode@gmail.com': 'ADMISION',
+
   // OPERADOR: todos los módulos excepto facturación
   'barrionuevodamarisbelen@gmail.com': 'OPERADOR',
   'emilio_xeneize_22@hotmail.com.ar': 'OPERADOR',

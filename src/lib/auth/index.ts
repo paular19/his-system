@@ -21,6 +21,32 @@ type SessionClaimsLike = {
   metadata?: unknown
 }
 
+const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
+  // ADMISION
+  'ficacode@gmail.com': ROLES.ADMISION,
+
+  // ADMIN
+  'ivictoria123@hotmail.com': ROLES.ADMIN,
+  'marcelalejandra2015@gmail.com': ROLES.ADMIN,
+  'ramospaula1996@gmail.com': ROLES.ADMIN,
+
+  // FACTURACION
+  'marianacanaza24@gmail.com': ROLES.FACTURACION,
+  'kmontano137@gmail.com': ROLES.FACTURACION,
+  'serapiogabriela40@gmail.com': ROLES.FACTURACION,
+
+  // OPERADOR
+  'barrionuevodamarisbelen@gmail.com': ROLES.OPERADOR,
+  'emilio_xeneize_22@hotmail.com.ar': ROLES.OPERADOR,
+  'ivanagtarcaya78@gmail.com': ROLES.OPERADOR,
+  'lucianolozanoj2@gmail.com': ROLES.OPERADOR,
+  'enahirtni@gmail.com': ROLES.OPERADOR,
+  'eduardogutierrez0770@gmail.com': ROLES.OPERADOR,
+  'tarosaicha1812@gmail.com': ROLES.OPERADOR,
+  'altamirano97.leandro@gmail.com': ROLES.OPERADOR,
+  'zeballosmonika@gmail.com': ROLES.OPERADOR,
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
@@ -43,6 +69,15 @@ function resolverMetadataDesdeClaims(claims: unknown): Record<string, unknown> {
   return {}
 }
 
+function resolverRolFallbackPorEmail(email: string | undefined): RolHIS {
+  const normalized = email?.trim().toLowerCase()
+  if (normalized && ROLES_POR_EMAIL_FALLBACK[normalized]) {
+    return ROLES_POR_EMAIL_FALLBACK[normalized]
+  }
+  // Fallback seguro para usuarios sin rol en Clerk.
+  return ROLES.OPERADOR
+}
+
 function resolverRolDesdeClaims(claims: unknown): RolHIS {
   const metadata = resolverMetadataDesdeClaims(claims)
   const rolMetadata = asString(metadata.rol)
@@ -52,7 +87,7 @@ function resolverRolDesdeClaims(claims: unknown): RolHIS {
     return rolMetadata as RolHIS
   }
 
-  return ROLES.ADMISION
+  return resolverRolFallbackPorEmail(resolverEmailDesdeClaims(claims))
 }
 
 function resolverCodigoUsuarioDesdeClaims(claims: unknown, userId: string): string {
@@ -79,8 +114,8 @@ function resolverRolDesdeMetadata(user: Awaited<ReturnType<typeof currentUser>>)
   if (rolMetadata && rolesValidos.includes(rolMetadata)) {
     return rolMetadata as RolHIS
   }
-  // Fallback por defecto
-  return ROLES.ADMISION
+  const emailPrincipal = user?.emailAddresses?.[0]?.emailAddress
+  return resolverRolFallbackPorEmail(emailPrincipal)
 }
 
 function normalizarIpDesdeHeader(raw: string | null): string | undefined {

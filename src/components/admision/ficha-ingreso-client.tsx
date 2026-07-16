@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
 import { updateIngresoAction } from '@/modules/admision/actions'
-import { ChevronRight, User, Pencil, FileText, Printer, Save, X, Loader2, AlertTriangle } from 'lucide-react'
+import { ChevronRight, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import { AdmisionEditForm } from './admision-edit-form'
@@ -49,10 +49,6 @@ function normalizarTexto(value: string | null | undefined): string {
         .trim()
 }
 
-function numeroAutorizacionValida(value: string | null | undefined): boolean {
-    return (value?.trim().length ?? 0) > 0
-}
-
 function DataItem({ label, value }: { label: string; value?: string | null }) {
     if (!value) return null
     return (
@@ -84,15 +80,11 @@ export function FichaIngresoClient({
     const [cardValues, setCardValues] = useState<any>({})
     const [practicasIngreso, setPracticasIngreso] = useState(ingreso.practicas)
     const estadoIngreso = (ingreso.estado ?? '').trim().toUpperCase()
-    const ingresoHabilitadoAutorizacion = estadoIngreso !== 'X'
-    const tienePracticas = practicasIngreso.length > 0
-    const puedeIngresarFlujoAutorizacion = ingresoHabilitadoAutorizacion && tienePracticas
     const practicasPendientes = practicasIngreso.filter(
-        (p) => (p.ordenPractica?.length ?? 0) === 0 && !numeroAutorizacionValida(p.numeroAutorizacion)
+        (p) => (p.ordenPractica?.length ?? 0) === 0
     )
-    const tienePracticasPendientes = practicasPendientes.length > 0
     const practicasAutorizadas = practicasIngreso.filter(
-        (p) => (p.ordenPractica?.length ?? 0) > 0 || numeroAutorizacionValida(p.numeroAutorizacion)
+        (p) => (p.ordenPractica?.length ?? 0) > 0
     )
     const [filtroPracticas, setFiltroPracticas] = useState('')
     const [paginaPendientes, setPaginaPendientes] = useState(1)
@@ -194,11 +186,6 @@ export function FichaIngresoClient({
         ?? ingreso.evoluciones?.[0]?.profesional?.matricula
         ?? ingreso.profesionalTratanteFallback?.matricula
         ?? null
-    const motivoBotonAutorizacionDeshabilitado = !ingresoHabilitadoAutorizacion
-        ? 'No disponible para ingresos anulados'
-        : !tienePracticas
-            ? 'No hay prácticas cargadas en la admisión'
-            : ''
     const esIngresoAmbulatorio = ingreso.tipoIngresoCodigo === 'AMB'
     const esGuardia = ingreso.ingresoSubtipo?.subtipoAdmisionCodigo === 'GUA'
     const esPracticaAmbulatoria =
@@ -903,27 +890,6 @@ export function FichaIngresoClient({
                                 >
                                     + Agregar práctica
                                 </button>
-                            )}
-                            {puedeGenerarAutorizacion && (
-                                puedeIngresarFlujoAutorizacion ? (
-                                    <a
-                                        href={`/dashboard/ambulatorio/nueva?ingresoId=${ingreso.id}`}
-                                        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
-                                    >
-                                        <Save className="h-4 w-4" />
-                                        Generar autorización
-                                    </a>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        disabled
-                                        title={motivoBotonAutorizacionDeshabilitado}
-                                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-400 cursor-not-allowed"
-                                    >
-                                        <Save className="h-4 w-4" />
-                                        Generar autorización
-                                    </button>
-                                )
                             )}
                         </div>
                     </div>

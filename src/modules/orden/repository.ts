@@ -277,8 +277,7 @@ export async function crearOrdenInterna(
               importeTotal: item.importeTotal ?? null,
               porcentajeCargoPac: item.porcentajeCargoPac ?? null,
               fecha: fechaItem,
-              numeroAutorizacion:
-                item.numeroAutorizacion?.trim() || generarCodigoBarras(PUESTO_NUMERO, numero, idx + 1),
+              numeroAutorizacion: normalizarNumeroAutorizacion(item.numeroAutorizacion)?.slice(0, 15) ?? null,
             }
           }),
         },

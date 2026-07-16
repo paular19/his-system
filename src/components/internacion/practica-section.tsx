@@ -79,10 +79,6 @@ function normalizarBusquedaLista(value: string): string {
         .trim()
 }
 
-function numeroAutorizacionValida(value: string | null | undefined): boolean {
-    return (value?.trim().length ?? 0) > 0
-}
-
 function practicaActiva(estado: string | null | undefined): boolean {
     return (estado?.trim().toUpperCase() ?? 'A') !== 'X'
 }
@@ -1084,10 +1080,10 @@ export function PracticaSection({
 
     const practicasVigentes = practicas.filter((p) => practicaActiva(p.estado))
     const practicasPendientes = practicasVigentes.filter(
-        (p) => (p.ordenPractica?.length ?? 0) === 0 && !numeroAutorizacionValida(p.numeroAutorizacion)
+        (p) => (p.ordenPractica?.length ?? 0) === 0
     )
     const practicasAutorizadas = practicasVigentes.filter(
-        (p) => (p.ordenPractica?.length ?? 0) > 0 || numeroAutorizacionValida(p.numeroAutorizacion)
+        (p) => (p.ordenPractica?.length ?? 0) > 0
     )
     const idsPendientesSeleccionadas = useMemo(() => {
         const pendientesIds = new Set(practicasPendientes.map((p) => p.id))
@@ -1900,6 +1896,11 @@ export function PracticaSection({
                                 ) : (
                                     ordenesAutorizadasPaginadas.map((grupo) => {
                                         const destinoAutorizada = obtenerDestinoGrupoPracticasAutorizadas(grupo)
+                                        const destinoOrdenImpresion =
+                                            grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                                ? `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(`${grupo.puestoNumero}-${grupo.ordenNumero}`)}`
+                                                : null
+                                        const destinoAbrir = destinoOrdenImpresion ?? destinoAutorizada
                                         const limitePracticas = 3
                                         const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
                                         const abierta = ordenesAutorizadasAbiertas[grupo.key] ?? false
@@ -1935,12 +1936,14 @@ export function PracticaSection({
                                                     <div className="mt-2 grid gap-3 md:grid-cols-2">
                                                         <div className="space-y-1.5 text-emerald-900">
                                                             <div className="flex items-center gap-2 flex-wrap">
-                                                                {destinoAutorizada && (
+                                                                {destinoAbrir && (
                                                                     <Link
-                                                                        href={destinoAutorizada}
+                                                                        href={destinoAbrir}
+                                                                        target={destinoOrdenImpresion ? '_blank' : undefined}
+                                                                        rel={destinoOrdenImpresion ? 'noopener noreferrer' : undefined}
                                                                         className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
                                                                     >
-                                                                        Abrir
+                                                                        {destinoOrdenImpresion ? 'Abrir orden' : 'Abrir'}
                                                                     </Link>
                                                                 )}
                                                             </div>

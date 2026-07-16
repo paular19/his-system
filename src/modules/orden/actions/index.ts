@@ -318,7 +318,6 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     const practicasPendientes = practicas.filter((p) => {
       const estado = (p.estado ?? 'A').trim().toUpperCase()
       if (estado === 'X') return false
-      if ((p.numeroAutorizacion?.trim().length ?? 0) > 0) return false
       return (p.ordenPractica?.length ?? 0) === 0
     })
 

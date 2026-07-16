@@ -10,7 +10,6 @@ type PracticaAdmisionApi = {
 function estaPendienteDeOrden(practica: PracticaAdmisionApi): boolean {
   const estado = (practica.estado ?? 'A').trim().toUpperCase()
   if (estado === 'X') return false
-  if ((practica.numeroAutorizacion?.trim().length ?? 0) > 0) return false
   return (practica.ordenPractica?.length ?? 0) === 0
 }
 

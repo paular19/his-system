@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { ActualizarPracticaSchema } from '@/modules/internacion/schemas'
 import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
 import { updateIngresoAction } from '@/modules/admision/actions'
 import { ChevronRight, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle } from 'lucide-react'
@@ -95,6 +96,8 @@ export function FichaIngresoClient({
     const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
     const [errorEliminarPractica, setErrorEliminarPractica] = useState<string | null>(null)
     const [errorGenerarOrdenes, setErrorGenerarOrdenes] = useState<string | null>(null)
+    const [practicaEditando, setPracticaEditando] = useState<IngresoDetalle['practicas'][number] | null>(null)
+    const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
@@ -250,9 +253,9 @@ export function FichaIngresoClient({
     }
 
     const recargarPracticasIngreso = async () => {
-        const res = await fetch(`/api/admision/${ingreso.id}`, { cache: 'no-store' })
+        const res = await fetch(`/api/admision/${ingreso.id}/practicas`, { cache: 'no-store' })
         const json = await res.json().catch(() => null)
-        const practicasActualizadas = Array.isArray(json?.data?.practicas) ? json.data.practicas : []
+        const practicasActualizadas = Array.isArray(json?.data) ? json.data : []
         setPracticasIngreso(practicasActualizadas)
     }
 
@@ -277,12 +280,58 @@ export function FichaIngresoClient({
 
             if (imprimirDespues && result.ordenes.length > 0) {
                 const ordenesParam = result.ordenes.map((o) => `${o.puestoNumero}-${o.numero}`).join(',')
-                router.push(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`)
+                window.open(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`, '_blank', 'noopener,noreferrer')
             }
         } catch {
             setErrorGenerarOrdenes('Error al generar órdenes')
         } finally {
             setGenerandoOrdenes(false)
+        }
+    }
+
+    const guardarEdicionPractica = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault()
+        if (!practicaEditando) return
+
+        setGuardandoPracticaEditando(true)
+        try {
+            const numeroAutorizacion = practicaEditando.numeroAutorizacion?.trim() || null
+
+            const payload = ActualizarPracticaSchema.parse({
+                convenioId: practicaEditando.convenioId,
+                codigoPractica: practicaEditando.codigoPractica.trim(),
+                descripcionPractica: practicaEditando.descripcionPractica,
+                fecha: new Date(practicaEditando.fecha),
+                cantidad: Number(practicaEditando.cantidad),
+                numeroAutorizacion,
+                facturable: Boolean(practicaEditando.facturable),
+                matriculaEspecialista: practicaEditando.matriculaEspecialista ?? null,
+                matriculaAnestesista: practicaEditando.matriculaAnestesista ?? null,
+                importeBaseUnitario:
+                    practicaEditando.importeTotal != null && Number(practicaEditando.cantidad) > 0
+                        ? Number(practicaEditando.importeTotal) / Number(practicaEditando.cantidad)
+                        : null,
+            })
+
+            const res = await fetch(`/api/internacion/${ingreso.id}/practicas/${practicaEditando.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+
+            const json = await res.json().catch(() => null)
+            if (!res.ok) {
+                setErrorGenerarOrdenes(json?.error ?? 'No se pudo guardar la práctica')
+                return
+            }
+
+            await recargarPracticasIngreso()
+            setPracticaEditando(null)
+            setErrorGenerarOrdenes(null)
+        } catch {
+            setErrorGenerarOrdenes('No se pudo guardar la práctica')
+        } finally {
+            setGuardandoPracticaEditando(false)
         }
     }
 
@@ -1015,6 +1064,67 @@ export function FichaIngresoClient({
                                         <span>{errorGenerarOrdenes}</span>
                                     </div>
                                 )}
+                                {practicaEditando && (
+                                    <form
+                                        onSubmit={(e) => void guardarEdicionPractica(e)}
+                                        className="mb-3 rounded-md border border-blue-200 bg-blue-50/60 p-3"
+                                    >
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                                            <div>
+                                                <label className="block text-[11px] text-gray-600 mb-1">Código</label>
+                                                <input
+                                                    type="text"
+                                                    value={practicaEditando.codigoPractica.trim()}
+                                                    disabled
+                                                    className="w-full rounded border border-gray-300 px-2 py-1 text-xs bg-gray-100"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[11px] text-gray-600 mb-1">Cantidad</label>
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    value={practicaEditando.cantidad}
+                                                    onChange={(e) => setPracticaEditando((prev) => prev ? {
+                                                        ...prev,
+                                                        cantidad: Number(e.target.value) > 0 ? Number(e.target.value) : 1,
+                                                    } : prev)}
+                                                    className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[11px] text-gray-600 mb-1">N° autorización</label>
+                                                <input
+                                                    type="text"
+                                                    value={practicaEditando.numeroAutorizacion ?? ''}
+                                                    onChange={(e) => setPracticaEditando((prev) => prev ? {
+                                                        ...prev,
+                                                        numeroAutorizacion: e.target.value,
+                                                    } : prev)}
+                                                    className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                                                    placeholder="Opcional"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="mt-2 flex items-center gap-2">
+                                            <button
+                                                type="submit"
+                                                disabled={guardandoPracticaEditando}
+                                                className="rounded-md border border-blue-200 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                                            >
+                                                {guardandoPracticaEditando ? 'Guardando...' : 'Guardar edición'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPracticaEditando(null)}
+                                                disabled={guardandoPracticaEditando}
+                                                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                            >
+                                                Cancelar
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
                                 {errorEliminarPractica && (
                                     <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
                                         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -1207,6 +1317,23 @@ export function FichaIngresoClient({
                                                                         >
                                                                             {destinoOrdenImpresion ? 'Abrir orden' : 'Abrir'}
                                                                         </Link>
+                                                                    )}
+                                                                    {puedeModificar && grupo.practicas.some((practica) => !Boolean(practica.facturada)) && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                const editable = grupo.practicas.find((practica) => !Boolean(practica.facturada))
+                                                                                if (editable) {
+                                                                                    setPracticaEditando({
+                                                                                        ...editable,
+                                                                                        numeroAutorizacion: grupo.numeroAutorizacion ?? editable.numeroAutorizacion ?? '',
+                                                                                    })
+                                                                                }
+                                                                            }}
+                                                                            className="inline-flex items-center rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50"
+                                                                        >
+                                                                            Editar práctica
+                                                                        </button>
                                                                     )}
                                                                 </div>
                                                                 <p className="text-emerald-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>

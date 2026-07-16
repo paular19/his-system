@@ -14,9 +14,9 @@ function estaPendienteDeOrden(practica: PracticaAdmisionApi): boolean {
 }
 
 async function obtenerPracticasIngreso(ingresoId: number): Promise<PracticaAdmisionApi[]> {
-  const res = await fetch(`/api/admision/${ingresoId}`, { cache: 'no-store' })
+  const res = await fetch(`/api/admision/${ingresoId}/practicas`, { cache: 'no-store' })
   const json = await res.json().catch(() => null)
-  const practicas = Array.isArray(json?.data?.practicas) ? json.data.practicas : []
+  const practicas = Array.isArray(json?.data) ? json.data : []
   return practicas as PracticaAdmisionApi[]
 }
 

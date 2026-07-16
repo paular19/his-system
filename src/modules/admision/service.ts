@@ -524,6 +524,14 @@ export async function obtenerIngreso(
   }
 }
 
+export async function obtenerPracticasIngreso(id: number): Promise<IngresoDetalle['practicas']> {
+  const practicas = await repo.obtenerPracticasIngresoPorId(id)
+  if (!practicas) {
+    throw new Error(`Ingreso con ID ${id} no encontrado`)
+  }
+  return practicas
+}
+
 export async function actualizarIngreso(
   id: number,
   data: ActualizarIngresoInput,

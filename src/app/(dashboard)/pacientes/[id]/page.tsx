@@ -41,8 +41,8 @@ export default async function FichaPacientePage({ params }: PageProps) {
   const edad = calcularEdad(paciente.fechaNacimiento)
   const puedeModificar = tienePermiso(usuario.rol, 'PACIENTES', 'MODIFICAR')
 
-  // Optimizado: limitar a últimos 10 ingresos y hacer query más selectiva
-  const ingresos = await prisma.ingreso.findMany({
+  // Evita un panic conocido de Prisma en prod al ordenar relaciones anidadas
+  const ingresosBase = await prisma.ingreso.findMany({
     where: { pacienteId: paciente.id },
     orderBy: [{ fechaIngreso: 'desc' }, { id: 'desc' }],
     take: 10,
@@ -66,24 +66,61 @@ export default async function FichaPacientePage({ params }: PageProps) {
       obraSocial: { select: { nombre: true } },
       plan: { select: { descripcion: true } },
       cama: { select: { identificador: true, sector: true, habitacion: true } },
-      ingresoPatologias: {
-        select: { id: true, descripcion: true, fecha: true },
-        orderBy: { fecha: 'desc' },
-      },
-      practicas: {
-        where: { OR: [{ estado: 'A' }, { estado: null }] },
-        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+    },
+  })
+
+  const ingresoIds = ingresosBase.map((ing) => ing.id)
+
+  const [patologiasRows, practicasRows] = ingresoIds.length > 0
+    ? await prisma.$transaction([
+      prisma.ingresoPatologia.findMany({
+        where: { ingresoId: { in: ingresoIds } },
         select: {
           id: true,
+          ingresoId: true,
+          descripcion: true,
+          fecha: true,
+        },
+        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+      }),
+      prisma.practica.findMany({
+        where: {
+          ingresoId: { in: ingresoIds },
+          OR: [{ estado: 'A' }, { estado: null }],
+        },
+        select: {
+          id: true,
+          ingresoId: true,
           codigoPractica: true,
           cantidad: true,
           fecha: true,
           numeroAutorizacion: true,
           nomencladorPractica: { select: { descripcion: true } },
         },
-      },
-    },
-  })
+        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+      }),
+    ])
+    : [[], []]
+
+  const patologiasByIngreso = new Map<number, Array<{ id: number; descripcion: string | null; fecha: Date }>>()
+  for (const row of patologiasRows) {
+    const lista = patologiasByIngreso.get(row.ingresoId) ?? []
+    lista.push({ id: row.id, descripcion: row.descripcion, fecha: row.fecha })
+    patologiasByIngreso.set(row.ingresoId, lista)
+  }
+
+  const practicasByIngreso = new Map<number, Array<(typeof practicasRows)[number]>>()
+  for (const row of practicasRows) {
+    const lista = practicasByIngreso.get(row.ingresoId) ?? []
+    lista.push(row)
+    practicasByIngreso.set(row.ingresoId, lista)
+  }
+
+  const ingresos = ingresosBase.map((ing) => ({
+    ...ing,
+    ingresoPatologias: patologiasByIngreso.get(ing.id) ?? [],
+    practicas: practicasByIngreso.get(ing.id) ?? [],
+  }))
 
   const ingresosPrint = ingresos.map((ing) => ({
     ...ing,

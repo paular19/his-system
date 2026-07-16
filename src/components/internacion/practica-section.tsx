@@ -592,18 +592,60 @@ export function PracticaSection({
 
     const handleGuardar = async () => {
         setError(null)
-        if (!practicaSeleccionada && !busqueda.trim()) {
+        let practicaBase = practicaSeleccionada
+        if (!practicaBase && !busqueda.trim()) {
             return setError('Seleccioná una práctica del nomenclador o escribí un código')
         }
-        if ((practicaSeleccionada?.valorEspecialista != null) && !matriculaEspecialista.trim()) {
+
+        if (!practicaBase) {
+            const codigoManual = busqueda.trim().toUpperCase()
+            if (!/^[A-Z0-9]{1,8}$/.test(codigoManual)) {
+                return setError('El código manual debe tener entre 1 y 8 caracteres alfanuméricos')
+            }
+
+            setBuscando(true)
+            try {
+                const qs = new URLSearchParams({ q: codigoManual })
+                if (convenioId) qs.set('convenioId', String(convenioId))
+
+                const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
+                const json = await res.json().catch(() => null)
+                const items: NomencladorItem[] = Array.isArray(json?.data) ? json.data : []
+                const matchExacto = items.find(
+                    (item) => item.codigo.trim().toUpperCase() === codigoManual
+                )
+
+                if (!matchExacto) {
+                    return setError('Seleccioná una práctica válida del listado de nomenclador antes de guardar')
+                }
+
+                practicaBase = matchExacto
+                setPracticaSeleccionada(matchExacto)
+                setBusqueda(matchExacto.descripcion)
+                setResultados([])
+                setComponenteSeleccion(seleccionPorDefecto({
+                    valorEspecialista: matchExacto.valorEspecialista,
+                    valorAyudante: matchExacto.valorAyudante,
+                    valorAnestesista: matchExacto.valorAnestesista,
+                    valorGastos: matchExacto.valorGastos,
+                    valorTotal: matchExacto.valor,
+                }))
+            } catch {
+                return setError('No se pudo validar la práctica en nomenclador')
+            } finally {
+                setBuscando(false)
+            }
+        }
+
+        if ((practicaBase?.valorEspecialista != null) && !matriculaEspecialista.trim()) {
             return setError('Ingrese matrícula para honorario especialista')
         }
-        if ((practicaSeleccionada?.valorAnestesista != null) && !matriculaAnestesista.trim()) {
+        if ((practicaBase?.valorAnestesista != null) && !matriculaAnestesista.trim()) {
             return setError('Ingrese matrícula para honorario anestesista')
         }
 
-        const requiereEspecialista = practicaSeleccionada?.valorEspecialista != null
-        const requiereAnestesista = practicaSeleccionada?.valorAnestesista != null
+        const requiereEspecialista = practicaBase?.valorEspecialista != null
+        const requiereAnestesista = practicaBase?.valorAnestesista != null
         const cantidadGeneral = Number.parseInt(cantidadGeneralPractica, 10)
         const cantidadGeneralFinal = crearPracticaTodaJunta ? cantidadGeneral : 1
 
@@ -615,9 +657,9 @@ export function PracticaSection({
         }
 
         const body = {
-            convenioId: practicaSeleccionada?.convenioId ?? convenioId ?? 0,
-            codigoPractica: practicaSeleccionada?.codigo ?? busqueda.trim().slice(0, 8).toUpperCase(),
-            descripcionPractica: practicaSeleccionada?.descripcion ?? busqueda.trim(),
+            convenioId: practicaBase?.convenioId ?? convenioId ?? 0,
+            codigoPractica: practicaBase?.codigo ?? busqueda.trim().slice(0, 8).toUpperCase(),
+            descripcionPractica: practicaBase?.descripcion ?? busqueda.trim(),
             fecha: new Date(fecha).toISOString(),
             cantidad: cantidadGeneralFinal,
             numeroAutorizacion: numeroAutorizacion.trim() || null,
@@ -630,14 +672,14 @@ export function PracticaSection({
                     ? parseInt(matriculaAnestesista, 10) || null
                     : null,
             facturable: true,
-            importeBaseUnitario: practicaSeleccionada
+            importeBaseUnitario: practicaBase
                 ? (() => {
                     const vals: ComponenteValores = {
-                        valorEspecialista: practicaSeleccionada.valorEspecialista,
-                        valorAyudante: practicaSeleccionada.valorAyudante,
-                        valorAnestesista: practicaSeleccionada.valorAnestesista,
-                        valorGastos: practicaSeleccionada.valorGastos,
-                        valorTotal: practicaSeleccionada.valor,
+                        valorEspecialista: practicaBase.valorEspecialista,
+                        valorAyudante: practicaBase.valorAyudante,
+                        valorAnestesista: practicaBase.valorAnestesista,
+                        valorGastos: practicaBase.valorGastos,
+                        valorTotal: practicaBase.valor,
                     }
                     const t = calcularTotalSeleccionado(vals, componenteSeleccion)
                     return t > 0 ? t : null
@@ -648,12 +690,12 @@ export function PracticaSection({
         const subitemsSeleccionados = subitemsSeleccionadosForm
 
         const clasificacionManualDefault =
-            practicaSeleccionada && practicaSeleccionada.valorAnestesista != null && practicaSeleccionada.valorEspecialista == null
+            practicaBase && practicaBase.valorAnestesista != null && practicaBase.valorEspecialista == null
                 ? 'HA'
                 : 'HE'
 
         const entradasCrear = (() => {
-            if (!(subitemsSeleccionados.length > 0 && practicaSeleccionada)) {
+            if (!(subitemsSeleccionados.length > 0 && practicaBase)) {
                 return [{ payload: body, clasificacion: clasificacionManualDefault }]
             }
 
@@ -677,10 +719,10 @@ export function PracticaSection({
 
             return subitemsSeleccionados.map((subitem, idx) => {
                 const valorUnitario = valorUnitarioPorSubitem(subitem, {
-                    valorEspecialista: practicaSeleccionada.valorEspecialista,
-                    valorAyudante: practicaSeleccionada.valorAyudante,
-                    valorAnestesista: practicaSeleccionada.valorAnestesista,
-                    valorGastos: practicaSeleccionada.valorGastos,
+                    valorEspecialista: practicaBase.valorEspecialista,
+                    valorAyudante: practicaBase.valorAyudante,
+                    valorAnestesista: practicaBase.valorAnestesista,
+                    valorGastos: practicaBase.valorGastos,
                 })
                 const clasificacionIndividual =
                     normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem

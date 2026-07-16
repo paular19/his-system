@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { flushSync } from 'react-dom'
 import { Plus, Trash2, Search, Loader2 } from 'lucide-react'
 import { BuscarPaciente } from './buscar-paciente'
 import { createIngresoAction } from '@/modules/admision/actions'
@@ -328,34 +329,36 @@ export function AdmisionForm({
   }) => {
     const matriculaAmbulatoria = obtenerMatriculaAmbulatoria()
 
-    setPracticas((prev) => [
-      ...prev,
-      {
-        tempId: crearTempId(),
-        convenioId: practica.convenioId,
-        codigo: practica.codigo,
-        descripcion: practica.descripcion,
-        numeroAutorizacion: '',
-        desglose: {
-          valorEspecialista: practica.valorEspecialista ?? null,
-          valorAyudante: practica.valorAyudante ?? null,
-          valorAnestesista: practica.valorAnestesista ?? null,
-          valorGastos: practica.valorGastos ?? null,
-          valorTotal: null,
+    flushSync(() => {
+      setPracticas((prev) => [
+        ...prev,
+        {
+          tempId: crearTempId(),
+          convenioId: practica.convenioId,
+          codigo: practica.codigo,
+          descripcion: practica.descripcion,
+          numeroAutorizacion: '',
+          desglose: {
+            valorEspecialista: practica.valorEspecialista ?? null,
+            valorAyudante: practica.valorAyudante ?? null,
+            valorAnestesista: practica.valorAnestesista ?? null,
+            valorGastos: practica.valorGastos ?? null,
+            valorTotal: null,
+          },
+          seleccionComponentes: seleccionPorDefecto({
+            valorEspecialista: practica.valorEspecialista ?? null,
+            valorAyudante: practica.valorAyudante ?? null,
+            valorAnestesista: practica.valorAnestesista ?? null,
+            valorGastos: practica.valorGastos ?? null,
+            valorTotal: null,
+          }),
+          requiereMatriculaEspecialista: practica.valorEspecialista != null,
+          requiereMatriculaAnestesista: practica.valorAnestesista != null,
+          matriculaEspecialista: practica.valorEspecialista != null ? matriculaAmbulatoria : null,
+          matriculaAnestesista: practica.valorAnestesista != null ? matriculaAmbulatoria : null,
         },
-        seleccionComponentes: seleccionPorDefecto({
-          valorEspecialista: practica.valorEspecialista ?? null,
-          valorAyudante: practica.valorAyudante ?? null,
-          valorAnestesista: practica.valorAnestesista ?? null,
-          valorGastos: practica.valorGastos ?? null,
-          valorTotal: null,
-        }),
-        requiereMatriculaEspecialista: practica.valorEspecialista != null,
-        requiereMatriculaAnestesista: practica.valorAnestesista != null,
-        matriculaEspecialista: practica.valorEspecialista != null ? matriculaAmbulatoria : null,
-        matriculaAnestesista: practica.valorAnestesista != null ? matriculaAmbulatoria : null,
-      },
-    ])
+      ])
+    })
     setResultadosPractica([])
     setTerminoBusquedaPractica('')
   }
@@ -451,6 +454,12 @@ export function AdmisionForm({
 
     if (!subtipoAdmisionCodigo) {
       setError('Debe seleccionar un tipo de admisión')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
+    if (terminoBusquedaPractica.trim().length >= 2 && resultadosPractica.length > 0) {
+      setError('Seleccione una práctica del listado o limpie la búsqueda antes de registrar la admisión')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }

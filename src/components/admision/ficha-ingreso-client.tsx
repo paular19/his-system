@@ -92,7 +92,9 @@ export function FichaIngresoClient({
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
+    const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
     const [errorEliminarPractica, setErrorEliminarPractica] = useState<string | null>(null)
+    const [errorGenerarOrdenes, setErrorGenerarOrdenes] = useState<string | null>(null)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
@@ -247,6 +249,43 @@ export function FichaIngresoClient({
         })
     }
 
+    const recargarPracticasIngreso = async () => {
+        const res = await fetch(`/api/admision/${ingreso.id}`, { cache: 'no-store' })
+        const json = await res.json().catch(() => null)
+        const practicasActualizadas = Array.isArray(json?.data?.practicas) ? json.data.practicas : []
+        setPracticasIngreso(practicasActualizadas)
+    }
+
+    const generarOrdenesSeleccionadas = async (imprimirDespues: boolean) => {
+        const seleccionActual = [...practicasSeleccionadas]
+        if (seleccionActual.length === 0) return
+
+        setErrorGenerarOrdenes(null)
+        setGenerandoOrdenes(true)
+        try {
+            const result = await generarOrdenesPendientesAdmision(ingreso.id, {
+                soloIds: new Set(seleccionActual),
+            })
+
+            if (!result.ok) {
+                setErrorGenerarOrdenes(result.error)
+                return
+            }
+
+            await recargarPracticasIngreso()
+            setPracticasSeleccionadas((prev) => prev.filter((id) => !seleccionActual.includes(id)))
+
+            if (imprimirDespues && result.ordenes.length > 0) {
+                const ordenesParam = result.ordenes.map((o) => `${o.puestoNumero}-${o.numero}`).join(',')
+                router.push(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`)
+            }
+        } catch {
+            setErrorGenerarOrdenes('Error al generar órdenes')
+        } finally {
+            setGenerandoOrdenes(false)
+        }
+    }
+
     const confirmarEliminarSeleccionadas = async () => {
         const seleccionActual = [...practicasSeleccionadas]
         if (seleccionActual.length === 0) return
@@ -309,7 +348,6 @@ export function FichaIngresoClient({
             if (exitosas.length > 0) {
                 setPracticasIngreso((prev) => prev.filter((p) => !exitosas.includes(p.id)))
                 setPracticasSeleccionadas((prev) => prev.filter((id) => !exitosas.includes(id)))
-                router.refresh()
             }
 
             if (fallidas.length === 0) {
@@ -900,11 +938,7 @@ export function FichaIngresoClient({
                             onSuccess={() => {
                                 setEditingCard(null)
                                 void (async () => {
-                                    const autoOrdenResult = await generarOrdenesPendientesAdmision(ingreso.id)
-                                    if (!autoOrdenResult.ok) {
-                                        console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
-                                    }
-                                    router.refresh()
+                                    await recargarPracticasIngreso()
                                 })()
                             }}
                             onCancel={() => setEditingCard(null)}
@@ -947,6 +981,22 @@ export function FichaIngresoClient({
                                         </label>
                                         <button
                                             type="button"
+                                            onClick={() => void generarOrdenesSeleccionadas(false)}
+                                            disabled={generandoOrdenes || practicasSeleccionadas.length === 0}
+                                            className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                        >
+                                            {generandoOrdenes ? 'Generando...' : `Generar órdenes (${practicasSeleccionadas.length})`}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => void generarOrdenesSeleccionadas(true)}
+                                            disabled={generandoOrdenes || practicasSeleccionadas.length === 0}
+                                            className="inline-flex items-center rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                                        >
+                                            Generar órdenes e imprimir
+                                        </button>
+                                        <button
+                                            type="button"
                                             onClick={() => {
                                                 if (practicasSeleccionadas.length === 0) return
                                                 setErrorEliminarPractica(null)
@@ -957,6 +1007,12 @@ export function FichaIngresoClient({
                                         >
                                             Eliminar seleccionadas ({practicasSeleccionadas.length})
                                         </button>
+                                    </div>
+                                )}
+                                {errorGenerarOrdenes && (
+                                    <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
+                                        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                                        <span>{errorGenerarOrdenes}</span>
                                     </div>
                                 )}
                                 {errorEliminarPractica && (

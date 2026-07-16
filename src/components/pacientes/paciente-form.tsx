@@ -16,7 +16,6 @@ type PacienteFormDefaults = {
   numeroDocumento?: number | null
   fechaNacimiento?: string | null
   sexo?: string | null
-  estadoCivil?: string | null
   domicilio?: string | null
   telefonoFijo?: string | null
   telefonoLaboral?: string | null
@@ -285,22 +284,6 @@ export function PacienteForm({
             )}
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Estado Civil
-            </label>
-            <select
-              {...register('estadoCivil')}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value="">-- Seleccionar --</option>
-              <option value="S">Soltero/a</option>
-              <option value="C">Casado/a</option>
-              <option value="D">Divorciado/a</option>
-              <option value="V">Viudo/a</option>
-              <option value="U">Unión convivencial</option>
-            </select>
-          </div>
         </div>
       </div>
 

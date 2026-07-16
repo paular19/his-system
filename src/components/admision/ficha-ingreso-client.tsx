@@ -200,6 +200,8 @@ export function FichaIngresoClient({
         : !tienePracticas
             ? 'No hay prácticas cargadas en la admisión'
             : ''
+    const esIngresoAmbulatorio = ingreso.tipoIngresoCodigo === 'AMB'
+    const esGuardia = ingreso.ingresoSubtipo?.subtipoAdmisionCodigo === 'GUA'
     const esPracticaAmbulatoria =
         ingreso.tipoIngresoCodigo === 'AMB' &&
         ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
@@ -445,9 +447,13 @@ export function FichaIngresoClient({
                                     setCardValues({
                                         fechaIngreso: toDateTimeLocalInputValue(ingreso.fechaIngreso),
                                         profesionalGuardiaId: ingreso.profesionalGuardiaId || '',
-                                        fechaEgreso: toDateInputValue(ingreso.fechaEgreso),
+                                        ...(!esIngresoAmbulatorio
+                                            ? { fechaEgreso: toDateInputValue(ingreso.fechaEgreso) }
+                                            : {}),
                                         fechaEgresoPrevista: toDateInputValue(ingreso.fechaEgresoPrevista),
-                                        profesionalTratanteId: ingreso.profesionalTratanteId || '',
+                                        ...(!esGuardia
+                                            ? { profesionalTratanteId: ingreso.profesionalTratanteId || '' }
+                                            : {}),
                                     });
                                 }}
                                 className="ml-1 text-gray-400 hover:text-blue-600" title="Editar sección"
@@ -514,18 +520,20 @@ export function FichaIngresoClient({
                                 </dd>
                             </div>
                             {/* Fecha de Egreso */}
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Fecha de Egreso</dt>
-                                <dd className="text-sm text-gray-900">
-                                    <input
-                                        type="datetime-local"
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.fechaEgreso ? cardValues.fechaEgreso + (cardValues.fechaEgreso.length === 10 ? 'T00:00' : '') : ''}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, fechaEgreso: e.target.value.slice(0, 16) }))}
-                                        disabled={cardLoading}
-                                    />
-                                </dd>
-                            </div>
+                            {!esIngresoAmbulatorio && (
+                                <div>
+                                    <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Fecha de Egreso</dt>
+                                    <dd className="text-sm text-gray-900">
+                                        <input
+                                            type="datetime-local"
+                                            className="border rounded px-2 py-1 w-full"
+                                            value={cardValues.fechaEgreso ? cardValues.fechaEgreso + (cardValues.fechaEgreso.length === 10 ? 'T00:00' : '') : ''}
+                                            onChange={e => setCardValues((v: any) => ({ ...v, fechaEgreso: e.target.value.slice(0, 16) }))}
+                                            disabled={cardLoading}
+                                        />
+                                    </dd>
+                                </div>
+                            )}
                             {/* Egreso Previsto */}
                             {!esPracticaAmbulatoria && (
                                 <div>
@@ -542,18 +550,20 @@ export function FichaIngresoClient({
                                 </div>
                             )}
                             {/* Profesional Tratante */}
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Profesional Tratante</dt>
-                                <dd className="text-sm text-gray-900">
-                                    <input
-                                        type="text"
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.profesionalTratanteNombre || ingreso.profesionalTratante?.nombre || ''}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, profesionalTratanteNombre: e.target.value }))}
-                                        disabled={cardLoading}
-                                    />
-                                </dd>
-                            </div>
+                            {!esGuardia && (
+                                <div>
+                                    <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Profesional Tratante</dt>
+                                    <dd className="text-sm text-gray-900">
+                                        <input
+                                            type="text"
+                                            className="border rounded px-2 py-1 w-full"
+                                            value={cardValues.profesionalTratanteNombre || ingreso.profesionalTratante?.nombre || ''}
+                                            onChange={e => setCardValues((v: any) => ({ ...v, profesionalTratanteNombre: e.target.value }))}
+                                            disabled={cardLoading}
+                                        />
+                                    </dd>
+                                </div>
+                            )}
                             <div className="col-span-full flex gap-2 mt-2">
                                 <button type="submit" className="text-green-600 border px-3 py-1 rounded" disabled={cardLoading}>Guardar</button>
                                 <button type="button" className="text-gray-400 border px-3 py-1 rounded" onClick={() => setEditingCard(null)} disabled={cardLoading}>Cancelar</button>
@@ -576,15 +586,21 @@ export function FichaIngresoClient({
                             />
                             <DataItem label="Fecha de Ingreso" value={formatearFechaHora(ingreso.fechaIngreso)} />
                             <DataItem label="Profesional Guardia" value={ingreso.profesionalGuardia?.nombre} />
-                            <DataItem label="Fecha de Egreso" value={formatearFecha(ingreso.fechaEgreso)} />
+                            {!esIngresoAmbulatorio && (
+                                <DataItem label="Fecha de Egreso" value={formatearFecha(ingreso.fechaEgreso)} />
+                            )}
                             {!esPracticaAmbulatoria && (
                                 <DataItem label="Egreso Previsto" value={formatearFecha(ingreso.fechaEgresoPrevista)} />
                             )}
-                            <DataItem label="Profesional Tratante" value={profesionalTratanteNombre} />
-                            <DataItem
-                                label="Matrícula Tratante"
-                                value={profesionalTratanteMatricula ? String(profesionalTratanteMatricula) : null}
-                            />
+                            {!esGuardia && (
+                                <DataItem label="Profesional Tratante" value={profesionalTratanteNombre} />
+                            )}
+                            {!esGuardia && (
+                                <DataItem
+                                    label="Matrícula Tratante"
+                                    value={profesionalTratanteMatricula ? String(profesionalTratanteMatricula) : null}
+                                />
+                            )}
                             <DataItem
                                 label="Profesional Interviniente"
                                 value={ingreso.profesionalInterviniente?.nombre}

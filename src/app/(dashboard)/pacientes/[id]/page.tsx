@@ -160,7 +160,6 @@ export default async function FichaPacientePage({ params }: PageProps) {
             numeroDocumento: paciente.numeroDocumento,
             fechaNacimiento: paciente.fechaNacimiento,
             sexo: paciente.sexo,
-            estadoCivil: paciente.estadoCivil,
             domicilio: paciente.domicilio,
             celular1: paciente.celular1,
             telefonoFijo: paciente.telefonoFijo,
@@ -230,10 +229,6 @@ export default async function FichaPacientePage({ params }: PageProps) {
                     ? 'Femenino'
                     : null
               }
-            />
-            <DataItem
-              label="Estado Civil"
-              value={mapEstadoCivil(paciente.estadoCivil)}
             />
           </dl>
         </div>
@@ -328,17 +323,6 @@ function DataItem({
       <dd className="mt-0.5 text-sm text-gray-900">{value ?? '-'}</dd>
     </div>
   )
-}
-
-function mapEstadoCivil(ec: string | null | undefined): string | null {
-  const map: Record<string, string> = {
-    S: 'Soltero/a',
-    C: 'Casado/a',
-    D: 'Divorciado/a',
-    V: 'Viudo/a',
-    U: 'Unión convivencial',
-  }
-  return ec ? (map[ec] ?? ec) : null
 }
 
 function normalizarCodigo(valor: string | null | undefined): string {

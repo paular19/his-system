@@ -15,7 +15,6 @@ type PacientePrintData = {
     numeroDocumento: number | null
     fechaNacimiento: Date | string | null
     sexo: string | null
-    estadoCivil: string | null
     domicilio: string | null
     celular1: string | null
     telefonoFijo: string | null
@@ -73,17 +72,6 @@ function labelSexo(sexo: string | null | undefined) {
     if (sexo === 'M') return 'Masculino'
     if (sexo === 'F') return 'Femenino'
     return '-'
-}
-
-function labelEstadoCivil(ec: string | null | undefined) {
-    const map: Record<string, string> = {
-        S: 'Soltero/a',
-        C: 'Casado/a',
-        D: 'Divorciado/a',
-        V: 'Viudo/a',
-        U: 'Unión convivencial',
-    }
-    return ec ? (map[ec] ?? ec) : '-'
 }
 
 function labelEstadoIngreso(estado: string | null | undefined) {
@@ -225,7 +213,6 @@ export function PacienteHospitalizacionPrint({ paciente, ingresos }: PacienteHos
                         <div><strong>Documento:</strong> {(paciente.tipoDocumento ?? '-')} {paciente.numeroDocumento ?? ''}</div>
                         <div><strong>Fecha nacimiento:</strong> {formatearFechaCalendario(paciente.fechaNacimiento)}</div>
                         <div><strong>Sexo:</strong> {labelSexo(paciente.sexo)}</div>
-                        <div><strong>Estado civil:</strong> {labelEstadoCivil(paciente.estadoCivil)}</div>
                         <div><strong>Domicilio:</strong> {paciente.domicilio ?? '-'}</div>
                         <div><strong>Celular:</strong> {paciente.celular1 ?? '-'}</div>
                         <div><strong>Tel. fijo:</strong> {paciente.telefonoFijo ?? '-'}</div>

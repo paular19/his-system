@@ -21,6 +21,8 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
         ?? ingreso.evoluciones?.[0]?.profesional?.matricula
         ?? ingreso.profesionalTratanteFallback?.matricula
         ?? null
+    const esIngresoAmbulatorio = ingreso.tipoIngresoCodigo === 'AMB'
+    const esGuardia = ingreso.ingresoSubtipo?.subtipoAdmisionCodigo === 'GUA'
     const esPracticaAmbulatoria =
         ingreso.tipoIngresoCodigo === 'AMB' &&
         ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
@@ -221,10 +223,12 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                 <dt className="text-gray-600">Fecha de Ingreso:</dt>
                                 <dd className="font-medium">{formatearFechaHora(ingreso.fechaIngreso)}</dd>
                             </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Fecha de Egreso:</dt>
-                                <dd className="font-medium">{formatearFecha(ingreso.fechaEgreso) ?? '—'}</dd>
-                            </div>
+                            {!esIngresoAmbulatorio && (
+                                <div className="flex justify-between">
+                                    <dt className="text-gray-600">Fecha de Egreso:</dt>
+                                    <dd className="font-medium">{formatearFecha(ingreso.fechaEgreso) ?? '—'}</dd>
+                                </div>
+                            )}
                             {!esPracticaAmbulatoria && (
                                 <div className="flex justify-between">
                                     <dt className="text-gray-600">Egreso Previsto:</dt>
@@ -239,14 +243,18 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                 <dt className="text-gray-600">Profesional Guardia:</dt>
                                 <dd className="font-medium">{ingreso.profesionalGuardia?.nombre ?? '—'}</dd>
                             </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Profesional Tratante:</dt>
-                                <dd className="font-medium">{profesionalTratanteNombre ?? '—'}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Matrícula Tratante:</dt>
-                                <dd className="font-medium">{profesionalTratanteMatricula ?? '—'}</dd>
-                            </div>
+                            {!esGuardia && (
+                                <div className="flex justify-between">
+                                    <dt className="text-gray-600">Profesional Tratante:</dt>
+                                    <dd className="font-medium">{profesionalTratanteNombre ?? '—'}</dd>
+                                </div>
+                            )}
+                            {!esGuardia && (
+                                <div className="flex justify-between">
+                                    <dt className="text-gray-600">Matrícula Tratante:</dt>
+                                    <dd className="font-medium">{profesionalTratanteMatricula ?? '—'}</dd>
+                                </div>
+                            )}
                             <div className="flex justify-between">
                                 <dt className="text-gray-600">Profesional Interviniente:</dt>
                                 <dd className="font-medium">{ingreso.profesionalInterviniente?.nombre ?? '—'}</dd>

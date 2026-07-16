@@ -80,7 +80,6 @@ export default async function EditarPacientePage({ params }: PageProps) {
       ? fechaCalendarioAInput(paciente.fechaNacimiento)
       : undefined,
     sexo: paciente.sexo ?? undefined,
-    estadoCivil: paciente.estadoCivil ?? undefined,
     paisId: paciente.paisId ?? undefined,
     profesionId: paciente.profesionId ?? undefined,
     domicilio: paciente.domicilio ?? undefined,

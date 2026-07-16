@@ -27,6 +27,7 @@ interface ItemPractica {
   convenioId: number | null
   codigo: string
   descripcion: string
+  numeroAutorizacion?: string | null
   desglose: ComponenteValores
   seleccionComponentes: ComponenteSeleccion
   requiereMatriculaEspecialista?: boolean
@@ -197,9 +198,11 @@ export function AdmisionForm({
 
   const subtiposConPracticasMeds = ['GUA', 'DER', 'TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'IND', 'PAM']
   const subtiposTurnoPractica = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM']
+  const esIngresoGuardia = subtipoAdmisionCodigo === 'GUA'
+  const esAtencionAmbulatoria = subtiposTurnoPractica.includes(subtipoAdmisionCodigo)
   const mostrarPanelPracticasMeds = subtiposConPracticasMeds.includes(subtipoAdmisionCodigo)
-  const mostrarPracticasAmbulatorias = subtiposTurnoPractica.includes(subtipoAdmisionCodigo)
-  const mostrarMedicacion = mostrarPanelPracticasMeds && !['RAY', 'ECG', 'ECO'].includes(subtipoAdmisionCodigo)
+  const mostrarPracticasAmbulatorias = esAtencionAmbulatoria
+  const mostrarMedicacion = mostrarPanelPracticasMeds && !esAtencionAmbulatoria
   const mostrarDescartables = mostrarMedicacion
   const etiquetaBusquedaPractica = subtipoAdmisionCodigo === 'CUR' || subtipoAdmisionCodigo === 'SUT'
     ? 'Buscar código de práctica...'
@@ -332,6 +335,7 @@ export function AdmisionForm({
         convenioId: practica.convenioId,
         codigo: practica.codigo,
         descripcion: practica.descripcion,
+        numeroAutorizacion: '',
         desglose: {
           valorEspecialista: practica.valorEspecialista ?? null,
           valorAyudante: practica.valorAyudante ?? null,
@@ -481,6 +485,7 @@ export function AdmisionForm({
           convenioId: p.convenioId,
           codigo: p.codigo,
           descripcion: p.descripcion,
+          numeroAutorizacion: p.numeroAutorizacion?.trim() || null,
           cantidad: 1,
           grupoOrden: null,
           importeTotal: Number((
@@ -503,6 +508,7 @@ export function AdmisionForm({
           convenioId: p.convenioId,
           codigo: p.codigo,
           descripcion: p.descripcion,
+          numeroAutorizacion: p.numeroAutorizacion?.trim() || null,
           cantidad: 1,
           grupoOrden: null,
           importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
@@ -525,7 +531,9 @@ export function AdmisionForm({
         fechaIngreso,
         fechaEgresoPrevista: mostrarPracticasAmbulatorias ? null : (fechaEgresoPrevista || null),
         profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null,
-        profesionalTratanteId: profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null,
+        profesionalTratanteId: esIngresoGuardia
+          ? null
+          : (profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null),
         obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
         planId: planId ? parseInt(planId, 10) : null,
         obraSocialCoseguroId:
@@ -553,6 +561,7 @@ export function AdmisionForm({
       // Agregar campos específicos según el subtipo
       if (subtipoAdmisionCodigo === 'GUA') {
         body.profesionalGuardiaId = profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null
+        body.profesionalTratanteId = null
       } else if (subtiposTurnoPractica.includes(subtipoAdmisionCodigo)) {
         body.profesionalGuardiaId = null
         body.profesionalTratanteId = profesionalIdTurno ? parseInt(profesionalIdTurno, 10) : null
@@ -708,7 +717,7 @@ export function AdmisionForm({
               />
             </div>
           )}
-          {!mostrarPracticasAmbulatorias && (
+          {!mostrarPracticasAmbulatorias && !esIngresoGuardia && (
             <>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Profesional Guardia</label>
@@ -1008,6 +1017,24 @@ export function AdmisionForm({
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
                         <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <label className="text-xs text-gray-500">Aut.</label>
+                          <input
+                            type="text"
+                            value={p.numeroAutorizacion ?? ''}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              setPracticas((prev) => prev.map((x) =>
+                                x.tempId === p.tempId
+                                  ? { ...x, numeroAutorizacion: value }
+                                  : x
+                              ))
+                            }}
+                            className="w-28 rounded border border-gray-300 px-2 py-1 text-xs"
+                            placeholder="Nro autorización"
+                            maxLength={50}
+                          />
+                        </div>
                         {p.requiereMatriculaEspecialista && (
                           <div className="flex items-center gap-1 shrink-0">
                             <label className="text-xs text-gray-500">Mat. HE</label>

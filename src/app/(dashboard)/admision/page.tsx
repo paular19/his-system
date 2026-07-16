@@ -1,6 +1,6 @@
 import { Header } from '@/components/layout/header'
 import { getUsuarioSesion } from '@/lib/auth'
-import { tienePermiso } from '@/lib/auth/rbac'
+import { ROLES, tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
 import { buscarIngresos } from '@/modules/admision/service'
 import { formatearFecha } from '@/lib/utils'
@@ -87,7 +87,11 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
   if (!tienePermiso(usuario.rol, 'ADMISION', 'LEER')) redirect('/dashboard')
 
   const rawParams = await searchParams
-  const params = normalizarSearchParams(rawParams)
+  const esUsuarioAdmision = usuario.rol === ROLES.ADMISION
+  const paramsBase = normalizarSearchParams(rawParams)
+  const params = esUsuarioAdmision
+    ? { ...paramsBase, tipoIngresoCodigo: 'AMB' }
+    : paramsBase
 
   const canonicalQuery = buildQueryString(params)
   const hasLegacyParams = Boolean(rawParams.pagina || rawParams.porPagina)

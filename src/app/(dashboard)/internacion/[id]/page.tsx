@@ -1,6 +1,6 @@
 import { Header } from '@/components/layout/header'
 import { getUsuarioSesion } from '@/lib/auth'
-import { tienePermiso } from '@/lib/auth/rbac'
+import { ROLES, tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { obtenerInternacionDetalle } from '@/modules/internacion/service'
@@ -65,6 +65,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         puedeCrear ||
         tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
         tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+    const esVistaAdmision = usuario.rol === ROLES.ADMISION
 
     // Load profesionales y camas disponibles para los formularios
     const [profesionales, camasDisponibles, obrasSocialesRows, planesRows, coseguros] = await Promise.all([
@@ -210,7 +211,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div className={`grid grid-cols-1 ${esVistaAdmision ? '' : 'lg:grid-cols-3'} gap-5`}>
                     {/* Columna izquierda: datos + cama + diagnósticos */}
                     <div className="space-y-4">
                         {/* Datos de internación */}
@@ -274,57 +275,61 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                         />
                     </div>
 
-                    {/* Columna central + derecha: evolución + medicaciones */}
-                    <div className="lg:col-span-2 min-w-0 space-y-4">
-                        <EvolucionSection
-                            ingresoId={ingresoId}
-                            evoluciones={detalle.evoluciones}
-                            profesionales={profesionales}
-                            puedeCrear={puedeCrear}
-                        />
+                    {!esVistaAdmision && (
+                        <>
+                            {/* Columna central + derecha: evolución + medicaciones */}
+                            <div className="lg:col-span-2 min-w-0 space-y-4">
+                                <EvolucionSection
+                                    ingresoId={ingresoId}
+                                    evoluciones={detalle.evoluciones}
+                                    profesionales={profesionales}
+                                    puedeCrear={puedeCrear}
+                                />
 
-                        <PracticaSection
-                            ingresoId={ingresoId}
-                            convenioId={detalle.obraSocial?.id ?? null}
-                            practicas={detalle.practicas}
-                            puedeCrear={puedeEditarPracticas}
-                            matriculaTratanteDefault={matriculaTratanteDefault}
-                        />
+                                <PracticaSection
+                                    ingresoId={ingresoId}
+                                    convenioId={detalle.obraSocial?.id ?? null}
+                                    practicas={detalle.practicas}
+                                    puedeCrear={puedeEditarPracticas}
+                                    matriculaTratanteDefault={matriculaTratanteDefault}
+                                />
 
-                        <MedicacionSection
-                            ingresoId={ingresoId}
-                            medicaciones={detalle.medicaciones}
-                            profesionales={profesionales}
-                            puedeCrear={puedeCrear}
-                            puedeModificar={puedeModificar}
-                        />
+                                <MedicacionSection
+                                    ingresoId={ingresoId}
+                                    medicaciones={detalle.medicaciones}
+                                    profesionales={profesionales}
+                                    puedeCrear={puedeCrear}
+                                    puedeModificar={puedeModificar}
+                                />
 
-                        <DescartableSection
-                            ingresoId={ingresoId}
-                            descartables={detalle.descartables}
-                            profesionales={profesionales}
-                            puedeCrear={puedeCrear}
-                            puedeModificar={puedeModificar}
-                        />
+                                <DescartableSection
+                                    ingresoId={ingresoId}
+                                    descartables={detalle.descartables}
+                                    profesionales={profesionales}
+                                    puedeCrear={puedeCrear}
+                                    puedeModificar={puedeModificar}
+                                />
 
-                        {detalle.paciente && (
-                            <CirugiaUrgenciaSection
-                                ingresoId={ingresoId}
-                                pacienteId={detalle.paciente.id}
-                                obraSocialIdInicial={detalle.obraSocial?.id ?? null}
-                                planIdInicial={detalle.plan?.id ?? null}
-                                obraSocialCoseguroIdInicial={detalle.obraSocialCoseguroId ?? null}
-                                numeroAfiliadoInicial={detalle.numeroAfiliado}
-                                puedeCrear={puedeCrear}
-                                obraSociales={obraSociales}
-                                planes={planes}
-                                coseguros={coseguros}
-                                camasDisponibles={camasDisponiblesSimple}
-                                cirugias={detalle.cirugiasUrgencia}
-                                matriculaTratanteDefault={matriculaTratanteDefault}
-                            />
-                        )}
-                    </div>
+                                {detalle.paciente && (
+                                    <CirugiaUrgenciaSection
+                                        ingresoId={ingresoId}
+                                        pacienteId={detalle.paciente.id}
+                                        obraSocialIdInicial={detalle.obraSocial?.id ?? null}
+                                        planIdInicial={detalle.plan?.id ?? null}
+                                        obraSocialCoseguroIdInicial={detalle.obraSocialCoseguroId ?? null}
+                                        numeroAfiliadoInicial={detalle.numeroAfiliado}
+                                        puedeCrear={puedeCrear}
+                                        obraSociales={obraSociales}
+                                        planes={planes}
+                                        coseguros={coseguros}
+                                        camasDisponibles={camasDisponiblesSimple}
+                                        cirugias={detalle.cirugiasUrgencia}
+                                        matriculaTratanteDefault={matriculaTratanteDefault}
+                                    />
+                                )}
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </>

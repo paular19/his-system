@@ -389,7 +389,7 @@ export async function crearCirugiaUrgencia(
     accion: 'CREAR',
     entidad: 'CirugiaProgramada',
     registroId: cirugia.id,
-    detalle: `Cirugía de urgencia registrada en internación ${data.ingresoId}`,
+    detalle: `Cirugía registrada en internación ${data.ingresoId}`,
     direccionIp: ip,
   })
 

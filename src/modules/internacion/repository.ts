@@ -1714,7 +1714,7 @@ export async function crearCirugiaUrgencia(
   usuario: string
 ): Promise<CirugiaUrgenciaItem> {
   const observacionesStructured = [
-    'Tipo: URGENCIA',
+    'Tipo: CIRUGIA',
     data.diagnostico?.trim() ? `Diagnostico: ${data.diagnostico.trim()}` : null,
     data.observaciones?.trim() ? `Observaciones: ${data.observaciones.trim()}` : null,
     data.obraSocialId ? `ObraSocialID: ${data.obraSocialId}` : null,
@@ -1747,7 +1747,7 @@ export async function crearCirugiaUrgencia(
           ? {
             create: {
               tipo: 'QUIRURGICA',
-              descripcion: 'Diferenciales de cirugía de urgencia',
+              descripcion: 'Diferenciales de cirugía',
               esFeriado: data.diferenciales.esFeriado,
               esNocturna: data.diferenciales.esNocturna,
               mismaViaPatologia: data.diferenciales.mismaViaPatologia,

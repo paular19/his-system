@@ -72,9 +72,6 @@ export const MATRIZ_PERMISOS: MatrizPermisos = {
     PACIENTES: ['LEER', 'CREAR', 'MODIFICAR'],
     ADMISION: ['LEER', 'CREAR', 'MODIFICAR'],
     INTERNACION: ['LEER', 'CREAR'],
-    GUARDIA: ['LEER', 'CREAR'],
-    AMBULATORIO: ['LEER', 'CREAR'],
-    FACTURACION: ['LEER'],
     COTIZADOR: ['LEER'],
   },
   MEDICO: {
@@ -116,8 +113,6 @@ export function tienePermiso(
   modulo: ModuloHIS,
   permiso: PermisoHIS
 ): boolean {
-  // TODO: restaurar permisos reales antes de producción
-  return true
   const permisosRol = MATRIZ_PERMISOS[rol]
   if (!permisosRol) return false
   const permisosModulo = permisosRol[modulo]

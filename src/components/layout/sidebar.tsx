@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { ROLES, type RolHIS } from '@/lib/auth/rbac'
 import {
   Users,
   ClipboardList,
@@ -21,7 +22,7 @@ interface NavItem {
   badge?: string
 }
 
-const NAV_ITEMS: NavItem[] = [
+const NAV_ITEMS_DEFAULT: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Pacientes', href: '/dashboard/pacientes', icon: Users },
   { label: 'Admisión', href: '/dashboard/admision', icon: ClipboardList },
@@ -32,8 +33,21 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Facturación', href: '/dashboard/facturacion', icon: Receipt },
 ]
 
-export function Sidebar() {
+const NAV_ITEMS_ADMISION: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Pacientes', href: '/dashboard/pacientes', icon: Users },
+  { label: 'Admisión', href: '/dashboard/admision', icon: ClipboardList },
+  { label: 'Internación', href: '/dashboard/internacion', icon: BedDouble },
+  { label: 'Presupuesto', href: '/dashboard/cotizador', icon: Receipt },
+]
+
+interface SidebarProps {
+  rol: RolHIS
+}
+
+export function Sidebar({ rol }: SidebarProps) {
   const pathname = usePathname()
+  const navItems = rol === ROLES.ADMISION ? NAV_ITEMS_ADMISION : NAV_ITEMS_DEFAULT
 
   return (
     <aside className="fixed left-0 top-0 h-full w-60 bg-gray-900 text-white flex flex-col z-30 print:hidden">
@@ -50,7 +64,7 @@ export function Sidebar() {
 
       {/* Navegación */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon
           const isActive =
             item.href === '/dashboard'

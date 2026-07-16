@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import { Header } from '@/components/layout/header'
+import { getUsuarioSesion } from '@/lib/auth'
+import { ROLES } from '@/lib/auth/rbac'
 import { prisma } from '@/lib/db'
 import { Users, BedDouble, ClipboardList, Activity } from 'lucide-react'
 
@@ -15,6 +17,9 @@ function inicioYFinDelDia() {
 }
 
 export default async function DashboardPage() {
+  const usuario = await getUsuarioSesion()
+  const esAdmision = usuario.rol === ROLES.ADMISION
+
   const { inicio, fin } = inicioYFinDelDia()
 
   let pacientesRegistrados = 0
@@ -123,13 +128,32 @@ export default async function DashboardPage() {
               <Users className="h-4 w-4" />
               Nuevo Paciente
             </a>
-            <a
-              href="/dashboard/admision"
-              className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
-            >
-              <ClipboardList className="h-4 w-4" />
-              Nueva Admisión
-            </a>
+            {esAdmision ? (
+              <>
+                <a
+                  href="/dashboard/admision/nuevo"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  Nueva Admisión Ambulatoria
+                </a>
+                <a
+                  href="/dashboard/internacion/nuevo"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  <BedDouble className="h-4 w-4" />
+                  Nueva internación
+                </a>
+              </>
+            ) : (
+              <a
+                href="/dashboard/admision/nuevo"
+                className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+              >
+                <ClipboardList className="h-4 w-4" />
+                Nueva Admisión
+              </a>
+            )}
           </div>
         </div>
       </div>

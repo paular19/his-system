@@ -205,6 +205,7 @@ export function AdmisionForm({
   const mostrarPracticasAmbulatorias = esAtencionAmbulatoria
   const mostrarMedicacion = mostrarPanelPracticasMeds && !esAtencionAmbulatoria
   const mostrarDescartables = mostrarMedicacion
+  const ocultarEgresoPrevisto = mostrarPracticasAmbulatorias || mostrarMedicacion
   const etiquetaBusquedaPractica = subtipoAdmisionCodigo === 'CUR' || subtipoAdmisionCodigo === 'SUT'
     ? 'Buscar código de práctica...'
     : 'Buscar práctica en nomenclador...'
@@ -387,10 +388,10 @@ export function AdmisionForm({
   }, [mostrarPanelPracticasMeds, subtipoAdmisionCodigo, profesionalIdTurno, profesionalGuardiaId, profesionalTratanteId, practicas.length])
 
   useEffect(() => {
-    if (mostrarPracticasAmbulatorias) {
+    if (ocultarEgresoPrevisto) {
       setFechaEgresoPrevista('')
     }
-  }, [mostrarPracticasAmbulatorias])
+  }, [ocultarEgresoPrevisto])
 
   const agregarMedicacion = () => {
     if (!nuevaMedNombre.trim()) return
@@ -538,7 +539,7 @@ export function AdmisionForm({
         tipoIngresoCodigo,
         subtipoAdmisionCodigo,
         fechaIngreso,
-        fechaEgresoPrevista: mostrarPracticasAmbulatorias ? null : (fechaEgresoPrevista || null),
+        fechaEgresoPrevista: ocultarEgresoPrevisto ? null : (fechaEgresoPrevista || null),
         profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null,
         profesionalTratanteId: esIngresoGuardia
           ? null
@@ -715,7 +716,7 @@ export function AdmisionForm({
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          {!mostrarPracticasAmbulatorias && (
+          {!ocultarEgresoPrevisto && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Egreso Previsto</label>
               <input

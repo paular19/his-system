@@ -28,6 +28,9 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
         ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
             ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
         )
+    const ocultarEgresoPrevisto =
+        esPracticaAmbulatoria ||
+        ['GUA', 'DER', 'IND'].includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
 
     useEffect(() => {
         const originalTitle = document.title
@@ -229,7 +232,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                     <dd className="font-medium">{formatearFecha(ingreso.fechaEgreso) ?? '—'}</dd>
                                 </div>
                             )}
-                            {!esPracticaAmbulatoria && (
+                            {!ocultarEgresoPrevisto && (
                                 <div className="flex justify-between">
                                     <dt className="text-gray-600">Egreso Previsto:</dt>
                                     <dd className="font-medium">{formatearFecha(ingreso.fechaEgresoPrevista) ?? '—'}</dd>

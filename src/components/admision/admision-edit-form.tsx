@@ -58,9 +58,13 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
     const esAmbulatorio = ingreso.tipoIngresoCodigo === 'AMB'
     const esGuardia = ingreso.ingresoSubtipo?.subtipoAdmisionCodigo === 'GUA'
     const subtiposPracticaAmbulatoria = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM']
+    const subtiposSinEgresoPrevisto = ['GUA', 'DER', 'IND']
     const esPracticaAmbulatoria =
         esAmbulatorio &&
         subtiposPracticaAmbulatoria.includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
+    const ocultarEgresoPrevisto =
+        esPracticaAmbulatoria ||
+        subtiposSinEgresoPrevisto.includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
 
     const crearTempId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 
@@ -105,7 +109,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         defaultValues: {
             subtipoAdmisionCodigo: ingreso.ingresoSubtipo?.subtipoAdmisionCodigo,
             fechaIngreso: toDateTimeLocalStr(ingreso.fechaIngreso) as unknown as Date,
-            fechaEgresoPrevista: esPracticaAmbulatoria
+            fechaEgresoPrevista: ocultarEgresoPrevisto
                 ? undefined
                 : (toDateStr(ingreso.fechaEgresoPrevista) as unknown as Date),
             fechaEgreso: esAmbulatorio
@@ -332,7 +336,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
             practicasAgregar: practicasAgregarNormalizadas.length > 0 ? practicasAgregarNormalizadas : undefined,
             // Fechas vacías: string vacío no debe pisar valores existentes
             fechaIngreso: (data.fechaIngreso as unknown as string) ? data.fechaIngreso : undefined,
-            fechaEgresoPrevista: esPracticaAmbulatoria
+            fechaEgresoPrevista: ocultarEgresoPrevisto
                 ? null
                 : ((data.fechaEgresoPrevista as unknown as string) ? data.fechaEgresoPrevista : undefined),
             fechaEgreso: esAmbulatorio
@@ -403,7 +407,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                 )}
 
                 {/* Egreso Previsto */}
-                {!esPracticaAmbulatoria && (
+                {!ocultarEgresoPrevisto && (
                     <div className="space-y-2">
                         <label htmlFor="fechaEgresoPrevista" className="block text-sm font-medium text-gray-700">
                             Egreso Previsto

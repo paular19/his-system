@@ -55,10 +55,17 @@ function normalizarCoseguroPorObraSocial<
 }
 
 const SUBTIPOS_PRACTICA_AMBULATORIA = new Set(['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'])
+const SUBTIPOS_SIN_EGRESO_PREVISTO = new Set(['GUA', 'DER', 'IND'])
 
 function esSubtipoPracticaAmbulatoria(subtipo: string | null | undefined): boolean {
   if (!subtipo) return false
   return SUBTIPOS_PRACTICA_AMBULATORIA.has(subtipo.trim().toUpperCase())
+}
+
+function omitirFechaEgresoPrevistaAmbulatorio(subtipo: string | null | undefined): boolean {
+  if (!subtipo) return false
+  const codigo = subtipo.trim().toUpperCase()
+  return esSubtipoPracticaAmbulatoria(codigo) || SUBTIPOS_SIN_EGRESO_PREVISTO.has(codigo)
 }
 
 function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
@@ -107,7 +114,7 @@ export async function crearIngreso(
   const dataNormalizada = normalizarCoseguroPorObraSocial(data, obraSocialNombre)
   const dataParaCrear =
     dataNormalizada.tipoIngresoCodigo === 'AMB' &&
-      esSubtipoPracticaAmbulatoria(dataNormalizada.subtipoAdmisionCodigo)
+      omitirFechaEgresoPrevistaAmbulatorio(dataNormalizada.subtipoAdmisionCodigo)
       ? { ...dataNormalizada, fechaEgresoPrevista: null }
       : dataNormalizada
 
@@ -550,7 +557,7 @@ export async function actualizarIngreso(
     ?? existe.ingresoSubtipo?.subtipoAdmisionCodigo
     ?? null
   const dataParaActualizar: ActualizarIngresoInput =
-    existe.tipoIngresoCodigo === 'AMB' && esSubtipoPracticaAmbulatoria(subtipoAdmisionFinal)
+    existe.tipoIngresoCodigo === 'AMB' && omitirFechaEgresoPrevistaAmbulatorio(subtipoAdmisionFinal)
       ? { ...dataNormalizada, fechaEgresoPrevista: null }
       : dataNormalizada
 

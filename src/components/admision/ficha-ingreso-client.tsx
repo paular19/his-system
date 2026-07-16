@@ -13,8 +13,6 @@ import { AdmisionEditForm } from './admision-edit-form'
 import { FichaAdmisionPrint } from './ficha-admision-print'
 import { PracticaIngresoForm } from './practica-ingreso-form'
 import type { IngresoDetalle } from '@/modules/admision/types'
-import { PracticaSection } from '@/components/internacion/practica-section'
-import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 import { agruparPracticasAutorizadasPorOrden, obtenerDestinoGrupoPracticasAutorizadas } from '@/lib/practicas-autorizadas'
@@ -207,7 +205,9 @@ export function FichaIngresoClient({
         ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
             ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
         )
-    const practicasParaSeccion = practicasIngreso as unknown as PracticaItem[]
+    const ocultarEgresoPrevisto =
+        esPracticaAmbulatoria ||
+        ['GUA', 'DER', 'IND'].includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
 
     const toDateInputValue = (value: Date | string | null | undefined) => {
         if (!value) return ''
@@ -450,7 +450,9 @@ export function FichaIngresoClient({
                                         ...(!esIngresoAmbulatorio
                                             ? { fechaEgreso: toDateInputValue(ingreso.fechaEgreso) }
                                             : {}),
-                                        fechaEgresoPrevista: toDateInputValue(ingreso.fechaEgresoPrevista),
+                                        ...(!ocultarEgresoPrevisto
+                                            ? { fechaEgresoPrevista: toDateInputValue(ingreso.fechaEgresoPrevista) }
+                                            : {}),
                                         ...(!esGuardia
                                             ? { profesionalTratanteId: ingreso.profesionalTratanteId || '' }
                                             : {}),
@@ -535,7 +537,7 @@ export function FichaIngresoClient({
                                 </div>
                             )}
                             {/* Egreso Previsto */}
-                            {!esPracticaAmbulatoria && (
+                            {!ocultarEgresoPrevisto && (
                                 <div>
                                     <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Egreso Previsto</dt>
                                     <dd className="text-sm text-gray-900">
@@ -589,7 +591,7 @@ export function FichaIngresoClient({
                             {!esIngresoAmbulatorio && (
                                 <DataItem label="Fecha de Egreso" value={formatearFecha(ingreso.fechaEgreso)} />
                             )}
-                            {!esPracticaAmbulatoria && (
+                            {!ocultarEgresoPrevisto && (
                                 <DataItem label="Egreso Previsto" value={formatearFecha(ingreso.fechaEgresoPrevista)} />
                             )}
                             {!esGuardia && (
@@ -889,20 +891,6 @@ export function FichaIngresoClient({
                 </div>
 
                 {/* Prácticas realizadas */}
-                <PracticaSection
-                    ingresoId={ingreso.id}
-                    convenioId={ingreso.obraSocialId ?? null}
-                    practicas={practicasParaSeccion}
-                    puedeCrear={puedeModificar || puedeAgregarDiagnostico}
-                    matriculaTratanteDefault={profesionalTratanteMatricula}
-                    puedeGenerarAutorizacion={puedeGenerarAutorizacion}
-                    refrescarDespuesCambios={false}
-                    permitirGenerarSinPendientes={true}
-                    incluirPracticaIdsEnGenerarAutorizacion={false}
-                    forzarNavegacionCompletaGenerarAutorizacion={true}
-                />
-
-                {false && (
                 <div className="his-card p-5">
                     <div className="flex items-center justify-between mb-3 pb-2 border-b gap-3 flex-wrap">
                         <h3 className="text-sm font-semibold text-gray-700">Prácticas realizadas</h3>
@@ -1142,6 +1130,11 @@ export function FichaIngresoClient({
                                     <div className="space-y-2">
                                         {ordenesAutorizadasPaginadas.map((grupo) => {
                                             const destinoAutorizada = obtenerDestinoGrupoPracticasAutorizadas(grupo)
+                                            const destinoOrdenImpresion =
+                                                grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                                    ? `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(`${grupo.puestoNumero}-${grupo.ordenNumero}`)}`
+                                                    : null
+                                            const destinoAbrir = destinoOrdenImpresion ?? destinoAutorizada
                                             const limitePracticas = 3
                                             const abierta = ordenesAutorizadasAbiertas[grupo.key] ?? false
                                             const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
@@ -1177,12 +1170,14 @@ export function FichaIngresoClient({
                                                         <div className="mt-2 grid gap-3 md:grid-cols-2">
                                                             <div className="space-y-1.5 text-xs text-emerald-900">
                                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                                    {destinoAutorizada && (
+                                                                    {destinoAbrir && (
                                                                         <Link
-                                                                            href={destinoAutorizada}
+                                                                            href={destinoAbrir}
+                                                                            target={destinoOrdenImpresion ? '_blank' : undefined}
+                                                                            rel={destinoOrdenImpresion ? 'noopener noreferrer' : undefined}
                                                                             className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
                                                                         >
-                                                                            Abrir
+                                                                            {destinoOrdenImpresion ? 'Abrir orden' : 'Abrir'}
                                                                         </Link>
                                                                     )}
                                                                 </div>
@@ -1273,7 +1268,6 @@ export function FichaIngresoClient({
                         </div>
                     )}
                 </div>
-                )}
 
                 {/* Observaciones */}
                 {observacionesLimpias && (

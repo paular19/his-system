@@ -286,13 +286,15 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     puedeCrear={puedeCrear}
                                 />
 
-                                <PracticaSection
-                                    ingresoId={ingresoId}
-                                    convenioId={detalle.obraSocial?.id ?? null}
-                                    practicas={detalle.practicas}
-                                    puedeCrear={puedeEditarPracticas}
-                                    matriculaTratanteDefault={matriculaTratanteDefault}
-                                />
+                                <div id="internacion-practicas">
+                                    <PracticaSection
+                                        ingresoId={ingresoId}
+                                        convenioId={detalle.obraSocial?.id ?? null}
+                                        practicas={detalle.practicas}
+                                        puedeCrear={puedeEditarPracticas}
+                                        matriculaTratanteDefault={matriculaTratanteDefault}
+                                    />
+                                </div>
 
                                 <MedicacionSection
                                     ingresoId={ingresoId}
@@ -314,18 +316,6 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     <CirugiaUrgenciaSection
                                         ingresoId={ingresoId}
                                         pacienteId={detalle.paciente.id}
-                                        pacienteNombre={detalle.nombre ?? detalle.paciente.nombreCompleto ?? '—'}
-                                        pacienteDni={
-                                            detalle.paciente.numeroDocumento != null
-                                                ? String(detalle.paciente.numeroDocumento)
-                                                : null
-                                        }
-                                        obraSocialNombre={detalle.obraSocial?.nombre ?? null}
-                                        cirujanoInicial={
-                                            detalle.profesionalTratante?.nombre
-                                                ? nombreProfesionalParaMostrar(detalle.profesionalTratante.nombre)
-                                                : null
-                                        }
                                         obraSocialIdInicial={detalle.obraSocial?.id ?? null}
                                         planIdInicial={detalle.plan?.id ?? null}
                                         obraSocialCoseguroIdInicial={detalle.obraSocialCoseguroId ?? null}
@@ -336,7 +326,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                         coseguros={coseguros}
                                         camasDisponibles={camasDisponiblesSimple}
                                         cirugias={detalle.cirugiasUrgencia}
-                                        matriculaTratanteDefault={matriculaTratanteDefault}
+                                        practicasInternacion={detalle.practicas}
                                     />
                                 )}
                             </div>

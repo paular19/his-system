@@ -161,7 +161,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
       plan: { select: { id: true, descripcion: true } },
       cama: { select: { id: true, identificador: true, sector: true, habitacion: true } },
       profesionalGuardia: { select: { id: true, nombre: true } },
-      profesionalTratante: { select: { id: true, nombre: true } },
+      profesionalTratante: { select: { id: true, nombre: true, matricula: true } },
       cirugiasProgramadas: {
         where: { internacionId: ingresoId },
         orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
@@ -455,7 +455,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
                 cirugia.diferencialesConsolidados.diferentesViasDiferentesPatologia
 
               return (
-                <article key={cirugia.id} className="his-card p-4 print:p-3 space-y-3 break-inside-avoid">
+                <article id={`cirugia-${cirugia.id}`} key={cirugia.id} className="his-card p-4 print:p-3 space-y-3 break-inside-avoid">
                   <div className="flex items-center justify-between gap-2 border-b pb-2">
                     <h3 className="text-sm font-semibold text-gray-900">Cirugia #{cirugia.id}</h3>
                     <span className="text-xs text-gray-500">
@@ -600,6 +600,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
                         ? nombreProfesionalParaMostrar(ingreso.profesionalTratante.nombre)
                         : null
                     }
+                    cirujanoMatricula={ingreso.profesionalTratante?.matricula ?? null}
                     diagnosticoInicial={cirugia.meta.diagnostico}
                     observacionesIniciales={cirugia.meta.observaciones}
                   />

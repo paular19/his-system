@@ -1729,6 +1729,54 @@ export async function crearCirugiaUrgencia(
     .slice(0, 500)
 
   const cirugia = await prisma.$transaction(async (tx) => {
+    const practicaIdsSeleccionadas = Array.from(
+      new Set((data.practicaIds ?? []).filter((id) => Number.isInteger(id) && id > 0))
+    )
+
+    let practicasParaCirugia = data.practicas
+    if (practicaIdsSeleccionadas.length > 0) {
+      const practicasExistentes = await tx.practica.findMany({
+        where: {
+          ingresoId: data.ingresoId,
+          id: { in: practicaIdsSeleccionadas },
+          OR: [{ estado: null }, { estado: { not: 'X' } }],
+        },
+        select: {
+          id: true,
+          convenioId: true,
+          codigoPractica: true,
+          cantidad: true,
+          importeTotal: true,
+          matriculaEspecialista: true,
+          matriculaAnestesista: true,
+          numeroAutorizacion: true,
+        },
+      })
+
+      const practicasPorId = new Map(practicasExistentes.map((item) => [item.id, item]))
+      const faltantes = practicaIdsSeleccionadas.filter((id) => !practicasPorId.has(id))
+      if (faltantes.length > 0) {
+        throw new Error('Hay prácticas seleccionadas que ya no están activas para esta internación')
+      }
+
+      practicasParaCirugia = practicaIdsSeleccionadas.map((id) => {
+        const practica = practicasPorId.get(id)!
+        const descripcionPayload =
+          data.practicas.find(
+            (item) => item.codigo.trim().toUpperCase() === practica.codigoPractica.trim().toUpperCase()
+          )?.descripcion ?? null
+        return {
+          convenioId: practica.convenioId,
+          codigo: practica.codigoPractica.trim(),
+          descripcion: (descripcionPayload?.trim() || practica.codigoPractica.trim()),
+          cantidad: Number(practica.cantidad),
+          importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : null,
+          matriculaEspecialista: practica.matriculaEspecialista,
+          matriculaAnestesista: practica.matriculaAnestesista,
+        }
+      })
+    }
+
     const creada = await tx.cirugiaProgramada.create({
       data: {
         pacienteId: data.pacienteId,
@@ -1738,7 +1786,7 @@ export async function crearCirugiaUrgencia(
         camaId: data.camaId ?? null,
         observaciones: observacionesStructured || null,
         practicas: {
-          create: data.practicas.map((p) => ({
+          create: practicasParaCirugia.map((p) => ({
             codigo: p.codigo.trim().slice(0, 20),
             descripcion: p.descripcion.trim().slice(0, 500),
             cantidad: p.cantidad,
@@ -1800,26 +1848,28 @@ export async function crearCirugiaUrgencia(
       },
     })
 
-    await Promise.all(
-      data.practicas.map((p) =>
-        tx.practica.create({
-          data: {
-            ingresoId: data.ingresoId,
-            convenioId: p.convenioId ?? data.obraSocialId ?? 0,
-            codigoPractica: p.codigo.padEnd(8).slice(0, 8),
-            convenioValorId: 0,
-            fecha: new Date(data.fechaCirugia),
-            cantidad: p.cantidad,
-            numeroAutorizacion: null,
-            matriculaEspecialista: p.matriculaEspecialista ?? null,
-            matriculaAnestesista: p.matriculaAnestesista ?? null,
-            facturable: true,
-            importeTotal: p.importeTotal ?? null,
-            usuarioRegistro: usuario.slice(0, 10),
-          },
-        })
+    if (practicaIdsSeleccionadas.length === 0) {
+      await Promise.all(
+        data.practicas.map((p) =>
+          tx.practica.create({
+            data: {
+              ingresoId: data.ingresoId,
+              convenioId: p.convenioId ?? data.obraSocialId ?? 0,
+              codigoPractica: p.codigo.padEnd(8).slice(0, 8),
+              convenioValorId: 0,
+              fecha: new Date(data.fechaCirugia),
+              cantidad: p.cantidad,
+              numeroAutorizacion: null,
+              matriculaEspecialista: p.matriculaEspecialista ?? null,
+              matriculaAnestesista: p.matriculaAnestesista ?? null,
+              facturable: true,
+              importeTotal: p.importeTotal ?? null,
+              usuarioRegistro: usuario.slice(0, 10),
+            },
+          })
+        )
       )
-    )
+    }
 
     return creada
   })

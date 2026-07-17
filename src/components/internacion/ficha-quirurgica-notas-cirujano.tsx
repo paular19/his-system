@@ -40,6 +40,7 @@ interface FichaQuirurgicaNotasCirujanoProps {
   pacienteDni?: string | null
   obraSocial?: string | null
   cirujanoInicial?: string | null
+  cirujanoMatricula?: number | null
   diagnosticoInicial?: string | null
   observacionesIniciales?: string | null
 }
@@ -155,6 +156,7 @@ export function FichaQuirurgicaNotasCirujano({
   pacienteDni,
   obraSocial,
   cirujanoInicial,
+  cirujanoMatricula,
   diagnosticoInicial,
   observacionesIniciales,
 }: FichaQuirurgicaNotasCirujanoProps) {
@@ -274,7 +276,7 @@ export function FichaQuirurgicaNotasCirujano({
           radiografiaConIntensificador: campos.radiografiaConIntensificador === 'SI',
           cantidadDisparos,
           tecnicoRadiologia: campos.tecnicoRadiologia.trim() || null,
-          firmaSelloRadiologo: campos.firmaSelloRadiologo.trim() || null,
+          firmaSelloRadiologo: null,
         }),
       })
 
@@ -587,15 +589,9 @@ export function FichaQuirurgicaNotasCirujano({
               />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Firma y sello del radiologo</label>
-              <input
-                type="text"
-                value={campos.firmaSelloRadiologo}
-                onChange={(e) => updateCampo('firmaSelloRadiologo', e.target.value)}
-                className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
-              />
-            </div>
+            <p className="md:col-span-2 text-xs text-slate-500 print:hidden">
+              Firma y sello se completan en papel al imprimir la ficha.
+            </p>
           </div>
         )}
 
@@ -625,15 +621,19 @@ export function FichaQuirurgicaNotasCirujano({
         </div>
       </div>
 
-      <div className="mt-3">
-        <label className="block text-xs font-medium text-slate-600 mb-1">Firma y sello del cirujano</label>
-        <input
-          type="text"
-          value={campos.firmaSelloCirujano}
-          onChange={(e) => updateCampo('firmaSelloCirujano', e.target.value)}
-          className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
-          placeholder="Nombre y sello"
-        />
+      <div className="mt-6 hidden print:grid print:grid-cols-2 gap-8">
+        <div>
+          <div className="h-10 border-b border-slate-700" />
+          <p className="mt-1 text-xs text-slate-700">Firma y sello del cirujano</p>
+          <p className="text-xs text-slate-700">Nombre: {campos.cirujano || '________________'}</p>
+          <p className="text-xs text-slate-700">Matricula: {cirujanoMatricula ? String(cirujanoMatricula) : '________________'}</p>
+        </div>
+        <div>
+          <div className="h-10 border-b border-slate-700" />
+          <p className="mt-1 text-xs text-slate-700">Firma y sello del radiologo</p>
+          <p className="text-xs text-slate-700">Nombre: {campos.tecnicoRadiologia || '________________'}</p>
+          <p className="text-xs text-slate-700">Matricula: __________________</p>
+        </div>
       </div>
     </section>
   )

@@ -207,6 +207,7 @@ export const CrearCirugiaUrgenciaSchema = z.object({
     matriculaEspecialista: z.number().int().positive().optional().nullable(),
     matriculaAnestesista: z.number().int().positive().optional().nullable(),
   })).min(1),
+  practicaIds: z.array(z.number().int().positive()).optional(),
   diferenciales: z.object({
     esFeriado: z.boolean().default(false),
     esNocturna: z.boolean().default(false),

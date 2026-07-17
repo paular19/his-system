@@ -24,6 +24,7 @@ import {
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
 import { agruparPracticasAutorizadasPorOrden, obtenerDestinoGrupoPracticasAutorizadas } from '@/lib/practicas-autorizadas'
+import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
 
 interface NomencladorItem {
     convenioId: number
@@ -583,6 +584,48 @@ export function PracticaSection({
             setError('Error al guardar el pedido de laboratorio')
         } finally {
             setGuardandoPedidoLaboratorio(false)
+        }
+    }
+
+    const handleGuardarDesdeFormulario = async (entradasCrear: PracticaCargaEntrada[]) => {
+        setError(null)
+        setGuardando(true)
+        try {
+            const practicasCreadas: PracticaItem[] = []
+            const clasificacionesCreadas: Record<number, string> = {}
+
+            for (const entrada of entradasCrear) {
+                const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(entrada.payload),
+                })
+                const json = await res.json()
+                if (!res.ok) {
+                    if (practicasCreadas.length > 0) {
+                        setPracticas((prev) => [...practicasCreadas, ...prev])
+                    }
+                    const mensaje = json.error ?? 'Error al registrar la practica'
+                    setError(mensaje)
+                    return { ok: false, error: mensaje }
+                }
+                practicasCreadas.push(json.data)
+                clasificacionesCreadas[json.data.id] = entrada.clasificacion
+            }
+
+            setPracticas((prev) => [...practicasCreadas, ...prev])
+            setClasificacionPorPracticaId((prev) => ({
+                ...prev,
+                ...clasificacionesCreadas,
+            }))
+
+            return { ok: true }
+        } catch {
+            const mensaje = 'Error de conexion'
+            setError(mensaje)
+            return { ok: false, error: mensaje }
+        } finally {
+            setGuardando(false)
         }
     }
 
@@ -1371,223 +1414,12 @@ export function PracticaSection({
 
                     {/* Formulario */}
                     {mostrarForm && puedeCrear && (
-                        <div className="border border-blue-100 bg-blue-50/40 rounded-xl p-4 space-y-3">
-                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                                Nueva práctica
-                            </p>
-
-                            {/* Búsqueda nomenclador */}
-                            <div className="relative">
-                                <label className="block text-xs text-gray-500 mb-1">
-                                    Buscar en nomenclador
-                                </label>
-                                <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-                                    <input
-                                        type="text"
-                                        value={busqueda}
-                                        onChange={(e) => buscarPractica(e.target.value)}
-                                        placeholder="Código o descripción (mín. 2 caracteres)..."
-                                        className="his-input pl-8 pr-8 text-sm w-full"
-                                    />
-                                    {buscando && (
-                                        <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 animate-spin" />
-                                    )}
-                                    {practicaSeleccionada && (
-                                        <button
-                                            onClick={() => { setPracticaSeleccionada(null); setBusqueda('') }}
-                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                        >
-                                            <X className="h-3.5 w-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                                {resultados.length > 0 && (
-                                    <ul className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto text-sm">
-                                        {resultados.map((r) => (
-                                            <li key={`${r.convenioId}-${r.codigo}`}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => seleccionarPractica(r)}
-                                                    className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-start gap-2"
-                                                >
-                                                    <span className="font-mono text-xs text-gray-400 shrink-0 pt-0.5">
-                                                        {r.codigo.trim()}
-                                                    </span>
-                                                    <span className="min-w-0 flex-1 text-gray-800">{r.descripcion}</span>
-                                                    <span className="shrink-0 text-xs font-medium text-gray-500">
-                                                        {r.valor != null ? formatoMoneda.format(r.valor) : '-'}
-                                                    </span>
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-
-                            {/* Selector de componentes */}
-                            {practicaSeleccionada && (
-                                <ComponenteSelector
-                                    valores={{
-                                        valorEspecialista: practicaSeleccionada.valorEspecialista,
-                                        valorAyudante: practicaSeleccionada.valorAyudante,
-                                        valorAnestesista: practicaSeleccionada.valorAnestesista,
-                                        valorGastos: practicaSeleccionada.valorGastos,
-                                        valorTotal: practicaSeleccionada.valor,
-                                    }}
-                                    seleccion={componenteSeleccion}
-                                    onChange={setComponenteSeleccion}
-                                    disabled={guardando}
-                                    clasificacionesPorComponente={clasificacionesPorComponenteForm}
-                                    onClasificacionChange={(index, value) => {
-                                        const raw = value.toUpperCase()
-                                        setClasificacionPorSubitemNuevo((prev) => {
-                                            const next = [...prev]
-                                            next[index] = normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, '')
-                                            return next
-                                        })
-                                    }}
-                                    clasificacionListId="clasificacion-practica-list"
-                                />
-                            )}
-
-                            {practicaSeleccionada && subitemsSeleccionadosForm.length > 0 && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <label className="inline-flex items-center gap-2 text-xs text-gray-600">
-                                        <input
-                                            type="checkbox"
-                                            checked={crearPracticaTodaJunta}
-                                            onChange={(e) => setCrearPracticaTodaJunta(e.target.checked)}
-                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                        />
-                                        Cargar práctica toda junta (un solo registro con subitems)
-                                    </label>
-                                    {crearPracticaTodaJunta && (
-                                        <div>
-                                            <label className="block text-xs text-gray-500 mb-1">Cantidad general</label>
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                max={999}
-                                                step={1}
-                                                value={cantidadGeneralPractica}
-                                                onChange={(e) => setCantidadGeneralPractica(e.target.value)}
-                                                className="his-input text-sm w-full"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Fecha */}
-                            <div className="grid grid-cols-1 gap-3">
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Fecha y hora</label>
-                                    <input
-                                        type="datetime-local"
-                                        value={fecha}
-                                        onChange={(e) => setFecha(e.target.value)}
-                                        className="his-input text-sm w-full"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Nro autorización */}
-                            <div className="grid grid-cols-1 gap-3">
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Nro. autorización</label>
-                                    <input
-                                        type="text"
-                                        value={numeroAutorizacion}
-                                        onChange={(e) => setNumeroAutorizacion(e.target.value)}
-                                        placeholder="Opcional"
-                                        className="his-input text-sm w-full"
-                                    />
-                                </div>
-                            </div>
-
-                            {practicaSeleccionada && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {practicaSeleccionada.valorEspecialista != null && (
-                                        <div>
-                                            <label className="block text-xs text-gray-500 mb-1">Matrícula especialista (HE)</label>
-                                            <select
-                                                value={matriculaEspecialista}
-                                                onChange={(e) => setMatriculaEspecialista(e.target.value)}
-                                                className="his-input text-sm w-full"
-                                            >
-                                                <option value="">Seleccionar matrícula...</option>
-                                                {profesionalesConMatricula.map((profesional) => (
-                                                    <option key={`esp-${profesional.id}`} value={String(profesional.matricula)}>
-                                                        {profesional.matricula} - {profesional.nombre}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                value={matriculaEspecialista}
-                                                onChange={(e) => setMatriculaEspecialista(e.target.value)}
-                                                placeholder="Ej: 12345"
-                                                className="his-input text-sm w-full mt-2"
-                                            />
-                                        </div>
-                                    )}
-                                    {practicaSeleccionada.valorAnestesista != null && (
-                                        <div>
-                                            <label className="block text-xs text-gray-500 mb-1">Matrícula anestesista (HA)</label>
-                                            <select
-                                                value={matriculaAnestesista}
-                                                onChange={(e) => setMatriculaAnestesista(e.target.value)}
-                                                className="his-input text-sm w-full"
-                                            >
-                                                <option value="">Seleccionar matrícula...</option>
-                                                {profesionalesConMatricula.map((profesional) => (
-                                                    <option key={`ane-${profesional.id}`} value={String(profesional.matricula)}>
-                                                        {profesional.matricula} - {profesional.nombre}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                value={matriculaAnestesista}
-                                                onChange={(e) => setMatriculaAnestesista(e.target.value)}
-                                                placeholder="Ej: 12345"
-                                                className="his-input text-sm w-full mt-2"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {error && (
-                                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
-                                    {error}
-                                </p>
-                            )}
-
-                            <div className="flex gap-2 pt-1">
-                                <button
-                                    onClick={handleGuardar}
-                                    disabled={guardando}
-                                    className="flex items-center gap-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg px-3 py-1.5 hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    {guardando ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                        <Plus className="h-3.5 w-3.5" />
-                                    )}
-                                    Guardar
-                                </button>
-                                <button
-                                    onClick={() => { setMostrarForm(false); limpiarForm() }}
-                                    className="text-xs text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-1.5 hover:bg-gray-50"
-                                >
-                                    Cancelar
-                                </button>
-                            </div>
-                        </div>
+                        <PracticaCargaForm
+                            convenioId={convenioId}
+                            matriculaTratanteDefault={matriculaTratanteDefault}
+                            onGuardar={handleGuardarDesdeFormulario}
+                            onCancel={() => setMostrarForm(false)}
+                        />
                     )}
 
                     <datalist id="clasificacion-practica-list">

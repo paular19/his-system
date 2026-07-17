@@ -3,23 +3,10 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, Trash2, Scissors, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Scissors, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
-import {
-    ComponenteSelector,
-    calcularTotalSeleccionado,
-    seleccionPorDefecto,
-    type ComponenteSeleccion,
-    type ComponenteValores,
-} from '@/components/ui/componente-selector'
-import {
-    esSubitemAnestesista,
-    esSubitemEspecialista,
-    type SubitemCodigo,
-    obtenerSubitemsSeleccionados,
-    valorUnitarioPorSubitem,
-} from '@/lib/practicas-subitems'
 import { fechaAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
+import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
 
 type OpcionObraSocial = {
     id: number
@@ -45,39 +32,16 @@ type OpcionCama = {
     habitacion: string | null
 }
 
-type NomencladorPracticaItem = {
-    convenioId: number
-    codigo: string
-    descripcion: string
-    valor?: number | null
-    valorEspecialista?: number | null
-    valorAyudante?: number | null
-    valorAnestesista?: number | null
-    valorGastos?: number | null
-}
-
 type PracticaFormItem = {
     _key: string
     convenioId: number
-    codigo: string
-    descripcion: string
-    requiereMatriculaEspecialista: boolean
-    requiereMatriculaAnestesista: boolean
+    codigoPractica: string
+    descripcionPractica: string
+    cantidad: number
+    importeTotal: number | null
     matriculaEspecialista: number | null
     matriculaAnestesista: number | null
-    desglose: ComponenteValores
-    seleccionComponentes: ComponenteSeleccion
-}
-
-const MATRICULA_ANESTESISTA_DEFAULT = 6
-
-function etiquetaSubitem(subitem: SubitemCodigo): string {
-    if (subitem === 'HE') return 'Honorario Especialista (HE)'
-    if (subitem === 'HA') return 'Honorario Anestesista (HA)'
-    if (subitem === 'GA') return 'Derechos/Gastos (GA)'
-    if (subitem === 'A1') return 'Ayudante 1 (A1)'
-    if (subitem === 'A2') return 'Ayudante 2 (A2)'
-    return 'Ayudante 3 (A3)'
+    clasificacion: string
 }
 
 type CirugiaUrgenciaItem = {
@@ -277,9 +241,6 @@ export function CirugiaUrgenciaSection({
     const [diagnostico, setDiagnostico] = useState('')
     const [observaciones, setObservaciones] = useState('')
 
-    const [terminoBusquedaPractica, setTerminoBusquedaPractica] = useState('')
-    const [buscandoPractica, setBuscandoPractica] = useState(false)
-    const [resultadosPractica, setResultadosPractica] = useState<NomencladorPracticaItem[]>([])
     const [practicas, setPracticas] = useState<PracticaFormItem[]>([])
 
     const [esFeriado, setEsFeriado] = useState(false)
@@ -317,62 +278,25 @@ export function CirugiaUrgenciaSection({
 
     const puedeIrAAutorizaciones = cirugias.length > 0
 
-    const buscarPracticaNomenclador = async (termino: string) => {
-        if (!obraSocialIdNumero || termino.trim().length < 2) {
-            setResultadosPractica([])
-            return
-        }
+    const guardarPracticasEnBorrador = async (entradas: PracticaCargaEntrada[]) => {
+        if (entradas.length === 0) return { ok: false, error: 'No hay practicas para agregar' }
 
-        setBuscandoPractica(true)
-        try {
-            const qs = new URLSearchParams({
-                q: termino.trim(),
-                convenioId: String(obraSocialIdNumero),
-            })
-            const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
-            const json = await res.json()
-            setResultadosPractica(Array.isArray(json.data) ? json.data : [])
-        } catch {
-            setResultadosPractica([])
-            setError('No se pudo buscar practicas en el nomenclador')
-        } finally {
-            setBuscandoPractica(false)
-        }
-    }
+        setPracticas((prev) => [
+            ...prev,
+            ...entradas.map((entrada) => ({
+                _key: `${entrada.payload.convenioId}-${entrada.payload.codigoPractica}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                convenioId: entrada.payload.convenioId,
+                codigoPractica: entrada.payload.codigoPractica,
+                descripcionPractica: entrada.payload.descripcionPractica,
+                cantidad: entrada.payload.cantidad,
+                importeTotal: entrada.payload.importeBaseUnitario,
+                matriculaEspecialista: entrada.payload.matriculaEspecialista,
+                matriculaAnestesista: entrada.payload.matriculaAnestesista,
+                clasificacion: entrada.clasificacion,
+            })),
+        ])
 
-    const agregarPractica = (p: NomencladorPracticaItem) => {
-        setPracticas((prev) => {
-            return [
-                ...prev,
-                {
-                    _key: `${p.convenioId}-${p.codigo}-${Date.now()}`,
-                    convenioId: p.convenioId,
-                    codigo: p.codigo.trim().slice(0, 50),
-                    descripcion: p.descripcion,
-                    requiereMatriculaEspecialista: Number(p.valorEspecialista ?? 0) > 0,
-                    requiereMatriculaAnestesista: Number(p.valorAnestesista ?? 0) > 0,
-                    matriculaEspecialista: matriculaTratanteDefault ?? null,
-                    matriculaAnestesista: MATRICULA_ANESTESISTA_DEFAULT,
-                    desglose: {
-                        valorEspecialista: p.valorEspecialista ?? null,
-                        valorAyudante: p.valorAyudante ?? null,
-                        valorAnestesista: p.valorAnestesista ?? null,
-                        valorGastos: p.valorGastos ?? null,
-                        valorTotal: p.valor ?? null,
-                    },
-                    seleccionComponentes: seleccionPorDefecto({
-                        valorEspecialista: p.valorEspecialista ?? null,
-                        valorAyudante: p.valorAyudante ?? null,
-                        valorAnestesista: p.valorAnestesista ?? null,
-                        valorGastos: p.valorGastos ?? null,
-                        valorTotal: p.valor ?? null,
-                    }),
-                },
-            ]
-        })
-
-        setResultadosPractica([])
-        setTerminoBusquedaPractica('')
+        return { ok: true }
     }
 
     const quitarPractica = (key: string) => {
@@ -385,8 +309,6 @@ export function CirugiaUrgenciaSection({
         setCamaId('')
         setDiagnostico('')
         setObservaciones('')
-        setTerminoBusquedaPractica('')
-        setResultadosPractica([])
         setPracticas([])
         setEsFeriado(false)
         setEsNocturna(false)
@@ -461,72 +383,19 @@ export function CirugiaUrgenciaSection({
             return
         }
 
-        const practicaSinMatricula = practicas.find(
-            (p) =>
-                (p.requiereMatriculaEspecialista &&
-                    p.seleccionComponentes.especialista > 0 &&
-                    !p.matriculaEspecialista) ||
-                (p.requiereMatriculaAnestesista &&
-                    p.seleccionComponentes.anestesista > 0 &&
-                    !p.matriculaAnestesista)
-        )
-        if (practicaSinMatricula) {
-            setError('Completa matricula en practicas con HE/HA antes de registrar la cirugia')
-            return
-        }
-
         setError(null)
         setGuardando(true)
 
         try {
-            const practicasExpandida = practicas.flatMap((p) => {
-                const subitems = obtenerSubitemsSeleccionados(
-                    {
-                        valorEspecialista: p.desglose.valorEspecialista,
-                        valorAyudante: p.desglose.valorAyudante,
-                        valorAnestesista: p.desglose.valorAnestesista,
-                        valorGastos: p.desglose.valorGastos,
-                    },
-                    p.seleccionComponentes
-                )
-
-                if (subitems.length === 0) {
-                    return [{
-                        convenioId: p.convenioId,
-                        codigo: p.codigo,
-                        descripcion: p.descripcion,
-                        cantidad: 1,
-                        importeTotal: Number(
-                            (
-                                calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
-                            ).toFixed(2)
-                        ),
-                        matriculaEspecialista:
-                            p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
-                        matriculaAnestesista:
-                            p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
-                    }]
-                }
-
-                return subitems.map((subitem) => {
-                    const valorUnitario = valorUnitarioPorSubitem(subitem, {
-                        valorEspecialista: p.desglose.valorEspecialista,
-                        valorAyudante: p.desglose.valorAyudante,
-                        valorAnestesista: p.desglose.valorAnestesista,
-                        valorGastos: p.desglose.valorGastos,
-                    })
-
-                    return {
-                        convenioId: p.convenioId,
-                        codigo: p.codigo,
-                        descripcion: `${p.descripcion} - ${etiquetaSubitem(subitem)}`,
-                        cantidad: 1,
-                        importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
-                        matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
-                        matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
-                    }
-                })
-            })
+            const practicasExpandida = practicas.map((p) => ({
+                convenioId: p.convenioId,
+                codigo: p.codigoPractica,
+                descripcion: p.descripcionPractica,
+                cantidad: p.cantidad,
+                importeTotal: p.importeTotal,
+                matriculaEspecialista: p.matriculaEspecialista,
+                matriculaAnestesista: p.matriculaAnestesista,
+            }))
 
             const res = await fetch(`/api/internacion/${ingresoId}/cirugia-urgencia`, {
                 method: 'POST',
@@ -778,135 +647,43 @@ export function CirugiaUrgenciaSection({
                                 />
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Practicas</label>
-                                <div className="flex gap-2 mb-2">
-                                    <div className="relative flex-1">
-                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                        <input
-                                            type="text"
-                                            value={terminoBusquedaPractica}
-                                            onChange={(e) => setTerminoBusquedaPractica(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault()
-                                                    void buscarPracticaNomenclador(terminoBusquedaPractica)
-                                                }
-                                            }}
-                                            placeholder="Buscar por codigo o descripcion"
-                                            className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-2 text-sm"
-                                            disabled={!obraSocialIdNumero}
-                                        />
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => void buscarPracticaNomenclador(terminoBusquedaPractica)}
-                                        disabled={buscandoPractica || terminoBusquedaPractica.trim().length < 2 || !obraSocialIdNumero}
-                                        className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
-                                    >
-                                        {buscandoPractica ? 'Buscando...' : 'Buscar'}
-                                    </button>
-                                </div>
+                            <div className="space-y-3">
+                                <PracticaCargaForm
+                                    convenioId={obraSocialIdNumero}
+                                    matriculaTratanteDefault={matriculaTratanteDefault}
+                                    onGuardar={guardarPracticasEnBorrador}
+                                    titulo="Nueva practica"
+                                />
 
-                                {resultadosPractica.length > 0 && (
-                                    <div className="mb-3 rounded-md border bg-white shadow-sm max-h-44 overflow-y-auto divide-y">
-                                        {resultadosPractica.map((p) => (
-                                            <button
-                                                key={`${p.convenioId}-${p.codigo}`}
-                                                type="button"
-                                                onClick={() => agregarPractica(p)}
-                                                className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors text-sm"
-                                            >
-                                                <span className="font-mono text-xs text-gray-500 mr-2">{p.codigo}</span>
-                                                {p.descripcion}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {practicas.length > 0 ? (
-                                    <div className="divide-y border rounded-md bg-white">
-                                        {practicas.map((p) => (
-                                            <div key={p._key} className="px-3 py-3 space-y-3">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
-                                                    <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
-
-                                                    {p.requiereMatriculaEspecialista && (
-                                                        <input
-                                                            type="number"
-                                                            min={1}
-                                                            value={p.matriculaEspecialista ?? ''}
-                                                            onChange={(e) => {
-                                                                const value = e.target.value.trim()
-                                                                setPracticas((prev) =>
-                                                                    prev.map((x) =>
-                                                                        x._key === p._key
-                                                                            ? {
-                                                                                ...x,
-                                                                                matriculaEspecialista: value ? Number.parseInt(value, 10) || null : null,
-                                                                            }
-                                                                            : x
-                                                                    )
-                                                                )
-                                                            }}
-                                                            className="w-24 rounded border border-gray-300 px-2 py-1 text-xs"
-                                                            placeholder="Mat. HE"
-                                                        />
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Practicas agregadas a la cirugia</label>
+                                    {practicas.length > 0 ? (
+                                        <div className="divide-y border rounded-md bg-white">
+                                            {practicas.map((p) => (
+                                                <div key={p._key} className="flex items-center gap-2 px-3 py-2 text-xs">
+                                                    <span className="font-mono text-gray-500 w-20 shrink-0">{p.codigoPractica.trim()}</span>
+                                                    <span className="flex-1 text-gray-800">{p.descripcionPractica}</span>
+                                                    <span className="text-gray-500">Cant: {p.cantidad}</span>
+                                                    {p.clasificacion && (
+                                                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                                                            {p.clasificacion}
+                                                        </span>
                                                     )}
-
-                                                    {p.requiereMatriculaAnestesista && (
-                                                        <input
-                                                            type="number"
-                                                            min={1}
-                                                            value={p.matriculaAnestesista ?? ''}
-                                                            onChange={(e) => {
-                                                                const value = e.target.value.trim()
-                                                                setPracticas((prev) =>
-                                                                    prev.map((x) =>
-                                                                        x._key === p._key
-                                                                            ? {
-                                                                                ...x,
-                                                                                matriculaAnestesista: value ? Number.parseInt(value, 10) || null : null,
-                                                                            }
-                                                                            : x
-                                                                    )
-                                                                )
-                                                            }}
-                                                            className="w-24 rounded border border-gray-300 px-2 py-1 text-xs"
-                                                            placeholder="Mat. HA"
-                                                        />
-                                                    )}
-
                                                     <button
                                                         type="button"
                                                         onClick={() => quitarPractica(p._key)}
                                                         className="text-red-400 hover:text-red-600"
+                                                        title="Quitar practica"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </button>
                                                 </div>
-
-                                                <ComponenteSelector
-                                                    valores={p.desglose}
-                                                    seleccion={p.seleccionComponentes}
-                                                    onChange={(nuevaSeleccion) => {
-                                                        setPracticas((prev) =>
-                                                            prev.map((x) =>
-                                                                x._key === p._key
-                                                                    ? { ...x, seleccionComponentes: nuevaSeleccion }
-                                                                    : x
-                                                            )
-                                                        )
-                                                    }}
-                                                    disabled={guardando}
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-xs text-gray-400">No se han agregado practicas.</p>
-                                )}
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-gray-400">No se han agregado practicas.</p>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

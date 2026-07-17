@@ -31,7 +31,7 @@ import type {
     PrestacionFacturableItem,
 } from './types'
 import { calcularImporteFacturable, resolverReglaFacturacion } from './cobertura'
-import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './diferenciales'
+import { aplicarDiferencialesAValores } from './diferenciales'
 import { crearOrdenAmbulatorio } from '@/modules/orden/service'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
@@ -1551,28 +1551,28 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     )
     const cirugiaPracticas = new Map<string, { cirugiaId: number; diferenciales: NonNullable<PrestacionFacturableItem['diferenciales']> }>()
     const diferencialesPorPracticaId = new Map<number, NonNullable<PrestacionFacturableItem['diferenciales']>>()
+    const practicaBaseAutomaticaPorCirugia = new Map<number, number>()
 
     for (const cirugia of ingreso.cirugiasProgramadas) {
         const practicaBaseId =
             cirugia.diferenciales.find((d) => d.practicaBaseId != null)?.practicaBaseId ?? null
-        const diferenciales = cirugia.diferenciales.length > 0
-            ? {
-                esFeriado: cirugia.diferenciales.some((d) => d.esFeriado),
-                esNocturna: cirugia.diferenciales.some((d) => d.esNocturna),
-                mismaViaPatologia: cirugia.diferenciales.some((d) => d.mismaViaPatologia),
-                diferentesViasPatologia: cirugia.diferenciales.some((d) => d.diferentesViasPatologia),
-                diferentesViasDiferentesPatologia: cirugia.diferenciales.some((d) => d.diferentesViasDiferentesPatologia),
-                dobleCirugia: cirugia.diferenciales.some((d) => d.dobleCirugia),
-                practicaBaseId,
-            }
-            : null
-        if (!diferenciales || !tieneDiferencialesActivos(diferenciales)) continue
+        const diferenciales: NonNullable<PrestacionFacturableItem['diferenciales']> = {
+            esFeriado: cirugia.diferenciales.some((d) => d.esFeriado),
+            esNocturna: cirugia.diferenciales.some((d) => d.esNocturna),
+            mismaViaPatologia: cirugia.diferenciales.some((d) => d.mismaViaPatologia),
+            diferentesViasPatologia: cirugia.diferenciales.some((d) => d.diferentesViasPatologia),
+            diferentesViasDiferentesPatologia: cirugia.diferenciales.some((d) => d.diferentesViasDiferentesPatologia),
+            dobleCirugia: cirugia.diferenciales.some((d) => d.dobleCirugia),
+            practicaBaseId,
+            esPracticaBase: false,
+            aplicaDiferencial: false,
+        }
 
         for (const practica of cirugia.practicas) {
             const clave = `${normalizarCodigoPracticaFacturacion(practica.codigo)}:${Number(practica.cantidad)}:${fechaClave(cirugia.fechaCirugia)}`
             cirugiaPracticas.set(clave, {
                 cirugiaId: cirugia.id,
-                diferenciales: diferenciales as NonNullable<PrestacionFacturableItem['diferenciales']>,
+                diferenciales,
             })
         }
     }
@@ -1588,6 +1588,48 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const actualesCodigo = practicasPendientesPorClave.get(claveCodigo) ?? []
         actualesCodigo.push({ id: p.id, cantidad: Number(p.cantidad), fecha: p.fecha })
         practicasPendientesPorClave.set(claveCodigo, actualesCodigo)
+    }
+
+    const candidatasBasePorCirugia = new Map<
+        number,
+        { practicaId: number; gastoReferencia: number; importeReferencia: number }
+    >()
+
+    for (const practicaIngreso of ingreso.practicas) {
+        const clavePractica = `${normalizarCodigoPracticaFacturacion(practicaIngreso.codigoPractica)}:${Number(practicaIngreso.cantidad)}:${fechaClave(practicaIngreso.fecha)}`
+        const infoCirugia = cirugiaPracticas.get(clavePractica)
+        if (!infoCirugia?.diferenciales?.dobleCirugia) continue
+
+        const cantidad = Math.max(1, Number(practicaIngreso.cantidad) || 1)
+        const importeReferencia =
+            practicaIngreso.importeTotal != null ? Number(String(practicaIngreso.importeTotal)) : 0
+        const valorGastosUnitario =
+            practicaIngreso.nomencladorPractica?.valorGastos != null
+                ? Number(practicaIngreso.nomencladorPractica.valorGastos)
+                : null
+        const esGastoPorCodigo = normalizarCodigoPracticaFacturacion(practicaIngreso.codigoPractica).includes('GA')
+        const esGastoPorDescripcion = descripcionEsGasto(practicaIngreso.nomencladorPractica?.descripcion)
+        const gastoReferencia =
+            valorGastosUnitario != null && valorGastosUnitario > 0
+                ? Number((valorGastosUnitario * cantidad).toFixed(2))
+                : (esGastoPorCodigo || esGastoPorDescripcion ? importeReferencia : 0)
+
+        const actual = candidatasBasePorCirugia.get(infoCirugia.cirugiaId)
+        if (
+            !actual ||
+            gastoReferencia > actual.gastoReferencia ||
+            (gastoReferencia === actual.gastoReferencia && importeReferencia > actual.importeReferencia)
+        ) {
+            candidatasBasePorCirugia.set(infoCirugia.cirugiaId, {
+                practicaId: practicaIngreso.id,
+                gastoReferencia,
+                importeReferencia,
+            })
+        }
+    }
+
+    for (const [cirugiaId, candidata] of candidatasBasePorCirugia) {
+        practicaBaseAutomaticaPorCirugia.set(cirugiaId, candidata.practicaId)
     }
 
     for (const o of ingreso.ordenes) {
@@ -1861,10 +1903,17 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 if (a.ordenNumero !== b.ordenNumero) return a.ordenNumero - b.ordenNumero
                 return a.ordenItem - b.ordenItem
             })
+        const practicaBaseIdEfectiva = diferencialCirugia
+            ? (
+                diferencialCirugia.diferenciales.practicaBaseId ??
+                practicaBaseAutomaticaPorCirugia.get(diferencialCirugia.cirugiaId) ??
+                null
+            )
+            : null
         const esPracticaBaseDobleCirugia = Boolean(
             diferencialCirugia?.diferenciales?.dobleCirugia &&
-            diferencialCirugia.diferenciales.practicaBaseId != null &&
-            diferencialCirugia.diferenciales.practicaBaseId === p.id
+            practicaBaseIdEfectiva != null &&
+            practicaBaseIdEfectiva === p.id
         )
         const aplicarDiferencialesCirugia = Boolean(diferencialCirugia) && !esPracticaBaseDobleCirugia
 
@@ -1978,6 +2027,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const diferencialesPractica = diferencialCirugia
             ? {
                 ...diferencialCirugia.diferenciales,
+                practicaBaseId: practicaBaseIdEfectiva,
                 esPracticaBase: esPracticaBaseDobleCirugia,
                 aplicaDiferencial: aplicarDiferencialesCirugia,
             }
@@ -4538,6 +4588,67 @@ export async function obtenerOrdenesAutorizadasIngreso(
         })()
         : {}
 
+    const cirugiasProgramadas = await prisma.cirugiaProgramada.findMany({
+        where: { internacionId: ingresoId },
+        orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
+        select: {
+            id: true,
+            fechaCirugia: true,
+            diferenciales: {
+                select: {
+                    esFeriado: true,
+                    esNocturna: true,
+                    mismaViaPatologia: true,
+                    diferentesViasPatologia: true,
+                    diferentesViasDiferentesPatologia: true,
+                    dobleCirugia: true,
+                },
+            },
+            practicas: {
+                select: {
+                    codigo: true,
+                    cantidad: true,
+                },
+            },
+        },
+    })
+
+    const cirugiaPracticasPorClave = new Map<
+        string,
+        {
+            cirugiaId: number
+            diferenciales: {
+                esFeriado: boolean
+                esNocturna: boolean
+                mismaViaPatologia: boolean
+                diferentesViasPatologia: boolean
+                diferentesViasDiferentesPatologia: boolean
+                dobleCirugia: boolean
+            }
+        }
+    >()
+
+    for (const cirugia of cirugiasProgramadas) {
+        const diferenciales = {
+            esFeriado: cirugia.diferenciales.some((d) => d.esFeriado),
+            esNocturna: cirugia.diferenciales.some((d) => d.esNocturna),
+            mismaViaPatologia: cirugia.diferenciales.some((d) => d.mismaViaPatologia),
+            diferentesViasPatologia: cirugia.diferenciales.some((d) => d.diferentesViasPatologia),
+            diferentesViasDiferentesPatologia: cirugia.diferenciales.some(
+                (d) => d.diferentesViasDiferentesPatologia
+            ),
+            dobleCirugia: cirugia.diferenciales.some((d) => d.dobleCirugia),
+        }
+
+        for (const practica of cirugia.practicas) {
+            const clave = `${normalizarCodigoPracticaFacturacion(practica.codigo)}:${Number(practica.cantidad)}:${fechaClave(cirugia.fechaCirugia)}`
+            cirugiaPracticasPorClave.set(clave, {
+                cirugiaId: cirugia.id,
+                diferenciales,
+            })
+        }
+    }
+
     const ordenes = await prisma.orden.findMany({
         where: {
             ingresoId,
@@ -4589,6 +4700,36 @@ export async function obtenerOrdenesAutorizadasIngreso(
                         )
                 )
                 .map((it) => ({
+                    ...(function () {
+                        const claveCirugia = `${normalizarCodigoPracticaFacturacion(it.codigoPractica)}:${Number(it.cantidad)}:${fechaClave(it.fecha)}`
+                        const cirugiaMatch = cirugiaPracticasPorClave.get(claveCirugia) ?? null
+                        const diferenciales = cirugiaMatch?.diferenciales ?? null
+                        const esCirugiaMultiple = Boolean(
+                            diferenciales?.dobleCirugia ||
+                                diferenciales?.mismaViaPatologia ||
+                                diferenciales?.diferentesViasPatologia ||
+                                diferenciales?.diferentesViasDiferentesPatologia
+                        )
+                        const etiquetasCirugia: string[] = []
+                        if (diferenciales?.mismaViaPatologia) {
+                            etiquetasCirugia.push('Misma vía / distinta patología')
+                        }
+                        if (diferenciales?.diferentesViasPatologia) {
+                            etiquetasCirugia.push('Distintas vías / misma patología')
+                        }
+                        if (diferenciales?.diferentesViasDiferentesPatologia) {
+                            etiquetasCirugia.push('Distintas vías / distinta patología')
+                        }
+                        if (diferenciales?.dobleCirugia) {
+                            etiquetasCirugia.push('Doble cirugía')
+                        }
+                        return {
+                            esPracticaCirugia: Boolean(cirugiaMatch),
+                            esCirugiaMultiple,
+                            cirugiaProgramadaId: cirugiaMatch?.cirugiaId ?? null,
+                            etiquetasCirugia,
+                        }
+                    })(),
                     item: it.item,
                     fecha: it.fecha,
                     codigoPractica: it.codigoPractica,
@@ -4613,6 +4754,11 @@ export async function obtenerOrdenesAutorizadasIngreso(
             })
 
             const items = itemsConEfector.map(({ efectorMatricula: _efectorMatricula, ...it }) => it)
+            const esCirugia = items.some((it) => Boolean(it.esPracticaCirugia))
+            const esCirugiaMultiple = items.some((it) => Boolean(it.esCirugiaMultiple))
+            const etiquetasCirugia = Array.from(
+                new Set(items.flatMap((it) => it.etiquetasCirugia ?? []))
+            )
 
             return {
                 puestoNumero: o.puestoNumero,
@@ -4621,6 +4767,9 @@ export async function obtenerOrdenesAutorizadasIngreso(
                 descripcion: o.descripcion,
                 numeroAutorizacion: o.numeroAutorizacion,
                 importeTotal: Number(o.importeTotal ?? 0),
+                esCirugia,
+                esCirugiaMultiple,
+                etiquetasCirugia,
                 profesional: profesionalLote,
                 items,
             }

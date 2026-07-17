@@ -218,6 +218,35 @@ export const CrearCirugiaUrgenciaSchema = z.object({
 
 export type CrearCirugiaUrgenciaInput = z.infer<typeof CrearCirugiaUrgenciaSchema>
 
+export const GuardarCondicionalCirugiaMultipleSchema = z
+  .object({
+    ingresoId: z.number().int().positive(),
+    cirugiaId: z.number().int().positive(),
+    cirugiasMultiples: z.boolean().default(false),
+    tipoCirugiaMultiple: z
+      .enum(['MISMA_VIA_MISMA_PATOLOGIA', 'MISMA_VIA_DISTINTA_PATOLOGIA', 'DISTINTA_VIA_DISTINTA_PATOLOGIA'])
+      .optional()
+      .nullable(),
+    monitoreoIntraoperatorio: z.boolean().default(false),
+    radiografiaConIntensificador: z.boolean().default(false),
+    cantidadDisparos: z.number().int().min(0).max(9999).optional().nullable(),
+    tecnicoRadiologia: z.string().max(120).trim().optional().nullable(),
+    firmaSelloRadiologo: z.string().max(120).trim().optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.cirugiasMultiples && !data.tipoCirugiaMultiple) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['tipoCirugiaMultiple'],
+        message: 'Debe indicar el tipo de cirugia multiple',
+      })
+    }
+  })
+
+export type GuardarCondicionalCirugiaMultipleInput = z.infer<
+  typeof GuardarCondicionalCirugiaMultipleSchema
+>
+
 export const CrearCirugiaSimpleSchema = z.object({
   ingresoId: z.number().int().positive(),
   pacienteId: z.number().int().positive(),

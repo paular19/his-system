@@ -17,6 +17,7 @@ import type {
   ActualizarDiagnosticoInternacionInput,
   CrearCirugiaUrgenciaInput,
   CrearCirugiaSimpleInput,
+  GuardarCondicionalCirugiaMultipleInput,
 } from './schemas'
 import type {
   CamaConOcupante,
@@ -413,6 +414,23 @@ export async function crearCirugiaSimpleConDescripcion(
   })
 
   return cirugia
+}
+
+export async function guardarCondicionalCirugiaMultiple(
+  data: GuardarCondicionalCirugiaMultipleInput,
+  usuario: string,
+  ip?: string
+): Promise<void> {
+  await repo.guardarCondicionalCirugiaMultiple(data)
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'CirugiaProgramada',
+    registroId: data.cirugiaId,
+    detalle: `Condicional de cirugia multiple actualizado en internacion ${data.ingresoId}`,
+    direccionIp: ip,
+  })
 }
 
 // ============================================

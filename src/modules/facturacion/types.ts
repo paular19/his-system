@@ -226,6 +226,9 @@ export interface OrdenAutorizadaLote {
     descripcion: string | null
     numeroAutorizacion: string | null
     importeTotal: number
+    esCirugia?: boolean
+    esCirugiaMultiple?: boolean
+    etiquetasCirugia?: string[]
     profesional: {
         id: number
         nombre: string
@@ -240,6 +243,10 @@ export interface OrdenAutorizadaLote {
         cantidad: number
         numeroAutorizacion: string | null
         importeTotal: number
+        esPracticaCirugia?: boolean
+        esCirugiaMultiple?: boolean
+        cirugiaProgramadaId?: number | null
+        etiquetasCirugia?: string[]
     }>
 }
 

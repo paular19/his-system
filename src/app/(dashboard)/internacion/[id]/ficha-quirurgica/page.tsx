@@ -443,6 +443,16 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
               const planCirugiaId = cirugia.meta.planId ?? ingreso.plan?.id ?? null
               const coseguroCirugiaId = cirugia.meta.coseguroId
               const afiliadoCirugia = cirugia.meta.afiliado ?? ingreso.numeroAfiliado ?? '—'
+              const tipoCirugiaMultipleInicial = cirugia.diferencialesConsolidados.mismaViaPatologia
+                ? 'MISMA_VIA_DISTINTA_PATOLOGIA'
+                : cirugia.diferencialesConsolidados.diferentesViasDiferentesPatologia
+                  ? 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
+                  : ''
+              const cirugiasMultiplesInicial =
+                cirugia.diferencialesConsolidados.dobleCirugia ||
+                cirugia.diferencialesConsolidados.mismaViaPatologia ||
+                cirugia.diferencialesConsolidados.diferentesViasPatologia ||
+                cirugia.diferencialesConsolidados.diferentesViasDiferentesPatologia
 
               return (
                 <article key={cirugia.id} className="his-card p-4 print:p-3 space-y-3 break-inside-avoid">
@@ -575,6 +585,21 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
                     ingresoId={ingresoId}
                     cirugiaId={cirugia.id}
                     fechaCirugiaLabel={fmtDate(cirugia.fechaCirugia)}
+                    fechaCirugiaInput={cirugia.fechaCirugia.toISOString().slice(0, 10)}
+                    cirugiasMultiplesInicial={cirugiasMultiplesInicial}
+                    tipoCirugiaMultipleInicial={tipoCirugiaMultipleInicial}
+                    pacienteNombre={ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? null}
+                    pacienteDni={ingreso.paciente?.numeroDocumento != null ? String(ingreso.paciente.numeroDocumento) : null}
+                    obraSocial={
+                      obraSocialCirugiaId != null
+                        ? obraSocialMap.get(obraSocialCirugiaId) ?? ingreso.obraSocial?.nombre ?? null
+                        : ingreso.obraSocial?.nombre ?? null
+                    }
+                    cirujanoInicial={
+                      ingreso.profesionalTratante?.nombre
+                        ? nombreProfesionalParaMostrar(ingreso.profesionalTratante.nombre)
+                        : null
+                    }
                     diagnosticoInicial={cirugia.meta.diagnostico}
                     observacionesIniciales={cirugia.meta.observaciones}
                   />

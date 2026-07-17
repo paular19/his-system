@@ -79,6 +79,7 @@ type CirugiaPracticaEditable = {
     descripcion: string
     importeTotal: number
     importeTotalReferencia: number
+    importeGastosReferencia: number
     esPracticaBase: boolean
     aplicaDiferencial: boolean
 }
@@ -927,9 +928,12 @@ function buildEditState(p: PrestacionFacturableItem): EditState {
 
 function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): DiferencialesCirugiaEditState {
     const baseIdActual = cirugia.diferenciales?.practicaBaseId ?? null
-    const baseIdPorImporte = cirugia.practicas[0]?.practicaId ?? null
+    const baseIdPorGastos =
+        cirugia.practicas.find((practica) => practica.importeGastosReferencia > 0)?.practicaId ??
+        cirugia.practicas[0]?.practicaId ??
+        null
     const dobleCirugia = Boolean(cirugia.diferenciales?.dobleCirugia)
-    const baseIdFinal = dobleCirugia ? (baseIdActual ?? baseIdPorImporte) : baseIdActual
+    const baseIdFinal = dobleCirugia ? (baseIdActual ?? baseIdPorGastos) : baseIdActual
 
     return {
         esFeriado: Boolean(cirugia.diferenciales?.esFeriado),
@@ -1289,6 +1293,15 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 descripcion: p.descripcion,
                 importeTotal: Number(p.importeTotal ?? 0),
                 importeTotalReferencia: Number(p.importeTotalOriginal ?? p.importeTotal ?? 0),
+                importeGastosReferencia: (() => {
+                    if (p.desglose?.valorGastos != null) {
+                        return Number((Number(p.desglose.valorGastos) * Number(p.cantidad ?? 1)).toFixed(2))
+                    }
+                    if ((p.incluyeCodigo ?? '').toUpperCase().includes('GA')) {
+                        return Number(p.importeTotalOriginal ?? p.importeTotal ?? 0)
+                    }
+                    return 0
+                })(),
                 esPracticaBase: Boolean(p.diferenciales?.esPracticaBase),
                 aplicaDiferencial: Boolean(p.diferenciales?.aplicaDiferencial),
             }
@@ -1312,7 +1325,12 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         return Array.from(map.values())
             .map((cirugia) => ({
                 ...cirugia,
-                practicas: [...cirugia.practicas].sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia),
+                practicas: [...cirugia.practicas].sort((a, b) => {
+                    if (b.importeGastosReferencia !== a.importeGastosReferencia) {
+                        return b.importeGastosReferencia - a.importeGastosReferencia
+                    }
+                    return b.importeTotalReferencia - a.importeTotalReferencia
+                }),
             }))
             .sort((a, b) => b.cirugiaId - a.cirugiaId)
     }, [contexto])
@@ -2348,7 +2366,11 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
 
         const draft = diferencialesCirugiaEdit[cirugia.cirugiaId] ?? buildDiferencialesCirugiaState(cirugia)
-        const practicaBaseId = draft.practicaBaseId ? Number.parseInt(draft.practicaBaseId, 10) : null
+        const practicaBaseId = draft.practicaBaseId
+            ? Number.parseInt(draft.practicaBaseId, 10)
+            : (cirugia.practicas.find((p) => p.importeGastosReferencia > 0)?.practicaId ??
+                cirugia.practicas[0]?.practicaId ??
+                null)
 
         if (draft.dobleCirugia && (!practicaBaseId || !cirugia.practicas.some((p) => p.practicaId === practicaBaseId))) {
             setError('Debe seleccionar la cirugía base al 100% para aplicar doble cirugía')
@@ -3041,7 +3063,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             <option value="">-- Seleccionar práctica base --</option>
                                                             {cirugia.practicas.map((practica) => (
                                                                 <option key={practica.practicaId} value={String(practica.practicaId)}>
-                                                                    {practica.descripcion} · {formatCurrency(practica.importeTotalReferencia)}
+                                                                    {practica.descripcion} · Total {formatCurrency(practica.importeTotalReferencia)} · Gastos {formatCurrency(practica.importeGastosReferencia)}
                                                                 </option>
                                                             ))}
                                                         </select>
@@ -3049,6 +3071,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     <div className="text-xs text-amber-900 rounded border border-amber-200 bg-white px-2 py-2">
                                                         <div><span className="font-semibold">Base 100%:</span> {practicaBase ? `${practicaBase.descripcion} (${formatCurrency(practicaBase.importeTotalReferencia)})` : 'Sin selección'}</div>
                                                         <div><span className="font-semibold">Con diferenciales:</span> {draft.dobleCirugia ? (practicasConDiferencial.length > 0 ? practicasConDiferencial.map((p) => p.descripcion).join(' · ') : 'Ninguna') : 'Todas las prácticas de la cirugía'}</div>
+                                                        <div><span className="font-semibold">Criterio automático:</span> mayor importe de GASTOS.</div>
                                                     </div>
                                                 </div>
                                             </div>

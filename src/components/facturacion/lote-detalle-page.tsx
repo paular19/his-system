@@ -827,20 +827,53 @@ export function LoteDetallePage({ loteId }: Props) {
                                 </div>
                             ) : (
                                 <div className="space-y-3">
-                                    {ordenes.map((orden) => {
-                                        const keyOrden = `${orden.puestoNumero}-${orden.numero}`
-                                        const itemsTabla = agruparItemsOrdenParaTabla(orden.items)
-                                        const totalCantidadOrden = orden.items.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)
-                                        const limitePracticas = 4
-                                        const abierta = ordenesAbiertas[keyOrden] ?? false
-                                        const expandida = ordenesExpandidas[keyOrden] ?? false
-                                        const practicasVisibles = expandida
-                                            ? itemsTabla
-                                            : itemsTabla.slice(0, limitePracticas)
-                                        const restantes = Math.max(0, itemsTabla.length - practicasVisibles.length)
+                                    {(() => {
+                                        const ordenesOrdenadas = [...ordenes].sort((a, b) => {
+                                            const diffTipo = Number(Boolean(b.esCirugia)) - Number(Boolean(a.esCirugia))
+                                            if (diffTipo !== 0) return diffTipo
+                                            const fechaA = new Date(a.fechaEmision).getTime()
+                                            const fechaB = new Date(b.fechaEmision).getTime()
+                                            if (fechaA !== fechaB) return fechaA - fechaB
+                                            return a.numero - b.numero
+                                        })
+                                        const hayCirugiaMultiple = ordenesOrdenadas.some((orden) => Boolean(orden.esCirugiaMultiple))
 
-                                        return (
-                                            <div key={keyOrden} className="border rounded-lg bg-white">
+                                        return ordenesOrdenadas.map((orden, index) => {
+                                            const keyOrden = `${orden.puestoNumero}-${orden.numero}`
+                                            const itemsTabla = agruparItemsOrdenParaTabla(orden.items)
+                                            const totalCantidadOrden = orden.items.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)
+                                            const limitePracticas = 4
+                                            const abierta = ordenesAbiertas[keyOrden] ?? false
+                                            const expandida = ordenesExpandidas[keyOrden] ?? false
+                                            const practicasVisibles = expandida
+                                                ? itemsTabla
+                                                : itemsTabla.slice(0, limitePracticas)
+                                            const restantes = Math.max(0, itemsTabla.length - practicasVisibles.length)
+                                            const esOrdenCirugia = Boolean(orden.esCirugia)
+                                            const eraCirugia = index > 0 ? Boolean(ordenesOrdenadas[index - 1]?.esCirugia) : null
+                                            const mostrarEncabezadoSeccion = index === 0 || esOrdenCirugia !== eraCirugia
+
+                                            return (
+                                                <div key={keyOrden} className="space-y-2">
+                                                    {mostrarEncabezadoSeccion && (
+                                                        <div
+                                                            className={`rounded-md border px-3 py-2 text-xs font-semibold uppercase tracking-wide ${esOrdenCirugia
+                                                                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                                                : 'border-slate-200 bg-slate-50 text-slate-700'
+                                                                }`}
+                                                        >
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <span>{esOrdenCirugia ? 'Cirugia' : 'Ordenes generales'}</span>
+                                                                {esOrdenCirugia && hayCirugiaMultiple && (
+                                                                    <span className="text-[11px] normal-case font-medium text-amber-800">
+                                                                        Incluye cirugia multiple con reglas de vias aplicadas en facturacion
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <div className={`border rounded-lg bg-white ${esOrdenCirugia ? 'border-amber-200' : ''}`}>
                                                 <button
                                                     type="button"
                                                     onClick={() => setOrdenesAbiertas((prev) => ({
@@ -852,6 +885,16 @@ export function LoteDetallePage({ loteId }: Props) {
                                                     <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
                                                         <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
                                                         <span>Orden #{orden.numero}</span>
+                                                        {esOrdenCirugia && (
+                                                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                                                                Cirugia
+                                                            </span>
+                                                        )}
+                                                        {esOrdenCirugia && orden.esCirugiaMultiple && (
+                                                            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
+                                                                Multiple
+                                                            </span>
+                                                        )}
                                                         {orden.descripcion && <span className="font-normal text-gray-500">— {orden.descripcion}</span>}
                                                     </span>
                                                     <span className="text-xs text-gray-500">{itemsTabla.length} práctica(s)</span>
@@ -866,6 +909,11 @@ export function LoteDetallePage({ loteId }: Props) {
                                                             <p>Cantidad total: {totalCantidadOrden}</p>
                                                             <p>Médico firmante: {orden.profesional?.nombre ?? '-'}</p>
                                                             <p>Matrícula firmante: {orden.profesional?.matricula ?? '-'}</p>
+                                                            {esOrdenCirugia && (orden.etiquetasCirugia?.length ?? 0) > 0 && (
+                                                                <p>
+                                                                    Reglas cirugía: <span className="font-medium text-amber-800">{(orden.etiquetasCirugia ?? []).join(' · ')}</span>
+                                                                </p>
+                                                            )}
                                                         </div>
 
                                                         <div className="rounded-md border border-gray-200 bg-white p-2.5">
@@ -1008,9 +1056,11 @@ export function LoteDetallePage({ loteId }: Props) {
                                                         </div>
                                                     </div>
                                                 )}
+                                                    </div>
                                             </div>
-                                        )
-                                    })}
+                                            )
+                                        })
+                                    })()}
                                 </div>
                             )}
                         </div>

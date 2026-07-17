@@ -31,6 +31,7 @@ import type {
   ActualizarDiagnosticoInternacionInput,
   CrearCirugiaUrgenciaInput,
   CrearCirugiaSimpleInput,
+  GuardarCondicionalCirugiaMultipleInput,
 } from './schemas'
 import type { ResultadoPaginado } from '@/types'
 
@@ -595,6 +596,7 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
             mismaViaPatologia: true,
             diferentesViasPatologia: true,
             diferentesViasDiferentesPatologia: true,
+            dobleCirugia: true,
           },
         },
       },
@@ -1753,6 +1755,10 @@ export async function crearCirugiaUrgencia(
               mismaViaPatologia: data.diferenciales.mismaViaPatologia,
               diferentesViasPatologia: data.diferenciales.diferentesViasPatologia,
               diferentesViasDiferentesPatologia: data.diferenciales.diferentesViasDiferentesPatologia,
+              dobleCirugia:
+                data.diferenciales.mismaViaPatologia ||
+                data.diferenciales.diferentesViasPatologia ||
+                data.diferenciales.diferentesViasDiferentesPatologia,
             },
           }
           : undefined,
@@ -1788,6 +1794,7 @@ export async function crearCirugiaUrgencia(
             mismaViaPatologia: true,
             diferentesViasPatologia: true,
             diferentesViasDiferentesPatologia: true,
+            dobleCirugia: true,
           },
         },
       },
@@ -1878,6 +1885,7 @@ export async function crearCirugiaSimpleConDescripcion(
           mismaViaPatologia: true,
           diferentesViasPatologia: true,
           diferentesViasDiferentesPatologia: true,
+          dobleCirugia: true,
         },
       },
     },
@@ -1890,6 +1898,58 @@ export async function crearCirugiaSimpleConDescripcion(
       cantidad: Number(p.cantidad),
     })),
   } as CirugiaUrgenciaItem
+}
+
+export async function guardarCondicionalCirugiaMultiple(
+  data: GuardarCondicionalCirugiaMultipleInput
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const cirugia = await tx.cirugiaProgramada.findFirst({
+      where: {
+        id: data.cirugiaId,
+        internacionId: data.ingresoId,
+      },
+      select: { id: true },
+    })
+
+    if (!cirugia) {
+      throw new Error('Cirugia no encontrada para el ingreso indicado')
+    }
+
+    const mismaViaPatologia =
+      data.cirugiasMultiples && data.tipoCirugiaMultiple === 'MISMA_VIA_DISTINTA_PATOLOGIA'
+    const diferentesViasDiferentesPatologia =
+      data.cirugiasMultiples && data.tipoCirugiaMultiple === 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
+
+    const payload = {
+      esFeriado: false,
+      esNocturna: false,
+      mismaViaPatologia,
+      diferentesViasPatologia: false,
+      diferentesViasDiferentesPatologia,
+      dobleCirugia: data.cirugiasMultiples,
+      practicaBaseId: null,
+    }
+
+    const existentes = await tx.cirugiaDiferencial.count({ where: { cirugiaId: cirugia.id } })
+
+    if (existentes === 0) {
+      await tx.cirugiaDiferencial.create({
+        data: {
+          cirugiaId: cirugia.id,
+          tipo: 'QUIRURGICA',
+          descripcion: 'Diferenciales de cirugia multiples configurados en internacion',
+          ...payload,
+        },
+      })
+      return
+    }
+
+    await tx.cirugiaDiferencial.updateMany({
+      where: { cirugiaId: cirugia.id },
+      data: payload,
+    })
+  })
 }
 
 // ============================================

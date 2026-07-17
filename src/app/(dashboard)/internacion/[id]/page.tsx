@@ -314,6 +314,18 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     <CirugiaUrgenciaSection
                                         ingresoId={ingresoId}
                                         pacienteId={detalle.paciente.id}
+                                        pacienteNombre={detalle.nombre ?? detalle.paciente.nombreCompleto ?? '—'}
+                                        pacienteDni={
+                                            detalle.paciente.numeroDocumento != null
+                                                ? String(detalle.paciente.numeroDocumento)
+                                                : null
+                                        }
+                                        obraSocialNombre={detalle.obraSocial?.nombre ?? null}
+                                        cirujanoInicial={
+                                            detalle.profesionalTratante?.nombre
+                                                ? nombreProfesionalParaMostrar(detalle.profesionalTratante.nombre)
+                                                : null
+                                        }
                                         obraSocialIdInicial={detalle.obraSocial?.id ?? null}
                                         planIdInicial={detalle.plan?.id ?? null}
                                         obraSocialCoseguroIdInicial={detalle.obraSocialCoseguroId ?? null}

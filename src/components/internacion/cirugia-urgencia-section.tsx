@@ -124,6 +124,10 @@ type ObservacionesCirugiaMeta = {
 interface CirugiaUrgenciaSectionProps {
     ingresoId: number
     pacienteId: number
+    pacienteNombre: string
+    pacienteDni: string | null
+    obraSocialNombre: string | null
+    cirujanoInicial: string | null
     obraSocialIdInicial: number | null
     planIdInicial: number | null
     obraSocialCoseguroIdInicial: number | null
@@ -240,6 +244,10 @@ function boolToLabel(value: boolean): string {
 export function CirugiaUrgenciaSection({
     ingresoId,
     pacienteId,
+    pacienteNombre,
+    pacienteDni,
+    obraSocialNombre,
+    cirujanoInicial,
     obraSocialIdInicial,
     planIdInicial,
     obraSocialCoseguroIdInicial,
@@ -1053,6 +1061,16 @@ export function CirugiaUrgenciaSection({
                                             ? coseguroMap.get(obraSocialCoseguroIdInicial) ?? `ID ${obraSocialCoseguroIdInicial}`
                                             : '—'
                                 const afiliado = meta.afiliado ?? numeroAfiliadoInicial ?? '—'
+                                const tipoCirugiaMultipleInicial = diferencialesConsolidados.mismaViaPatologia
+                                    ? 'MISMA_VIA_DISTINTA_PATOLOGIA'
+                                    : diferencialesConsolidados.diferentesViasDiferentesPatologia
+                                        ? 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
+                                        : ''
+                                const cirugiasMultiplesInicial =
+                                    Boolean(diferencialesConsolidados.dobleCirugia) ||
+                                    diferencialesConsolidados.mismaViaPatologia ||
+                                    diferencialesConsolidados.diferentesViasPatologia ||
+                                    diferencialesConsolidados.diferentesViasDiferentesPatologia
 
                                 return (
                                     <article key={c.id} className="border rounded-lg p-3 bg-white space-y-3">
@@ -1160,9 +1178,25 @@ export function CirugiaUrgenciaSection({
                                             ingresoId={ingresoId}
                                             cirugiaId={c.id}
                                             fechaCirugiaLabel={formatearFechaArgentina(c.fechaCirugia)}
+                                            fechaCirugiaInput={fechaAInputLocal(c.fechaCirugia)}
+                                            cirugiasMultiplesInicial={cirugiasMultiplesInicial}
+                                            tipoCirugiaMultipleInicial={tipoCirugiaMultipleInicial}
+                                            pacienteNombre={pacienteNombre}
+                                            pacienteDni={pacienteDni}
+                                            obraSocial={obraSocialLabel !== '—' ? obraSocialLabel : obraSocialNombre}
+                                            cirujanoInicial={cirujanoInicial}
                                             diagnosticoInicial={meta.diagnostico}
                                             observacionesIniciales={meta.observaciones}
                                         />
+
+                                        <section className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 print:bg-white print:border-gray-300">
+                                            <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">
+                                                Ficha de anestesia
+                                            </p>
+                                            <p className="text-xs text-amber-700 mt-1">
+                                                Pendiente de definicion final con PDF de anestesia. Se incorporara en este mismo bloque.
+                                            </p>
+                                        </section>
                                     </article>
                                 )
                             })}

@@ -1,11 +1,25 @@
-﻿'use client'
+'use client'
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Scissors, ChevronDown, ChevronUp } from 'lucide-react'
+import Link from 'next/link'
+import { Plus, Search, Trash2, Scissors, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
+import {
+    ComponenteSelector,
+    calcularTotalSeleccionado,
+    seleccionPorDefecto,
+    type ComponenteSeleccion,
+    type ComponenteValores,
+} from '@/components/ui/componente-selector'
+import {
+    esSubitemAnestesista,
+    esSubitemEspecialista,
+    type SubitemCodigo,
+    obtenerSubitemsSeleccionados,
+    valorUnitarioPorSubitem,
+} from '@/lib/practicas-subitems'
 import { fechaAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
-import type { PracticaItem } from '@/modules/internacion/types'
 
 type OpcionObraSocial = {
     id: number
@@ -29,6 +43,41 @@ type OpcionCama = {
     identificador: string
     sector: string
     habitacion: string | null
+}
+
+type NomencladorPracticaItem = {
+    convenioId: number
+    codigo: string
+    descripcion: string
+    valor?: number | null
+    valorEspecialista?: number | null
+    valorAyudante?: number | null
+    valorAnestesista?: number | null
+    valorGastos?: number | null
+}
+
+type PracticaFormItem = {
+    _key: string
+    convenioId: number
+    codigo: string
+    descripcion: string
+    requiereMatriculaEspecialista: boolean
+    requiereMatriculaAnestesista: boolean
+    matriculaEspecialista: number | null
+    matriculaAnestesista: number | null
+    desglose: ComponenteValores
+    seleccionComponentes: ComponenteSeleccion
+}
+
+const MATRICULA_ANESTESISTA_DEFAULT = 6
+
+function etiquetaSubitem(subitem: SubitemCodigo): string {
+    if (subitem === 'HE') return 'Honorario Especialista (HE)'
+    if (subitem === 'HA') return 'Honorario Anestesista (HA)'
+    if (subitem === 'GA') return 'Derechos/Gastos (GA)'
+    if (subitem === 'A1') return 'Ayudante 1 (A1)'
+    if (subitem === 'A2') return 'Ayudante 2 (A2)'
+    return 'Ayudante 3 (A3)'
 }
 
 type CirugiaUrgenciaItem = {
@@ -84,7 +133,7 @@ interface CirugiaUrgenciaSectionProps {
     coseguros: OpcionCoseguro[]
     camasDisponibles: OpcionCama[]
     cirugias: CirugiaUrgenciaItem[]
-    practicasInternacion: PracticaItem[]
+    matriculaTratanteDefault?: number | null
 }
 
 function normalizarNombreObraSocial(value: string): string {
@@ -94,14 +143,6 @@ function normalizarNombreObraSocial(value: string): string {
         .toUpperCase()
         .replace(/[^A-Z0-9]+/g, ' ')
         .replace(/\s+/g, ' ')
-        .trim()
-}
-
-function normalizarBusqueda(value: string): string {
-    return value
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
         .trim()
 }
 
@@ -195,10 +236,6 @@ function boolToLabel(value: boolean): string {
     return value ? 'Si' : 'No'
 }
 
-function practicaActiva(estado: string | null | undefined): boolean {
-    return (estado?.trim().toUpperCase() ?? 'A') !== 'X'
-}
-
 export function CirugiaUrgenciaSection({
     ingresoId,
     pacienteId,
@@ -212,15 +249,19 @@ export function CirugiaUrgenciaSection({
     coseguros,
     camasDisponibles,
     cirugias: cirugiasIniciales,
-    practicasInternacion,
+    matriculaTratanteDefault,
 }: CirugiaUrgenciaSectionProps) {
     const router = useRouter()
 
     const [cirugias, setCirugias] = useState<CirugiaUrgenciaItem[]>(cirugiasIniciales)
     const [expandido, setExpandido] = useState(true)
     const [mostrarForm, setMostrarForm] = useState(false)
+    const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
     const [guardando, setGuardando] = useState(false)
+    const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
+    const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
 
     const [fechaCirugia, setFechaCirugia] = useState(fechaAInputLocal())
     const [horaCirugia, setHoraCirugia] = useState('')
@@ -236,8 +277,10 @@ export function CirugiaUrgenciaSection({
     const [diagnostico, setDiagnostico] = useState('')
     const [observaciones, setObservaciones] = useState('')
 
-    const [filtroPracticas, setFiltroPracticas] = useState('')
-    const [practicaIdsSeleccionadas, setPracticaIdsSeleccionadas] = useState<number[]>([])
+    const [terminoBusquedaPractica, setTerminoBusquedaPractica] = useState('')
+    const [buscandoPractica, setBuscandoPractica] = useState(false)
+    const [resultadosPractica, setResultadosPractica] = useState<NomencladorPracticaItem[]>([])
+    const [practicas, setPracticas] = useState<PracticaFormItem[]>([])
 
     const [esFeriado, setEsFeriado] = useState(false)
     const [esNocturna, setEsNocturna] = useState(false)
@@ -268,35 +311,73 @@ export function CirugiaUrgenciaSection({
         [coseguros]
     )
 
-    const practicasActivas = useMemo(
-        () => practicasInternacion.filter((practica) => practicaActiva(practica.estado)),
-        [practicasInternacion]
-    )
-
-    const practicasSeleccionables = useMemo(() => {
-        const termino = normalizarBusqueda(filtroPracticas)
-        if (!termino) return practicasActivas
-
-        return practicasActivas.filter((practica) => {
-            const codigo = normalizarBusqueda(practica.codigoPractica)
-            const descripcion = normalizarBusqueda(practica.descripcionPractica ?? '')
-            const autorizacion = normalizarBusqueda(practica.numeroAutorizacion ?? '')
-            return (
-                codigo.includes(termino) ||
-                descripcion.includes(termino) ||
-                autorizacion.includes(termino)
-            )
-        })
-    }, [filtroPracticas, practicasActivas])
-
-    const practicasMap = useMemo(
-        () => new Map(practicasActivas.map((practica) => [practica.id, practica])),
-        [practicasActivas]
-    )
-
     const puedeGuardar = useMemo(() => {
-        return Boolean(fechaCirugia && practicaIdsSeleccionadas.length > 0)
-    }, [fechaCirugia, practicaIdsSeleccionadas.length])
+        return Boolean(fechaCirugia && practicas.length > 0)
+    }, [fechaCirugia, practicas.length])
+
+    const puedeIrAAutorizaciones = cirugias.length > 0
+
+    const buscarPracticaNomenclador = async (termino: string) => {
+        if (!obraSocialIdNumero || termino.trim().length < 2) {
+            setResultadosPractica([])
+            return
+        }
+
+        setBuscandoPractica(true)
+        try {
+            const qs = new URLSearchParams({
+                q: termino.trim(),
+                convenioId: String(obraSocialIdNumero),
+            })
+            const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
+            const json = await res.json()
+            setResultadosPractica(Array.isArray(json.data) ? json.data : [])
+        } catch {
+            setResultadosPractica([])
+            setError('No se pudo buscar practicas en el nomenclador')
+        } finally {
+            setBuscandoPractica(false)
+        }
+    }
+
+    const agregarPractica = (p: NomencladorPracticaItem) => {
+        setPracticas((prev) => {
+            return [
+                ...prev,
+                {
+                    _key: `${p.convenioId}-${p.codigo}-${Date.now()}`,
+                    convenioId: p.convenioId,
+                    codigo: p.codigo.trim().slice(0, 50),
+                    descripcion: p.descripcion,
+                    requiereMatriculaEspecialista: Number(p.valorEspecialista ?? 0) > 0,
+                    requiereMatriculaAnestesista: Number(p.valorAnestesista ?? 0) > 0,
+                    matriculaEspecialista: matriculaTratanteDefault ?? null,
+                    matriculaAnestesista: MATRICULA_ANESTESISTA_DEFAULT,
+                    desglose: {
+                        valorEspecialista: p.valorEspecialista ?? null,
+                        valorAyudante: p.valorAyudante ?? null,
+                        valorAnestesista: p.valorAnestesista ?? null,
+                        valorGastos: p.valorGastos ?? null,
+                        valorTotal: p.valor ?? null,
+                    },
+                    seleccionComponentes: seleccionPorDefecto({
+                        valorEspecialista: p.valorEspecialista ?? null,
+                        valorAyudante: p.valorAyudante ?? null,
+                        valorAnestesista: p.valorAnestesista ?? null,
+                        valorGastos: p.valorGastos ?? null,
+                        valorTotal: p.valor ?? null,
+                    }),
+                },
+            ]
+        })
+
+        setResultadosPractica([])
+        setTerminoBusquedaPractica('')
+    }
+
+    const quitarPractica = (key: string) => {
+        setPracticas((prev) => prev.filter((x) => x._key !== key))
+    }
 
     const limpiarForm = () => {
         setFechaCirugia(fechaAInputLocal())
@@ -304,8 +385,9 @@ export function CirugiaUrgenciaSection({
         setCamaId('')
         setDiagnostico('')
         setObservaciones('')
-        setFiltroPracticas('')
-        setPracticaIdsSeleccionadas([])
+        setTerminoBusquedaPractica('')
+        setResultadosPractica([])
+        setPracticas([])
         setEsFeriado(false)
         setEsNocturna(false)
         setEsCirugiaMultiple(false)
@@ -315,33 +397,57 @@ export function CirugiaUrgenciaSection({
         setError(null)
     }
 
-    const togglePracticaSeleccionada = (practicaId: number, checked: boolean) => {
-        setPracticaIdsSeleccionadas((prev) => {
-            if (checked) {
-                if (prev.includes(practicaId)) return prev
-                return [...prev, practicaId]
-            }
-            return prev.filter((id) => id !== practicaId)
-        })
+    const limpiarPedidoLaboratorio = () => {
+        setNumeroProtocoloLaboratorio('')
+        setDiagnosticoLaboratorio('')
     }
 
-    const toggleSeleccionTodas = (checked: boolean) => {
-        const idsFiltradas = practicasSeleccionables.map((practica) => practica.id)
-        if (!checked) {
-            setPracticaIdsSeleccionadas((prev) => prev.filter((id) => !idsFiltradas.includes(id)))
+    const crearPedidoLaboratorio = async () => {
+        const numeroProtocolo = numeroProtocoloLaboratorio.trim()
+        const diagnostico = diagnosticoLaboratorio.trim()
+
+        if (!numeroProtocolo) {
+            setError('Ingresa el numero de protocolo')
             return
         }
 
-        setPracticaIdsSeleccionadas((prev) => {
-            const next = new Set(prev)
-            for (const id of idsFiltradas) next.add(id)
-            return Array.from(next)
-        })
+        if (!diagnostico) {
+            setError('Ingresa el diagnostico')
+            return
+        }
+
+        setError(null)
+        setGuardandoPedidoLaboratorio(true)
+        try {
+            const result = await crearPedidoLaboratorioAction({
+                ingresoId,
+                numeroProtocolo,
+                diagnostico,
+            })
+
+            if ('error' in result && result.error) {
+                setError(result.error)
+                return
+            }
+
+            limpiarPedidoLaboratorio()
+            setMostrarPedidoLaboratorio(false)
+            if ('puestoNumero' in result && 'numero' in result) {
+                router.push(`/dashboard/ambulatorio/${result.puestoNumero}/${result.numero}`)
+                return
+            }
+
+            router.refresh()
+        } catch {
+            setError('No se pudo generar el pedido de laboratorio')
+        } finally {
+            setGuardandoPedidoLaboratorio(false)
+        }
     }
 
     const guardarCirugiaUrgencia = async () => {
         if (!puedeGuardar) {
-            setError('Completa la fecha y selecciona al menos una practica')
+            setError('Completa fecha y al menos una practica')
             return
         }
 
@@ -355,29 +461,73 @@ export function CirugiaUrgenciaSection({
             return
         }
 
-        const practicasSeleccionadas = practicaIdsSeleccionadas
-            .map((id) => practicasMap.get(id))
-            .filter((practica): practica is PracticaItem => Boolean(practica))
-
-        if (practicasSeleccionadas.length === 0) {
-            setError('Las practicas seleccionadas ya no estan activas, refresca y volve a intentar')
+        const practicaSinMatricula = practicas.find(
+            (p) =>
+                (p.requiereMatriculaEspecialista &&
+                    p.seleccionComponentes.especialista > 0 &&
+                    !p.matriculaEspecialista) ||
+                (p.requiereMatriculaAnestesista &&
+                    p.seleccionComponentes.anestesista > 0 &&
+                    !p.matriculaAnestesista)
+        )
+        if (practicaSinMatricula) {
+            setError('Completa matricula en practicas con HE/HA antes de registrar la cirugia')
             return
         }
-
-        const practicasPayload = practicasSeleccionadas.map((practica) => ({
-            convenioId: practica.convenioId,
-            codigo: practica.codigoPractica.trim(),
-            descripcion: practica.descripcionPractica?.trim() || practica.codigoPractica.trim(),
-            cantidad: Number(practica.cantidad) > 0 ? Number(practica.cantidad) : 1,
-            importeTotal: practica.importeTotal ?? null,
-            matriculaEspecialista: practica.matriculaEspecialista ?? null,
-            matriculaAnestesista: practica.matriculaAnestesista ?? null,
-        }))
 
         setError(null)
         setGuardando(true)
 
         try {
+            const practicasExpandida = practicas.flatMap((p) => {
+                const subitems = obtenerSubitemsSeleccionados(
+                    {
+                        valorEspecialista: p.desglose.valorEspecialista,
+                        valorAyudante: p.desglose.valorAyudante,
+                        valorAnestesista: p.desglose.valorAnestesista,
+                        valorGastos: p.desglose.valorGastos,
+                    },
+                    p.seleccionComponentes
+                )
+
+                if (subitems.length === 0) {
+                    return [{
+                        convenioId: p.convenioId,
+                        codigo: p.codigo,
+                        descripcion: p.descripcion,
+                        cantidad: 1,
+                        importeTotal: Number(
+                            (
+                                calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
+                            ).toFixed(2)
+                        ),
+                        matriculaEspecialista:
+                            p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
+                        matriculaAnestesista:
+                            p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
+                    }]
+                }
+
+                return subitems.map((subitem) => {
+                    const valorUnitario = valorUnitarioPorSubitem(subitem, {
+                        valorEspecialista: p.desglose.valorEspecialista,
+                        valorAyudante: p.desglose.valorAyudante,
+                        valorAnestesista: p.desglose.valorAnestesista,
+                        valorGastos: p.desglose.valorGastos,
+                    })
+
+                    return {
+                        convenioId: p.convenioId,
+                        codigo: p.codigo,
+                        descripcion: `${p.descripcion} - ${etiquetaSubitem(subitem)}`,
+                        cantidad: 1,
+                        importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
+                        matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
+                        matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
+                    }
+                })
+            })
+
             const res = await fetch(`/api/internacion/${ingresoId}/cirugia-urgencia`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -388,15 +538,14 @@ export function CirugiaUrgenciaSection({
                     camaId: camaId ? Number.parseInt(camaId, 10) : null,
                     obraSocialId: obraSocialId ? Number.parseInt(obraSocialId, 10) : null,
                     planId: planId ? Number.parseInt(planId, 10) : null,
-                    obraSocialCoseguroId:
-                        obraSocialCoseguroId && esCoberturaConCoseguro
-                            ? Number.parseInt(obraSocialCoseguroId, 10)
-                            : null,
+                    obraSocialCoseguroId: obraSocialCoseguroId
+                        && esCoberturaConCoseguro
+                        ? Number.parseInt(obraSocialCoseguroId, 10)
+                        : null,
                     numeroAfiliado: numeroAfiliado || null,
                     diagnostico: diagnostico || null,
                     observaciones: observaciones || null,
-                    practicas: practicasPayload,
-                    practicaIds: practicasSeleccionadas.map((practica) => practica.id),
+                    practicas: practicasExpandida,
                     diferenciales: {
                         esFeriado,
                         esNocturna,
@@ -424,11 +573,6 @@ export function CirugiaUrgenciaSection({
         }
     }
 
-    const practicasFiltradasIds = practicasSeleccionables.map((practica) => practica.id)
-    const todasFiltradasSeleccionadas =
-        practicasFiltradasIds.length > 0 &&
-        practicasFiltradasIds.every((id) => practicaIdsSeleccionadas.includes(id))
-
     return (
         <div className="his-card">
             <div className="flex items-center justify-between p-4 border-b border-gray-100">
@@ -448,13 +592,25 @@ export function CirugiaUrgenciaSection({
 
                 {puedeCrear && (
                     <div className="flex items-center gap-2">
-                        <Link
-                            href="#internacion-practicas"
+                        <button
+                            onClick={() => {
+                                setMostrarPedidoLaboratorio((v) => !v)
+                                if (mostrarPedidoLaboratorio) limpiarPedidoLaboratorio()
+                            }}
                             className="flex items-center gap-1 text-xs font-medium text-indigo-700 hover:text-indigo-800 border border-indigo-200 rounded-lg px-2.5 py-1 hover:bg-indigo-50"
                         >
                             <Plus className="h-3.5 w-3.5" />
-                            Ir a Practicas
-                        </Link>
+                            Nuevo pedido de laboratorio
+                        </button>
+                        {puedeIrAAutorizaciones && (
+                            <Link
+                                href={`/dashboard/ambulatorio/nueva?ingresoId=${ingresoId}`}
+                                className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 hover:bg-emerald-50"
+                            >
+                                <Plus className="h-3.5 w-3.5" />
+                                Generar autorizacion
+                            </Link>
+                        )}
                         <button
                             onClick={() => {
                                 setMostrarForm((v) => !v)
@@ -463,7 +619,7 @@ export function CirugiaUrgenciaSection({
                             className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50"
                         >
                             <Plus className="h-3.5 w-3.5" />
-                            Agregar cirugia
+                            Agregar
                         </button>
                     </div>
                 )}
@@ -477,13 +633,60 @@ export function CirugiaUrgenciaSection({
                         </div>
                     )}
 
-                    {mostrarForm && puedeCrear && (
-                        <div className="space-y-4 border border-blue-100 bg-blue-50/40 rounded-xl p-4">
-                            <div className="rounded-md border border-blue-200 bg-white p-3 text-xs text-blue-900">
-                                La carga de practicas, generacion de ordenes y formato de impresion se hace en el bloque Practicas.
-                                Aca solo seleccionas cuales practicas ya cargadas pertenecen a esta cirugia.
+                    {mostrarPedidoLaboratorio && puedeCrear && (
+                        <div className="space-y-3 border border-indigo-100 bg-indigo-50/40 rounded-xl p-4">
+                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                                Nuevo pedido de laboratorio
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Numero de protocolo</label>
+                                    <input
+                                        type="text"
+                                        value={numeroProtocoloLaboratorio}
+                                        onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)}
+                                        placeholder="Ej: 123456"
+                                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Diagnostico</label>
+                                    <input
+                                        type="text"
+                                        value={diagnosticoLaboratorio}
+                                        onChange={(e) => setDiagnosticoLaboratorio(e.target.value)}
+                                        placeholder="Diagnostico clinico"
+                                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    />
+                                </div>
                             </div>
 
+                            <div className="flex gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => void crearPedidoLaboratorio()}
+                                    disabled={guardandoPedidoLaboratorio}
+                                    className="flex items-center gap-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    {guardandoPedidoLaboratorio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                                    Generar orden
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setMostrarPedidoLaboratorio(false)
+                                        limpiarPedidoLaboratorio()
+                                    }}
+                                    className="text-xs text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {mostrarForm && puedeCrear && (
+                        <div className="space-y-4 border border-blue-100 bg-blue-50/40 rounded-xl p-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-medium text-gray-600 mb-1">Obra Social</label>
@@ -575,65 +778,134 @@ export function CirugiaUrgenciaSection({
                                 />
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="block text-xs font-medium text-gray-600">Practicas de la cirugia</label>
-
-                                <div className="flex items-center gap-2">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Practicas</label>
+                                <div className="flex gap-2 mb-2">
                                     <div className="relative flex-1">
-                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                         <input
                                             type="text"
-                                            value={filtroPracticas}
-                                            onChange={(e) => setFiltroPracticas(e.target.value)}
-                                            placeholder="Filtrar por codigo, descripcion o autorizacion"
+                                            value={terminoBusquedaPractica}
+                                            onChange={(e) => setTerminoBusquedaPractica(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault()
+                                                    void buscarPracticaNomenclador(terminoBusquedaPractica)
+                                                }
+                                            }}
+                                            placeholder="Buscar por codigo o descripcion"
                                             className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-2 text-sm"
+                                            disabled={!obraSocialIdNumero}
                                         />
                                     </div>
-                                    <label className="inline-flex items-center gap-2 text-xs text-gray-700">
-                                        <input
-                                            type="checkbox"
-                                            checked={todasFiltradasSeleccionadas}
-                                            onChange={(e) => toggleSeleccionTodas(e.target.checked)}
-                                            className="h-4 w-4 rounded border-gray-300 text-blue-600"
-                                        />
-                                        Todas
-                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => void buscarPracticaNomenclador(terminoBusquedaPractica)}
+                                        disabled={buscandoPractica || terminoBusquedaPractica.trim().length < 2 || !obraSocialIdNumero}
+                                        className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                                    >
+                                        {buscandoPractica ? 'Buscando...' : 'Buscar'}
+                                    </button>
                                 </div>
 
-                                {practicasSeleccionables.length === 0 ? (
-                                    <p className="text-xs text-gray-500">No hay practicas activas para seleccionar.</p>
-                                ) : (
-                                    <div className="max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white divide-y">
-                                        {practicasSeleccionables.map((practica) => (
-                                            <label
-                                                key={practica.id}
-                                                className="flex items-start gap-2 px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer"
+                                {resultadosPractica.length > 0 && (
+                                    <div className="mb-3 rounded-md border bg-white shadow-sm max-h-44 overflow-y-auto divide-y">
+                                        {resultadosPractica.map((p) => (
+                                            <button
+                                                key={`${p.convenioId}-${p.codigo}`}
+                                                type="button"
+                                                onClick={() => agregarPractica(p)}
+                                                className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors text-sm"
                                             >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={practicaIdsSeleccionadas.includes(practica.id)}
-                                                    onChange={(e) =>
-                                                        togglePracticaSeleccionada(practica.id, e.target.checked)
-                                                    }
-                                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600"
-                                                />
-                                                <span className="min-w-0 flex-1">
-                                                    <span className="font-mono text-gray-500 mr-2">
-                                                        {practica.codigoPractica.trim()}
-                                                    </span>
-                                                    <span className="text-gray-800">
-                                                        {practica.descripcionPractica ?? practica.codigoPractica.trim()}
-                                                    </span>
-                                                    <span className="block mt-0.5 text-gray-500">
-                                                        Cant: {Number(practica.cantidad)}
-                                                        {practica.numeroAutorizacion
-                                                            ? `  Aut: ${practica.numeroAutorizacion}`
-                                                            : '  Sin autorizacion'}
-                                                    </span>
-                                                </span>
-                                            </label>
+                                                <span className="font-mono text-xs text-gray-500 mr-2">{p.codigo}</span>
+                                                {p.descripcion}
+                                            </button>
                                         ))}
                                     </div>
+                                )}
+
+                                {practicas.length > 0 ? (
+                                    <div className="divide-y border rounded-md bg-white">
+                                        {practicas.map((p) => (
+                                            <div key={p._key} className="px-3 py-3 space-y-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
+                                                    <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
+
+                                                    {p.requiereMatriculaEspecialista && (
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            value={p.matriculaEspecialista ?? ''}
+                                                            onChange={(e) => {
+                                                                const value = e.target.value.trim()
+                                                                setPracticas((prev) =>
+                                                                    prev.map((x) =>
+                                                                        x._key === p._key
+                                                                            ? {
+                                                                                ...x,
+                                                                                matriculaEspecialista: value ? Number.parseInt(value, 10) || null : null,
+                                                                            }
+                                                                            : x
+                                                                    )
+                                                                )
+                                                            }}
+                                                            className="w-24 rounded border border-gray-300 px-2 py-1 text-xs"
+                                                            placeholder="Mat. HE"
+                                                        />
+                                                    )}
+
+                                                    {p.requiereMatriculaAnestesista && (
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            value={p.matriculaAnestesista ?? ''}
+                                                            onChange={(e) => {
+                                                                const value = e.target.value.trim()
+                                                                setPracticas((prev) =>
+                                                                    prev.map((x) =>
+                                                                        x._key === p._key
+                                                                            ? {
+                                                                                ...x,
+                                                                                matriculaAnestesista: value ? Number.parseInt(value, 10) || null : null,
+                                                                            }
+                                                                            : x
+                                                                    )
+                                                                )
+                                                            }}
+                                                            className="w-24 rounded border border-gray-300 px-2 py-1 text-xs"
+                                                            placeholder="Mat. HA"
+                                                        />
+                                                    )}
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => quitarPractica(p._key)}
+                                                        className="text-red-400 hover:text-red-600"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+
+                                                <ComponenteSelector
+                                                    valores={p.desglose}
+                                                    seleccion={p.seleccionComponentes}
+                                                    onChange={(nuevaSeleccion) => {
+                                                        setPracticas((prev) =>
+                                                            prev.map((x) =>
+                                                                x._key === p._key
+                                                                    ? { ...x, seleccionComponentes: nuevaSeleccion }
+                                                                    : x
+                                                            )
+                                                        )
+                                                    }}
+                                                    disabled={guardando}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-400">No se han agregado practicas.</p>
                                 )}
                             </div>
 
@@ -674,48 +946,45 @@ export function CirugiaUrgenciaSection({
                                 </div>
                             </div>
 
-                            <div className="rounded-md border border-gray-200 bg-white p-3 space-y-2 text-sm text-gray-700">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">Diferenciales</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
-                                    <label className="flex items-center gap-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={esFeriado}
-                                            onChange={(e) => setEsFeriado(e.target.checked)}
-                                            className="w-4 h-4 text-blue-600 rounded"
-                                        />
-                                        Es feriado
-                                    </label>
-                                    <label className="flex items-center gap-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={esNocturna}
-                                            onChange={(e) => setEsNocturna(e.target.checked)}
-                                            className="w-4 h-4 text-blue-600 rounded"
-                                        />
-                                        Cirugia nocturna
-                                    </label>
-                                    <label className="flex items-center gap-2 md:col-span-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={esCirugiaMultiple}
-                                            onChange={(e) => {
-                                                const checked = e.target.checked
-                                                setEsCirugiaMultiple(checked)
-                                                if (!checked) {
-                                                    setMismaViaPatologia(false)
-                                                    setDiferentesViasPatologia(false)
-                                                    setDiferentesViasDiferentesPatologia(false)
-                                                }
-                                            }}
-                                            className="w-4 h-4 text-blue-600 rounded"
-                                        />
-                                        Cirugia multiple
-                                    </label>
-                                </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4 text-sm text-gray-700">
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={esFeriado}
+                                        onChange={(e) => setEsFeriado(e.target.checked)}
+                                        className="w-4 h-4 text-blue-600 rounded"
+                                    />
+                                    Es feriado
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={esNocturna}
+                                        onChange={(e) => setEsNocturna(e.target.checked)}
+                                        className="w-4 h-4 text-blue-600 rounded"
+                                    />
+                                    Cirugia nocturna
+                                </label>
+                                <label className="flex items-center gap-2 md:col-span-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={esCirugiaMultiple}
+                                        onChange={(e) => {
+                                            const checked = e.target.checked
+                                            setEsCirugiaMultiple(checked)
+                                            if (!checked) {
+                                                setMismaViaPatologia(false)
+                                                setDiferentesViasPatologia(false)
+                                                setDiferentesViasDiferentesPatologia(false)
+                                            }
+                                        }}
+                                        className="w-4 h-4 text-blue-600 rounded"
+                                    />
+                                    Cirugia multiple
+                                </label>
 
                                 {esCirugiaMultiple && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 pt-1 border-t border-gray-100">
+                                    <>
                                         <label className="flex items-center gap-2">
                                             <input
                                                 type="checkbox"
@@ -723,7 +992,7 @@ export function CirugiaUrgenciaSection({
                                                 onChange={(e) => setMismaViaPatologia(e.target.checked)}
                                                 className="w-4 h-4 text-blue-600 rounded"
                                             />
-                                            Misma via, distintas patologias
+                                            Misma via, diferentes patologias
                                         </label>
                                         <label className="flex items-center gap-2">
                                             <input
@@ -738,14 +1007,12 @@ export function CirugiaUrgenciaSection({
                                             <input
                                                 type="checkbox"
                                                 checked={diferentesViasDiferentesPatologia}
-                                                onChange={(e) =>
-                                                    setDiferentesViasDiferentesPatologia(e.target.checked)
-                                                }
+                                                onChange={(e) => setDiferentesViasDiferentesPatologia(e.target.checked)}
                                                 className="w-4 h-4 text-blue-600 rounded"
                                             />
-                                            Diferentes vias, distintas patologias
+                                            Diferentes vias, diferentes patologias
                                         </label>
-                                    </div>
+                                    </>
                                 )}
                             </div>
 
@@ -948,5 +1215,3 @@ function DatoCirugia({ label, value }: { label: string; value: string }) {
         </div>
     )
 }
-
-

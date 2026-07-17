@@ -326,7 +326,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                         coseguros={coseguros}
                                         camasDisponibles={camasDisponiblesSimple}
                                         cirugias={detalle.cirugiasUrgencia}
-                                        practicasInternacion={detalle.practicas}
+                                        matriculaTratanteDefault={matriculaTratanteDefault}
                                     />
                                 )}
                             </div>

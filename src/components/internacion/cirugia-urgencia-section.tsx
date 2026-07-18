@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Trash2, Scissors, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
-import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
+import { crearPedidoLaboratorioAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 import { fechaAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
 
@@ -73,17 +73,6 @@ type CirugiaUrgenciaItem = {
     }>
 }
 
-type ObservacionesCirugiaMeta = {
-    tipo: string | null
-    diagnostico: string | null
-    observaciones: string | null
-    obraSocialId: number | null
-    planId: number | null
-    coseguroId: number | null
-    afiliado: string | null
-    extra: string[]
-}
-
 interface CirugiaUrgenciaSectionProps {
     ingresoId: number
     pacienteId: number
@@ -110,95 +99,6 @@ function normalizarNombreObraSocial(value: string): string {
         .trim()
 }
 
-function parseEntero(value: string): number | null {
-    const parsed = Number.parseInt(value, 10)
-    return Number.isFinite(parsed) ? parsed : null
-}
-
-function parseObservacionesCirugia(value: string | null | undefined): ObservacionesCirugiaMeta {
-    if (!value || !value.trim()) {
-        return {
-            tipo: null,
-            diagnostico: null,
-            observaciones: null,
-            obraSocialId: null,
-            planId: null,
-            coseguroId: null,
-            afiliado: null,
-            extra: [],
-        }
-    }
-
-    const meta: ObservacionesCirugiaMeta = {
-        tipo: null,
-        diagnostico: null,
-        observaciones: null,
-        obraSocialId: null,
-        planId: null,
-        coseguroId: null,
-        afiliado: null,
-        extra: [],
-    }
-
-    const tokens = value
-        .split('|')
-        .map((part) => part.trim())
-        .filter((part) => part.length > 0)
-
-    for (const token of tokens) {
-        const [rawKey, ...rest] = token.split(':')
-        const key = rawKey?.trim().toLowerCase()
-        const parsedValue = rest.join(':').trim()
-
-        if (!key || !parsedValue) {
-            meta.extra.push(token)
-            continue
-        }
-
-        if (key === 'tipo') {
-            meta.tipo = parsedValue
-            continue
-        }
-
-        if (key === 'diagnostico') {
-            meta.diagnostico = parsedValue
-            continue
-        }
-
-        if (key === 'observaciones') {
-            meta.observaciones = parsedValue
-            continue
-        }
-
-        if (key === 'obrasocialid') {
-            meta.obraSocialId = parseEntero(parsedValue)
-            continue
-        }
-
-        if (key === 'planid') {
-            meta.planId = parseEntero(parsedValue)
-            continue
-        }
-
-        if (key === 'coseguroid') {
-            meta.coseguroId = parseEntero(parsedValue)
-            continue
-        }
-
-        if (key === 'afiliado') {
-            meta.afiliado = parsedValue
-            continue
-        }
-
-        meta.extra.push(token)
-    }
-
-    return meta
-}
-
-function boolToLabel(value: boolean): string {
-    return value ? 'Si' : 'No'
-}
 
 export function CirugiaUrgenciaSection({
     ingresoId,
@@ -223,6 +123,7 @@ export function CirugiaUrgenciaSection({
     const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
     const [guardando, setGuardando] = useState(false)
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
+    const [generandoOrdenAgrupada, setGenerandoOrdenAgrupada] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
@@ -242,6 +143,7 @@ export function CirugiaUrgenciaSection({
     const [observaciones, setObservaciones] = useState('')
 
     const [practicas, setPracticas] = useState<PracticaFormItem[]>([])
+    const [practicasSeleccionadasImpresion, setPracticasSeleccionadasImpresion] = useState<number[]>([])
 
     const [esFeriado, setEsFeriado] = useState(false)
     const [esNocturna, setEsNocturna] = useState(false)
@@ -262,19 +164,22 @@ export function CirugiaUrgenciaSection({
         () => planes.filter((p) => !obraSocialIdNumero || p.obraSocialId === obraSocialIdNumero),
         [planes, obraSocialIdNumero]
     )
-    const obraSocialMap = useMemo(
-        () => new Map(obraSociales.map((os) => [os.id, os.nombre])),
-        [obraSociales]
-    )
-    const planMap = useMemo(() => new Map(planes.map((p) => [p.id, p.nombre])), [planes])
-    const coseguroMap = useMemo(
-        () => new Map(coseguros.map((coseguro) => [coseguro.id, coseguro.nombre])),
-        [coseguros]
-    )
-
     const puedeGuardar = useMemo(() => {
         return Boolean(fechaCirugia && practicas.length > 0)
     }, [fechaCirugia, practicas.length])
+
+    const practicaIdsCirugias = useMemo(
+        () => cirugias.flatMap((cirugia) => cirugia.practicas.map((practica) => practica.id)),
+        [cirugias]
+    )
+    const setPracticaIdsCirugias = useMemo(
+        () => new Set(practicaIdsCirugias),
+        [practicaIdsCirugias]
+    )
+    const practicasSeleccionadasVigentes = useMemo(
+        () => practicasSeleccionadasImpresion.filter((id) => setPracticaIdsCirugias.has(id)),
+        [practicasSeleccionadasImpresion, setPracticaIdsCirugias]
+    )
 
     const puedeIrAAutorizaciones = cirugias.length > 0
 
@@ -317,6 +222,76 @@ export function CirugiaUrgenciaSection({
         setDiferentesViasPatologia(false)
         setDiferentesViasDiferentesPatologia(false)
         setError(null)
+    }
+
+    const alternarSeleccionPracticaCirugia = (practicaId: number, checked: boolean) => {
+        setPracticasSeleccionadasImpresion((prev) => {
+            if (checked) {
+                if (prev.includes(practicaId)) return prev
+                return [...prev, practicaId]
+            }
+            return prev.filter((id) => id !== practicaId)
+        })
+    }
+
+    const alternarSeleccionTodasCirugia = (practicaIds: number[], checked: boolean) => {
+        if (!checked) {
+            setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => !practicaIds.includes(id)))
+            return
+        }
+
+        setPracticasSeleccionadasImpresion((prev) => {
+            const next = new Set(prev)
+            for (const practicaId of practicaIds) {
+                next.add(practicaId)
+            }
+            return Array.from(next)
+        })
+    }
+
+    const generarEImprimirOrdenAgrupada = async () => {
+        if (practicasSeleccionadasVigentes.length === 0) {
+            setError('Selecciona al menos una practica de cirugia para imprimir en una sola orden')
+            return
+        }
+
+        setError(null)
+        setGenerandoOrdenAgrupada(true)
+        try {
+            const result = await generarOrdenesDesdeInternacionAction({
+                ingresoId,
+                practicaIds: practicasSeleccionadasVigentes,
+                agruparEnUnaOrden: true,
+            })
+
+            if ('error' in result && result.error) {
+                setError(result.error)
+                return
+            }
+
+            const grupos = Array.isArray((result as { ordenesPorGrupo?: unknown }).ordenesPorGrupo)
+                ? ((result as {
+                    ordenesPorGrupo: Array<{ puestoNumero: number; numero: number; practicaIds: number[] }>
+                }).ordenesPorGrupo)
+                : []
+
+            if (grupos.length === 0) {
+                setError('No se generaron ordenes para las practicas seleccionadas')
+                return
+            }
+
+            const ordenesParam = grupos
+                .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
+                .join(',')
+
+            const idsAsignados = new Set(grupos.flatMap((grupo) => grupo.practicaIds))
+            setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => !idsAsignados.has(id)))
+            router.push(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`)
+        } catch {
+            setError('No se pudo generar la orden agrupada para impresion')
+        } finally {
+            setGenerandoOrdenAgrupada(false)
+        }
     }
 
     const limpiarPedidoLaboratorio = () => {
@@ -821,48 +796,46 @@ export function CirugiaUrgenciaSection({
                         <p className="text-sm text-gray-500">No hay cirugias registradas.</p>
                     ) : (
                         <div className="space-y-3">
-                            {cirugias.map((c) => {
-                                const meta = parseObservacionesCirugia(c.observaciones)
-                                const diferencialesConsolidados = c.diferenciales.reduce(
-                                    (acc, row) => ({
-                                        esFeriado: acc.esFeriado || row.esFeriado,
-                                        esNocturna: acc.esNocturna || row.esNocturna,
-                                        mismaViaPatologia: acc.mismaViaPatologia || row.mismaViaPatologia,
-                                        diferentesViasPatologia:
-                                            acc.diferentesViasPatologia || row.diferentesViasPatologia,
-                                        diferentesViasDiferentesPatologia:
-                                            acc.diferentesViasDiferentesPatologia || row.diferentesViasDiferentesPatologia,
-                                        dobleCirugia: acc.dobleCirugia || Boolean(row.dobleCirugia),
-                                    }),
-                                    {
-                                        esFeriado: false,
-                                        esNocturna: false,
-                                        mismaViaPatologia: false,
-                                        diferentesViasPatologia: false,
-                                        diferentesViasDiferentesPatologia: false,
-                                        dobleCirugia: false,
-                                    }
-                                )
+                            {puedeCrear && (
+                                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                                    <div className="text-xs text-emerald-800">
+                                        Practicas seleccionadas para una sola orden: {practicasSeleccionadasVigentes.length}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => alternarSeleccionTodasCirugia(practicaIdsCirugias, true)}
+                                            disabled={practicaIdsCirugias.length === 0 || generandoOrdenAgrupada}
+                                            className="rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                                        >
+                                            Seleccionar todas
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPracticasSeleccionadasImpresion([])}
+                                            disabled={practicasSeleccionadasVigentes.length === 0 || generandoOrdenAgrupada}
+                                            className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                        >
+                                            Limpiar seleccion
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => void generarEImprimirOrdenAgrupada()}
+                                            disabled={practicasSeleccionadasVigentes.length === 0 || generandoOrdenAgrupada}
+                                            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                        >
+                                            {generandoOrdenAgrupada && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                            {generandoOrdenAgrupada ? 'Generando...' : 'Imprimir en una sola orden'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
-                                const obraSocialLabel =
-                                    meta.obraSocialId != null
-                                        ? obraSocialMap.get(meta.obraSocialId) ?? `ID ${meta.obraSocialId}`
-                                        : obraSocialIdInicial != null
-                                            ? obraSocialMap.get(obraSocialIdInicial) ?? `ID ${obraSocialIdInicial}`
-                                            : '-'
-                                const planLabel =
-                                    meta.planId != null
-                                        ? planMap.get(meta.planId) ?? `ID ${meta.planId}`
-                                        : planIdInicial != null
-                                            ? planMap.get(planIdInicial) ?? `ID ${planIdInicial}`
-                                            : '-'
-                                const coseguroLabel =
-                                    meta.coseguroId != null
-                                        ? coseguroMap.get(meta.coseguroId) ?? `ID ${meta.coseguroId}`
-                                        : obraSocialCoseguroIdInicial != null
-                                            ? coseguroMap.get(obraSocialCoseguroIdInicial) ?? `ID ${obraSocialCoseguroIdInicial}`
-                                            : '-'
-                                const afiliado = meta.afiliado ?? numeroAfiliadoInicial ?? '-'
+                            {cirugias.map((c) => {
+                                const practicaIdsCirugia = c.practicas.map((practica) => practica.id)
+                                const todasSeleccionadasCirugia =
+                                    practicaIdsCirugia.length > 0
+                                    && practicaIdsCirugia.every((id) => practicasSeleccionadasVigentes.includes(id))
 
                                 return (
                                     <article key={c.id} className="border rounded-lg p-3 bg-white space-y-3">
@@ -876,55 +849,8 @@ export function CirugiaUrgenciaSection({
                                                     href={`/dashboard/internacion/${ingresoId}/ficha-quirurgica#cirugia-${c.id}`}
                                                     className="text-xs font-medium text-blue-700 border border-blue-200 rounded-md px-2 py-1 hover:bg-blue-50"
                                                 >
-                                                    Completar ficha quirurgica
+                                                    Ver ficha quirurgica
                                                 </Link>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-1.5 text-xs">
-                                            <DatoCirugia label="Nro autorizacion" value={c.numeroAutorizacion ?? '-'} />
-                                            <DatoCirugia
-                                                label="Cama"
-                                                value={
-                                                    c.cama
-                                                        ? `${c.cama.identificador} (${c.cama.sector})${c.cama.habitacion ? ` - Hab. ${c.cama.habitacion}` : ''}`
-                                                        : '-'
-                                                }
-                                            />
-                                            <DatoCirugia label="Obra social" value={obraSocialLabel} />
-                                            <DatoCirugia label="Plan" value={planLabel} />
-                                            <DatoCirugia label="Coseguro" value={coseguroLabel} />
-                                            <DatoCirugia label="Afiliado" value={afiliado} />
-                                        </div>
-
-                                        {meta.diagnostico && (
-                                            <div>
-                                                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Diagnostico quirurgico</p>
-                                                <p className="text-sm text-gray-800 whitespace-pre-wrap">{meta.diagnostico}</p>
-                                            </div>
-                                        )}
-
-                                        <div>
-                                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Diferenciales</p>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-1.5 text-xs">
-                                                <DatoCirugia label="Es feriado" value={boolToLabel(diferencialesConsolidados.esFeriado)} />
-                                                <DatoCirugia label="Nocturna" value={boolToLabel(diferencialesConsolidados.esNocturna)} />
-                                                <DatoCirugia
-                                                    label="Misma via / distinta patologia"
-                                                    value={boolToLabel(diferencialesConsolidados.mismaViaPatologia)}
-                                                />
-                                                <DatoCirugia
-                                                    label="Diferentes vias / misma patologia"
-                                                    value={boolToLabel(diferencialesConsolidados.diferentesViasPatologia)}
-                                                />
-                                                <DatoCirugia
-                                                    label="Diferentes vias / distinta patologia"
-                                                    value={boolToLabel(diferencialesConsolidados.diferentesViasDiferentesPatologia)}
-                                                />
-                                                <DatoCirugia
-                                                    label="Doble cirugia"
-                                                    value={boolToLabel(Boolean(diferencialesConsolidados.dobleCirugia))}
-                                                />
                                             </div>
                                         </div>
 
@@ -937,6 +863,17 @@ export function CirugiaUrgenciaSection({
                                                     <table className="min-w-full text-xs">
                                                         <thead className="bg-gray-50 text-gray-600">
                                                             <tr>
+                                                                {puedeCrear && (
+                                                                    <th className="text-left px-2 py-1 border-b w-9">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={todasSeleccionadasCirugia}
+                                                                            onChange={(e) => alternarSeleccionTodasCirugia(practicaIdsCirugia, e.target.checked)}
+                                                                            className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500"
+                                                                            title="Seleccionar practicas de esta cirugia"
+                                                                        />
+                                                                    </th>
+                                                                )}
                                                                 <th className="text-left px-2 py-1 border-b">Codigo</th>
                                                                 <th className="text-left px-2 py-1 border-b">Descripcion</th>
                                                                 <th className="text-right px-2 py-1 border-b">Cant.</th>
@@ -946,6 +883,16 @@ export function CirugiaUrgenciaSection({
                                                         <tbody>
                                                             {c.practicas.map((p) => (
                                                                 <tr key={p.id} className="text-gray-700">
+                                                                    {puedeCrear && (
+                                                                        <td className="px-2 py-1 border-b align-middle">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={practicasSeleccionadasVigentes.includes(p.id)}
+                                                                                onChange={(e) => alternarSeleccionPracticaCirugia(p.id, e.target.checked)}
+                                                                                className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500"
+                                                                            />
+                                                                        </td>
+                                                                    )}
                                                                     <td className="px-2 py-1 border-b font-mono">{p.codigo}</td>
                                                                     <td className="px-2 py-1 border-b">{p.descripcion}</td>
                                                                     <td className="px-2 py-1 border-b text-right">{String(Number(p.cantidad))}</td>
@@ -957,22 +904,6 @@ export function CirugiaUrgenciaSection({
                                                 </div>
                                             )}
                                         </div>
-
-                                        {(meta.observaciones || meta.extra.length > 0 || c.observaciones) && (
-                                            <div>
-                                                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Observaciones</p>
-                                                <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                                                    {meta.observaciones ?? c.observaciones ?? '-'}
-                                                </p>
-                                                {meta.extra.length > 0 && (
-                                                    <ul className="mt-1 text-xs text-gray-500 list-disc pl-4">
-                                                        {meta.extra.map((extra, index) => (
-                                                            <li key={`${c.id}-extra-${index}`}>{extra}</li>
-                                                        ))}
-                                                    </ul>
-                                                )}
-                                            </div>
-                                        )}
                                     </article>
                                 )
                             })}
@@ -980,15 +911,6 @@ export function CirugiaUrgenciaSection({
                     )}
                 </div>
             )}
-        </div>
-    )
-}
-
-function DatoCirugia({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="flex items-start justify-between gap-3">
-            <dt className="text-gray-500 font-medium">{label}</dt>
-            <dd className="text-gray-900 text-right">{value}</dd>
         </div>
     )
 }

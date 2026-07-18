@@ -428,7 +428,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
           )}
         </section>
 
-        {puedeCrearCirugia && ingreso.paciente?.id != null && (
+        {puedeCrearCirugia && ingreso.paciente?.id != null && cirugias.length === 0 && (
           <FichaQuirurgicaAltaCirugia ingresoId={ingresoId} pacienteId={ingreso.paciente.id} />
         )}
 

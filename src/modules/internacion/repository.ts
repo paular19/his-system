@@ -1671,13 +1671,14 @@ export async function eliminarPracticaNoAutorizada(
     })
 
     // Si la práctica pertenece a una cirugía programada vinculada, eliminar también una práctica espejo pendiente.
+    // Usamos igualdad exacta de código para evitar borrar el ítem equivocado por prefijos compartidos.
     if (codigoPracticaTrim.length > 0) {
       const cirugia = await tx.cirugiaProgramada.findFirst({
         where: {
           internacionId: ingresoId,
           practicas: {
             some: {
-              codigo: { startsWith: codigoPracticaTrim },
+              codigo: codigoPracticaTrim,
               numeroAutorizacion: null,
             },
           },
@@ -1687,7 +1688,7 @@ export async function eliminarPracticaNoAutorizada(
           id: true,
           practicas: {
             where: {
-              codigo: { startsWith: codigoPracticaTrim },
+              codigo: codigoPracticaTrim,
               numeroAutorizacion: null,
             },
             orderBy: { id: 'desc' },

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Scissors, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
@@ -101,6 +101,10 @@ export function CirugiaUrgenciaSection({
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
     const [practicasSeleccionadasImpresion, setPracticasSeleccionadasImpresion] = useState<number[]>([])
+
+    useEffect(() => {
+        setCirugias(cirugiasIniciales)
+    }, [cirugiasIniciales])
 
     const practicaIdsCirugias = useMemo(
         () => cirugias.flatMap((cirugia) => cirugia.practicas.map((practica) => practica.id)),

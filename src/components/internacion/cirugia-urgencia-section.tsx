@@ -61,6 +61,19 @@ type CirugiaUrgenciaItem = {
     }>
 }
 
+type PracticaInternacionItem = {
+    id: number
+    codigoPractica: string
+    cantidad: number
+    estado: string | null
+    ordenPractica: Array<{
+        puestoNumero: number
+        ordenNumero: number
+        item: number
+        numeroAutorizacion: string | null
+    }>
+}
+
 interface CirugiaUrgenciaSectionProps {
     ingresoId: number
     pacienteId: number
@@ -74,6 +87,7 @@ interface CirugiaUrgenciaSectionProps {
     coseguros: OpcionCoseguro[]
     camasDisponibles: OpcionCama[]
     cirugias: CirugiaUrgenciaItem[]
+    practicasInternacion: PracticaInternacionItem[]
     matriculaTratanteDefault?: number | null
 }
 
@@ -87,6 +101,7 @@ export function CirugiaUrgenciaSection({
     numeroAfiliadoInicial,
     puedeCrear,
     cirugias: cirugiasIniciales,
+    practicasInternacion,
     matriculaTratanteDefault,
 }: CirugiaUrgenciaSectionProps) {
     const router = useRouter()
@@ -219,12 +234,47 @@ export function CirugiaUrgenciaSection({
             return
         }
 
+        const practicasCirugiaSeleccionadas = cirugias
+            .flatMap((cirugia) => cirugia.practicas)
+            .filter((practica) => practicasSeleccionadasVigentes.includes(practica.id))
+
+        const practicasPendientesPorCodigo = new Map<string, number[]>()
+        for (const practica of practicasInternacion) {
+            const estado = (practica.estado ?? 'A').trim().toUpperCase()
+            if (estado === 'X') continue
+            if ((practica.ordenPractica?.length ?? 0) > 0) continue
+
+            const codigo = practica.codigoPractica.trim().toUpperCase()
+            const prev = practicasPendientesPorCodigo.get(codigo) ?? []
+            prev.push(practica.id)
+            practicasPendientesPorCodigo.set(codigo, prev)
+        }
+
+        const practicaIdInternacionPorPracticaCirugiaId = new Map<number, number>()
+        for (const practicaCirugia of practicasCirugiaSeleccionadas) {
+            const codigo = practicaCirugia.codigo.trim().toUpperCase()
+            const candidatos = practicasPendientesPorCodigo.get(codigo) ?? []
+            const practicaIdInternacion = candidatos.shift()
+            if (practicaIdInternacion == null) continue
+            practicaIdInternacionPorPracticaCirugiaId.set(practicaCirugia.id, practicaIdInternacion)
+            practicasPendientesPorCodigo.set(codigo, candidatos)
+        }
+
+        const practicaIdsInternacionSeleccionadas = practicasSeleccionadasVigentes
+            .map((id) => practicaIdInternacionPorPracticaCirugiaId.get(id) ?? null)
+            .filter((id): id is number => id != null)
+
+        if (practicaIdsInternacionSeleccionadas.length === 0) {
+            setError('No se encontraron practicas pendientes de internacion para la seleccion de cirugia')
+            return
+        }
+
         setError(null)
         setGenerandoOrdenAgrupada(true)
         try {
             const result = await generarOrdenesDesdeInternacionAction({
                 ingresoId,
-                practicaIds: practicasSeleccionadasVigentes,
+                practicaIds: practicaIdsInternacionSeleccionadas,
                 agruparEnUnaOrden: true,
             })
 
@@ -248,8 +298,15 @@ export function CirugiaUrgenciaSection({
                 .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
                 .join(',')
 
-            const idsAsignados = new Set(grupos.flatMap((grupo) => grupo.practicaIds))
-            setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => !idsAsignados.has(id)))
+            const idsAsignadosInternacion = new Set(grupos.flatMap((grupo) => grupo.practicaIds))
+            const idsAsignadosCirugia = new Set<number>()
+            for (const [practicaIdCirugia, practicaIdInternacion] of practicaIdInternacionPorPracticaCirugiaId.entries()) {
+                if (idsAsignadosInternacion.has(practicaIdInternacion)) {
+                    idsAsignadosCirugia.add(practicaIdCirugia)
+                }
+            }
+
+            setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => !idsAsignadosCirugia.has(id)))
 
             if (imprimirDespues) {
                 router.push(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`)

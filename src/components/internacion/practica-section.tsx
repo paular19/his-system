@@ -1001,7 +1001,7 @@ export function PracticaSection({
         setGenerandoOrdenes(true)
         const printWindow =
             imprimirDespues && typeof window !== 'undefined'
-                ? window.open('', '_blank', 'noopener,noreferrer')
+                ? window.open('about:blank', '_blank')
                 : null
         try {
             const clasificacionPayload = Object.fromEntries(
@@ -1080,9 +1080,9 @@ export function PracticaSection({
                     .join(',')
                 const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
                 if (printWindow) {
-                    printWindow.location.href = url
+                    printWindow.location.assign(url)
                 } else if (typeof window !== 'undefined') {
-                    window.open(url, '_blank', 'noopener,noreferrer')
+                    window.open(url, '_blank')
                 }
             }
 
@@ -1141,7 +1141,7 @@ export function PracticaSection({
             .join(',')
         const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
         if (typeof window !== 'undefined') {
-            window.open(url, '_blank', 'noopener,noreferrer')
+            window.open(url, '_blank')
             return
         }
         router.push(url)

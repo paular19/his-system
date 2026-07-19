@@ -37,6 +37,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
         revalidatePath(`/dashboard/internacion/${ingresoId}`)
         revalidatePath(`/dashboard/internacion/${ingresoId}/informe`)
+        revalidatePath(`/dashboard/internacion/${ingresoId}/ficha-quirurgica`)
 
         return NextResponse.json({ data: cirugia }, { status: 201 })
     } catch (err) {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Scissors, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
-import { crearPedidoLaboratorioAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
+import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 import { fechaAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
 
@@ -109,12 +109,10 @@ export function CirugiaUrgenciaSection({
     const [cirugias, setCirugias] = useState<CirugiaUrgenciaItem[]>(cirugiasIniciales)
     const [expandido, setExpandido] = useState(true)
     const [mostrarForm, setMostrarForm] = useState(false)
-    const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
-    const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
+    const [cirugiaActivaId, setCirugiaActivaId] = useState<number | null>(null)
+    const [creandoCirugia, setCreandoCirugia] = useState(false)
     const [generandoOrdenAgrupada, setGenerandoOrdenAgrupada] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
-    const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
     const [practicasSeleccionadasImpresion, setPracticasSeleccionadasImpresion] = useState<number[]>([])
 
     useEffect(() => {
@@ -134,14 +132,51 @@ export function CirugiaUrgenciaSection({
         [practicasSeleccionadasImpresion, setPracticaIdsCirugias]
     )
 
-    const puedeIrAAutorizaciones = cirugias.length > 0
-
     const limpiarForm = () => {
         setError(null)
     }
 
+    const iniciarNuevaCirugia = async () => {
+        setError(null)
+        setCreandoCirugia(true)
+
+        try {
+            const res = await fetch(`/api/internacion/${ingresoId}/cirugias`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pacienteId,
+                    fechaCirugia: fechaAInputLocal(),
+                    horaCirugia: null,
+                    descripcion: 'Creada desde internacion para carga de practicas',
+                }),
+            })
+
+            const json = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                throw new Error(json.error ?? 'No se pudo crear la cirugia')
+            }
+
+            const nuevaCirugia = json.data as CirugiaUrgenciaItem
+            setCirugias((prev) => [nuevaCirugia, ...prev])
+            setCirugiaActivaId(nuevaCirugia.id)
+            setMostrarForm(true)
+            router.refresh()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'No se pudo crear la cirugia')
+        } finally {
+            setCreandoCirugia(false)
+        }
+    }
+
     const guardarPracticasEnCirugia = async (entradas: PracticaCargaEntrada[]) => {
         if (entradas.length === 0) return { ok: false, error: 'No hay practicas para agregar' }
+
+        if (!cirugiaActivaId) {
+            const mensaje = 'Primero crea una cirugia con el boton Agregar'
+            setError(mensaje)
+            return { ok: false, error: mensaje }
+        }
 
         if (!obraSocialIdInicial) {
             const mensaje = 'La internacion no tiene obra social asignada. Actualizala para cargar practicas de cirugia.'
@@ -165,8 +200,11 @@ export function CirugiaUrgenciaSection({
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    cirugiaId: cirugiaActivaId,
                     pacienteId,
-                    fechaCirugia: fechaAInputLocal(),
+                    fechaCirugia: fechaAInputLocal(
+                        cirugias.find((cirugia) => cirugia.id === cirugiaActivaId)?.fechaCirugia ?? new Date()
+                    ),
                     horaCirugia: null,
                     camaId: null,
                     obraSocialId: obraSocialIdInicial,
@@ -193,7 +231,9 @@ export function CirugiaUrgenciaSection({
                 return { ok: false, error: mensaje }
             }
 
-            setCirugias((prev) => [json.data, ...prev])
+            setCirugias((prev) =>
+                prev.map((cirugia) => (cirugia.id === cirugiaActivaId ? (json.data as CirugiaUrgenciaItem) : cirugia))
+            )
             router.refresh()
             return { ok: true }
         } catch {
@@ -321,54 +361,6 @@ export function CirugiaUrgenciaSection({
         }
     }
 
-    const limpiarPedidoLaboratorio = () => {
-        setNumeroProtocoloLaboratorio('')
-        setDiagnosticoLaboratorio('')
-    }
-
-    const crearPedidoLaboratorio = async () => {
-        const numeroProtocolo = numeroProtocoloLaboratorio.trim()
-        const diagnostico = diagnosticoLaboratorio.trim()
-
-        if (!numeroProtocolo) {
-            setError('Ingresa el numero de protocolo')
-            return
-        }
-
-        if (!diagnostico) {
-            setError('Ingresa el diagnostico')
-            return
-        }
-
-        setError(null)
-        setGuardandoPedidoLaboratorio(true)
-        try {
-            const result = await crearPedidoLaboratorioAction({
-                ingresoId,
-                numeroProtocolo,
-                diagnostico,
-            })
-
-            if ('error' in result && result.error) {
-                setError(result.error)
-                return
-            }
-
-            limpiarPedidoLaboratorio()
-            setMostrarPedidoLaboratorio(false)
-            if ('puestoNumero' in result && 'numero' in result) {
-                router.push(`/dashboard/ambulatorio/${result.puestoNumero}/${result.numero}`)
-                return
-            }
-
-            router.refresh()
-        } catch {
-            setError('No se pudo generar el pedido de laboratorio')
-        } finally {
-            setGuardandoPedidoLaboratorio(false)
-        }
-    }
-
     return (
         <div className="his-card">
             <div className="flex items-center justify-between p-4 border-b border-gray-100">
@@ -389,33 +381,12 @@ export function CirugiaUrgenciaSection({
                 {puedeCrear && (
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => {
-                                setMostrarPedidoLaboratorio((v) => !v)
-                                if (mostrarPedidoLaboratorio) limpiarPedidoLaboratorio()
-                            }}
-                            className="flex items-center gap-1 text-xs font-medium text-indigo-700 hover:text-indigo-800 border border-indigo-200 rounded-lg px-2.5 py-1 hover:bg-indigo-50"
+                            onClick={() => void iniciarNuevaCirugia()}
+                            disabled={creandoCirugia}
+                            className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50 disabled:opacity-60"
                         >
-                            <Plus className="h-3.5 w-3.5" />
-                            Nuevo pedido de laboratorio
-                        </button>
-                        {puedeIrAAutorizaciones && (
-                            <Link
-                                href={`/dashboard/ambulatorio/nueva?ingresoId=${ingresoId}`}
-                                className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 hover:bg-emerald-50"
-                            >
-                                <Plus className="h-3.5 w-3.5" />
-                                Generar autorizacion
-                            </Link>
-                        )}
-                        <button
-                            onClick={() => {
-                                setMostrarForm((v) => !v)
-                                if (mostrarForm) limpiarForm()
-                            }}
-                            className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50"
-                        >
-                            <Plus className="h-3.5 w-3.5" />
-                            Agregar
+                            {creandoCirugia ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                            {creandoCirugia ? 'Creando cirugia...' : 'Agregar'}
                         </button>
                     </div>
                 )}
@@ -429,62 +400,10 @@ export function CirugiaUrgenciaSection({
                         </div>
                     )}
 
-                    {mostrarPedidoLaboratorio && puedeCrear && (
-                        <div className="space-y-3 border border-indigo-100 bg-indigo-50/40 rounded-xl p-4">
-                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                                Nuevo pedido de laboratorio
-                            </p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Numero de protocolo</label>
-                                    <input
-                                        type="text"
-                                        value={numeroProtocoloLaboratorio}
-                                        onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)}
-                                        placeholder="Ej: 123456"
-                                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Diagnostico</label>
-                                    <input
-                                        type="text"
-                                        value={diagnosticoLaboratorio}
-                                        onChange={(e) => setDiagnosticoLaboratorio(e.target.value)}
-                                        placeholder="Diagnostico clinico"
-                                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex gap-2 pt-1">
-                                <button
-                                    type="button"
-                                    onClick={() => void crearPedidoLaboratorio()}
-                                    disabled={guardandoPedidoLaboratorio}
-                                    className="flex items-center gap-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-50"
-                                >
-                                    {guardandoPedidoLaboratorio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                                    Generar orden
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setMostrarPedidoLaboratorio(false)
-                                        limpiarPedidoLaboratorio()
-                                    }}
-                                    className="text-xs text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-1.5 hover:bg-gray-50"
-                                >
-                                    Cancelar
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
                     {mostrarForm && puedeCrear && (
                         <div className="space-y-4 border border-blue-100 bg-blue-50/40 rounded-xl p-4">
                             <p className="text-xs text-gray-600">
-                                Los datos administrativos y diferenciales se completan en la ficha quirurgica. Aqui solo agregas practicas.
+                                Cargando practicas en cirugia #{cirugiaActivaId ?? '—'}. Los datos administrativos y diferenciales se completan en la ficha quirurgica.
                             </p>
 
                             <PracticaCargaForm
@@ -494,6 +413,7 @@ export function CirugiaUrgenciaSection({
                                 onCancel={() => {
                                     limpiarForm()
                                     setMostrarForm(false)
+                                    setCirugiaActivaId(null)
                                 }}
                                 titulo="Nueva practica"
                             />

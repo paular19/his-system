@@ -188,6 +188,7 @@ export type ActualizarPracticaInput = z.infer<typeof ActualizarPracticaSchema>
 
 export const CrearCirugiaUrgenciaSchema = z.object({
   ingresoId: z.number().int().positive(),
+  cirugiaId: z.number().int().positive().optional().nullable(),
   pacienteId: z.number().int().positive(),
   fechaCirugia: z.string().min(1),
   horaCirugia: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),

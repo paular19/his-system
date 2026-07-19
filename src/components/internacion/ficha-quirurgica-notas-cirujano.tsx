@@ -36,13 +36,7 @@ interface FichaQuirurgicaNotasCirujanoProps {
   fechaCirugiaInput?: string | null
   cirugiasMultiplesInicial?: boolean
   tipoCirugiaMultipleInicial?: '' | 'MISMA_VIA_MISMA_PATOLOGIA' | 'MISMA_VIA_DISTINTA_PATOLOGIA' | 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
-  pacienteNombre?: string | null
-  pacienteDni?: string | null
-  obraSocial?: string | null
-  cirujanoInicial?: string | null
   cirujanoMatricula?: number | null
-  diagnosticoInicial?: string | null
-  observacionesIniciales?: string | null
 }
 
 function storageKey(ingresoId: number, cirugiaId: number): string {
@@ -50,21 +44,15 @@ function storageKey(ingresoId: number, cirugiaId: number): string {
 }
 
 function buildInitialState(
-  pacienteNombre?: string | null,
-  pacienteDni?: string | null,
-  obraSocial?: string | null,
   fechaCirugiaInput?: string | null,
   cirugiasMultiplesInicial?: boolean,
-  tipoCirugiaMultipleInicial?: '' | 'MISMA_VIA_MISMA_PATOLOGIA' | 'MISMA_VIA_DISTINTA_PATOLOGIA' | 'DISTINTA_VIA_DISTINTA_PATOLOGIA',
-  cirujanoInicial?: string | null,
-  diagnosticoInicial?: string | null,
-  observacionesIniciales?: string | null
+  tipoCirugiaMultipleInicial?: '' | 'MISMA_VIA_MISMA_PATOLOGIA' | 'MISMA_VIA_DISTINTA_PATOLOGIA' | 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
 ): CamposNotasCirujano {
   return {
-    apellidoNombre: (pacienteNombre ?? '').trim(),
-    dni: (pacienteDni ?? '').trim(),
-    obraSocial: (obraSocial ?? '').trim(),
-    cirujano: (cirujanoInicial ?? '').trim(),
+    apellidoNombre: '',
+    dni: '',
+    obraSocial: '',
+    cirujano: '',
     ayudantePrimero: '',
     ayudanteSegundo: '',
     ayudanteTercero: '',
@@ -73,10 +61,10 @@ function buildInitialState(
     fecha: (fechaCirugiaInput ?? '').trim(),
     horaComienzo: '',
     horaTermino: '',
-    diagnosticoOperatorio: (diagnosticoInicial ?? '').trim(),
+    diagnosticoOperatorio: '',
     diagnosticoPosoperatorio: '',
     procedimientoQuirurgico: '',
-    operacionHallazgos: (observacionesIniciales ?? '').trim(),
+    operacionHallazgos: '',
     cirugiasMultiples: Boolean(cirugiasMultiplesInicial),
     tipoCirugiaMultiple: tipoCirugiaMultipleInicial ?? '',
     monitoreoIntraoperatorio: 'NO',
@@ -152,42 +140,24 @@ export function FichaQuirurgicaNotasCirujano({
   fechaCirugiaInput,
   cirugiasMultiplesInicial,
   tipoCirugiaMultipleInicial,
-  pacienteNombre,
-  pacienteDni,
-  obraSocial,
-  cirujanoInicial,
   cirujanoMatricula,
-  diagnosticoInicial,
-  observacionesIniciales,
 }: FichaQuirurgicaNotasCirujanoProps) {
   const fallback = useMemo(
     () =>
       buildInitialState(
-        pacienteNombre,
-        pacienteDni,
-        obraSocial,
         fechaCirugiaInput,
         cirugiasMultiplesInicial,
-        tipoCirugiaMultipleInicial,
-        cirujanoInicial,
-        diagnosticoInicial,
-        observacionesIniciales
+        tipoCirugiaMultipleInicial
       ),
     [
-      pacienteNombre,
-      pacienteDni,
-      obraSocial,
       fechaCirugiaInput,
       cirugiasMultiplesInicial,
       tipoCirugiaMultipleInicial,
-      cirujanoInicial,
-      diagnosticoInicial,
-      observacionesIniciales,
     ]
   )
 
   const [campos, setCampos] = useState<CamposNotasCirujano>(fallback)
-  const [guardandoCondicional, setGuardandoCondicional] = useState(false)
+  const [guardandoFicha, setGuardandoFicha] = useState(false)
   const [estadoCondicional, setEstadoCondicional] = useState<
     { tipo: 'ok' | 'error'; mensaje: string } | null
   >(null)
@@ -217,15 +187,7 @@ export function FichaQuirurgicaNotasCirujano({
 
   const updateCampo = <T extends keyof CamposNotasCirujano>(field: T, value: CamposNotasCirujano[T]) => {
     setEstadoCondicional(null)
-    setCampos((prev) => {
-      const next = { ...prev, [field]: value }
-      try {
-        window.localStorage.setItem(storageKey(ingresoId, cirugiaId), JSON.stringify(next))
-      } catch {
-        // ignore storage errors silently
-      }
-      return next
-    })
+    setCampos((prev) => ({ ...prev, [field]: value }))
   }
 
   const limpiar = () => {
@@ -238,7 +200,7 @@ export function FichaQuirurgicaNotasCirujano({
     }
   }
 
-  const guardarCondicionalFacturacion = async () => {
+  const guardarFichaYCondicional = async () => {
     if (campos.cirugiasMultiples && !campos.tipoCirugiaMultiple) {
       setEstadoCondicional({
         tipo: 'error',
@@ -261,10 +223,16 @@ export function FichaQuirurgicaNotasCirujano({
       cantidadDisparos = parsedCantidad
     }
 
-    setGuardandoCondicional(true)
+    setGuardandoFicha(true)
     setEstadoCondicional(null)
 
     try {
+      try {
+        window.localStorage.setItem(storageKey(ingresoId, cirugiaId), JSON.stringify(campos))
+      } catch {
+        // ignore storage errors silently
+      }
+
       const res = await fetch(`/api/internacion/${ingresoId}/cirugia-urgencia`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -287,15 +255,15 @@ export function FichaQuirurgicaNotasCirujano({
 
       setEstadoCondicional({
         tipo: 'ok',
-        mensaje: 'Condicional de cirugia multiple guardado para facturacion.',
+        mensaje: 'Ficha guardada y lista para imprimir. El condicional impacta en facturacion.',
       })
     } catch (err) {
       setEstadoCondicional({
         tipo: 'error',
-        mensaje: err instanceof Error ? err.message : 'Error desconocido al guardar condicional.',
+        mensaje: err instanceof Error ? err.message : 'Error desconocido al guardar la ficha.',
       })
     } finally {
-      setGuardandoCondicional(false)
+      setGuardandoFicha(false)
     }
   }
 
@@ -487,24 +455,16 @@ export function FichaQuirurgicaNotasCirujano({
             onChange={(e) => {
               const enabled = e.target.checked
               setEstadoCondicional(null)
-              setCampos((prev) => {
-                const next: CamposNotasCirujano = {
-                  ...prev,
-                  cirugiasMultiples: enabled,
-                  tipoCirugiaMultiple: enabled ? prev.tipoCirugiaMultiple : '',
-                  monitoreoIntraoperatorio: enabled ? prev.monitoreoIntraoperatorio : 'NO',
-                  radiografiaConIntensificador: enabled ? prev.radiografiaConIntensificador : 'NO',
-                  cantidadDisparos: enabled ? prev.cantidadDisparos : '',
-                  tecnicoRadiologia: enabled ? prev.tecnicoRadiologia : '',
-                  firmaSelloRadiologo: enabled ? prev.firmaSelloRadiologo : '',
-                }
-                try {
-                  window.localStorage.setItem(storageKey(ingresoId, cirugiaId), JSON.stringify(next))
-                } catch {
-                  // ignore storage errors silently
-                }
-                return next
-              })
+              setCampos((prev) => ({
+                ...prev,
+                cirugiasMultiples: enabled,
+                tipoCirugiaMultiple: enabled ? prev.tipoCirugiaMultiple : '',
+                monitoreoIntraoperatorio: enabled ? prev.monitoreoIntraoperatorio : 'NO',
+                radiografiaConIntensificador: enabled ? prev.radiografiaConIntensificador : 'NO',
+                cantidadDisparos: enabled ? prev.cantidadDisparos : '',
+                tecnicoRadiologia: enabled ? prev.tecnicoRadiologia : '',
+                firmaSelloRadiologo: enabled ? prev.firmaSelloRadiologo : '',
+              }))
             }}
             className="h-4 w-4 rounded border-slate-300 text-blue-600"
           />
@@ -610,13 +570,13 @@ export function FichaQuirurgicaNotasCirujano({
         <div className="flex justify-end">
           <button
             type="button"
-            onClick={() => void guardarCondicionalFacturacion()}
-            disabled={guardandoCondicional}
+            onClick={() => void guardarFichaYCondicional()}
+            disabled={guardandoFicha}
             className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
           >
-            {guardandoCondicional
-              ? 'Guardando condicional...'
-              : 'Guardar condicional para facturacion'}
+            {guardandoFicha
+              ? 'Guardando ficha...'
+              : 'Guardar ficha y condicional'}
           </button>
         </div>
       </div>

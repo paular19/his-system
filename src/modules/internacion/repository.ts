@@ -1778,40 +1778,104 @@ export async function crearCirugiaUrgencia(
       })
     }
 
-    const creada = await tx.cirugiaProgramada.create({
-      data: {
-        pacienteId: data.pacienteId,
-        internacionId: data.ingresoId,
-        fechaCirugia: new Date(data.fechaCirugia),
-        horaCirugia: data.horaCirugia ?? null,
-        camaId: data.camaId ?? null,
-        observaciones: observacionesStructured || null,
-        practicas: {
-          create: practicasParaCirugia.map((p) => ({
-            codigo: p.codigo.trim().slice(0, 20),
-            descripcion: p.descripcion.trim().slice(0, 500),
-            cantidad: p.cantidad,
-            numeroAutorizacion: null,
-          })),
+    const cirugiaExistenteId =
+      typeof data.cirugiaId === 'number' && Number.isInteger(data.cirugiaId) && data.cirugiaId > 0
+        ? data.cirugiaId
+        : null
+
+    let cirugiaIdObjetivo: number
+
+    if (cirugiaExistenteId != null) {
+      const cirugiaExistente = await tx.cirugiaProgramada.findFirst({
+        where: {
+          id: cirugiaExistenteId,
+          internacionId: data.ingresoId,
+          pacienteId: data.pacienteId,
         },
-        diferenciales: data.diferenciales
-          ? {
-            create: {
-              tipo: 'QUIRURGICA',
-              descripcion: 'Diferenciales de cirugía',
-              esFeriado: data.diferenciales.esFeriado,
-              esNocturna: data.diferenciales.esNocturna,
-              mismaViaPatologia: data.diferenciales.mismaViaPatologia,
-              diferentesViasPatologia: data.diferenciales.diferentesViasPatologia,
-              diferentesViasDiferentesPatologia: data.diferenciales.diferentesViasDiferentesPatologia,
-              dobleCirugia:
-                data.diferenciales.mismaViaPatologia ||
-                data.diferenciales.diferentesViasPatologia ||
-                data.diferenciales.diferentesViasDiferentesPatologia,
+        select: { id: true },
+      })
+
+      if (!cirugiaExistente) {
+        throw new Error('La cirugía seleccionada no existe o no pertenece a esta internación')
+      }
+
+      cirugiaIdObjetivo = cirugiaExistente.id
+
+      await tx.cirugiaPractica.createMany({
+        data: practicasParaCirugia.map((p) => ({
+          cirugiaId: cirugiaIdObjetivo,
+          codigo: p.codigo.trim().slice(0, 20),
+          descripcion: p.descripcion.trim().slice(0, 500),
+          cantidad: p.cantidad,
+          numeroAutorizacion: null,
+        })),
+      })
+    } else {
+      const creada = await tx.cirugiaProgramada.create({
+        data: {
+          pacienteId: data.pacienteId,
+          internacionId: data.ingresoId,
+          fechaCirugia: new Date(data.fechaCirugia),
+          horaCirugia: data.horaCirugia ?? null,
+          camaId: data.camaId ?? null,
+          observaciones: observacionesStructured || null,
+          practicas: {
+            create: practicasParaCirugia.map((p) => ({
+              codigo: p.codigo.trim().slice(0, 20),
+              descripcion: p.descripcion.trim().slice(0, 500),
+              cantidad: p.cantidad,
+              numeroAutorizacion: null,
+            })),
+          },
+          diferenciales: data.diferenciales
+            ? {
+              create: {
+                tipo: 'QUIRURGICA',
+                descripcion: 'Diferenciales de cirugía',
+                esFeriado: data.diferenciales.esFeriado,
+                esNocturna: data.diferenciales.esNocturna,
+                mismaViaPatologia: data.diferenciales.mismaViaPatologia,
+                diferentesViasPatologia: data.diferenciales.diferentesViasPatologia,
+                diferentesViasDiferentesPatologia: data.diferenciales.diferentesViasDiferentesPatologia,
+                dobleCirugia:
+                  data.diferenciales.mismaViaPatologia ||
+                  data.diferenciales.diferentesViasPatologia ||
+                  data.diferenciales.diferentesViasDiferentesPatologia,
+              },
+            }
+            : undefined,
+        },
+        select: { id: true },
+      })
+
+      cirugiaIdObjetivo = creada.id
+    }
+
+    if (practicaIdsSeleccionadas.length === 0) {
+      await Promise.all(
+        practicasParaCirugia.map((p) =>
+          tx.practica.create({
+            data: {
+              ingresoId: data.ingresoId,
+              convenioId: p.convenioId ?? data.obraSocialId ?? 0,
+              codigoPractica: p.codigo.padEnd(8).slice(0, 8),
+              convenioValorId: 0,
+              fecha: new Date(data.fechaCirugia),
+              cantidad: p.cantidad,
+              numeroAutorizacion: null,
+              matriculaEspecialista: p.matriculaEspecialista ?? null,
+              matriculaAnestesista: p.matriculaAnestesista ?? null,
+              facturable: true,
+              importeTotal: p.importeTotal ?? null,
+              usuarioRegistro: usuario.slice(0, 10),
             },
-          }
-          : undefined,
-      },
+          })
+        )
+      )
+    }
+
+    const cirugiaObjetivo = await tx.cirugiaProgramada.findUnique({
+      where: { id: cirugiaIdObjetivo },
       select: {
         id: true,
         fechaCirugia: true,
@@ -1849,30 +1913,11 @@ export async function crearCirugiaUrgencia(
       },
     })
 
-    if (practicaIdsSeleccionadas.length === 0) {
-      await Promise.all(
-        data.practicas.map((p) =>
-          tx.practica.create({
-            data: {
-              ingresoId: data.ingresoId,
-              convenioId: p.convenioId ?? data.obraSocialId ?? 0,
-              codigoPractica: p.codigo.padEnd(8).slice(0, 8),
-              convenioValorId: 0,
-              fecha: new Date(data.fechaCirugia),
-              cantidad: p.cantidad,
-              numeroAutorizacion: null,
-              matriculaEspecialista: p.matriculaEspecialista ?? null,
-              matriculaAnestesista: p.matriculaAnestesista ?? null,
-              facturable: true,
-              importeTotal: p.importeTotal ?? null,
-              usuarioRegistro: usuario.slice(0, 10),
-            },
-          })
-        )
-      )
+    if (!cirugiaObjetivo) {
+      throw new Error('No se pudo recuperar la cirugía después de guardar las prácticas')
     }
 
-    return creada
+    return cirugiaObjetivo
   })
 
   return {

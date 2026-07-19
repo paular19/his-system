@@ -385,12 +385,17 @@ export async function crearCirugiaUrgencia(
 ): Promise<CirugiaUrgenciaItem> {
   const cirugia = await repo.crearCirugiaUrgencia(data, usuario)
 
+  const esAgregarPracticasACirugiaExistente =
+    typeof data.cirugiaId === 'number' && Number.isInteger(data.cirugiaId) && data.cirugiaId > 0
+
   await registrarAudit({
     usuario,
-    accion: 'CREAR',
+    accion: esAgregarPracticasACirugiaExistente ? 'MODIFICAR' : 'CREAR',
     entidad: 'CirugiaProgramada',
     registroId: cirugia.id,
-    detalle: `Cirugía registrada en internación ${data.ingresoId}`,
+    detalle: esAgregarPracticasACirugiaExistente
+      ? `Prácticas agregadas a cirugía ${cirugia.id} en internación ${data.ingresoId}`
+      : `Cirugía registrada en internación ${data.ingresoId}`,
     direccionIp: ip,
   })
 

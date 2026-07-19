@@ -20,6 +20,38 @@ interface PageProps {
   params: Promise<{ id: string }>
 }
 
+function parseObservacionesCirugia(value: string | null | undefined): {
+  diagnostico: string | null
+  observaciones: string | null
+} {
+  if (!value || !value.trim()) {
+    return { diagnostico: null, observaciones: null }
+  }
+
+  let diagnostico: string | null = null
+  let observaciones: string | null = null
+
+  const tokens = value
+    .split('|')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+
+  for (const token of tokens) {
+    const [rawKey, ...rest] = token.split(':')
+    const key = rawKey?.trim().toLowerCase()
+    const parsedValue = rest.join(':').trim()
+
+    if (!key || !parsedValue) continue
+    if (key === 'diagnostico') diagnostico = parsedValue
+    if (key === 'observaciones') observaciones = parsedValue
+  }
+
+  return {
+    diagnostico,
+    observaciones: observaciones ?? value,
+  }
+}
+
 export default async function FichaQuirurgicaPage({ params }: PageProps) {
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'INTERNACION', 'LEER')) redirect('/dashboard')
@@ -36,12 +68,26 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
     where: { id: ingresoId },
     select: {
       id: true,
+      nombre: true,
       numeroIngreso: true,
       tipoIngresoCodigo: true,
+      obraSocial: {
+        select: {
+          nombre: true,
+        },
+      },
+      profesionalTratante: {
+        select: {
+          nombre: true,
+          matricula: true,
+        },
+      },
       paciente: {
         select: {
           id: true,
           historiaClinica: true,
+          nombreCompleto: true,
+          numeroDocumento: true,
         },
       },
       cirugiasProgramadas: {
@@ -51,6 +97,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
           id: true,
           fechaCirugia: true,
           horaCirugia: true,
+          observaciones: true,
           diferenciales: {
             select: {
               mismaViaPatologia: true,
@@ -103,10 +150,14 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
       diferencialesConsolidados.diferentesViasPatologia ||
       diferencialesConsolidados.diferentesViasDiferentesPatologia
 
+    const meta = parseObservacionesCirugia(cirugia.observaciones)
+
     return {
       ...cirugia,
       tipoCirugiaMultipleInicial: tipoCirugiaMultipleInicialTyped,
       cirugiasMultiplesInicial,
+      diagnosticoInicial: meta.diagnostico,
+      observacionesIniciales: meta.observaciones,
     }
   })
 
@@ -202,7 +253,13 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
                   fechaCirugiaInput={cirugia.fechaCirugia.toISOString().slice(0, 10)}
                   cirugiasMultiplesInicial={cirugia.cirugiasMultiplesInicial}
                   tipoCirugiaMultipleInicial={cirugia.tipoCirugiaMultipleInicial}
-                  cirujanoMatricula={null}
+                  pacienteNombre={ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? null}
+                  pacienteDni={ingreso.paciente?.numeroDocumento != null ? String(ingreso.paciente.numeroDocumento) : null}
+                  obraSocial={ingreso.obraSocial?.nombre ?? null}
+                  cirujanoInicial={ingreso.profesionalTratante?.nombre ?? null}
+                  diagnosticoInicial={cirugia.diagnosticoInicial}
+                  observacionesIniciales={cirugia.observacionesIniciales}
+                  cirujanoMatricula={ingreso.profesionalTratante?.matricula ?? null}
                 />
               </article>
             ))

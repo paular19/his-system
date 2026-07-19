@@ -36,6 +36,12 @@ interface FichaQuirurgicaNotasCirujanoProps {
   fechaCirugiaInput?: string | null
   cirugiasMultiplesInicial?: boolean
   tipoCirugiaMultipleInicial?: '' | 'MISMA_VIA_MISMA_PATOLOGIA' | 'MISMA_VIA_DISTINTA_PATOLOGIA' | 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
+  pacienteNombre?: string | null
+  pacienteDni?: string | null
+  obraSocial?: string | null
+  cirujanoInicial?: string | null
+  diagnosticoInicial?: string | null
+  observacionesIniciales?: string | null
   cirujanoMatricula?: number | null
 }
 
@@ -44,15 +50,21 @@ function storageKey(ingresoId: number, cirugiaId: number): string {
 }
 
 function buildInitialState(
+  pacienteNombre?: string | null,
+  pacienteDni?: string | null,
+  obraSocial?: string | null,
   fechaCirugiaInput?: string | null,
   cirugiasMultiplesInicial?: boolean,
-  tipoCirugiaMultipleInicial?: '' | 'MISMA_VIA_MISMA_PATOLOGIA' | 'MISMA_VIA_DISTINTA_PATOLOGIA' | 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
+  tipoCirugiaMultipleInicial?: '' | 'MISMA_VIA_MISMA_PATOLOGIA' | 'MISMA_VIA_DISTINTA_PATOLOGIA' | 'DISTINTA_VIA_DISTINTA_PATOLOGIA',
+  cirujanoInicial?: string | null,
+  diagnosticoInicial?: string | null,
+  observacionesIniciales?: string | null
 ): CamposNotasCirujano {
   return {
-    apellidoNombre: '',
-    dni: '',
-    obraSocial: '',
-    cirujano: '',
+    apellidoNombre: (pacienteNombre ?? '').trim(),
+    dni: (pacienteDni ?? '').trim(),
+    obraSocial: (obraSocial ?? '').trim(),
+    cirujano: (cirujanoInicial ?? '').trim(),
     ayudantePrimero: '',
     ayudanteSegundo: '',
     ayudanteTercero: '',
@@ -61,10 +73,10 @@ function buildInitialState(
     fecha: (fechaCirugiaInput ?? '').trim(),
     horaComienzo: '',
     horaTermino: '',
-    diagnosticoOperatorio: '',
+    diagnosticoOperatorio: (diagnosticoInicial ?? '').trim(),
     diagnosticoPosoperatorio: '',
     procedimientoQuirurgico: '',
-    operacionHallazgos: '',
+    operacionHallazgos: (observacionesIniciales ?? '').trim(),
     cirugiasMultiples: Boolean(cirugiasMultiplesInicial),
     tipoCirugiaMultiple: tipoCirugiaMultipleInicial ?? '',
     monitoreoIntraoperatorio: 'NO',
@@ -140,19 +152,37 @@ export function FichaQuirurgicaNotasCirujano({
   fechaCirugiaInput,
   cirugiasMultiplesInicial,
   tipoCirugiaMultipleInicial,
+  pacienteNombre,
+  pacienteDni,
+  obraSocial,
+  cirujanoInicial,
+  diagnosticoInicial,
+  observacionesIniciales,
   cirujanoMatricula,
 }: FichaQuirurgicaNotasCirujanoProps) {
   const fallback = useMemo(
     () =>
       buildInitialState(
+        pacienteNombre,
+        pacienteDni,
+        obraSocial,
         fechaCirugiaInput,
         cirugiasMultiplesInicial,
-        tipoCirugiaMultipleInicial
+        tipoCirugiaMultipleInicial,
+        cirujanoInicial,
+        diagnosticoInicial,
+        observacionesIniciales
       ),
     [
+      pacienteNombre,
+      pacienteDni,
+      obraSocial,
       fechaCirugiaInput,
       cirugiasMultiplesInicial,
       tipoCirugiaMultipleInicial,
+      cirujanoInicial,
+      diagnosticoInicial,
+      observacionesIniciales,
     ]
   )
 

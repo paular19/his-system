@@ -999,10 +999,6 @@ export function PracticaSection({
 
         setError(null)
         setGenerandoOrdenes(true)
-        const printWindow =
-            imprimirDespues && typeof window !== 'undefined'
-                ? window.open('about:blank', '_blank')
-                : null
         try {
             const clasificacionPayload = Object.fromEntries(
                 idsPendientesSeleccionadas.map((id) => {
@@ -1024,7 +1020,6 @@ export function PracticaSection({
 
             if ('error' in result && result.error) {
                 setError(result.error)
-                printWindow?.close()
                 return
             }
 
@@ -1079,9 +1074,7 @@ export function PracticaSection({
                     .map((o) => `${o.puestoNumero}-${o.numero}`)
                     .join(',')
                 const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
-                if (printWindow) {
-                    printWindow.location.assign(url)
-                } else if (typeof window !== 'undefined') {
+                if (typeof window !== 'undefined') {
                     window.open(url, '_blank')
                 }
             }
@@ -1091,7 +1084,6 @@ export function PracticaSection({
             }
         } catch {
             setError('Error al generar órdenes desde internación')
-            printWindow?.close()
         } finally {
             setGenerandoOrdenes(false)
         }

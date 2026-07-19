@@ -220,6 +220,22 @@ export function PracticaSection({
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const subitemsPreviosRef = useRef<SubitemCodigo[]>([])
 
+    useEffect(() => {
+        setPracticas(practicasIniciales)
+        const idsValidos = new Set(practicasIniciales.map((p) => p.id))
+        setPracticasSeleccionadas((prev) => prev.filter((id) => idsValidos.has(id)))
+        setClasificacionPorPracticaId((prev) => {
+            const next: Record<number, string> = {}
+            for (const [key, value] of Object.entries(prev)) {
+                const id = Number(key)
+                if (idsValidos.has(id)) {
+                    next[id] = value
+                }
+            }
+            return next
+        })
+    }, [practicasIniciales])
+
     const subitemsSeleccionadosForm = useMemo(() => {
         if (!practicaSeleccionada) return [] as SubitemCodigo[]
         return obtenerSubitemsSeleccionados(
@@ -983,6 +999,10 @@ export function PracticaSection({
 
         setError(null)
         setGenerandoOrdenes(true)
+        const printWindow =
+            imprimirDespues && typeof window !== 'undefined'
+                ? window.open('', '_blank', 'noopener,noreferrer')
+                : null
         try {
             const clasificacionPayload = Object.fromEntries(
                 idsPendientesSeleccionadas.map((id) => {
@@ -1004,6 +1024,7 @@ export function PracticaSection({
 
             if ('error' in result && result.error) {
                 setError(result.error)
+                printWindow?.close()
                 return
             }
 
@@ -1057,10 +1078,20 @@ export function PracticaSection({
                 const ordenesParam = gruposConSeleccion
                     .map((o) => `${o.puestoNumero}-${o.numero}`)
                     .join(',')
-                router.push(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`)
+                const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+                if (printWindow) {
+                    printWindow.location.href = url
+                } else if (typeof window !== 'undefined') {
+                    window.open(url, '_blank', 'noopener,noreferrer')
+                }
+            }
+
+            if (refrescarDespuesCambios) {
+                router.refresh()
             }
         } catch {
             setError('Error al generar órdenes desde internación')
+            printWindow?.close()
         } finally {
             setGenerandoOrdenes(false)
         }
@@ -1108,7 +1139,12 @@ export function PracticaSection({
         const ordenesParam = base
             .map((o) => `${o.puestoNumero}-${o.numero}`)
             .join(',')
-        router.push(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`)
+        const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+        if (typeof window !== 'undefined') {
+            window.open(url, '_blank', 'noopener,noreferrer')
+            return
+        }
+        router.push(url)
     }
 
     const fmtFecha = (d: Date | string) =>

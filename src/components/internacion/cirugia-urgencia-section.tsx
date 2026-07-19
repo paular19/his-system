@@ -274,6 +274,11 @@ export function CirugiaUrgenciaSection({
             return
         }
 
+        const printWindow =
+            imprimirDespues && typeof window !== 'undefined'
+                ? window.open('', '_blank', 'noopener,noreferrer')
+                : null
+
         const practicasCirugiaSeleccionadas = cirugias
             .flatMap((cirugia) => cirugia.practicas)
             .filter((practica) => practicasSeleccionadasVigentes.includes(practica.id))
@@ -320,6 +325,7 @@ export function CirugiaUrgenciaSection({
 
             if ('error' in result && result.error) {
                 setError(result.error)
+                printWindow?.close()
                 return
             }
 
@@ -331,6 +337,7 @@ export function CirugiaUrgenciaSection({
 
             if (grupos.length === 0) {
                 setError('No se generaron ordenes para las practicas seleccionadas')
+                printWindow?.close()
                 return
             }
 
@@ -349,13 +356,20 @@ export function CirugiaUrgenciaSection({
             setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => !idsAsignadosCirugia.has(id)))
 
             if (imprimirDespues) {
-                router.push(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`)
+                const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+                if (printWindow) {
+                    printWindow.location.href = url
+                } else if (typeof window !== 'undefined') {
+                    window.open(url, '_blank', 'noopener,noreferrer')
+                }
+                router.refresh()
                 return
             }
 
             router.refresh()
         } catch {
             setError('No se pudo generar la orden agrupada')
+            printWindow?.close()
         } finally {
             setGenerandoOrdenAgrupada(false)
         }

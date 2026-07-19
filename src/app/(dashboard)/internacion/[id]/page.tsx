@@ -36,9 +36,44 @@ interface PageProps {
     params: Promise<{ id: string }>
 }
 
+function resolverApellidoParaTitulo(nombreCompleto: string | null | undefined): string | null {
+    const raw = nombreCompleto?.trim()
+    if (!raw) return null
+
+    if (raw.includes(',')) {
+        const [apellido] = raw.split(',')
+        const normalizado = apellido?.trim()
+        return normalizado && normalizado.length > 0 ? normalizado : null
+    }
+
+    const partes = raw.split(/\s+/).filter(Boolean)
+    return partes[0] ?? null
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     const { id } = await params
-    return { title: `Internación #${id}` }
+    const ingresoId = parseInt(id, 10)
+    if (isNaN(ingresoId)) {
+        return { title: 'Internación' }
+    }
+
+    const ingreso = await prisma.ingreso.findUnique({
+        where: { id: ingresoId },
+        select: {
+            nombre: true,
+            paciente: {
+                select: {
+                    nombreCompleto: true,
+                },
+            },
+        },
+    })
+
+    const apellido = resolverApellidoParaTitulo(
+        ingreso?.paciente?.nombreCompleto ?? ingreso?.nombre ?? null
+    )
+
+    return { title: apellido ? `Internación - ${apellido}` : 'Internación' }
 }
 
 export default async function InternacionDetallePage({ params }: PageProps) {

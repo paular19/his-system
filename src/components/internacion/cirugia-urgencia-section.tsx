@@ -386,7 +386,7 @@ export function CirugiaUrgenciaSection({
                             className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50 disabled:opacity-60"
                         >
                             {creandoCirugia ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                            {creandoCirugia ? 'Creando cirugia...' : 'Agregar'}
+                            {creandoCirugia ? 'Creando cirugia...' : 'Agregar cirugia'}
                         </button>
                     </div>
                 )}
@@ -482,6 +482,19 @@ export function CirugiaUrgenciaSection({
                                             </p>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs text-gray-500">Cirugia #{c.id}</span>
+                                                {puedeCrear && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setCirugiaActivaId(c.id)
+                                                            setMostrarForm(true)
+                                                            setError(null)
+                                                        }}
+                                                        className="text-xs font-medium text-emerald-700 border border-emerald-200 rounded-md px-2 py-1 hover:bg-emerald-50"
+                                                    >
+                                                        Agregar practica
+                                                    </button>
+                                                )}
                                                 <Link
                                                     href={`/dashboard/internacion/${ingresoId}/ficha-quirurgica#cirugia-${c.id}`}
                                                     className="text-xs font-medium text-blue-700 border border-blue-200 rounded-md px-2 py-1 hover:bg-blue-50"

@@ -74,6 +74,16 @@ type PracticaInternacionItem = {
     }>
 }
 
+type EstadoPracticaCirugia = {
+    practicaInternacionIdPendiente: number | null
+    ordenesGeneradas: Array<{
+        puestoNumero: number
+        ordenNumero: number
+        item: number
+        numeroAutorizacion: string | null
+    }>
+}
+
 interface CirugiaUrgenciaSectionProps {
     ingresoId: number
     pacienteId: number
@@ -123,13 +133,78 @@ export function CirugiaUrgenciaSection({
         () => cirugias.flatMap((cirugia) => cirugia.practicas.map((practica) => practica.id)),
         [cirugias]
     )
-    const setPracticaIdsCirugias = useMemo(
-        () => new Set(practicaIdsCirugias),
-        [practicaIdsCirugias]
+
+    const estadoPracticaCirugiaPorId = useMemo(() => {
+        const practicasCirugiaOrdenadas = cirugias.flatMap((cirugia) =>
+            cirugia.practicas.map((practica) => ({
+                practicaIdCirugia: practica.id,
+                codigo: practica.codigo.trim().toUpperCase(),
+            }))
+        )
+
+        const pendientesPorCodigo = new Map<string, number[]>()
+        const ordenadasPorCodigo = new Map<
+            string,
+            Array<{
+                puestoNumero: number
+                ordenNumero: number
+                item: number
+                numeroAutorizacion: string | null
+            }>
+        >()
+
+        for (const practica of practicasInternacion) {
+            const estado = (practica.estado ?? 'A').trim().toUpperCase()
+            if (estado === 'X') continue
+
+            const codigo = practica.codigoPractica.trim().toUpperCase()
+            if ((practica.ordenPractica?.length ?? 0) === 0) {
+                const pendientes = pendientesPorCodigo.get(codigo) ?? []
+                pendientes.push(practica.id)
+                pendientesPorCodigo.set(codigo, pendientes)
+                continue
+            }
+
+            const ordenes = ordenadasPorCodigo.get(codigo) ?? []
+            ordenes.push(...practica.ordenPractica)
+            ordenadasPorCodigo.set(codigo, ordenes)
+        }
+
+        const estadoPorId = new Map<number, EstadoPracticaCirugia>()
+
+        for (const practica of practicasCirugiaOrdenadas) {
+            const pendientes = pendientesPorCodigo.get(practica.codigo) ?? []
+            const practicaInternacionIdPendiente = pendientes.shift() ?? null
+            pendientesPorCodigo.set(practica.codigo, pendientes)
+
+            const ordenesDisponibles = ordenadasPorCodigo.get(practica.codigo) ?? []
+            const ordenesGeneradas = practicaInternacionIdPendiente == null && ordenesDisponibles.length > 0
+                ? [ordenesDisponibles.shift()!]
+                : []
+            ordenadasPorCodigo.set(practica.codigo, ordenesDisponibles)
+
+            estadoPorId.set(practica.practicaIdCirugia, {
+                practicaInternacionIdPendiente,
+                ordenesGeneradas,
+            })
+        }
+
+        return estadoPorId
+    }, [cirugias, practicasInternacion])
+
+    const practicaIdsPendientesCirugia = useMemo(
+        () => practicaIdsCirugias.filter((id) => (estadoPracticaCirugiaPorId.get(id)?.practicaInternacionIdPendiente ?? null) != null),
+        [practicaIdsCirugias, estadoPracticaCirugiaPorId]
     )
+
+    const setPracticaIdsPendientesCirugia = useMemo(
+        () => new Set(practicaIdsPendientesCirugia),
+        [practicaIdsPendientesCirugia]
+    )
+
     const practicasSeleccionadasVigentes = useMemo(
-        () => practicasSeleccionadasImpresion.filter((id) => setPracticaIdsCirugias.has(id)),
-        [practicasSeleccionadasImpresion, setPracticaIdsCirugias]
+        () => practicasSeleccionadasImpresion.filter((id) => setPracticaIdsPendientesCirugia.has(id)),
+        [practicasSeleccionadasImpresion, setPracticaIdsPendientesCirugia]
     )
 
     const limpiarForm = () => {
@@ -283,26 +358,14 @@ export function CirugiaUrgenciaSection({
             .flatMap((cirugia) => cirugia.practicas)
             .filter((practica) => practicasSeleccionadasVigentes.includes(practica.id))
 
-        const practicasPendientesPorCodigo = new Map<string, number[]>()
-        for (const practica of practicasInternacion) {
-            const estado = (practica.estado ?? 'A').trim().toUpperCase()
-            if (estado === 'X') continue
-            if ((practica.ordenPractica?.length ?? 0) > 0) continue
-
-            const codigo = practica.codigoPractica.trim().toUpperCase()
-            const prev = practicasPendientesPorCodigo.get(codigo) ?? []
-            prev.push(practica.id)
-            practicasPendientesPorCodigo.set(codigo, prev)
-        }
-
         const practicaIdInternacionPorPracticaCirugiaId = new Map<number, number>()
         for (const practicaCirugia of practicasCirugiaSeleccionadas) {
-            const codigo = practicaCirugia.codigo.trim().toUpperCase()
-            const candidatos = practicasPendientesPorCodigo.get(codigo) ?? []
-            const practicaIdInternacion = candidatos.shift()
-            if (practicaIdInternacion == null) continue
+            const practicaIdInternacion =
+                estadoPracticaCirugiaPorId.get(practicaCirugia.id)?.practicaInternacionIdPendiente ?? null
+            if (practicaIdInternacion == null) {
+                continue
+            }
             practicaIdInternacionPorPracticaCirugiaId.set(practicaCirugia.id, practicaIdInternacion)
-            practicasPendientesPorCodigo.set(codigo, candidatos)
         }
 
         const practicaIdsInternacionSeleccionadas = practicasSeleccionadasVigentes
@@ -311,6 +374,7 @@ export function CirugiaUrgenciaSection({
 
         if (practicaIdsInternacionSeleccionadas.length === 0) {
             setError('No se encontraron practicas pendientes de internacion para la seleccion de cirugia')
+            printWindow?.close()
             return
         }
 
@@ -446,8 +510,8 @@ export function CirugiaUrgenciaSection({
                                     <div className="flex flex-wrap items-center gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => alternarSeleccionTodasCirugia(practicaIdsCirugias, true)}
-                                            disabled={practicaIdsCirugias.length === 0 || generandoOrdenAgrupada}
+                                            onClick={() => alternarSeleccionTodasCirugia(practicaIdsPendientesCirugia, true)}
+                                            disabled={practicaIdsPendientesCirugia.length === 0 || generandoOrdenAgrupada}
                                             className="rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                                         >
                                             Seleccionar todas
@@ -484,9 +548,12 @@ export function CirugiaUrgenciaSection({
 
                             {cirugias.map((c) => {
                                 const practicaIdsCirugia = c.practicas.map((practica) => practica.id)
+                                const practicaIdsPendientesCirugiaItem = practicaIdsCirugia.filter(
+                                    (id) => (estadoPracticaCirugiaPorId.get(id)?.practicaInternacionIdPendiente ?? null) != null
+                                )
                                 const todasSeleccionadasCirugia =
-                                    practicaIdsCirugia.length > 0
-                                    && practicaIdsCirugia.every((id) => practicasSeleccionadasVigentes.includes(id))
+                                    practicaIdsPendientesCirugiaItem.length > 0
+                                    && practicaIdsPendientesCirugiaItem.every((id) => practicasSeleccionadasVigentes.includes(id))
 
                                 return (
                                     <article key={c.id} className="border rounded-lg p-3 bg-white space-y-3">
@@ -532,7 +599,7 @@ export function CirugiaUrgenciaSection({
                                                                         <input
                                                                             type="checkbox"
                                                                             checked={todasSeleccionadasCirugia}
-                                                                            onChange={(e) => alternarSeleccionTodasCirugia(practicaIdsCirugia, e.target.checked)}
+                                                                                onChange={(e) => alternarSeleccionTodasCirugia(practicaIdsPendientesCirugiaItem, e.target.checked)}
                                                                             className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500"
                                                                             title="Seleccionar practicas de esta cirugia"
                                                                         />
@@ -549,18 +616,41 @@ export function CirugiaUrgenciaSection({
                                                                 <tr key={p.id} className="text-gray-700">
                                                                     {puedeCrear && (
                                                                         <td className="px-2 py-1 border-b align-middle">
+                                                                            {(() => {
+                                                                                const estadoPractica = estadoPracticaCirugiaPorId.get(p.id)
+                                                                                const esPendiente = (estadoPractica?.practicaInternacionIdPendiente ?? null) != null
+                                                                                return (
                                                                             <input
                                                                                 type="checkbox"
                                                                                 checked={practicasSeleccionadasVigentes.includes(p.id)}
                                                                                 onChange={(e) => alternarSeleccionPracticaCirugia(p.id, e.target.checked)}
+                                                                                disabled={!esPendiente || generandoOrdenAgrupada}
                                                                                 className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500"
+                                                                                title={
+                                                                                    esPendiente
+                                                                                        ? 'Practica pendiente para generar orden'
+                                                                                        : 'Esta practica ya tiene orden generada o no esta pendiente'
+                                                                                }
                                                                             />
+                                                                                )
+                                                                            })()}
                                                                         </td>
                                                                     )}
                                                                     <td className="px-2 py-1 border-b font-mono">{p.codigo}</td>
                                                                     <td className="px-2 py-1 border-b">{p.descripcion}</td>
                                                                     <td className="px-2 py-1 border-b text-right">{String(Number(p.cantidad))}</td>
-                                                                    <td className="px-2 py-1 border-b">{p.numeroAutorizacion ?? '-'}</td>
+                                                                    <td className="px-2 py-1 border-b">
+                                                                        {(() => {
+                                                                            const estadoPractica = estadoPracticaCirugiaPorId.get(p.id)
+                                                                            const primeraOrden = estadoPractica?.ordenesGeneradas?.[0]
+
+                                                                            if (p.numeroAutorizacion) return p.numeroAutorizacion
+                                                                            if (primeraOrden) {
+                                                                                return `Orden ${primeraOrden.puestoNumero}-${primeraOrden.ordenNumero}`
+                                                                            }
+                                                                            return 'Pendiente'
+                                                                        })()}
+                                                                    </td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>

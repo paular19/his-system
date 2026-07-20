@@ -66,6 +66,7 @@ type PracticaInternacionItem = {
     codigoPractica: string
     cantidad: number
     estado: string | null
+    usuario?: string | null
     ordenPractica: Array<{
         puestoNumero: number
         ordenNumero: number
@@ -75,7 +76,8 @@ type PracticaInternacionItem = {
 }
 
 type EstadoPracticaCirugia = {
-    practicaInternacionIdPendiente: number | null
+    pendiente: boolean
+    practicaInternacionId: number
     ordenesGeneradas: Array<{
         puestoNumero: number
         ordenNumero: number
@@ -135,65 +137,63 @@ export function CirugiaUrgenciaSection({
     )
 
     const estadoPracticaCirugiaPorId = useMemo(() => {
-        const practicasCirugiaOrdenadas = cirugias.flatMap((cirugia) =>
-            cirugia.practicas.map((practica) => ({
-                practicaIdCirugia: practica.id,
-                codigo: practica.codigo.trim().toUpperCase(),
-            }))
-        )
-
-        const pendientesPorCodigo = new Map<string, number[]>()
-        const ordenadasPorCodigo = new Map<
-            string,
-            Array<{
-                puestoNumero: number
-                ordenNumero: number
-                item: number
-                numeroAutorizacion: string | null
-            }>
-        >()
+        const estadoPorId = new Map<number, EstadoPracticaCirugia>()
+        const practicasInternacionPorCodigo = new Map<string, PracticaInternacionItem[]>()
 
         for (const practica of practicasInternacion) {
             const estado = (practica.estado ?? 'A').trim().toUpperCase()
             if (estado === 'X') continue
 
             const codigo = practica.codigoPractica.trim().toUpperCase()
-            if ((practica.ordenPractica?.length ?? 0) === 0) {
-                const pendientes = pendientesPorCodigo.get(codigo) ?? []
-                pendientes.push(practica.id)
-                pendientesPorCodigo.set(codigo, pendientes)
-                continue
-            }
+            if (!codigo) continue
 
-            const ordenes = ordenadasPorCodigo.get(codigo) ?? []
-            ordenes.push(...practica.ordenPractica)
-            ordenadasPorCodigo.set(codigo, ordenes)
+            const bucket = practicasInternacionPorCodigo.get(codigo) ?? []
+            bucket.push(practica)
+            practicasInternacionPorCodigo.set(codigo, bucket)
         }
 
-        const estadoPorId = new Map<number, EstadoPracticaCirugia>()
+        for (const bucket of practicasInternacionPorCodigo.values()) {
+            bucket.sort((a, b) => a.id - b.id)
+        }
 
-        for (const practica of practicasCirugiaOrdenadas) {
-            const pendientes = pendientesPorCodigo.get(practica.codigo) ?? []
-            const practicaInternacionIdPendiente = pendientes.shift() ?? null
-            pendientesPorCodigo.set(practica.codigo, pendientes)
+        for (const cirugia of cirugias) {
+            const usadosPorCodigo = new Set<number>()
 
-            const ordenesDisponibles = ordenadasPorCodigo.get(practica.codigo) ?? []
-            const ordenesGeneradas = practicaInternacionIdPendiente == null && ordenesDisponibles.length > 0
-                ? [ordenesDisponibles.shift()!]
-                : []
-            ordenadasPorCodigo.set(practica.codigo, ordenesDisponibles)
+            for (const practicaCirugia of cirugia.practicas) {
+                const codigoCirugia = practicaCirugia.codigo.trim().toUpperCase()
+                const candidatas = practicasInternacionPorCodigo.get(codigoCirugia) ?? []
 
-            estadoPorId.set(practica.practicaIdCirugia, {
-                practicaInternacionIdPendiente,
-                ordenesGeneradas,
-            })
+                const candidata = candidatas.find((item) => {
+                    if (usadosPorCodigo.has(item.id)) return false
+                    const usuario = (item.usuario ?? '').trim().toUpperCase()
+                    return usuario === 'CIRUGIA'
+                })
+                    ?? candidatas.find((item) => !usadosPorCodigo.has(item.id))
+
+                if (!candidata) continue
+
+                usadosPorCodigo.add(candidata.id)
+
+                const ordenesGeneradas = (candidata.ordenPractica ?? []).map((orden) => ({
+                    puestoNumero: orden.puestoNumero,
+                    ordenNumero: orden.ordenNumero,
+                    item: orden.item,
+                    numeroAutorizacion: orden.numeroAutorizacion,
+                }))
+
+                estadoPorId.set(practicaCirugia.id, {
+                    pendiente: ordenesGeneradas.length === 0,
+                    practicaInternacionId: candidata.id,
+                    ordenesGeneradas,
+                })
+            }
         }
 
         return estadoPorId
     }, [cirugias, practicasInternacion])
 
     const practicaIdsPendientesCirugia = useMemo(
-        () => practicaIdsCirugias.filter((id) => (estadoPracticaCirugiaPorId.get(id)?.practicaInternacionIdPendiente ?? null) != null),
+        () => practicaIdsCirugias.filter((id) => estadoPracticaCirugiaPorId.get(id)?.pendiente === true),
         [practicaIdsCirugias, estadoPracticaCirugiaPorId]
     )
 
@@ -353,19 +353,19 @@ export function CirugiaUrgenciaSection({
             .flatMap((cirugia) => cirugia.practicas)
             .filter((practica) => practicasSeleccionadasVigentes.includes(practica.id))
 
-        const practicaIdInternacionPorPracticaCirugiaId = new Map<number, number>()
-        for (const practicaCirugia of practicasCirugiaSeleccionadas) {
-            const practicaIdInternacion =
-                estadoPracticaCirugiaPorId.get(practicaCirugia.id)?.practicaInternacionIdPendiente ?? null
-            if (practicaIdInternacion == null) {
-                continue
-            }
-            practicaIdInternacionPorPracticaCirugiaId.set(practicaCirugia.id, practicaIdInternacion)
-        }
+        const vinculacionesSeleccionadas = practicasCirugiaSeleccionadas
+            .map((practica) => {
+                const estado = estadoPracticaCirugiaPorId.get(practica.id)
+                if (!estado || !estado.pendiente) return null
+                return {
+                    practicaIdCirugia: practica.id,
+                    practicaIdInternacion: estado.practicaInternacionId,
+                }
+            })
+            .filter((item): item is { practicaIdCirugia: number; practicaIdInternacion: number } => item != null)
 
-        const practicaIdsInternacionSeleccionadas = practicasSeleccionadasVigentes
-            .map((id) => practicaIdInternacionPorPracticaCirugiaId.get(id) ?? null)
-            .filter((id): id is number => id != null)
+        const practicaIdsInternacionSeleccionadas = vinculacionesSeleccionadas
+            .map((item) => item.practicaIdInternacion)
 
         if (practicaIdsInternacionSeleccionadas.length === 0) {
             setError('No se encontraron practicas pendientes de internacion para la seleccion de cirugia')
@@ -403,9 +403,9 @@ export function CirugiaUrgenciaSection({
 
             const idsAsignadosInternacion = new Set(grupos.flatMap((grupo) => grupo.practicaIds))
             const idsAsignadosCirugia = new Set<number>()
-            for (const [practicaIdCirugia, practicaIdInternacion] of practicaIdInternacionPorPracticaCirugiaId.entries()) {
-                if (idsAsignadosInternacion.has(practicaIdInternacion)) {
-                    idsAsignadosCirugia.add(practicaIdCirugia)
+            for (const vinculacion of vinculacionesSeleccionadas) {
+                if (idsAsignadosInternacion.has(vinculacion.practicaIdInternacion)) {
+                    idsAsignadosCirugia.add(vinculacion.practicaIdCirugia)
                 }
             }
 
@@ -538,7 +538,7 @@ export function CirugiaUrgenciaSection({
                             {cirugias.map((c) => {
                                 const practicaIdsCirugia = c.practicas.map((practica) => practica.id)
                                 const practicaIdsPendientesCirugiaItem = practicaIdsCirugia.filter(
-                                    (id) => (estadoPracticaCirugiaPorId.get(id)?.practicaInternacionIdPendiente ?? null) != null
+                                    (id) => estadoPracticaCirugiaPorId.get(id)?.pendiente === true
                                 )
                                 const todasSeleccionadasCirugia =
                                     practicaIdsPendientesCirugiaItem.length > 0
@@ -607,7 +607,7 @@ export function CirugiaUrgenciaSection({
                                                                         <td className="px-2 py-1 border-b align-middle">
                                                                             {(() => {
                                                                                 const estadoPractica = estadoPracticaCirugiaPorId.get(p.id)
-                                                                                const esPendiente = (estadoPractica?.practicaInternacionIdPendiente ?? null) != null
+                                                                                const esPendiente = estadoPractica?.pendiente === true
                                                                                 return (
                                                                             <input
                                                                                 type="checkbox"

@@ -188,6 +188,80 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             ? profesionales.find((p) => p.id === detalle.profesionalTratante?.id)?.matricula ?? null
             : null)
 
+    const practicasCirugiaEspejo = await prisma.practica.findMany({
+        where: {
+            ingresoId,
+            OR: [{ estado: 'A' }, { estado: null }],
+            usuarioRegistro: 'CIRUGIA',
+        },
+        select: {
+            id: true,
+            codigoPractica: true,
+            cantidad: true,
+            estado: true,
+            usuarioRegistro: true,
+            ordenPractica: {
+                where: {
+                    orden: {
+                        estado: { not: 'X' },
+                    },
+                },
+                select: {
+                    puestoNumero: true,
+                    ordenNumero: true,
+                    item: true,
+                    numeroAutorizacion: true,
+                },
+            },
+        },
+        orderBy: { id: 'asc' },
+    })
+
+    const practicasInternacionParaCirugiaMap = new Map<number, {
+        id: number
+        codigoPractica: string
+        cantidad: number
+        estado: string | null
+        usuario: string | null
+        ordenPractica: Array<{
+            puestoNumero: number
+            ordenNumero: number
+            item: number
+            numeroAutorizacion: string | null
+        }>
+    }>()
+
+    for (const practica of detalle.practicas) {
+        practicasInternacionParaCirugiaMap.set(practica.id, {
+            id: practica.id,
+            codigoPractica: practica.codigoPractica,
+            cantidad: Number(practica.cantidad),
+            estado: practica.estado,
+            usuario: practica.usuario ?? null,
+            ordenPractica: Array.isArray(practica.ordenPractica) ? practica.ordenPractica : [],
+        })
+    }
+
+    for (const practica of practicasCirugiaEspejo) {
+        if (practicasInternacionParaCirugiaMap.has(practica.id)) continue
+
+        practicasInternacionParaCirugiaMap.set(practica.id, {
+            id: practica.id,
+            codigoPractica: practica.codigoPractica,
+            cantidad: Number(practica.cantidad),
+            estado: practica.estado,
+            usuario: practica.usuarioRegistro,
+            ordenPractica: practica.ordenPractica.map((orden) => ({
+                puestoNumero: orden.puestoNumero,
+                ordenNumero: orden.ordenNumero,
+                item: orden.item,
+                numeroAutorizacion: orden.numeroAutorizacion,
+            })),
+        })
+    }
+
+    const practicasInternacionParaCirugia = Array.from(practicasInternacionParaCirugiaMap.values())
+
     return (
         <>
             <Header titulo={`Internación INT-${detalle.numeroIngreso}`} />
@@ -361,7 +435,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                         coseguros={coseguros}
                                         camasDisponibles={camasDisponiblesSimple}
                                         cirugias={detalle.cirugiasUrgencia}
-                                        practicasInternacion={detalle.practicas}
+                                        practicasInternacion={practicasInternacionParaCirugia}
                                         matriculaTratanteDefault={matriculaTratanteDefault}
                                     />
                                 )}

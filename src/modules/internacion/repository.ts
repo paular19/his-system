@@ -40,6 +40,7 @@ import type { ResultadoPaginado } from '@/types'
 // ============================================
 
 const ARG_TIME_ZONE = 'America/Argentina/Buenos_Aires'
+const USUARIO_REGISTRO_CIRUGIA = 'CIRUGIA'
 
 function esFechaSoloEnUtc(fecha: Date): boolean {
   return (
@@ -540,6 +541,9 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
       where: {
         ingresoId: id,
         OR: [{ estado: 'A' }, { estado: null }],
+        NOT: {
+          usuarioRegistro: 'CIRUGIA',
+        },
       },
       select: {
         id: true,
@@ -1867,7 +1871,7 @@ export async function crearCirugiaUrgencia(
               matriculaAnestesista: p.matriculaAnestesista ?? null,
               facturable: true,
               importeTotal: p.importeTotal ?? null,
-              usuarioRegistro: usuario.slice(0, 10),
+              usuarioRegistro: USUARIO_REGISTRO_CIRUGIA,
             },
           })
         )

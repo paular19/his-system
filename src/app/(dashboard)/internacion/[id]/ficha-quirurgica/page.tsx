@@ -9,7 +9,7 @@ import {
   formatearFechaArgentina,
   formatearFechaHoraArgentina,
 } from '@/lib/utils/argentina-date'
-import { ChevronRight, FileText } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
@@ -213,13 +213,6 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
         </nav>
 
         <div className="flex justify-end gap-2 print:hidden">
-          <Link
-            href={`/dashboard/internacion/${ingresoId}`}
-            className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            <FileText className="h-4 w-4" />
-            Detalle
-          </Link>
           <PrintButton
             label="Imprimir"
             className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"

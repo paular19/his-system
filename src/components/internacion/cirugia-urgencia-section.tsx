@@ -567,6 +567,8 @@ export function CirugiaUrgenciaSection({
                                                 )}
                                                 <Link
                                                     href={`/dashboard/internacion/${ingresoId}/ficha-quirurgica#cirugia-${c.id}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
                                                     className="text-xs font-medium text-blue-700 border border-blue-200 rounded-md px-2 py-1 hover:bg-blue-50"
                                                 >
                                                     Ver ficha quirurgica

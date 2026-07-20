@@ -420,8 +420,8 @@ export function AutorizacionPrint({
             height: 128mm;
             margin-bottom: 4mm !important;
             box-sizing: border-box;
-            page-break-after: auto !important;
-            break-after: auto !important;
+            page-break-after: always !important;
+            break-after: page !important;
             page-break-inside: avoid;
             break-inside: avoid-page;
             overflow: hidden;

@@ -195,6 +195,7 @@ export function FichaQuirurgicaNotasCirujano({
 
   const [campos, setCampos] = useState<CamposNotasCirujano>(fallback)
   const [guardandoFicha, setGuardandoFicha] = useState(false)
+  const [modoLectura, setModoLectura] = useState(false)
   const [estadoCondicional, setEstadoCondicional] = useState<
     { tipo: 'ok' | 'error'; mensaje: string } | null
   >(null)
@@ -216,6 +217,7 @@ export function FichaQuirurgicaNotasCirujano({
       const raw = window.localStorage.getItem(key)
       if (!raw) {
         setCampos(fallback)
+        setModoLectura(false)
         return
       }
       const parsed = JSON.parse(raw) as Partial<CamposNotasCirujano> & {
@@ -228,8 +230,10 @@ export function FichaQuirurgicaNotasCirujano({
         firmaCirujano?: string
       }
       setCampos(mergeCampos(fallback, parsed))
+      setModoLectura(true)
     } catch {
       setCampos(fallback)
+      setModoLectura(false)
     }
   }, [cirugiaId, fallback, ingresoId])
 
@@ -240,6 +244,7 @@ export function FichaQuirurgicaNotasCirujano({
 
   const limpiar = () => {
     setCampos(fallback)
+    setModoLectura(false)
     setEstadoCondicional(null)
     try {
       window.localStorage.removeItem(storageKey(ingresoId, cirugiaId))
@@ -305,6 +310,7 @@ export function FichaQuirurgicaNotasCirujano({
         tipo: 'ok',
         mensaje: 'Ficha guardada y lista para imprimir. El condicional impacta en facturacion.',
       })
+      setModoLectura(true)
     } catch (err) {
       setEstadoCondicional({
         tipo: 'error',
@@ -317,7 +323,7 @@ export function FichaQuirurgicaNotasCirujano({
 
   return (
     <section className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 print:bg-white print:border-gray-300">
-      <div className="print:hidden">
+      <div className={`${modoLectura ? 'hidden' : 'block'} print:hidden`}>
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
             <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Ficha quirurgica</p>
@@ -325,13 +331,15 @@ export function FichaQuirurgicaNotasCirujano({
               Cirugia {cirugiaId} - {fechaCirugiaLabel}. Completar por cirujano y equipo.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={limpiar}
-            className="text-xs text-slate-600 border rounded px-2 py-1 hover:bg-white"
-          >
-            Limpiar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={limpiar}
+              className="text-xs text-slate-600 border rounded px-2 py-1 hover:bg-white"
+            >
+              Limpiar
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -631,7 +639,26 @@ export function FichaQuirurgicaNotasCirujano({
         </div>
       </div>
 
-      <div className="hidden print:block print:text-[11px] print:leading-tight space-y-2">
+      {modoLectura && (
+        <div className="mb-2 flex items-center justify-end gap-2 print:hidden">
+          <button
+            type="button"
+            onClick={() => setModoLectura(false)}
+            className="text-xs text-blue-700 border border-blue-200 rounded px-2 py-1 hover:bg-blue-50"
+          >
+            Editar
+          </button>
+          <button
+            type="button"
+            onClick={limpiar}
+            className="text-xs text-slate-600 border rounded px-2 py-1 hover:bg-white"
+          >
+            Limpiar
+          </button>
+        </div>
+      )}
+
+      <div className={`${modoLectura ? 'block' : 'hidden'} print:block print:text-[11px] print:leading-tight space-y-2`}>
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-700 border-b border-slate-300 pb-1">
           Informe quirurgico detallado
         </p>

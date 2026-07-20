@@ -160,6 +160,13 @@ export function FichaQuirurgicaNotasCirujano({
   observacionesIniciales,
   cirujanoMatricula,
 }: FichaQuirurgicaNotasCirujanoProps) {
+  const tipoCirugiaMultipleLabel: Record<NonNullable<CamposNotasCirujano['tipoCirugiaMultiple']>, string> = {
+    '': 'No especificada',
+    MISMA_VIA_MISMA_PATOLOGIA: 'I) Misma via, misma patologia',
+    MISMA_VIA_DISTINTA_PATOLOGIA: 'II) Misma via, distinta patologia',
+    DISTINTA_VIA_DISTINTA_PATOLOGIA: 'III) Distinta via, distinta patologia',
+  }
+
   const fallback = useMemo(
     () =>
       buildInitialState(
@@ -191,6 +198,17 @@ export function FichaQuirurgicaNotasCirujano({
   const [estadoCondicional, setEstadoCondicional] = useState<
     { tipo: 'ok' | 'error'; mensaje: string } | null
   >(null)
+
+  const textoCampo = (value: string): string => value.trim() || '—'
+
+  const rangoHorario = useMemo(() => {
+    const comienzo = campos.horaComienzo.trim()
+    const termino = campos.horaTermino.trim()
+    if (comienzo && termino) return `${comienzo} a ${termino}`
+    if (comienzo) return `Inicio ${comienzo}`
+    if (termino) return `Termino ${termino}`
+    return '—'
+  }, [campos.horaComienzo, campos.horaTermino])
 
   useEffect(() => {
     const key = storageKey(ingresoId, cirugiaId)
@@ -299,23 +317,24 @@ export function FichaQuirurgicaNotasCirujano({
 
   return (
     <section className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 print:bg-white print:border-gray-300">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div>
-          <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Ficha quirurgica</p>
-          <p className="text-[11px] text-slate-500 print:hidden">
-            Cirugia {cirugiaId} - {fechaCirugiaLabel}. Completar por cirujano y equipo.
-          </p>
+      <div className="print:hidden">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div>
+            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Ficha quirurgica</p>
+            <p className="text-[11px] text-slate-500">
+              Cirugia {cirugiaId} - {fechaCirugiaLabel}. Completar por cirujano y equipo.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={limpiar}
+            className="text-xs text-slate-600 border rounded px-2 py-1 hover:bg-white"
+          >
+            Limpiar
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={limpiar}
-          className="text-xs text-slate-600 border rounded px-2 py-1 hover:bg-white print:hidden"
-        >
-          Limpiar
-        </button>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Apellido y nombre</label>
           <input
@@ -475,9 +494,9 @@ export function FichaQuirurgicaNotasCirujano({
             className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm resize-y"
           />
         </div>
-      </div>
+        </div>
 
-      <div className="mt-3 rounded-md border border-slate-200 bg-white/70 p-3 space-y-3">
+        <div className="mt-3 rounded-md border border-slate-200 bg-white/70 p-3 space-y-3">
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input
             type="checkbox"
@@ -579,7 +598,7 @@ export function FichaQuirurgicaNotasCirujano({
               />
             </div>
 
-            <p className="md:col-span-2 text-xs text-slate-500 print:hidden">
+            <p className="md:col-span-2 text-xs text-slate-500">
               Firma y sello se completan en papel al imprimir la ficha.
             </p>
           </div>
@@ -609,9 +628,65 @@ export function FichaQuirurgicaNotasCirujano({
               : 'Guardar ficha y condicional'}
           </button>
         </div>
+        </div>
       </div>
 
-      <div className="mt-6 hidden print:grid print:grid-cols-2 gap-8">
+      <div className="hidden print:block print:text-[11px] print:leading-tight space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-700 border-b border-slate-300 pb-1">
+          Informe quirurgico detallado
+        </p>
+
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+          <p><span className="font-semibold text-slate-700">Cirugia:</span> #{cirugiaId}</p>
+          <p><span className="font-semibold text-slate-700">Fecha:</span> {textoCampo(campos.fecha || fechaCirugiaLabel)}</p>
+          <p><span className="font-semibold text-slate-700">Paciente:</span> {textoCampo(campos.apellidoNombre)}</p>
+          <p><span className="font-semibold text-slate-700">DNI:</span> {textoCampo(campos.dni)}</p>
+          <p><span className="font-semibold text-slate-700">Obra social:</span> {textoCampo(campos.obraSocial)}</p>
+          <p><span className="font-semibold text-slate-700">Horario quirurgico:</span> {rangoHorario}</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-slate-200 pt-2">
+          <p><span className="font-semibold text-slate-700">Cirujano:</span> {textoCampo(campos.cirujano)}</p>
+          <p><span className="font-semibold text-slate-700">Instrumentadora:</span> {textoCampo(campos.instrumentadora)}</p>
+          <p><span className="font-semibold text-slate-700">1er ayudante:</span> {textoCampo(campos.ayudantePrimero)}</p>
+          <p><span className="font-semibold text-slate-700">Circular:</span> {textoCampo(campos.circular)}</p>
+          <p><span className="font-semibold text-slate-700">2do ayudante:</span> {textoCampo(campos.ayudanteSegundo)}</p>
+          <p><span className="font-semibold text-slate-700">3er ayudante:</span> {textoCampo(campos.ayudanteTercero)}</p>
+        </div>
+
+        <div className="border border-slate-300 rounded p-2">
+          <p className="font-semibold text-slate-700">Diagnostico operatorio</p>
+          <p className="mt-1 whitespace-pre-line">{textoCampo(campos.diagnosticoOperatorio)}</p>
+        </div>
+
+        <div className="border border-slate-300 rounded p-2">
+          <p className="font-semibold text-slate-700">Diagnostico posoperatorio</p>
+          <p className="mt-1 whitespace-pre-line">{textoCampo(campos.diagnosticoPosoperatorio)}</p>
+        </div>
+
+        <div className="border border-slate-300 rounded p-2">
+          <p className="font-semibold text-slate-700">Procedimiento quirurgico</p>
+          <p className="mt-1 whitespace-pre-line">{textoCampo(campos.procedimientoQuirurgico)}</p>
+        </div>
+
+        <div className="border border-slate-300 rounded p-2">
+          <p className="font-semibold text-slate-700">Operacion y hallazgos</p>
+          <p className="mt-1 whitespace-pre-line">{textoCampo(campos.operacionHallazgos)}</p>
+        </div>
+
+        <div className="border border-slate-300 rounded p-2">
+          <p className="font-semibold text-slate-700">Condicional de cirugias multiples</p>
+          <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
+            <p><span className="font-semibold">Aplica:</span> {campos.cirugiasMultiples ? 'Si' : 'No'}</p>
+            <p><span className="font-semibold">Monitoreo intraoperatorio:</span> {campos.monitoreoIntraoperatorio}</p>
+            <p><span className="font-semibold">Clasificacion:</span> {campos.cirugiasMultiples ? tipoCirugiaMultipleLabel[campos.tipoCirugiaMultiple] : 'No aplica'}</p>
+            <p><span className="font-semibold">Radiografia c/intensificador:</span> {campos.radiografiaConIntensificador}</p>
+            <p><span className="font-semibold">Cantidad disparos:</span> {textoCampo(campos.cantidadDisparos)}</p>
+            <p><span className="font-semibold">Tecnico:</span> {textoCampo(campos.tecnicoRadiologia)}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-8">
         <div>
           <div className="h-10 border-b border-slate-700" />
           <p className="mt-1 text-xs text-slate-700">Firma y sello del cirujano</p>
@@ -623,6 +698,7 @@ export function FichaQuirurgicaNotasCirujano({
           <p className="mt-1 text-xs text-slate-700">Firma y sello del radiologo</p>
           <p className="text-xs text-slate-700">Nombre: {campos.tecnicoRadiologia || '________________'}</p>
           <p className="text-xs text-slate-700">Matricula: __________________</p>
+        </div>
         </div>
       </div>
     </section>

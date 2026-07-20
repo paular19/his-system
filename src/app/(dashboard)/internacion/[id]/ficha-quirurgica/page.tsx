@@ -177,7 +177,29 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
     <>
       <Header titulo="Ficha Quirurgica" />
 
-      <div className="p-6 max-w-5xl space-y-6 print:space-y-4">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+
+          .ficha-quirurgica-sheet {
+            width: 100%;
+            max-width: 194mm;
+            margin: 0 auto;
+          }
+
+          .ficha-quirurgica-sheet .his-card {
+            box-shadow: none !important;
+            border-color: #cbd5e1 !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+        }
+      `}</style>
+
+      <div className="ficha-quirurgica-sheet p-6 max-w-5xl space-y-6 print:space-y-2 print:p-2">
         <nav className="flex items-center gap-1 text-xs text-gray-500 print:hidden">
           <Link href="/dashboard/internacion" className="hover:text-gray-700">
             Internacion
@@ -232,13 +254,13 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
         )}
 
         <section className="space-y-4">
-          <h2 className="text-base font-semibold text-gray-900">Fichas por cirugia</h2>
+          <h2 className="text-base font-semibold text-gray-900 print:mb-1">Fichas por cirugia</h2>
 
           {cirugias.length === 0 ? (
             <div className="his-card p-5 text-sm text-gray-500">No hay cirugias registradas para esta internacion.</div>
           ) : (
             cirugias.map((cirugia) => (
-              <article id={`cirugia-${cirugia.id}`} key={cirugia.id} className="his-card p-4 print:p-3 space-y-3 break-inside-avoid">
+              <article id={`cirugia-${cirugia.id}`} key={cirugia.id} className="his-card p-4 print:p-2 space-y-3 print:space-y-2 break-inside-avoid">
                 <div className="flex items-center justify-between gap-2 border-b pb-2">
                   <h3 className="text-sm font-semibold text-gray-900">Cirugia #{cirugia.id}</h3>
                   <span className="text-xs text-gray-500">

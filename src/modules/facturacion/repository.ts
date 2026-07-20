@@ -33,6 +33,7 @@ import type {
 import { calcularImporteFacturable, resolverReglaFacturacion } from './cobertura'
 import { aplicarDiferencialesAValores } from './diferenciales'
 import { crearOrdenAmbulatorio } from '@/modules/orden/service'
+import { claveDiaArgentina } from '@/lib/utils/argentina-date'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 const NOMBRE_MATRICULA_9110_DEFAULT = 'CLINICA SAN RAFAEL'
@@ -1007,7 +1008,33 @@ function periodoToDateRange(periodo: string): { desde: Date; hasta: Date } {
 }
 
 function fechaClave(value: Date): string {
-    return value.toISOString().slice(0, 10)
+    return claveDiaArgentina(value) ?? value.toISOString().slice(0, 10)
+}
+
+function claveCirugiaPractica(codigo: string, cantidad: number, fecha: Date): string {
+    return `${normalizarCodigoPracticaFacturacion(codigo)}:${Number(cantidad)}:${fechaClave(fecha)}`
+}
+
+function claveCirugiaPracticaSinFecha(codigo: string, cantidad: number): string {
+    return `${normalizarCodigoPracticaFacturacion(codigo)}:${Number(cantidad)}`
+}
+
+function resolverInfoCirugiaConFallback<T>(
+    porClaveCompleta: Map<string, T>,
+    porClaveSinFecha: Map<string, T[]>,
+    codigo: string,
+    cantidad: number,
+    fecha: Date
+): T | null {
+    const matchExacto = porClaveCompleta.get(claveCirugiaPractica(codigo, cantidad, fecha))
+    if (matchExacto) return matchExacto
+
+    const candidatos = porClaveSinFecha.get(claveCirugiaPracticaSinFecha(codigo, cantidad)) ?? []
+    if (candidatos.length === 1) {
+        return candidatos[0] ?? null
+    }
+
+    return null
 }
 
 function normalizarCodigoPracticaFacturacion(codigo: string): string {
@@ -1550,6 +1577,10 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         ingreso.practicas.map((p) => p.codigoPractica)
     )
     const cirugiaPracticas = new Map<string, { cirugiaId: number; diferenciales: NonNullable<PrestacionFacturableItem['diferenciales']> }>()
+    const cirugiaPracticasPorCodigoCantidad = new Map<
+        string,
+        Array<{ cirugiaId: number; diferenciales: NonNullable<PrestacionFacturableItem['diferenciales']> }>
+    >()
     const diferencialesPorPracticaId = new Map<number, NonNullable<PrestacionFacturableItem['diferenciales']>>()
     const practicaBaseAutomaticaPorCirugia = new Map<number, number>()
 
@@ -1569,11 +1600,18 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         }
 
         for (const practica of cirugia.practicas) {
-            const clave = `${normalizarCodigoPracticaFacturacion(practica.codigo)}:${Number(practica.cantidad)}:${fechaClave(cirugia.fechaCirugia)}`
-            cirugiaPracticas.set(clave, {
+            const infoCirugia = {
                 cirugiaId: cirugia.id,
                 diferenciales,
-            })
+            }
+
+            const clave = claveCirugiaPractica(practica.codigo, Number(practica.cantidad), cirugia.fechaCirugia)
+            cirugiaPracticas.set(clave, infoCirugia)
+
+            const claveSinFecha = claveCirugiaPracticaSinFecha(practica.codigo, Number(practica.cantidad))
+            const actuales = cirugiaPracticasPorCodigoCantidad.get(claveSinFecha) ?? []
+            actuales.push(infoCirugia)
+            cirugiaPracticasPorCodigoCantidad.set(claveSinFecha, actuales)
         }
     }
 
@@ -1596,8 +1634,13 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     >()
 
     for (const practicaIngreso of ingreso.practicas) {
-        const clavePractica = `${normalizarCodigoPracticaFacturacion(practicaIngreso.codigoPractica)}:${Number(practicaIngreso.cantidad)}:${fechaClave(practicaIngreso.fecha)}`
-        const infoCirugia = cirugiaPracticas.get(clavePractica)
+        const infoCirugia = resolverInfoCirugiaConFallback(
+            cirugiaPracticas,
+            cirugiaPracticasPorCodigoCantidad,
+            practicaIngreso.codigoPractica,
+            Number(practicaIngreso.cantidad),
+            practicaIngreso.fecha
+        )
         if (!infoCirugia?.diferenciales?.dobleCirugia) continue
 
         const cantidad = Math.max(1, Number(practicaIngreso.cantidad) || 1)
@@ -1895,8 +1938,13 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         )
 
         // Buscar si esta práctica pertenece a una cirugía programada
-        const clavePractica = `${normalizarCodigoPracticaFacturacion(p.codigoPractica)}:${Number(p.cantidad)}:${fechaClave(p.fecha)}`
-        const diferencialCirugia = cirugiaPracticas.get(clavePractica) ?? null
+        const diferencialCirugia = resolverInfoCirugiaConFallback(
+            cirugiaPracticas,
+            cirugiaPracticasPorCodigoCantidad,
+            p.codigoPractica,
+            Number(p.cantidad),
+            p.fecha
+        )
         const autorizacionesVinculadas = [...(autorizacionesVinculadasPorPractica.get(p.id) ?? [])]
             .sort((a, b) => {
                 if (a.ordenPuestoNumero !== b.ordenPuestoNumero) return a.ordenPuestoNumero - b.ordenPuestoNumero
@@ -3671,14 +3719,33 @@ export async function actualizarDiferencialesCirugiaFacturacion(
                 throw new Error('La práctica base seleccionada no pertenece al ingreso')
             }
 
-            const clavePracticaBase = `${normalizarCodigoPracticaFacturacion(practicaBase.codigoPractica)}:${Number(practicaBase.cantidad)}:${fechaClave(practicaBase.fecha)}`
             const clavesCirugia = new Set(
-                cirugia.practicas.map(
-                    (p) => `${normalizarCodigoPracticaFacturacion(p.codigo)}:${Number(p.cantidad)}:${fechaClave(cirugia.fechaCirugia)}`
+                cirugia.practicas.map((p) =>
+                    claveCirugiaPractica(p.codigo, Number(p.cantidad), cirugia.fechaCirugia)
                 )
             )
+            const clavePracticaBase = claveCirugiaPractica(
+                practicaBase.codigoPractica,
+                Number(practicaBase.cantidad),
+                practicaBase.fecha
+            )
 
-            if (!clavesCirugia.has(clavePracticaBase)) {
+            const coincideExacto = clavesCirugia.has(clavePracticaBase)
+            const coincidePorCodigoCantidadUnico = (() => {
+                if (coincideExacto) return true
+
+                const claveBaseSinFecha = claveCirugiaPracticaSinFecha(
+                    practicaBase.codigoPractica,
+                    Number(practicaBase.cantidad)
+                )
+                const coincidencias = cirugia.practicas.filter(
+                    (p) =>
+                        claveCirugiaPracticaSinFecha(p.codigo, Number(p.cantidad)) === claveBaseSinFecha
+                )
+                return coincidencias.length === 1
+            })()
+
+            if (!coincidePorCodigoCantidadUnico) {
                 throw new Error('La práctica base seleccionada no corresponde a la cirugía indicada')
             }
         }
@@ -4627,6 +4694,20 @@ export async function obtenerOrdenesAutorizadasIngreso(
             }
         }
     >()
+    const cirugiaPracticasPorCodigoCantidad = new Map<
+        string,
+        Array<{
+            cirugiaId: number
+            diferenciales: {
+                esFeriado: boolean
+                esNocturna: boolean
+                mismaViaPatologia: boolean
+                diferentesViasPatologia: boolean
+                diferentesViasDiferentesPatologia: boolean
+                dobleCirugia: boolean
+            }
+        }>
+    >()
 
     for (const cirugia of cirugiasProgramadas) {
         const diferenciales = {
@@ -4641,11 +4722,17 @@ export async function obtenerOrdenesAutorizadasIngreso(
         }
 
         for (const practica of cirugia.practicas) {
-            const clave = `${normalizarCodigoPracticaFacturacion(practica.codigo)}:${Number(practica.cantidad)}:${fechaClave(cirugia.fechaCirugia)}`
-            cirugiaPracticasPorClave.set(clave, {
+            const infoCirugia = {
                 cirugiaId: cirugia.id,
                 diferenciales,
-            })
+            }
+            const clave = claveCirugiaPractica(practica.codigo, Number(practica.cantidad), cirugia.fechaCirugia)
+            cirugiaPracticasPorClave.set(clave, infoCirugia)
+
+            const claveSinFecha = claveCirugiaPracticaSinFecha(practica.codigo, Number(practica.cantidad))
+            const actuales = cirugiaPracticasPorCodigoCantidad.get(claveSinFecha) ?? []
+            actuales.push(infoCirugia)
+            cirugiaPracticasPorCodigoCantidad.set(claveSinFecha, actuales)
         }
     }
 
@@ -4701,8 +4788,13 @@ export async function obtenerOrdenesAutorizadasIngreso(
                 )
                 .map((it) => ({
                     ...(function () {
-                        const claveCirugia = `${normalizarCodigoPracticaFacturacion(it.codigoPractica)}:${Number(it.cantidad)}:${fechaClave(it.fecha)}`
-                        const cirugiaMatch = cirugiaPracticasPorClave.get(claveCirugia) ?? null
+                        const cirugiaMatch = resolverInfoCirugiaConFallback(
+                            cirugiaPracticasPorClave,
+                            cirugiaPracticasPorCodigoCantidad,
+                            it.codigoPractica,
+                            Number(it.cantidad),
+                            it.fecha
+                        )
                         const diferenciales = cirugiaMatch?.diferenciales ?? null
                         const esCirugiaMultiple = Boolean(
                             diferenciales?.dobleCirugia ||

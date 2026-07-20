@@ -508,7 +508,7 @@ export async function listarOrdenes(params: {
   if (estadoTab === 'pendientes' || estadoTab === 'confirmadas') {
     const rows = await prisma.orden.findMany({
       where: { estado: { not: 'X' } },
-      orderBy: [{ puestoNumero: 'desc' }, { numero: 'desc' }],
+      orderBy: [{ fechaEmision: 'desc' }, { puestoNumero: 'desc' }, { numero: 'desc' }],
       select: {
         puestoNumero: true,
         numero: true,
@@ -607,7 +607,7 @@ export async function listarOrdenes(params: {
       where,
       skip,
       take,
-      orderBy: [{ puestoNumero: 'desc' }, { numero: 'desc' }],
+      orderBy: [{ fechaEmision: 'desc' }, { puestoNumero: 'desc' }, { numero: 'desc' }],
       select: {
         puestoNumero: true,
         numero: true,

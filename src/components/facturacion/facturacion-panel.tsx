@@ -833,6 +833,57 @@ function obtenerOrdenParaOrdenamiento(
     }
 }
 
+function esPrestacionCirugiaMultiple(p: PrestacionFacturableItem): boolean {
+    const diferenciales = p.diferenciales
+    if (!diferenciales) return false
+    return Boolean(
+        diferenciales.dobleCirugia ||
+        diferenciales.mismaViaPatologia ||
+        diferenciales.diferentesViasPatologia ||
+        diferenciales.diferentesViasDiferentesPatologia
+    )
+}
+
+type OrdenRelacionada = {
+    ordenPuestoNumero: number
+    ordenNumero: number
+}
+
+function keyOrdenRelacionada(orden: OrdenRelacionada): string {
+    return `${orden.ordenPuestoNumero}:${orden.ordenNumero}`
+}
+
+function obtenerOrdenesRelacionadasPrestacion(p: PrestacionFacturableItem): OrdenRelacionada[] {
+    const ordenes: OrdenRelacionada[] = []
+
+    const ordenDirecta = obtenerOrdenParaOrdenamiento(p)
+    if (ordenDirecta) {
+        ordenes.push({
+            ordenPuestoNumero: ordenDirecta.puestoNumero,
+            ordenNumero: ordenDirecta.ordenNumero,
+        })
+    }
+
+    for (const aut of p.autorizacionesVinculadas ?? []) {
+        ordenes.push({
+            ordenPuestoNumero: aut.ordenPuestoNumero,
+            ordenNumero: aut.ordenNumero,
+        })
+    }
+
+    const unicas = new Map<string, OrdenRelacionada>()
+    for (const orden of ordenes) {
+        unicas.set(keyOrdenRelacionada(orden), orden)
+    }
+
+    return Array.from(unicas.values()).sort((a, b) => {
+        if (a.ordenPuestoNumero !== b.ordenPuestoNumero) {
+            return a.ordenPuestoNumero - b.ordenPuestoNumero
+        }
+        return a.ordenNumero - b.ordenNumero
+    })
+}
+
 function prioridadTipoPrestacionParaGrilla(p: PrestacionFacturableItem): number {
     if (p.tipo === 'PRACTICA') return 0
     if (p.tipo === 'MEDICACION') return 1
@@ -977,7 +1028,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const [selectedIngresoId, setSelectedIngresoId] = useState<number | null>(() =>
         parseEnteroPositivo(searchParams.get('ingresoId'))
     )
-    const [autoSeleccionBusquedaDirecta, setAutoSeleccionBusquedaDirecta] = useState(false)
+    const [, setAutoSeleccionBusquedaDirecta] = useState(false)
     const [mostrarCoincidenciasBusqueda, setMostrarCoincidenciasBusqueda] = useState(true)
     const ultimoEstadoBusquedaAutoRef = useRef('')
 
@@ -1239,6 +1290,11 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             key: string
             ordenPuestoNumero: number | null
             ordenNumero: number | null
+            cirugiaProgramadaId: number | null
+            esCirugia: boolean
+            esCirugiaMultiple: boolean
+            etiquetasCirugia: string[]
+            ordenesRelacionadas: OrdenRelacionada[]
             items: PrestacionFacturableItem[]
         }> = []
 
@@ -1246,23 +1302,58 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
         for (const p of prestacionesNoOrdenadasFiltradasOrdenadas) {
             const orden = obtenerOrdenParaOrdenamiento(p)
-            const key = orden
-                ? `ORD:${orden.puestoNumero}:${orden.ordenNumero}`
-                : `SIN:${p.uid}`
+            const cirugiaProgramadaId =
+                p.tipo === 'PRACTICA' && p.esPracticaCirugia
+                    ? (p.origen.cirugiaProgramadaId ?? null)
+                    : null
+            const key = cirugiaProgramadaId
+                ? `CIR:${cirugiaProgramadaId}`
+                : (orden
+                    ? `ORD:${orden.puestoNumero}:${orden.ordenNumero}`
+                    : `SIN:${p.uid}`)
+            const ordenesRelacionadas = obtenerOrdenesRelacionadasPrestacion(p)
+            const etiquetasCirugiaPrestacion = resumenDiferenciales(p.diferenciales)
 
             const idx = indicePorKey.get(key)
             if (idx == null) {
                 indicePorKey.set(key, grupos.length)
                 grupos.push({
                     key,
-                    ordenPuestoNumero: orden?.puestoNumero ?? null,
-                    ordenNumero: orden?.ordenNumero ?? null,
+                    ordenPuestoNumero: cirugiaProgramadaId ? null : (orden?.puestoNumero ?? null),
+                    ordenNumero: cirugiaProgramadaId ? null : (orden?.ordenNumero ?? null),
+                    cirugiaProgramadaId,
+                    esCirugia: Boolean(cirugiaProgramadaId || p.esPracticaCirugia),
+                    esCirugiaMultiple: esPrestacionCirugiaMultiple(p),
+                    etiquetasCirugia: etiquetasCirugiaPrestacion,
+                    ordenesRelacionadas,
                     items: [p],
                 })
                 continue
             }
 
-            grupos[idx]?.items.push(p)
+            const grupo = grupos[idx]
+            if (!grupo) continue
+
+            grupo.items.push(p)
+            grupo.esCirugia = grupo.esCirugia || Boolean(cirugiaProgramadaId || p.esPracticaCirugia)
+            grupo.esCirugiaMultiple = grupo.esCirugiaMultiple || esPrestacionCirugiaMultiple(p)
+
+            const etiquetas = new Set([...grupo.etiquetasCirugia, ...etiquetasCirugiaPrestacion])
+            grupo.etiquetasCirugia = Array.from(etiquetas)
+
+            const ordenesMap = new Map<string, OrdenRelacionada>()
+            for (const actual of grupo.ordenesRelacionadas) {
+                ordenesMap.set(keyOrdenRelacionada(actual), actual)
+            }
+            for (const actual of ordenesRelacionadas) {
+                ordenesMap.set(keyOrdenRelacionada(actual), actual)
+            }
+            grupo.ordenesRelacionadas = Array.from(ordenesMap.values()).sort((a, b) => {
+                if (a.ordenPuestoNumero !== b.ordenPuestoNumero) {
+                    return a.ordenPuestoNumero - b.ordenPuestoNumero
+                }
+                return a.ordenNumero - b.ordenNumero
+            })
         }
 
         return grupos
@@ -2735,11 +2826,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         <div className="inline-flex h-9 items-center rounded-md bg-gray-100 px-2.5 text-[11px] font-medium text-gray-700">
                             {totalAdmisiones} opciones encontradas
                         </div>
-                        {autoSeleccionBusquedaDirecta && selectedIngresoId && (
-                            <div className="inline-flex h-9 items-center rounded-md bg-emerald-100 px-2.5 text-[11px] font-medium text-emerald-800">
-                                Selección automática aplicada
-                            </div>
-                        )}
                     </div>
 
                     <div className="xl:col-span-12 space-y-2">
@@ -3261,7 +3347,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                         <p className="text-xs text-gray-500 whitespace-nowrap">
                                             {esVistaFacturadas
                                                 ? `Órdenes facturadas: ${ordenesConItems.length}`
-                                                : `Órdenes: ${gruposPrestacionesNoOrdenadasFiltradas.length} · Prácticas: ${prestacionesNoOrdenadasFiltradas.length} de ${prestacionesNoOrdenadas.length}`}
+                                                : `Grupos: ${gruposPrestacionesNoOrdenadasFiltradas.length} · Prácticas: ${prestacionesNoOrdenadasFiltradas.length} de ${prestacionesNoOrdenadas.length}`}
                                         </p>
                                     </div>
                                 </div>
@@ -3285,7 +3371,8 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                         <tbody className="divide-y">
                                             {!esVistaFacturadas && gruposPrestacionesNoOrdenadasPaginadas.map((grupo) => {
                                                 const grupoExpandido = ordenesPendientesExpand[grupo.key] ?? true
-                                                const tieneNumeroOrden = Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
+                                                const esGrupoCirugia = Boolean(grupo.cirugiaProgramadaId)
+                                                const tieneNumeroOrden = !esGrupoCirugia && Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
                                                 const practicasSeleccionablesOrden = grupo.items.filter((it) => esPrestacionSeleccionableParaFacturar(it))
                                                 const practicasSeleccionablesOrdenUids = practicasSeleccionablesOrden.map((it) => it.uid)
                                                 const totalSeleccionablesOrden = practicasSeleccionablesOrdenUids.length
@@ -3310,9 +3397,11 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const guardandoAutorizacionOrden =
                                                     Boolean(authOrdenKey) && guardandoAutorizacionOrdenKey === authOrdenKey
                                                 const etiquetaOrden =
-                                                    grupo.ordenPuestoNumero && grupo.ordenNumero
+                                                    esGrupoCirugia
+                                                        ? `Cirugía #${grupo.cirugiaProgramadaId}`
+                                                        : (grupo.ordenPuestoNumero && grupo.ordenNumero
                                                         ? formatOrderNumber(grupo.ordenPuestoNumero, grupo.ordenNumero)
-                                                        : 'Sin orden vinculada'
+                                                        : 'Sin orden vinculada')
                                                 const destinoOrdenGrupo =
                                                     grupo.ordenPuestoNumero && grupo.ordenNumero
                                                         ? `/dashboard/ambulatorio/${grupo.ordenPuestoNumero}/${grupo.ordenNumero}`
@@ -3330,7 +3419,9 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     >
                                                                         {grupoExpandido ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                                                                     </button>
-                                                                    <span className="text-xs font-medium text-slate-700">Orden</span>
+                                                                    <span className="text-xs font-medium text-slate-700">
+                                                                        {esGrupoCirugia ? 'Cirugía' : 'Orden'}
+                                                                    </span>
                                                                     {destinoOrdenGrupo ? (
                                                                         <Link
                                                                             href={destinoOrdenGrupo}
@@ -3344,7 +3435,47 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     ) : (
                                                                         <span className="text-xs font-medium text-slate-600">{etiquetaOrden}</span>
                                                                     )}
-                                                                    <span className="text-[11px] text-slate-500">({grupo.items.length} práctica{grupo.items.length === 1 ? '' : 's'})</span>
+                                                                    {grupo.esCirugia && (
+                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                                                                            Cirugía
+                                                                        </span>
+                                                                    )}
+                                                                    {grupo.esCirugiaMultiple && (
+                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-medium text-rose-800">
+                                                                            Regla cirugía múltiple
+                                                                        </span>
+                                                                    )}
+                                                                    {grupo.etiquetasCirugia.map((etq) => (
+                                                                        <span key={`${grupo.key}:${etq}`} className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                                                                            {etq}
+                                                                        </span>
+                                                                    ))}
+                                                                    <span className="text-[11px] text-slate-500">
+                                                                        ({grupo.items.length} práctica{grupo.items.length === 1 ? '' : 's'}
+                                                                        {esGrupoCirugia
+                                                                            ? ` · ${grupo.ordenesRelacionadas.length} orden${grupo.ordenesRelacionadas.length === 1 ? '' : 'es'}`
+                                                                            : ''}
+                                                                        )
+                                                                    </span>
+                                                                    {esGrupoCirugia && grupo.ordenesRelacionadas.length > 0 && (
+                                                                        <div className="flex flex-wrap items-center gap-1">
+                                                                            {grupo.ordenesRelacionadas.map((ordenRelacionada) => {
+                                                                                const hrefOrden = `/dashboard/ambulatorio/${ordenRelacionada.ordenPuestoNumero}/${ordenRelacionada.ordenNumero}`
+                                                                                return (
+                                                                                    <Link
+                                                                                        key={`${grupo.key}:${ordenRelacionada.ordenPuestoNumero}:${ordenRelacionada.ordenNumero}`}
+                                                                                        href={hrefOrden}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-100"
+                                                                                        title="Abrir orden relacionada en nueva pestaña"
+                                                                                    >
+                                                                                        {formatOrderNumber(ordenRelacionada.ordenPuestoNumero, ordenRelacionada.ordenNumero)}
+                                                                                    </Link>
+                                                                                )
+                                                                            })}
+                                                                        </div>
+                                                                    )}
                                                                     {totalSeleccionablesOrden > 0 && (
                                                                         <label className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
                                                                             <input
@@ -3361,7 +3492,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                     })
                                                                                 }}
                                                                             />
-                                                                            Facturar orden completa
+                                                                            {esGrupoCirugia ? 'Facturar cirugía completa' : 'Facturar orden completa'}
                                                                             <span className="text-[10px] text-emerald-700">
                                                                                 ({totalSeleccionadasOrden}/{totalSeleccionablesOrden})
                                                                             </span>

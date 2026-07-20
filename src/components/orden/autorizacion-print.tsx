@@ -92,8 +92,8 @@ export function AutorizacionPrint({
     const esGastos = contieneClasificacion(item.clasificacionAgrupacion, 'GA') || incluyeCodigo.includes('GA')
     const matriculaEfector = item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null
 
-    if (esGastos && matriculaEfector === 995) {
-      return 'CLINICA SAN RAFAEL · MP 995'
+    if (esGastos && matriculaEfector === 9995) {
+      return 'GASTOS INTERNACION · MP 9995'
     }
 
     if (contieneClasificacion(item.clasificacionAgrupacion, 'HA') || incluyeCodigo.includes('HA')) {
@@ -122,27 +122,34 @@ export function AutorizacionPrint({
     const incluyeCodigo = item.incluyeCodigo || ''
     const esGastos = contieneClasificacion(item.clasificacionAgrupacion, 'GA') || incluyeCodigo.includes('GA')
     const matriculaEfector = item.efectorMatricula ?? item.efectorProfesional?.matricula ?? null
+    const firmanteDesdeOrden = orden.profesional?.nombre
+      ? {
+          nombre: orden.profesional.nombre,
+          matricula: orden.profesional.matricula ?? null,
+        }
+      : null
 
-    if (esTituloPatologia(item)) {
+    if (esTituloPatologia(item) && !firmanteDesdeOrden) {
       return {
         nombre: NOMBRE_PATOLOGIA_DEFAULT,
         matricula: MATRICULA_PATOLOGIA_DEFAULT,
       }
     }
 
+    if (esInternacion && firmanteDesdeOrden) {
+      return firmanteDesdeOrden
+    }
+
+    if (!esInternacion && firmanteDesdeOrden) {
+      return firmanteDesdeOrden
+    }
+
     if (contieneClasificacion(item.clasificacionAgrupacion, 'HA') || incluyeCodigo.includes('HA')) {
       return { nombre: 'ASOSIACION ANESTESISTA', matricula: 6 }
     }
 
-    if (esGastos && matriculaEfector === 995) {
-      return { nombre: 'CLINICA SAN RAFAEL', matricula: 995 }
-    }
-
-    if (!esInternacion && orden.profesional?.nombre) {
-      return {
-        nombre: orden.profesional.nombre,
-        matricula: orden.profesional.matricula ?? null,
-      }
+    if (esGastos && matriculaEfector === 9995) {
+      return { nombre: 'GASTOS INTERNACION', matricula: 9995 }
     }
 
     if (item.efectorProfesional) {

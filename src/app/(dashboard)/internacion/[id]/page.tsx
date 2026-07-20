@@ -200,6 +200,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             cantidad: true,
             estado: true,
             usuarioRegistro: true,
+            matriculaEspecialista: true,
+            matriculaAnestesista: true,
             ordenPractica: {
                 where: {
                     orden: {
@@ -223,6 +225,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         cantidad: number
         estado: string | null
         usuario: string | null
+        matriculaEspecialista: number | null
+        matriculaAnestesista: number | null
         ordenPractica: Array<{
             puestoNumero: number
             ordenNumero: number
@@ -238,6 +242,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             cantidad: Number(practica.cantidad),
             estado: practica.estado,
             usuario: practica.usuario ?? null,
+            matriculaEspecialista: practica.matriculaEspecialista ?? null,
+            matriculaAnestesista: practica.matriculaAnestesista ?? null,
             ordenPractica: Array.isArray(practica.ordenPractica) ? practica.ordenPractica : [],
         })
     }
@@ -251,6 +257,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             cantidad: Number(practica.cantidad),
             estado: practica.estado,
             usuario: practica.usuarioRegistro,
+            matriculaEspecialista: practica.matriculaEspecialista ?? null,
+            matriculaAnestesista: practica.matriculaAnestesista ?? null,
             ordenPractica: practica.ordenPractica.map((orden) => ({
                 puestoNumero: orden.puestoNumero,
                 ordenNumero: orden.ordenNumero,

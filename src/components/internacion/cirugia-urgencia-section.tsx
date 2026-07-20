@@ -7,6 +7,7 @@ import { Plus, Scissors, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 import { fechaAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 
 type OpcionObraSocial = {
     id: number
@@ -67,6 +68,8 @@ type PracticaInternacionItem = {
     cantidad: number
     estado: string | null
     usuario?: string | null
+    matriculaEspecialista?: number | null
+    matriculaAnestesista?: number | null
     ordenPractica: Array<{
         puestoNumero: number
         ordenNumero: number
@@ -85,6 +88,14 @@ type EstadoPracticaCirugia = {
         numeroAutorizacion: string | null
     }>
 }
+
+type ProfesionalConMatricula = {
+    id: number
+    nombre: string
+    matricula: number
+}
+
+const MATRICULA_PATOLOGIA_DEFAULT = 2675
 
 interface CirugiaUrgenciaSectionProps {
     ingresoId: number
@@ -126,15 +137,82 @@ export function CirugiaUrgenciaSection({
     const [generandoOrdenAgrupada, setGenerandoOrdenAgrupada] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [practicasSeleccionadasImpresion, setPracticasSeleccionadasImpresion] = useState<number[]>([])
+    const [profesionalesFirmantes, setProfesionalesFirmantes] = useState<ProfesionalConMatricula[]>([])
+    const [cirujanoFirmanteId, setCirujanoFirmanteId] = useState('')
+    const [firmanteEditadoManualmente, setFirmanteEditadoManualmente] = useState(false)
 
     useEffect(() => {
         setCirugias(cirugiasIniciales)
     }, [cirugiasIniciales])
 
+    useEffect(() => {
+        let cancelled = false
+
+        const cargarFirmantes = async () => {
+            try {
+                const res = await fetch('/api/cirugia/profesionales', { cache: 'no-store' })
+                const json = await res.json().catch(() => null)
+                const data: unknown[] = Array.isArray(json?.data) ? json.data : []
+
+                if (cancelled) return
+
+                const profesionales = data
+                    .filter((profesional: unknown): profesional is ProfesionalConMatricula => {
+                        if (!profesional || typeof profesional !== 'object') return false
+                        const candidato = profesional as {
+                            id?: unknown
+                            nombre?: unknown
+                            matricula?: unknown
+                        }
+                        return (
+                            typeof candidato.id === 'number' &&
+                            typeof candidato.nombre === 'string' &&
+                            typeof candidato.matricula === 'number' &&
+                            candidato.matricula > 0
+                        )
+                    })
+                    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
+
+                setProfesionalesFirmantes(profesionales)
+            } catch {
+                if (!cancelled) {
+                    setProfesionalesFirmantes([])
+                }
+            }
+        }
+
+        void cargarFirmantes()
+
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
     const practicaIdsCirugias = useMemo(
         () => cirugias.flatMap((cirugia) => cirugia.practicas.map((practica) => practica.id)),
         [cirugias]
     )
+
+    const practicasInternacionPorId = useMemo(
+        () => new Map(practicasInternacion.map((practica) => [practica.id, practica] as const)),
+        [practicasInternacion]
+    )
+
+    const matriculaPorProfesionalId = useMemo(() => {
+        const map = new Map<number, number>()
+        for (const profesional of profesionalesFirmantes) {
+            map.set(profesional.id, profesional.matricula)
+        }
+        return map
+    }, [profesionalesFirmantes])
+
+    const profesionalIdPorMatricula = useMemo(() => {
+        const map = new Map<number, number>()
+        for (const profesional of profesionalesFirmantes) {
+            map.set(profesional.matricula, profesional.id)
+        }
+        return map
+    }, [profesionalesFirmantes])
 
     const estadoPracticaCirugiaPorId = useMemo(() => {
         const estadoPorId = new Map<number, EstadoPracticaCirugia>()
@@ -206,6 +284,64 @@ export function CirugiaUrgenciaSection({
         () => practicasSeleccionadasImpresion.filter((id) => setPracticaIdsPendientesCirugia.has(id)),
         [practicasSeleccionadasImpresion, setPracticaIdsPendientesCirugia]
     )
+
+    const matriculaFirmanteSugerida = useMemo(() => {
+        const idsRelevantes = practicasSeleccionadasVigentes.length > 0
+            ? practicasSeleccionadasVigentes
+            : practicaIdsPendientesCirugia
+
+        for (const practicaCirugiaId of idsRelevantes) {
+            const estadoPractica = estadoPracticaCirugiaPorId.get(practicaCirugiaId)
+            if (!estadoPractica?.pendiente) continue
+
+            const practica = practicasInternacionPorId.get(estadoPractica.practicaInternacionId)
+            if (!practica) continue
+
+            const matriculaEspecialista = practica.matriculaEspecialista
+            if (matriculaEspecialista == null || matriculaEspecialista <= 0) continue
+            if (matriculaEspecialista === MATRICULA_PATOLOGIA_DEFAULT) continue
+            if (practica.codigoPractica.trim().startsWith('15')) continue
+
+            return matriculaEspecialista
+        }
+
+        return null
+    }, [
+        practicaIdsPendientesCirugia,
+        practicasSeleccionadasVigentes,
+        estadoPracticaCirugiaPorId,
+        practicasInternacionPorId,
+    ])
+
+    useEffect(() => {
+        const profesionalIdSugerido =
+            matriculaFirmanteSugerida != null
+                ? (profesionalIdPorMatricula.get(matriculaFirmanteSugerida) ?? null)
+                : null
+
+        if (!profesionalIdSugerido) return
+        if (firmanteEditadoManualmente && cirujanoFirmanteId) return
+
+        const siguiente = String(profesionalIdSugerido)
+        if (cirujanoFirmanteId === siguiente) return
+
+        setCirujanoFirmanteId(siguiente)
+    }, [
+        matriculaFirmanteSugerida,
+        profesionalIdPorMatricula,
+        firmanteEditadoManualmente,
+        cirujanoFirmanteId,
+    ])
+
+    useEffect(() => {
+        if (!cirujanoFirmanteId) return
+
+        const profesionalId = Number.parseInt(cirujanoFirmanteId, 10)
+        if (!Number.isFinite(profesionalId) || !matriculaPorProfesionalId.has(profesionalId)) {
+            setCirujanoFirmanteId('')
+            setFirmanteEditadoManualmente(false)
+        }
+    }, [cirujanoFirmanteId, matriculaPorProfesionalId])
 
     const limpiarForm = () => {
         setError(null)
@@ -367,6 +503,11 @@ export function CirugiaUrgenciaSection({
         const practicaIdsInternacionSeleccionadas = vinculacionesSeleccionadas
             .map((item) => item.practicaIdInternacion)
 
+        const profesionalIdFirmante = Number.parseInt(cirujanoFirmanteId, 10)
+        const cirujanoFirmanteMatricula = Number.isFinite(profesionalIdFirmante)
+            ? (matriculaPorProfesionalId.get(profesionalIdFirmante) ?? null)
+            : matriculaFirmanteSugerida
+
         if (practicaIdsInternacionSeleccionadas.length === 0) {
             setError('No se encontraron practicas pendientes de internacion para la seleccion de cirugia')
             return
@@ -379,6 +520,7 @@ export function CirugiaUrgenciaSection({
                 ingresoId,
                 practicaIds: practicaIdsInternacionSeleccionadas,
                 agruparEnUnaOrden: true,
+                cirujanoFirmanteMatricula: cirujanoFirmanteMatricula ?? undefined,
             })
 
             if ('error' in result && result.error) {
@@ -493,8 +635,29 @@ export function CirugiaUrgenciaSection({
                         <div className="space-y-3">
                             {puedeCrear && (
                                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                                    <div className="text-xs text-emerald-800">
-                                        Practicas seleccionadas para generar una sola orden: {practicasSeleccionadasVigentes.length}
+                                    <div className="min-w-65 flex-1 space-y-1">
+                                        <div className="text-xs text-emerald-800">
+                                            Practicas seleccionadas para generar una sola orden: {practicasSeleccionadasVigentes.length}
+                                        </div>
+                                        <label className="block text-[11px] font-medium text-emerald-800">
+                                            Cirujano firmante
+                                            <ProfesionalSelect
+                                                profesionales={profesionalesFirmantes}
+                                                value={cirujanoFirmanteId}
+                                                onChange={(nextValue) => {
+                                                    setCirujanoFirmanteId(nextValue)
+                                                    setFirmanteEditadoManualmente(true)
+                                                }}
+                                                disabled={generandoOrdenAgrupada || profesionalesFirmantes.length === 0}
+                                                placeholderOption="-- Seleccionar firmante --"
+                                                searchPlaceholder="Buscar por nombre o matricula"
+                                                selectClassName="mt-1 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-900 disabled:bg-emerald-100 disabled:text-emerald-700"
+                                                searchClassName="mt-1 w-full rounded border border-emerald-200 bg-white px-2 py-1 text-[11px] text-emerald-900 disabled:bg-emerald-100 disabled:text-emerald-700"
+                                            />
+                                        </label>
+                                        <p className="text-[10px] text-emerald-700">
+                                            Se sugiere automáticamente el primer especialista no patólogo de las prácticas seleccionadas.
+                                        </p>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
                                         <button

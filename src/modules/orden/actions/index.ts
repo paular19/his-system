@@ -15,7 +15,9 @@ import {
 } from '../clasificacion'
 
 type ModoGeneracion = 'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'
-const MATRICULA_GASTOS_INTERNACION_DEFAULT = 995
+const MATRICULA_GASTOS_INTERNACION_DEFAULT = 9995
+const MATRICULA_AYUDANTE_INTERNACION_DEFAULT = 995
+const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const ORDEN_CLASIFICACION_COMPONENTES = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3'] as const
 type ClasificacionComponente = (typeof ORDEN_CLASIFICACION_COMPONENTES)[number]
 
@@ -35,6 +37,7 @@ const GenerarOrdenesInternacionSchema = z.object({
   clasificacionPorPracticaId: z.record(z.string()).optional().default({}),
   agruparEnUnaOrden: z.boolean().optional().default(false),
   titularOrdenAgrupada: z.string().trim().max(120).optional().nullable(),
+  cirujanoFirmanteMatricula: z.number().int().positive().optional().nullable(),
 })
 
 function componentesClasificacion(
@@ -245,6 +248,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
   clasificacionPorPracticaId?: Record<string, string>
   agruparEnUnaOrden?: boolean
   titularOrdenAgrupada?: string | null
+  cirujanoFirmanteMatricula?: number | null
 }) {
   const usuario = await getUsuarioSesion()
 
@@ -325,35 +329,73 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       return { error: 'No hay prácticas pendientes para generar órdenes' }
     }
 
+    const practicasPendientesPorId = new Map(practicasPendientes.map((practica) => [practica.id, practica] as const))
+    const matriculaFirmanteManual =
+      parsed.data.cirujanoFirmanteMatricula != null && parsed.data.cirujanoFirmanteMatricula > 0
+        ? parsed.data.cirujanoFirmanteMatricula
+        : null
+
+    const esMatriculaEspecialistaFirmanteValida = (practica: (typeof practicasPendientes)[number]): boolean => {
+      const matricula = practica.matriculaEspecialista
+      if (matricula == null || matricula <= 0) return false
+      if (matricula === MATRICULA_PATOLOGIA_DEFAULT) return false
+      return !practica.codigoPractica.trim().startsWith('15')
+    }
+
     const matriculaFirmanteDesdePractica =
       practicasPendientes
-        .map((p) => (p.matriculaEspecialista != null && p.matriculaEspecialista > 0 ? p.matriculaEspecialista : null))
+        .map((p) => (esMatriculaEspecialistaFirmanteValida(p) ? p.matriculaEspecialista : null))
         .find((m): m is number => m != null) ?? null
 
-    const profesionalPorPractica = matriculaFirmanteDesdePractica
-      ? await prisma.profesional.findFirst({
+    const matriculasFirmantesBuscadas = new Set<number>()
+    if (matriculaFirmanteManual) matriculasFirmantesBuscadas.add(matriculaFirmanteManual)
+    if (matriculaFirmanteDesdePractica) matriculasFirmantesBuscadas.add(matriculaFirmanteDesdePractica)
+    for (const practica of practicasPendientes) {
+      if (!esMatriculaEspecialistaFirmanteValida(practica)) continue
+      matriculasFirmantesBuscadas.add(practica.matriculaEspecialista!)
+    }
+
+    const profesionalesFirmantes = matriculasFirmantesBuscadas.size > 0
+      ? await prisma.profesional.findMany({
           where: {
-            matricula: matriculaFirmanteDesdePractica,
+            matricula: { in: Array.from(matriculasFirmantesBuscadas) },
             estado: 'A',
           },
-          select: { id: true },
+          select: { id: true, matricula: true },
         })
-      : null
+      : []
 
-    let profesionalId =
-      profesionalPorPractica?.id ??
+    const profesionalIdPorMatricula = new Map<number, number>()
+    for (const profesional of profesionalesFirmantes) {
+      if (profesional.matricula == null) continue
+      profesionalIdPorMatricula.set(profesional.matricula, profesional.id)
+    }
+
+    const profesionalIdManual =
+      matriculaFirmanteManual != null
+        ? (profesionalIdPorMatricula.get(matriculaFirmanteManual) ?? null)
+        : null
+
+    const profesionalIdPorPractica =
+      matriculaFirmanteDesdePractica != null
+        ? (profesionalIdPorMatricula.get(matriculaFirmanteDesdePractica) ?? null)
+        : null
+
+    let profesionalIdFallback =
+      profesionalIdManual ??
+      profesionalIdPorPractica ??
       ingreso.profesionalTratanteId ??
       ingreso.profesionalGuardiaId ??
       null
-    if (!profesionalId) {
+    if (!profesionalIdFallback) {
       const profesionalFallback = await prisma.profesional.findFirst({
         where: { estado: 'A' },
         select: { id: true },
         orderBy: { id: 'asc' },
       })
-      profesionalId = profesionalFallback?.id ?? null
+      profesionalIdFallback = profesionalFallback?.id ?? null
     }
-    if (!profesionalId) return { error: 'No hay profesional disponible para emitir la orden' }
+    if (!profesionalIdFallback) return { error: 'No hay profesional disponible para emitir la orden' }
 
     const grupos = new Map<string, Array<{
       item: CrearOrdenInput['items'][number]
@@ -405,8 +447,10 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         tipoFacturacion: 'H',
         clasificacionAgrupacion: key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : clasificacion,
         efectorMatricula:
-          esClasificacionSoloGastos || esClasificacionSoloAyudante
+          esClasificacionSoloGastos
             ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+            : esClasificacionSoloAyudante
+            ? MATRICULA_AYUDANTE_INTERNACION_DEFAULT
             : clasificacion === 'HA'
             ? (practica.matriculaAnestesista ?? null)
             : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null),
@@ -466,6 +510,29 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         ? 'PROTOCOLO BIOQUIMICO'
         : tituloDesdeClasificacion(clasificacion)
 
+      const matriculaFirmanteGrupo = parsed.data.agruparEnUnaOrden
+        ? null
+        : (
+            itemsGrupo
+              .map(({ practicaId }) => practicasPendientesPorId.get(practicaId))
+              .find((practica): practica is (typeof practicasPendientes)[number] =>
+                practica != null && esMatriculaEspecialistaFirmanteValida(practica)
+              )
+              ?.matriculaEspecialista ??
+            null
+          )
+
+      const profesionalIdGrupo =
+        (matriculaFirmanteGrupo != null
+          ? (profesionalIdPorMatricula.get(matriculaFirmanteGrupo) ?? null)
+          : null) ??
+        profesionalIdManual ??
+        profesionalIdFallback
+
+      if (!profesionalIdGrupo) {
+        return { error: 'No hay profesional disponible para emitir la orden' }
+      }
+
       const orden = await crearOrdenAmbulatorio(
         {
           ingresoId: ingreso.id,
@@ -475,7 +542,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           obraSocialId: ingreso.obraSocialId,
           obraSocialCoseguroId: ingreso.obraSocialCoseguroId ?? undefined,
           planCoseguroId: ingreso.planCoseguroId ?? undefined,
-          profesionalId,
+          profesionalId: profesionalIdGrupo,
           tipoOrdenCodigo: 'PRA',
           titularModular,
           imprimirPorDuplicado: esGrupoConDerechos,

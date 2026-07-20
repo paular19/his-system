@@ -448,7 +448,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         clasificacionAgrupacion: key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : clasificacion,
         efectorMatricula:
           esClasificacionSoloGastos
-            ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+            ? ((practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0)
+                ? practica.matriculaEspecialista
+                : MATRICULA_GASTOS_INTERNACION_DEFAULT)
             : esClasificacionSoloAyudante
             ? MATRICULA_AYUDANTE_INTERNACION_DEFAULT
             : clasificacion === 'HA'
@@ -523,10 +525,10 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           )
 
       const profesionalIdGrupo =
+        profesionalIdManual ??
         (matriculaFirmanteGrupo != null
           ? (profesionalIdPorMatricula.get(matriculaFirmanteGrupo) ?? null)
           : null) ??
-        profesionalIdManual ??
         profesionalIdFallback
 
       if (!profesionalIdGrupo) {

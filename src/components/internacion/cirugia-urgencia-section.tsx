@@ -444,6 +444,30 @@ export function CirugiaUrgenciaSection({
         practicasInternacionPorId,
     ])
 
+    const firmaPrevistaTexto = useMemo(() => {
+        const profesionalSeleccionadoId = Number.parseInt(cirujanoFirmanteId, 10)
+        if (Number.isFinite(profesionalSeleccionadoId)) {
+            const profesionalSeleccionado = profesionalesFirmantes.find(
+                (profesional) => profesional.id === profesionalSeleccionadoId
+            )
+            if (profesionalSeleccionado) {
+                return `${profesionalSeleccionado.nombre} · MP ${profesionalSeleccionado.matricula}`
+            }
+        }
+
+        if (matriculaFirmanteSugerida != null) {
+            const sugerido = profesionalesFirmantes.find(
+                (profesional) => profesional.matricula === matriculaFirmanteSugerida
+            )
+            if (sugerido) {
+                return `${sugerido.nombre} · MP ${sugerido.matricula} (sugerido)`
+            }
+            return `Matrícula ${matriculaFirmanteSugerida} (sugerida)`
+        }
+
+        return 'Sin firmante seleccionado. Se usará el profesional de la internación.'
+    }, [cirujanoFirmanteId, profesionalesFirmantes, matriculaFirmanteSugerida])
+
     useEffect(() => {
         const profesionalIdSugerido =
             matriculaFirmanteSugerida != null
@@ -964,6 +988,9 @@ export function CirugiaUrgenciaSection({
                                         </label>
                                         <p className="text-[10px] text-emerald-700">
                                             Se sugiere automáticamente el primer especialista no patólogo de las prácticas seleccionadas.
+                                        </p>
+                                        <p className="text-[10px] text-emerald-800">
+                                            Firma prevista: {firmaPrevistaTexto}
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">

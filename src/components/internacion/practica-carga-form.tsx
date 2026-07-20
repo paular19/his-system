@@ -74,6 +74,7 @@ const formatoMoneda = new Intl.NumberFormat('es-AR', {
 })
 
 const MATRICULA_ANESTESISTA_DEFAULT = 6
+const MATRICULA_GASTOS_INTERNACION_DEFAULT = 9995
 
 function etiquetaSubitem(subitem: SubitemCodigo): string {
     if (subitem === 'HE') return 'Honorario Especialista (HE)'
@@ -113,6 +114,7 @@ export function PracticaCargaForm({
         matriculaTratanteDefault ? String(matriculaTratanteDefault) : ''
     )
     const [matriculaAnestesista, setMatriculaAnestesista] = useState(String(MATRICULA_ANESTESISTA_DEFAULT))
+    const [matriculaGastos, setMatriculaGastos] = useState(String(MATRICULA_GASTOS_INTERNACION_DEFAULT))
 
     const [profesionalesConMatricula, setProfesionalesConMatricula] = useState<ProfesionalConMatricula[]>([])
 
@@ -298,6 +300,7 @@ export function PracticaCargaForm({
         setCrearPracticaTodaJunta(false)
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
         setMatriculaAnestesista(String(MATRICULA_ANESTESISTA_DEFAULT))
+        setMatriculaGastos(String(MATRICULA_GASTOS_INTERNACION_DEFAULT))
         setError(null)
     }
 
@@ -365,9 +368,18 @@ export function PracticaCargaForm({
             setError('Ingrese matricula para honorario anestesista')
             return
         }
+        if ((practicaBase?.valorGastos != null) && componenteSeleccion.gastos > 0 && !matriculaGastos.trim()) {
+            setError('Ingrese matricula para derechos/gastos')
+            return
+        }
 
         const requiereEspecialista = practicaBase?.valorEspecialista != null
         const requiereAnestesista = practicaBase?.valorAnestesista != null
+        const requiereGastos = (practicaBase?.valorGastos != null) && componenteSeleccion.gastos > 0
+        const matriculaGastosNormalizada =
+            matriculaGastos.trim() !== ''
+                ? Number.parseInt(matriculaGastos, 10) || null
+                : null
         const cantidadGeneral = Number.parseInt(cantidadGeneralPractica, 10)
         const cantidadGeneralFinal = crearPracticaTodaJunta ? cantidadGeneral : 1
 
@@ -389,6 +401,8 @@ export function PracticaCargaForm({
             matriculaEspecialista:
                 requiereEspecialista && matriculaEspecialista.trim()
                     ? Number.parseInt(matriculaEspecialista, 10) || null
+                    : requiereGastos
+                    ? matriculaGastosNormalizada
                     : null,
             matriculaAnestesista:
                 requiereAnestesista && matriculaAnestesista.trim()
@@ -461,6 +475,8 @@ export function PracticaCargaForm({
                         importeBaseUnitario: valorUnitario,
                         matriculaEspecialista: esSubitemEspecialista(subitem)
                             ? body.matriculaEspecialista
+                            : subitem === 'GA'
+                            ? matriculaGastosNormalizada
                             : null,
                         matriculaAnestesista: esSubitemAnestesista(subitem)
                             ? body.matriculaAnestesista
@@ -667,6 +683,31 @@ export function PracticaCargaForm({
                                 value={matriculaAnestesista}
                                 onChange={(e) => setMatriculaAnestesista(e.target.value)}
                                 placeholder="Ej: 12345"
+                                className="his-input text-sm w-full mt-2"
+                            />
+                        </div>
+                    )}
+                    {practicaSeleccionada.valorGastos != null && (
+                        <div>
+                            <label className="block text-xs text-gray-500 mb-1">Matricula derechos/gastos (GA)</label>
+                            <select
+                                value={matriculaGastos}
+                                onChange={(e) => setMatriculaGastos(e.target.value)}
+                                className="his-input text-sm w-full"
+                            >
+                                <option value="">Seleccionar matricula...</option>
+                                {profesionalesConMatricula.map((profesional) => (
+                                    <option key={`gto-${profesional.id}`} value={String(profesional.matricula)}>
+                                        {profesional.matricula} - {profesional.nombre}
+                                    </option>
+                                ))}
+                            </select>
+                            <input
+                                type="number"
+                                min={1}
+                                value={matriculaGastos}
+                                onChange={(e) => setMatriculaGastos(e.target.value)}
+                                placeholder="Ej: 9995"
                                 className="his-input text-sm w-full mt-2"
                             />
                         </div>

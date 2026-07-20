@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Scissors, ChevronDown, ChevronUp, Loader2, ChevronRight } from 'lucide-react'
-import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
-import { fechaAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
+import { Plus, Scissors, ChevronDown, ChevronUp, Loader2, ChevronRight, Pencil, Trash2, Ban } from 'lucide-react'
+import { anularOrdenAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
+import { fechaAInputLocal, fechaHoraAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { formatearNumeroOrden } from '@/modules/orden/types'
@@ -66,7 +66,11 @@ type CirugiaUrgenciaItem = {
 type PracticaInternacionItem = {
     id: number
     codigoPractica: string
+    fecha: string | Date
     cantidad: number
+    numeroAutorizacion: string | null
+    facturable: boolean
+    facturada: boolean
     estado: string | null
     usuario?: string | null
     matriculaEspecialista?: number | null
@@ -106,11 +110,26 @@ type ProfesionalConMatricula = {
     matricula: number
 }
 
+type PracticaCirugiaEditDraft = {
+    codigoPractica: string
+    fecha: string
+    cantidad: string
+    numeroAutorizacion: string
+    matriculaEspecialista: string
+    matriculaAnestesista: string
+    facturable: boolean
+}
+
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 
 function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
     const normalizado = value?.trim() ?? ''
     return normalizado.length > 0 ? normalizado : null
+}
+
+function practicaInternacionFacturada(practica: PracticaInternacionItem | null | undefined): boolean {
+    if (!practica) return false
+    return Boolean(practica.facturada)
 }
 
 interface CirugiaUrgenciaSectionProps {
@@ -158,6 +177,15 @@ export function CirugiaUrgenciaSection({
     const [firmanteEditadoManualmente, setFirmanteEditadoManualmente] = useState(false)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
+    const [eliminandoPracticaCirugiaId, setEliminandoPracticaCirugiaId] = useState<number | null>(null)
+    const [anulandoOrdenGrupoKey, setAnulandoOrdenGrupoKey] = useState<string | null>(null)
+    const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
+    const [practicaEditando, setPracticaEditando] = useState<{
+        cirugiaId: number
+        practicaCirugiaId: number
+        practicaInternacionId: number
+    } | null>(null)
+    const [draftPracticaEditando, setDraftPracticaEditando] = useState<PracticaCirugiaEditDraft | null>(null)
 
     useEffect(() => {
         setCirugias(cirugiasIniciales)
@@ -448,6 +476,182 @@ export function CirugiaUrgenciaSection({
 
     const limpiarForm = () => {
         setError(null)
+    }
+
+    const abrirEdicionPracticaCirugia = (cirugiaId: number, practicaCirugiaId: number) => {
+        const estado = estadoPracticaCirugiaPorId.get(practicaCirugiaId)
+        if (!estado) {
+            setError('No se encontró la práctica de internación asociada para editar')
+            return
+        }
+
+        const practicaInternacion = practicasInternacionPorId.get(estado.practicaInternacionId)
+        if (!practicaInternacion) {
+            setError('No se encontró la práctica de internación asociada para editar')
+            return
+        }
+
+        if (practicaInternacionFacturada(practicaInternacion)) {
+            setError('La práctica ya fue facturada. Anulá la orden en Facturación para poder editarla.')
+            return
+        }
+
+        setError(null)
+        setPracticaEditando({
+            cirugiaId,
+            practicaCirugiaId,
+            practicaInternacionId: practicaInternacion.id,
+        })
+        setDraftPracticaEditando({
+            codigoPractica: practicaInternacion.codigoPractica.trim(),
+            fecha: fechaHoraAInputLocal(practicaInternacion.fecha),
+            cantidad: String(
+                Number.isFinite(Number(practicaInternacion.cantidad)) && Number(practicaInternacion.cantidad) > 0
+                    ? Number(practicaInternacion.cantidad)
+                    : 1
+            ),
+            numeroAutorizacion: practicaInternacion.numeroAutorizacion ?? '',
+            matriculaEspecialista: practicaInternacion.matriculaEspecialista != null
+                ? String(practicaInternacion.matriculaEspecialista)
+                : '',
+            matriculaAnestesista: practicaInternacion.matriculaAnestesista != null
+                ? String(practicaInternacion.matriculaAnestesista)
+                : '',
+            facturable: Boolean(practicaInternacion.facturable),
+        })
+    }
+
+    const cerrarEdicionPracticaCirugia = () => {
+        if (guardandoPracticaEditando) return
+        setPracticaEditando(null)
+        setDraftPracticaEditando(null)
+    }
+
+    const guardarEdicionPracticaCirugia = async () => {
+        if (!practicaEditando || !draftPracticaEditando) return
+
+        const codigoPractica = draftPracticaEditando.codigoPractica.trim().toUpperCase()
+        if (!codigoPractica) {
+            setError('El código de práctica es obligatorio')
+            return
+        }
+
+        const cantidad = Number.parseInt(draftPracticaEditando.cantidad, 10)
+        if (!Number.isFinite(cantidad) || cantidad <= 0 || cantidad > 999) {
+            setError('La cantidad debe estar entre 1 y 999')
+            return
+        }
+
+        if (!draftPracticaEditando.fecha) {
+            setError('La fecha de la práctica es obligatoria')
+            return
+        }
+
+        const payload = {
+            convenioId: null,
+            codigoPractica,
+            descripcionPractica: null,
+            numeroProtocoloLaboratorio: null,
+            diagnosticoLaboratorio: null,
+            fecha: new Date(draftPracticaEditando.fecha).toISOString(),
+            cantidad,
+            numeroAutorizacion: draftPracticaEditando.numeroAutorizacion.trim() || null,
+            facturable: draftPracticaEditando.facturable,
+            importeBaseUnitario: null,
+            matriculaEspecialista: draftPracticaEditando.matriculaEspecialista.trim() !== ''
+                ? Number(draftPracticaEditando.matriculaEspecialista)
+                : null,
+            matriculaAnestesista: draftPracticaEditando.matriculaAnestesista.trim() !== ''
+                ? Number(draftPracticaEditando.matriculaAnestesista)
+                : null,
+        }
+
+        setError(null)
+        setGuardandoPracticaEditando(true)
+        try {
+            const res = await fetch(
+                `/api/internacion/${ingresoId}/practicas/${practicaEditando.practicaInternacionId}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    cache: 'no-store',
+                }
+            )
+
+            const json = await res.json().catch(() => null)
+            if (!res.ok) {
+                setError(json?.error ?? 'No se pudo editar la práctica')
+                return
+            }
+
+            cerrarEdicionPracticaCirugia()
+            router.refresh()
+        } catch {
+            setError('Error de conexión al editar la práctica')
+        } finally {
+            setGuardandoPracticaEditando(false)
+        }
+    }
+
+    const eliminarPracticaPendienteCirugia = async (cirugiaId: number, practicaCirugiaId: number) => {
+        const estado = estadoPracticaCirugiaPorId.get(practicaCirugiaId)
+        if (!estado?.pendiente) {
+            setError('Solo se pueden eliminar prácticas sin orden generada')
+            return
+        }
+
+        if (typeof window !== 'undefined') {
+            const confirmar = window.confirm('Se eliminará la práctica seleccionada. ¿Desea continuar?')
+            if (!confirmar) return
+        }
+
+        setError(null)
+        setEliminandoPracticaCirugiaId(practicaCirugiaId)
+        try {
+            const res = await fetch(`/api/cirugia/${cirugiaId}/practicas/${practicaCirugiaId}`, {
+                method: 'DELETE',
+                cache: 'no-store',
+            })
+
+            const json = await res.json().catch(() => null)
+            if (!res.ok) {
+                setError(json?.error ?? 'No se pudo eliminar la práctica de cirugía')
+                return
+            }
+
+            setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => id !== practicaCirugiaId))
+            router.refresh()
+        } catch {
+            setError('Error de conexión al eliminar la práctica de cirugía')
+        } finally {
+            setEliminandoPracticaCirugiaId(null)
+        }
+    }
+
+    const anularOrdenGeneradaCirugia = async (grupoKey: string, puestoNumero: number, ordenNumero: number) => {
+        if (typeof window !== 'undefined') {
+            const confirmar = window.confirm(
+                `Se anulará la orden ${formatearNumeroOrden(puestoNumero, ordenNumero)}. ¿Desea continuar?`
+            )
+            if (!confirmar) return
+        }
+
+        setError(null)
+        setAnulandoOrdenGrupoKey(grupoKey)
+        try {
+            const result = await anularOrdenAction(puestoNumero, ordenNumero)
+            if ('error' in result && result.error) {
+                setError(result.error)
+                return
+            }
+
+            router.refresh()
+        } catch {
+            setError('No se pudo anular la orden')
+        } finally {
+            setAnulandoOrdenGrupoKey(null)
+        }
     }
 
     const iniciarNuevaCirugia = async () => {
@@ -872,39 +1076,72 @@ export function CirugiaUrgenciaSection({
                                                                 <th className="text-left px-2 py-1 border-b">Descripcion</th>
                                                                 <th className="text-right px-2 py-1 border-b">Cant.</th>
                                                                 <th className="text-left px-2 py-1 border-b">Autorizacion</th>
+                                                                {puedeCrear && <th className="text-right px-2 py-1 border-b">Acciones</th>}
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {practicasPendientesCirugiaItem.map((p) => (
-                                                                <tr key={p.id} className="text-gray-700">
-                                                                    {puedeCrear && (
-                                                                        <td className="px-2 py-1 border-b align-middle">
-                                                                            {(() => {
-                                                                                const estadoPractica = estadoPracticaCirugiaPorId.get(p.id)
-                                                                                const esPendiente = estadoPractica?.pendiente === true
-                                                                                return (
-                                                                            <input
-                                                                                type="checkbox"
-                                                                                checked={practicasSeleccionadasVigentes.includes(p.id)}
-                                                                                onChange={(e) => alternarSeleccionPracticaCirugia(p.id, e.target.checked)}
-                                                                                disabled={!esPendiente || generandoOrdenAgrupada}
-                                                                                className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500"
-                                                                                title={
-                                                                                    esPendiente
-                                                                                        ? 'Practica pendiente para generar orden'
-                                                                                        : 'Esta practica ya tiene orden generada o no esta pendiente'
-                                                                                }
-                                                                            />
-                                                                                )
-                                                                            })()}
-                                                                        </td>
-                                                                    )}
-                                                                    <td className="px-2 py-1 border-b font-mono">{p.codigo}</td>
-                                                                    <td className="px-2 py-1 border-b">{p.descripcion}</td>
-                                                                    <td className="px-2 py-1 border-b text-right">{String(Number(p.cantidad))}</td>
-                                                                    <td className="px-2 py-1 border-b">Pendiente</td>
-                                                                </tr>
-                                                            ))}
+                                                            {practicasPendientesCirugiaItem.map((p) => {
+                                                                const estadoPractica = estadoPracticaCirugiaPorId.get(p.id)
+                                                                const esPendiente = estadoPractica?.pendiente === true
+                                                                const practicaInternacion = estadoPractica
+                                                                    ? (practicasInternacionPorId.get(estadoPractica.practicaInternacionId) ?? null)
+                                                                    : null
+                                                                const estaFacturada = practicaInternacionFacturada(practicaInternacion)
+                                                                const estaEliminando = eliminandoPracticaCirugiaId === p.id
+
+                                                                return (
+                                                                    <tr key={p.id} className="text-gray-700">
+                                                                        {puedeCrear && (
+                                                                            <td className="px-2 py-1 border-b align-middle">
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={practicasSeleccionadasVigentes.includes(p.id)}
+                                                                                    onChange={(e) => alternarSeleccionPracticaCirugia(p.id, e.target.checked)}
+                                                                                    disabled={!esPendiente || generandoOrdenAgrupada}
+                                                                                    className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500"
+                                                                                    title={
+                                                                                        esPendiente
+                                                                                            ? 'Practica pendiente para generar orden'
+                                                                                            : 'Esta practica ya tiene orden generada o no esta pendiente'
+                                                                                    }
+                                                                                />
+                                                                            </td>
+                                                                        )}
+                                                                        <td className="px-2 py-1 border-b font-mono">{p.codigo}</td>
+                                                                        <td className="px-2 py-1 border-b">{p.descripcion}</td>
+                                                                        <td className="px-2 py-1 border-b text-right">{String(Number(p.cantidad))}</td>
+                                                                        <td className="px-2 py-1 border-b">Pendiente</td>
+                                                                        {puedeCrear && (
+                                                                            <td className="px-2 py-1 border-b">
+                                                                                <div className="flex items-center justify-end gap-1.5">
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => abrirEdicionPracticaCirugia(c.id, p.id)}
+                                                                                        disabled={!esPendiente || estaFacturada || guardandoPracticaEditando}
+                                                                                        title={estaFacturada
+                                                                                            ? 'Práctica facturada. Anulá la orden en Facturación para editar.'
+                                                                                            : 'Editar práctica'}
+                                                                                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                                                    >
+                                                                                        <Pencil className="h-3.5 w-3.5" />
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => void eliminarPracticaPendienteCirugia(c.id, p.id)}
+                                                                                        disabled={!esPendiente || estaEliminando}
+                                                                                        title="Eliminar práctica"
+                                                                                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                                                                    >
+                                                                                        {estaEliminando
+                                                                                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                                            : <Trash2 className="h-3.5 w-3.5" />}
+                                                                                    </button>
+                                                                                </div>
+                                                                            </td>
+                                                                        )}
+                                                                    </tr>
+                                                                )
+                                                            })}
                                                         </tbody>
                                                     </table>
                                                 </div>
@@ -933,6 +1170,18 @@ export function CirugiaUrgenciaSection({
                                                             : grupo.numeroAutorizacion
                                                                 ? `/dashboard/ambulatorio?tab=confirmadas&q=${encodeURIComponent(grupo.numeroAutorizacion)}`
                                                                 : null
+                                                    const grupoFacturado = grupo.practicas.some((practicaGrupo) => {
+                                                        const estadoPractica = estadoPracticaCirugiaPorId.get(practicaGrupo.id)
+                                                        const practicaInternacion = estadoPractica
+                                                            ? (practicasInternacionPorId.get(estadoPractica.practicaInternacionId) ?? null)
+                                                            : null
+                                                        return practicaInternacionFacturada(practicaInternacion)
+                                                    })
+                                                    const puedeAnularGrupo =
+                                                        grupo.tipo === 'orden' &&
+                                                        Boolean(grupo.puestoNumero && grupo.ordenNumero) &&
+                                                        !grupoFacturado
+                                                    const grupoAnulandose = anulandoOrdenGrupoKey === grupoKey
                                                     const tituloGrupo =
                                                         grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                                             ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
@@ -972,6 +1221,22 @@ export function CirugiaUrgenciaSection({
                                                                                     Abrir orden
                                                                                 </Link>
                                                                             )}
+                                                                            {puedeCrear && grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => void anularOrdenGeneradaCirugia(grupoKey, grupo.puestoNumero as number, grupo.ordenNumero as number)}
+                                                                                    disabled={grupoAnulandose || !puedeAnularGrupo}
+                                                                                    title={!puedeAnularGrupo
+                                                                                        ? 'La orden ya está facturada'
+                                                                                        : 'Anular orden'}
+                                                                                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                                                                >
+                                                                                    {grupoAnulandose
+                                                                                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                        : <Ban className="h-3 w-3" />}
+                                                                                    {grupoAnulandose ? 'Anulando...' : 'Anular orden'}
+                                                                                </button>
+                                                                            )}
                                                                         </div>
                                                                         <p className="text-emerald-800">N° autorizacion: {grupo.numeroAutorizacion ?? '-'}</p>
                                                                         <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
@@ -997,18 +1262,47 @@ export function CirugiaUrgenciaSection({
                                                                         </div>
 
                                                                         <div className="mt-2 space-y-1.5">
-                                                                            {practicasVisibles.map((practica) => (
-                                                                                <div
-                                                                                    key={`${grupoKey}-${practica.id}`}
-                                                                                    className="rounded border border-emerald-100 bg-white px-2 py-1.5"
-                                                                                >
-                                                                                    <div className="flex items-center justify-between gap-2 text-emerald-900">
-                                                                                        <span className="font-mono text-[11px]">{practica.codigo}</span>
-                                                                                        <span className="font-medium">Cant. {practica.cantidad}</span>
+                                                                            {practicasVisibles.map((practica) => {
+                                                                                const estadoPractica = estadoPracticaCirugiaPorId.get(practica.id)
+                                                                                const practicaInternacion = estadoPractica
+                                                                                    ? (practicasInternacionPorId.get(estadoPractica.practicaInternacionId) ?? null)
+                                                                                    : null
+                                                                                const estaFacturada = practicaInternacionFacturada(practicaInternacion)
+
+                                                                                return (
+                                                                                    <div
+                                                                                        key={`${grupoKey}-${practica.id}`}
+                                                                                        className="rounded border border-emerald-100 bg-white px-2 py-1.5"
+                                                                                    >
+                                                                                        <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                                                                            <span className="font-mono text-[11px]">{practica.codigo}</span>
+                                                                                            <span className="font-medium">Cant. {practica.cantidad}</span>
+                                                                                        </div>
+                                                                                        <p className="text-emerald-900">{practica.descripcion}</p>
+                                                                                        {puedeCrear && (
+                                                                                            <div className="mt-1 flex items-center justify-end gap-2">
+                                                                                                {estaFacturada && (
+                                                                                                    <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                                                                                                        Facturada
+                                                                                                    </span>
+                                                                                                )}
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    onClick={() => abrirEdicionPracticaCirugia(c.id, practica.id)}
+                                                                                                    disabled={guardandoPracticaEditando || estaFacturada}
+                                                                                                    title={estaFacturada
+                                                                                                        ? 'Práctica facturada. Anulá la orden en Facturación para editar.'
+                                                                                                        : 'Editar práctica'}
+                                                                                                    className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                                                                >
+                                                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                                                    Editar
+                                                                                                </button>
+                                                                                            </div>
+                                                                                        )}
                                                                                     </div>
-                                                                                    <p className="text-emerald-900">{practica.descripcion}</p>
-                                                                                </div>
-                                                                            ))}
+                                                                                )
+                                                                            })}
                                                                         </div>
 
                                                                         {!expandida && restantes > 0 && (
@@ -1027,6 +1321,146 @@ export function CirugiaUrgenciaSection({
                             })}
                         </div>
                     )}
+                </div>
+            )}
+
+            {practicaEditando && draftPracticaEditando && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+                    <div className="w-full max-w-xl rounded-xl border border-blue-200 bg-white p-4 shadow-xl space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-900">Editar práctica de cirugía</h3>
+                                <p className="text-xs text-gray-600">
+                                    Solo se permite editar prácticas con orden generada no facturada.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={cerrarEdicionPracticaCirugia}
+                                disabled={guardandoPracticaEditando}
+                                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <label className="text-xs text-gray-600">
+                                Código
+                                <input
+                                    type="text"
+                                    value={draftPracticaEditando.codigoPractica}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        codigoPractica: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+
+                            <label className="text-xs text-gray-600">
+                                Fecha y hora
+                                <input
+                                    type="datetime-local"
+                                    value={draftPracticaEditando.fecha}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        fecha: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+
+                            <label className="text-xs text-gray-600">
+                                Cantidad
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={999}
+                                    value={draftPracticaEditando.cantidad}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        cantidad: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+
+                            <label className="text-xs text-gray-600">
+                                N° autorización
+                                <input
+                                    type="text"
+                                    value={draftPracticaEditando.numeroAutorizacion}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        numeroAutorizacion: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+
+                            <label className="text-xs text-gray-600">
+                                Matrícula especialista
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={draftPracticaEditando.matriculaEspecialista}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        matriculaEspecialista: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+
+                            <label className="text-xs text-gray-600">
+                                Matrícula anestesista
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={draftPracticaEditando.matriculaAnestesista}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        matriculaAnestesista: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                        </div>
+
+                        <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+                            <input
+                                type="checkbox"
+                                checked={draftPracticaEditando.facturable}
+                                onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                    ...prev,
+                                    facturable: e.target.checked,
+                                } : prev)}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Facturable
+                        </label>
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                                type="button"
+                                onClick={cerrarEdicionPracticaCirugia}
+                                disabled={guardandoPracticaEditando}
+                                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void guardarEdicionPracticaCirugia()}
+                                disabled={guardandoPracticaEditando}
+                                className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {guardandoPracticaEditando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                {guardandoPracticaEditando ? 'Guardando...' : 'Guardar cambios'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

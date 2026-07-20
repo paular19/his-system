@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, ChevronRight, Trash2, Pencil } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
-import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
+import { anularOrdenAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 import {
     ComponenteSelector,
     type ComponenteValores,
@@ -216,6 +216,7 @@ export function PracticaSection({
     const [practicaEditando, setPracticaEditando] = useState<PracticaItem | null>(null)
     const [draftPracticaEditando, setDraftPracticaEditando] = useState<PracticaEditDraft | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
+    const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const subitemsPreviosRef = useRef<SubitemCodigo[]>([])
@@ -1139,6 +1140,49 @@ export function PracticaSection({
         router.push(url)
     }
 
+    const handleAnularOrdenDesdeGrupo = async (puestoNumero: number, ordenNumero: number, grupoKey: string) => {
+        if (typeof window !== 'undefined') {
+            const confirmar = window.confirm(
+                `Se anulará la orden ${formatearNumeroOrden(puestoNumero, ordenNumero)}. ¿Desea continuar?`
+            )
+            if (!confirmar) return
+        }
+
+        setError(null)
+        setAnulandoOrdenKey(grupoKey)
+        try {
+            const result = await anularOrdenAction(puestoNumero, ordenNumero)
+            if ('error' in result && result.error) {
+                setError(result.error)
+                return
+            }
+
+            setPracticas((prev) => prev.map((practica) => {
+                const ordenesRestantes = (practica.ordenPractica ?? []).filter(
+                    (orden) => !(orden.puestoNumero === puestoNumero && orden.ordenNumero === ordenNumero)
+                )
+
+                if (ordenesRestantes.length === (practica.ordenPractica ?? []).length) {
+                    return practica
+                }
+
+                return {
+                    ...practica,
+                    ordenPractica: ordenesRestantes,
+                    facturada: false,
+                }
+            }))
+
+            if (refrescarDespuesCambios) {
+                router.refresh()
+            }
+        } catch {
+            setError('Error al anular la orden')
+        } finally {
+            setAnulandoOrdenKey(null)
+        }
+    }
+
     const fmtFecha = (d: Date | string) =>
         new Date(d).toLocaleString('es-AR', {
             day: '2-digit',
@@ -1760,6 +1804,12 @@ export function PracticaSection({
                                             grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                                 ? `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(`${grupo.puestoNumero}-${grupo.ordenNumero}`)}`
                                                 : null
+                                        const grupoFacturado = grupo.practicas.some((practica) => practicaFacturada(practica))
+                                        const puedeAnularGrupo =
+                                            grupo.tipo === 'orden' &&
+                                            Boolean(grupo.puestoNumero && grupo.ordenNumero) &&
+                                            !grupoFacturado
+                                        const grupoAnulandose = anulandoOrdenKey === grupo.key
                                         const destinoAbrir = destinoOrdenImpresion ?? destinoAutorizada
                                         const limitePracticas = 3
                                         const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
@@ -1805,6 +1855,20 @@ export function PracticaSection({
                                                                     >
                                                                         {destinoOrdenImpresion ? 'Abrir orden' : 'Abrir'}
                                                                     </Link>
+                                                                )}
+                                                                {puedeCrear && grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => void handleAnularOrdenDesdeGrupo(grupo.puestoNumero as number, grupo.ordenNumero as number, grupo.key)}
+                                                                        disabled={grupoAnulandose || !puedeAnularGrupo}
+                                                                        title={!puedeAnularGrupo
+                                                                            ? 'La orden ya está facturada'
+                                                                            : 'Anular orden'}
+                                                                        className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                                                    >
+                                                                        {grupoAnulandose && <Loader2 className="h-3 w-3 animate-spin" />}
+                                                                        {grupoAnulandose ? 'Anulando...' : 'Anular orden'}
+                                                                    </button>
                                                                 )}
                                                             </div>
                                                             <p className="text-emerald-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>

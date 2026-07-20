@@ -197,7 +197,12 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         select: {
             id: true,
             codigoPractica: true,
+            fecha: true,
             cantidad: true,
+            numeroAutorizacion: true,
+            facturable: true,
+            puestoNumero: true,
+            ordenNumero: true,
             estado: true,
             usuarioRegistro: true,
             matriculaEspecialista: true,
@@ -222,7 +227,11 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const practicasInternacionParaCirugiaMap = new Map<number, {
         id: number
         codigoPractica: string
+        fecha: Date
         cantidad: number
+        numeroAutorizacion: string | null
+        facturable: boolean
+        facturada: boolean
         estado: string | null
         usuario: string | null
         matriculaEspecialista: number | null
@@ -239,7 +248,11 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         practicasInternacionParaCirugiaMap.set(practica.id, {
             id: practica.id,
             codigoPractica: practica.codigoPractica,
+            fecha: practica.fecha,
             cantidad: Number(practica.cantidad),
+            numeroAutorizacion: practica.numeroAutorizacion ?? null,
+            facturable: Boolean(practica.facturable),
+            facturada: Boolean(practica.facturada),
             estado: practica.estado,
             usuario: practica.usuario ?? null,
             matriculaEspecialista: practica.matriculaEspecialista ?? null,
@@ -254,7 +267,16 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         practicasInternacionParaCirugiaMap.set(practica.id, {
             id: practica.id,
             codigoPractica: practica.codigoPractica,
+            fecha: practica.fecha,
             cantidad: Number(practica.cantidad),
+            numeroAutorizacion: practica.numeroAutorizacion ?? null,
+            facturable: Boolean(practica.facturable),
+            facturada: Boolean(
+                practica.puestoNumero != null &&
+                practica.ordenNumero != null &&
+                Number(practica.puestoNumero) > 0 &&
+                Number(practica.ordenNumero) > 0
+            ),
             estado: practica.estado,
             usuario: practica.usuarioRegistro,
             matriculaEspecialista: practica.matriculaEspecialista ?? null,

@@ -783,16 +783,24 @@ export async function actualizarNumeroAutorizacionAction(
 export async function anularOrdenAction(puestoNumero: number, numero: number) {
   const usuario = await getUsuarioSesion()
 
-  const puedeModificar = tienePermiso(usuario.rol, 'AMBULATORIO', 'MODIFICAR')
-  const puedeCrear = tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
-  if (!puedeModificar && !puedeCrear) {
+  const puedeAmbulatorio =
+    tienePermiso(usuario.rol, 'AMBULATORIO', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
+  const puedeInternacion =
+    tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+  const puedeAdmision =
+    tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+
+  if (!puedeAmbulatorio && !puedeInternacion && !puedeAdmision) {
     return { error: 'Sin permiso para anular órdenes' }
   }
 
   try {
     const orden = await prisma.orden.findUnique({
       where: { puestoNumero_numero: { puestoNumero, numero } },
-      select: { estado: true, numeroAutorizacion: true, ingresoId: true },
+      select: { estado: true, ingresoId: true },
     })
 
     if (!orden) {
@@ -804,8 +812,17 @@ export async function anularOrdenAction(puestoNumero: number, numero: number) {
       return { error: 'La orden ya está anulada' }
     }
 
-    if ((orden.numeroAutorizacion ?? '').trim().length > 0) {
-      return { error: 'Solo se pueden anular órdenes pendientes' }
+    const existeFacturacion = await prisma.practica.findFirst({
+      where: {
+        puestoNumero,
+        ordenNumero: numero,
+        OR: [{ estado: 'A' }, { estado: null }],
+      },
+      select: { id: true },
+    })
+
+    if (existeFacturacion) {
+      return { error: 'Solo se pueden anular órdenes no facturadas' }
     }
 
     await prisma.orden.update({

@@ -219,15 +219,6 @@ export function FichaQuirurgicaNotasCirujano({
     return `${parts[2]}/${parts[1]}/${parts[0]}`
   }, [campos.fecha, fechaCirugiaLabel])
 
-  const horarioFicha = useMemo(() => {
-    const comienzo = campos.horaComienzo.trim()
-    const termino = campos.horaTermino.trim()
-    if (comienzo && termino) return `${comienzo} - ${termino}`
-    if (comienzo) return comienzo
-    if (termino) return termino
-    return '—'
-  }, [campos.horaComienzo, campos.horaTermino])
-
   const diagnosticoPreoperatorioTexto =
     campos.diagnosticoOperatorio.trim() || '(CAMPO PARA EL DIAGNOSTICO PREOPERATORIO)'
   const diagnosticoPosoperatorioTexto =
@@ -689,121 +680,106 @@ export function FichaQuirurgicaNotasCirujano({
           Vista de impresion maquetada
         </p>
 
-        <div className="mx-auto w-full max-w-[900px] rounded border-2 border-slate-700 bg-white text-[11px] text-slate-900 print:max-w-none print:rounded-none print:border-slate-900 print:text-[10.5px]">
-          <header className="border-b-2 border-slate-700 px-3 py-2">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-[13px] font-bold uppercase tracking-wide">Ficha Quirurgica</p>
-                <p className="text-[10px] uppercase text-slate-700">Informe operatorio</p>
+        <div className="mx-auto w-full max-w-[900px] rounded bg-white text-[10.2px] text-black print:max-w-none print:rounded-none print:text-[9.8px]">
+          <div className="border border-black">
+            <div className="grid grid-cols-[46%_22%_32%] border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">APELLIDO Y NOMBRE</span> {campos.apellidoNombre.trim()}
               </div>
-              <div className="text-right">
-                <p><span className="font-semibold">Cirugia:</span> #{cirugiaId}</p>
-                <p><span className="font-semibold">Fecha:</span> {fechaFicha}</p>
-                <p><span className="font-semibold">Horario:</span> {horarioFicha}</p>
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">DNI N</span> {campos.dni.trim()}
               </div>
-            </div>
-          </header>
-
-          <div className="grid grid-cols-12 border-b border-slate-700">
-            <div className="col-span-8 border-r border-slate-700 px-3 py-1.5">
-              <p className="text-[10px] font-semibold uppercase text-slate-700">Apellido y nombre</p>
-              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.apellidoNombre)}</p>
-            </div>
-            <div className="col-span-2 border-r border-slate-700 px-3 py-1.5">
-              <p className="text-[10px] font-semibold uppercase text-slate-700">DNI</p>
-              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.dni)}</p>
-            </div>
-            <div className="col-span-2 px-3 py-1.5">
-              <p className="text-[10px] font-semibold uppercase text-slate-700">Obra social</p>
-              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.obraSocial)}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 border-b border-slate-700">
-            <div className="border-r border-slate-700 px-3 py-1.5">
-              <p className="text-[10px] font-semibold uppercase text-slate-700">Cirujano</p>
-              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.cirujano)}</p>
-            </div>
-            <div className="px-3 py-1.5">
-              <p className="text-[10px] font-semibold uppercase text-slate-700">1er ayudante</p>
-              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.ayudantePrimero)}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 border-b border-slate-700">
-            <div className="border-r border-slate-700 px-3 py-1.5">
-              <p className="text-[10px] font-semibold uppercase text-slate-700">2do ayudante</p>
-              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.ayudanteSegundo)}</p>
-            </div>
-            <div className="px-3 py-1.5">
-              <p className="text-[10px] font-semibold uppercase text-slate-700">3er ayudante</p>
-              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.ayudanteTercero)}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 border-b border-slate-700">
-            <div className="border-r border-slate-700 px-3 py-1.5">
-              <p className="text-[10px] font-semibold uppercase text-slate-700">Instrumentadora</p>
-              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.instrumentadora)}</p>
-            </div>
-            <div className="px-3 py-1.5">
-              <p className="text-[10px] font-semibold uppercase text-slate-700">Circular</p>
-              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.circular)}</p>
-            </div>
-          </div>
-
-          <div className="border-b border-slate-700 px-3 py-2">
-            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-700">Desarrollo diagnostico y operatorio</p>
-
-            <div className="space-y-2">
-              <div>
-                <p className="text-[10px] font-semibold">1) Diagnostico preoperatorio</p>
-                <p className="min-h-6 border-b border-slate-400 whitespace-pre-wrap pt-0.5">{diagnosticoPreoperatorioTexto}</p>
-              </div>
-
-              <div>
-                <p className="text-[10px] font-semibold">2) Diagnostico posoperatorio</p>
-                <p className="min-h-6 border-b border-slate-400 whitespace-pre-wrap pt-0.5">{diagnosticoPosoperatorioTexto}</p>
-              </div>
-
-              <div>
-                <p className="text-[10px] font-semibold">3) Procedimiento quirurgico</p>
-                <p className="min-h-6 border-b border-slate-400 whitespace-pre-wrap pt-0.5">{procedimientoQuirurgicoTexto}</p>
-              </div>
-
-              <div>
-                <p className="text-[10px] font-semibold">4) Operacion y hallazgos</p>
-                <p className="min-h-8 border-b border-slate-400 whitespace-pre-wrap pt-0.5">{operacionHallazgosTexto}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 px-3 py-2">
-            <div className="rounded border border-slate-700 px-2 py-1.5">
-              <p className="text-[10px] font-semibold uppercase">Campos de cirugia multiple</p>
-              <div className="mt-1 grid grid-cols-1 gap-0.5 text-[10px]">
-                <p><span className="font-semibold">Aplica:</span> {campos.cirugiasMultiples ? 'Si' : 'No'}</p>
-                <p><span className="font-semibold">Tipo:</span> {campos.cirugiasMultiples ? tipoCirugiaMultipleLabel[campos.tipoCirugiaMultiple] : 'No aplica'}</p>
-                <p><span className="font-semibold">Monitoreo intraoperatorio:</span> {campos.monitoreoIntraoperatorio}</p>
-                <p><span className="font-semibold">Rx con intensificador:</span> {campos.radiografiaConIntensificador}</p>
-                <p><span className="font-semibold">Cantidad de disparos:</span> {campos.cantidadDisparos.trim() || '0'}</p>
-                <p><span className="font-semibold">Tecnico:</span> {campos.tecnicoRadiologia.trim() || '________________'}</p>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">O SOCIAL</span> {campos.obraSocial.trim()}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2">
-              <div className="px-2 pt-5">
-                <div className="border-b border-slate-700" />
+            <div className="grid grid-cols-2 border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">CIRUJANO</span> {campos.cirujano.trim()}
+              </div>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">1er. AYUDANTE</span> {campos.ayudantePrimero.trim()}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">2do. AYUDANTE</span> {campos.ayudanteSegundo.trim()}
+              </div>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">3er. AYUDANTE</span> {campos.ayudanteTercero.trim()}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">INSTRUMENTADORA</span> {campos.instrumentadora.trim()}
+              </div>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">CIRCULAR</span> {campos.circular.trim()}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-[20%_48%_32%] border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">FECHA</span> {fechaFicha}
+              </div>
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">HORA COMIENZO OPERACION</span> {campos.horaComienzo.trim()}
+              </div>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">TERMINO</span> {campos.horaTermino.trim()}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-[16%_30%_30%_24%] border-b border-black">
+              <div className="border-r border-black px-2 py-1 font-semibold uppercase">ORDENAMIENTO</div>
+              <div className="border-r border-black px-2 py-1 font-semibold uppercase">1 DIAGNOSTICO PREOPERATORIO</div>
+              <div className="border-r border-black px-2 py-1 font-semibold uppercase">2 DIAGNOSTICO POSTOPERATORIO</div>
+              <div className="px-2 py-1 font-semibold uppercase">3 PROCEDIMIENTO QUIRURGICO</div>
+            </div>
+
+            <div className="grid grid-cols-[16%_44%_40%] border-b border-black">
+              <div className="border-r border-black px-2 py-1" />
+              <div className="border-r border-black px-2 py-1 font-semibold uppercase">4 OPERACION Y HALLAZGOS</div>
+              <div className="px-2 py-1 font-semibold uppercase">5 FIRMA</div>
+            </div>
+
+            <div
+              className="relative min-h-[210mm]"
+              style={{
+                backgroundImage:
+                  'repeating-linear-gradient(to bottom, transparent 0, transparent 7.7mm, rgb(0 0 0) 7.7mm, rgb(0 0 0) 7.9mm)',
+              }}
+            >
+              <div className="relative z-10 space-y-1 px-2 pt-1">
+                <p><span className="font-semibold">1)</span> {diagnosticoPreoperatorioTexto}</p>
+                <p><span className="font-semibold">2)</span> {diagnosticoPosoperatorioTexto}</p>
+                <p><span className="font-semibold">3)</span> {procedimientoQuirurgicoTexto}</p>
+                <p><span className="font-semibold">4)</span> {operacionHallazgosTexto}</p>
+              </div>
+
+              <div className="absolute bottom-[52mm] right-[2mm] z-10 w-[44%] bg-white/95 px-2 pt-2 pb-1">
+                <div className="border-b border-black" />
                 <p className="mt-1 text-[10px] font-semibold">Firma y sello del cirujano</p>
                 <p className="text-[10px]">Nombre: {campos.cirujano || '________________'}</p>
                 <p className="text-[10px]">Matricula: {cirujanoMatricula ? String(cirujanoMatricula) : '________________'}</p>
               </div>
 
-              <div className="px-2 pt-5">
-                <div className="border-b border-slate-700" />
-                <p className="mt-1 text-[10px] font-semibold">Firma y sello del radiologo</p>
-                <p className="text-[10px]">Nombre: {campos.tecnicoRadiologia || '________________'}</p>
-                <p className="text-[10px]">Matricula: __________________</p>
+              <div className="absolute bottom-0 right-0 z-20 h-[45mm] w-[27%] border-l border-t border-black bg-white px-2 py-1 text-[8.8px]">
+                <p className="font-semibold uppercase">FIRMA Y SELLO</p>
+                <div className="mt-1 space-y-0.5">
+                  <p className="font-semibold uppercase">CIRUGIA MULTIPLE</p>
+                  <p>Aplica: {campos.cirugiasMultiples ? 'Si' : 'No'}</p>
+                  <p>Tipo: {campos.cirugiasMultiples ? tipoCirugiaMultipleLabel[campos.tipoCirugiaMultiple] : 'No aplica'}</p>
+                  <p>Monitoreo: {campos.monitoreoIntraoperatorio}</p>
+                  <p>Rx intensificador: {campos.radiografiaConIntensificador}</p>
+                  <p>Disparos: {campos.cantidadDisparos.trim() || '0'}</p>
+                  <p className="pt-0.5 font-semibold">Firma y sello del radiologo</p>
+                  <p>Nombre: {campos.tecnicoRadiologia.trim() || '________________'}</p>
+                  <p>Matricula: __________________</p>
+                </div>
               </div>
             </div>
           </div>

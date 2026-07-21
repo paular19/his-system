@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BuscarPaciente } from '@/components/admision/buscar-paciente'
 import type { PacienteResumen } from '@/modules/admision/types'
@@ -56,6 +56,7 @@ export function InternacionForm({
   camaInicial,
 }: InternacionFormProps) {
   const router = useRouter()
+  const submitEnCursoRef = useRef(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
@@ -102,11 +103,17 @@ export function InternacionForm({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+
+    if (submitEnCursoRef.current || guardando) {
+      return
+    }
+
     if (!paciente) {
       setError('Seleccione un paciente')
       return
     }
 
+    submitEnCursoRef.current = true
     setGuardando(true)
     setError(null)
 
@@ -154,7 +161,7 @@ export function InternacionForm({
       router.push(`/dashboard/internacion/${ingreso.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido')
-    } finally {
+      submitEnCursoRef.current = false
       setGuardando(false)
     }
   }

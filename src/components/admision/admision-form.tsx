@@ -105,6 +105,7 @@ export function AdmisionForm({
 }: AdmisionFormProps) {
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
+  const submitEnCursoRef = useRef(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
@@ -296,6 +297,10 @@ export function AdmisionForm({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
+    if (submitEnCursoRef.current || guardando) {
+      return
+    }
+
     if (!paciente) {
       setError('Debe seleccionar un paciente')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -379,6 +384,7 @@ export function AdmisionForm({
 
     setPracticas(practicasNormalizadas)
 
+    submitEnCursoRef.current = true
     setGuardando(true)
     setError(null)
 
@@ -440,6 +446,8 @@ export function AdmisionForm({
       if ('error' in result) {
         setError(result.error)
         formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        submitEnCursoRef.current = false
+        setGuardando(false)
         return
       }
 
@@ -455,13 +463,21 @@ export function AdmisionForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    } finally {
+      submitEnCursoRef.current = false
       setGuardando(false)
     }
   }
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+      {guardando && (
+        <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-[1px] flex items-center justify-center px-4">
+          <div className="rounded-lg border border-blue-200 bg-white shadow-sm px-4 py-3 text-sm text-blue-700 flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Registrando admision... por favor espere.
+          </div>
+        </div>
+      )}
       {guardando && (
         <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-700 flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />

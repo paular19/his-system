@@ -4,7 +4,12 @@ import { useEffect, useRef } from 'react'
 import JsBarcode from 'jsbarcode'
 import { formatearNumeroOrden, generarCodigoBarras } from '@/modules/orden/types'
 import type { OrdenConItems } from '@/modules/orden/types'
-import { contieneClasificacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
+import {
+  clasificacionDesdeIncluyeCodigo,
+  contieneClasificacion,
+  normalizarClasificacionAgrupacion,
+  tituloDesdeClasificacion,
+} from '@/modules/orden/clasificacion'
 
 interface AutorizacionPrintProps {
   orden: OrdenConItems
@@ -185,6 +190,32 @@ export function AutorizacionPrint({
   const tituloPagina = (items: OrdenConItems['items']): string => {
     const itemConTitulo = items.find((it) => Boolean(it.titularModular?.trim()))
     if (itemConTitulo?.titularModular) return itemConTitulo.titularModular
+
+    if (items.some((it) => it.codigoPractica.trim() === '66')) {
+      return 'PROTOCOLO BIOQUIMICO'
+    }
+
+    const codigos = new Set<string>()
+    for (const item of items) {
+      const clasificacionNormalizada =
+        normalizarClasificacionAgrupacion(item.clasificacionAgrupacion) ??
+        clasificacionDesdeIncluyeCodigo(item.incluyeCodigo)
+
+      if (!clasificacionNormalizada) continue
+      for (const token of clasificacionNormalizada.split('+')) {
+        codigos.add(token)
+      }
+    }
+
+    if (codigos.size > 0) {
+      const clasificacionCombinada = normalizarClasificacionAgrupacion(
+        Array.from(codigos).join('+')
+      )
+      if (clasificacionCombinada) {
+        return tituloDesdeClasificacion(clasificacionCombinada)
+      }
+    }
+
     return items[0] ? tituloPorIncluye(items[0]) : 'HONORARIOS'
   }
 

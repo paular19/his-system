@@ -181,7 +181,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
         @media print {
           @page {
             size: A4 portrait;
-            margin: 8mm;
+            margin: 4mm;
           }
 
           .ficha-quirurgica-sheet {
@@ -199,7 +199,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
         }
       `}</style>
 
-      <div className="ficha-quirurgica-sheet p-6 max-w-5xl space-y-6 print:space-y-2 print:p-2">
+      <div className="ficha-quirurgica-sheet p-6 max-w-5xl space-y-6 print:space-y-0 print:p-0">
         <nav className="flex items-center gap-1 text-xs text-gray-500 print:hidden">
           <Link href="/dashboard/internacion" className="hover:text-gray-700">
             Internacion
@@ -219,7 +219,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
           />
         </div>
 
-        <div className="border-b-2 pb-4 print:pb-3">
+        <div className="border-b-2 pb-4 print:hidden">
           <div className="flex items-start justify-between gap-4">
             <div>
               <img
@@ -246,15 +246,15 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
           <FichaQuirurgicaAltaCirugia ingresoId={ingresoId} pacienteId={ingreso.paciente.id} />
         )}
 
-        <section className="space-y-4">
-          <h2 className="text-base font-semibold text-gray-900 print:mb-1">Fichas por cirugia</h2>
+        <section className="space-y-4 print:space-y-0">
+          <h2 className="text-base font-semibold text-gray-900 print:hidden">Fichas por cirugia</h2>
 
           {cirugias.length === 0 ? (
             <div className="his-card p-5 text-sm text-gray-500">No hay cirugias registradas para esta internacion.</div>
           ) : (
             cirugias.map((cirugia) => (
-              <article id={`cirugia-${cirugia.id}`} key={cirugia.id} className="his-card p-4 print:p-2 space-y-3 print:space-y-2 break-inside-avoid">
-                <div className="flex items-center justify-between gap-2 border-b pb-2">
+              <article id={`cirugia-${cirugia.id}`} key={cirugia.id} className="his-card p-4 print:p-0 space-y-3 print:space-y-0 break-inside-avoid print:border-none">
+                <div className="flex items-center justify-between gap-2 border-b pb-2 print:hidden">
                   <h3 className="text-sm font-semibold text-gray-900">Cirugia #{cirugia.id}</h3>
                   <span className="text-xs text-gray-500">
                     {fmtDate(cirugia.fechaCirugia)} {cirugia.horaCirugia ? `· ${cirugia.horaCirugia}` : ''}

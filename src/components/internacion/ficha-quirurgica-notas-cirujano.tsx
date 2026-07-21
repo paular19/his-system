@@ -200,17 +200,6 @@ export function FichaQuirurgicaNotasCirujano({
     { tipo: 'ok' | 'error'; mensaje: string } | null
   >(null)
 
-  const textoCampo = (value: string): string => value.trim() || '—'
-
-  const rangoHorario = useMemo(() => {
-    const comienzo = campos.horaComienzo.trim()
-    const termino = campos.horaTermino.trim()
-    if (comienzo && termino) return `${comienzo} a ${termino}`
-    if (comienzo) return `Inicio ${comienzo}`
-    if (termino) return `Termino ${termino}`
-    return '—'
-  }, [campos.horaComienzo, campos.horaTermino])
-
   const fechaFicha = useMemo(() => {
     const value = campos.fecha.trim()
     if (!value) return fechaCirugiaLabel
@@ -227,6 +216,21 @@ export function FichaQuirurgicaNotasCirujano({
     campos.procedimientoQuirurgico.trim() || '(CAMPO PARA EL PROCEDIMIENTO QUIRURGICO)'
   const operacionHallazgosTexto =
     campos.operacionHallazgos.trim() || '(CAMPO PARA LA OPERACION Y HALLAZGOS)'
+
+  const desarrolloTexto = useMemo(() => {
+    const normalizar = (value: string): string => value.replace(/\s+/g, ' ').trim()
+    return [
+      `1) ${normalizar(diagnosticoPreoperatorioTexto)}`,
+      `2) ${normalizar(diagnosticoPosoperatorioTexto)}`,
+      `3) ${normalizar(procedimientoQuirurgicoTexto)}`,
+      `4) ${normalizar(operacionHallazgosTexto)}`,
+    ].join('\n')
+  }, [
+    diagnosticoPreoperatorioTexto,
+    diagnosticoPosoperatorioTexto,
+    procedimientoQuirurgicoTexto,
+    operacionHallazgosTexto,
+  ])
 
   useEffect(() => {
     const key = storageKey(ingresoId, cirugiaId)
@@ -681,7 +685,7 @@ export function FichaQuirurgicaNotasCirujano({
         </p>
 
         <div className="mx-auto w-full max-w-[900px] rounded bg-white text-[10.2px] text-black print:max-w-none print:rounded-none print:text-[9.8px]">
-          <div className="border border-black">
+          <div className="border border-black print:h-[274mm] print:overflow-hidden">
             <div className="grid grid-cols-[46%_22%_32%] border-b border-black">
               <div className="border-r border-black px-2 py-1">
                 <span className="font-semibold uppercase">APELLIDO Y NOMBRE</span> {campos.apellidoNombre.trim()}
@@ -747,30 +751,19 @@ export function FichaQuirurgicaNotasCirujano({
             </div>
 
             <div
-              className="relative min-h-[210mm]"
+              className="relative h-[221mm] overflow-hidden"
               style={{
                 backgroundImage:
                   'repeating-linear-gradient(to bottom, transparent 0, transparent 7.7mm, rgb(0 0 0) 7.7mm, rgb(0 0 0) 7.9mm)',
               }}
             >
-              <div className="relative z-10 space-y-1 px-2 pt-1">
-                <p><span className="font-semibold">1)</span> {diagnosticoPreoperatorioTexto}</p>
-                <p><span className="font-semibold">2)</span> {diagnosticoPosoperatorioTexto}</p>
-                <p><span className="font-semibold">3)</span> {procedimientoQuirurgicoTexto}</p>
-                <p><span className="font-semibold">4)</span> {operacionHallazgosTexto}</p>
+              <div className="absolute inset-0 z-10 px-2 pt-[0.9mm] pb-[48mm] text-[9.8px] leading-[7.8mm] whitespace-pre-wrap break-words">
+                {desarrolloTexto}
               </div>
 
-              <div className="absolute bottom-[52mm] right-[2mm] z-10 w-[44%] bg-white/95 px-2 pt-2 pb-1">
-                <div className="border-b border-black" />
-                <p className="mt-1 text-[10px] font-semibold">Firma y sello del cirujano</p>
-                <p className="text-[10px]">Nombre: {campos.cirujano || '________________'}</p>
-                <p className="text-[10px]">Matricula: {cirujanoMatricula ? String(cirujanoMatricula) : '________________'}</p>
-              </div>
-
-              <div className="absolute bottom-0 right-0 z-20 h-[45mm] w-[27%] border-l border-t border-black bg-white px-2 py-1 text-[8.8px]">
-                <p className="font-semibold uppercase">FIRMA Y SELLO</p>
-                <div className="mt-1 space-y-0.5">
-                  <p className="font-semibold uppercase">CIRUGIA MULTIPLE</p>
+              <div className="absolute bottom-0 left-0 z-20 h-[46mm] w-[33%] border-r border-t border-black bg-white px-2 py-1 text-[8.7px]">
+                <p className="font-semibold uppercase">CIRUGIA MULTIPLE</p>
+                <div className="mt-0.5 space-y-0.5">
                   <p>Aplica: {campos.cirugiasMultiples ? 'Si' : 'No'}</p>
                   <p>Tipo: {campos.cirugiasMultiples ? tipoCirugiaMultipleLabel[campos.tipoCirugiaMultiple] : 'No aplica'}</p>
                   <p>Monitoreo: {campos.monitoreoIntraoperatorio}</p>
@@ -780,6 +773,14 @@ export function FichaQuirurgicaNotasCirujano({
                   <p>Nombre: {campos.tecnicoRadiologia.trim() || '________________'}</p>
                   <p>Matricula: __________________</p>
                 </div>
+              </div>
+
+              <div className="absolute bottom-0 right-0 z-20 h-[46mm] w-[33%] border-l border-t border-black bg-white px-2">
+                <div className="h-[11mm]" />
+                <div className="border-b border-black" />
+                <p className="mt-1 text-[10px] font-semibold">Firma y sello del cirujano</p>
+                <p className="text-[10px]">Nombre: {campos.cirujano || '________________'}</p>
+                <p className="text-[10px]">Matricula: {cirujanoMatricula ? String(cirujanoMatricula) : '________________'}</p>
               </div>
             </div>
           </div>

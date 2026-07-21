@@ -211,19 +211,21 @@ export function FichaQuirurgicaNotasCirujano({
     return '—'
   }, [campos.horaComienzo, campos.horaTermino])
 
-  const fechaPlantilla = useMemo(() => {
+  const fechaFicha = useMemo(() => {
     const value = campos.fecha.trim()
-    if (!value) return ''
+    if (!value) return fechaCirugiaLabel
     const parts = value.split('-')
     if (parts.length !== 3) return value
     return `${parts[2]}/${parts[1]}/${parts[0]}`
-  }, [campos.fecha])
+  }, [campos.fecha, fechaCirugiaLabel])
 
-  const horarioPlantilla = useMemo(() => {
+  const horarioFicha = useMemo(() => {
     const comienzo = campos.horaComienzo.trim()
     const termino = campos.horaTermino.trim()
     if (comienzo && termino) return `${comienzo} - ${termino}`
-    return comienzo || termino
+    if (comienzo) return comienzo
+    if (termino) return termino
+    return '—'
   }, [campos.horaComienzo, campos.horaTermino])
 
   const diagnosticoPreoperatorioTexto =
@@ -684,56 +686,125 @@ export function FichaQuirurgicaNotasCirujano({
 
       <div className={`${modoLectura ? 'block' : 'hidden'} print:block`}>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-700 print:hidden">
-          Vista de impresion sobre plantilla PDF
+          Vista de impresion maquetada
         </p>
 
-        <div className="relative mx-auto w-full max-w-[900px] overflow-hidden rounded border border-slate-300 bg-white print:max-w-none print:rounded-none print:border-none">
-          <img
-            src="/ficha-quirurgica-template.jpg"
-            alt="Plantilla de ficha quirurgica"
-            className="block w-full h-auto"
-          />
+        <div className="mx-auto w-full max-w-[900px] rounded border-2 border-slate-700 bg-white text-[11px] text-slate-900 print:max-w-none print:rounded-none print:border-slate-900 print:text-[10.5px]">
+          <header className="border-b-2 border-slate-700 px-3 py-2">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-[13px] font-bold uppercase tracking-wide">Ficha Quirurgica</p>
+                <p className="text-[10px] uppercase text-slate-700">Informe operatorio</p>
+              </div>
+              <div className="text-right">
+                <p><span className="font-semibold">Cirugia:</span> #{cirugiaId}</p>
+                <p><span className="font-semibold">Fecha:</span> {fechaFicha}</p>
+                <p><span className="font-semibold">Horario:</span> {horarioFicha}</p>
+              </div>
+            </div>
+          </header>
 
-          <div className="absolute inset-0 text-[8px] text-black leading-[1.2] print:text-[8.2px] print:leading-[1.2]">
-            <span className="absolute left-[20.5%] top-[2.8%] w-[39%] truncate pr-1">{campos.apellidoNombre.trim()}</span>
-            <span className="absolute left-[60.8%] top-[2.8%] w-[18%] truncate pr-1">{campos.dni.trim()}</span>
-            <span className="absolute left-[81%] top-[2.8%] w-[17%] truncate pr-1">{campos.obraSocial.trim()}</span>
+          <div className="grid grid-cols-12 border-b border-slate-700">
+            <div className="col-span-8 border-r border-slate-700 px-3 py-1.5">
+              <p className="text-[10px] font-semibold uppercase text-slate-700">Apellido y nombre</p>
+              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.apellidoNombre)}</p>
+            </div>
+            <div className="col-span-2 border-r border-slate-700 px-3 py-1.5">
+              <p className="text-[10px] font-semibold uppercase text-slate-700">DNI</p>
+              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.dni)}</p>
+            </div>
+            <div className="col-span-2 px-3 py-1.5">
+              <p className="text-[10px] font-semibold uppercase text-slate-700">Obra social</p>
+              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.obraSocial)}</p>
+            </div>
+          </div>
 
-            <span className="absolute left-[9.1%] top-[6.0%] w-[40%] truncate pr-1">{campos.cirujano.trim()}</span>
-            <span className="absolute left-[50.4%] top-[6.0%] w-[47%] truncate pr-1">{campos.ayudantePrimero.trim()}</span>
+          <div className="grid grid-cols-2 border-b border-slate-700">
+            <div className="border-r border-slate-700 px-3 py-1.5">
+              <p className="text-[10px] font-semibold uppercase text-slate-700">Cirujano</p>
+              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.cirujano)}</p>
+            </div>
+            <div className="px-3 py-1.5">
+              <p className="text-[10px] font-semibold uppercase text-slate-700">1er ayudante</p>
+              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.ayudantePrimero)}</p>
+            </div>
+          </div>
 
-            <span className="absolute left-[9.1%] top-[9.1%] w-[40%] truncate pr-1">{campos.ayudanteSegundo.trim()}</span>
-            <span className="absolute left-[50.4%] top-[9.1%] w-[47%] truncate pr-1">{campos.ayudanteTercero.trim()}</span>
+          <div className="grid grid-cols-2 border-b border-slate-700">
+            <div className="border-r border-slate-700 px-3 py-1.5">
+              <p className="text-[10px] font-semibold uppercase text-slate-700">2do ayudante</p>
+              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.ayudanteSegundo)}</p>
+            </div>
+            <div className="px-3 py-1.5">
+              <p className="text-[10px] font-semibold uppercase text-slate-700">3er ayudante</p>
+              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.ayudanteTercero)}</p>
+            </div>
+          </div>
 
-            <span className="absolute left-[9.1%] top-[12.2%] w-[40%] truncate pr-1">{campos.instrumentadora.trim()}</span>
-            <span className="absolute left-[50.4%] top-[12.2%] w-[47%] truncate pr-1">{campos.circular.trim()}</span>
+          <div className="grid grid-cols-2 border-b border-slate-700">
+            <div className="border-r border-slate-700 px-3 py-1.5">
+              <p className="text-[10px] font-semibold uppercase text-slate-700">Instrumentadora</p>
+              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.instrumentadora)}</p>
+            </div>
+            <div className="px-3 py-1.5">
+              <p className="text-[10px] font-semibold uppercase text-slate-700">Circular</p>
+              <p className="min-h-5 border-b border-slate-400 pt-0.5">{textoCampo(campos.circular)}</p>
+            </div>
+          </div>
 
-            <span className="absolute left-[7.6%] top-[15.3%] w-[17%] truncate pr-1">{fechaPlantilla || fechaCirugiaLabel}</span>
-            <span className="absolute left-[26.8%] top-[15.3%] w-[35%] truncate pr-1">{horarioPlantilla || rangoHorario.replace('Inicio ', '').replace('Termino ', '')}</span>
-            <span className="absolute left-[71.5%] top-[15.3%] w-[26%] truncate pr-1">{campos.horaTermino.trim()}</span>
+          <div className="border-b border-slate-700 px-3 py-2">
+            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-700">Desarrollo diagnostico y operatorio</p>
 
-            <span className="absolute left-[10.8%] top-[18.9%] w-[9%] truncate pr-1">{String(cirugiaId)}</span>
+            <div className="space-y-2">
+              <div>
+                <p className="text-[10px] font-semibold">1) Diagnostico preoperatorio</p>
+                <p className="min-h-6 border-b border-slate-400 whitespace-pre-wrap pt-0.5">{diagnosticoPreoperatorioTexto}</p>
+              </div>
 
-            <div className="absolute left-[4.3%] top-[23.2%] w-[90.5%] space-y-1 whitespace-pre-wrap pr-2">
-              <p><span className="font-semibold">1)</span> {diagnosticoPreoperatorioTexto}</p>
-              <p><span className="font-semibold">2)</span> {diagnosticoPosoperatorioTexto}</p>
-              <p><span className="font-semibold">3)</span> {procedimientoQuirurgicoTexto}</p>
-              <p><span className="font-semibold">4)</span> {operacionHallazgosTexto}</p>
+              <div>
+                <p className="text-[10px] font-semibold">2) Diagnostico posoperatorio</p>
+                <p className="min-h-6 border-b border-slate-400 whitespace-pre-wrap pt-0.5">{diagnosticoPosoperatorioTexto}</p>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-semibold">3) Procedimiento quirurgico</p>
+                <p className="min-h-6 border-b border-slate-400 whitespace-pre-wrap pt-0.5">{procedimientoQuirurgicoTexto}</p>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-semibold">4) Operacion y hallazgos</p>
+                <p className="min-h-8 border-b border-slate-400 whitespace-pre-wrap pt-0.5">{operacionHallazgosTexto}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 px-3 py-2">
+            <div className="rounded border border-slate-700 px-2 py-1.5">
+              <p className="text-[10px] font-semibold uppercase">Campos de cirugia multiple</p>
+              <div className="mt-1 grid grid-cols-1 gap-0.5 text-[10px]">
+                <p><span className="font-semibold">Aplica:</span> {campos.cirugiasMultiples ? 'Si' : 'No'}</p>
+                <p><span className="font-semibold">Tipo:</span> {campos.cirugiasMultiples ? tipoCirugiaMultipleLabel[campos.tipoCirugiaMultiple] : 'No aplica'}</p>
+                <p><span className="font-semibold">Monitoreo intraoperatorio:</span> {campos.monitoreoIntraoperatorio}</p>
+                <p><span className="font-semibold">Rx con intensificador:</span> {campos.radiografiaConIntensificador}</p>
+                <p><span className="font-semibold">Cantidad de disparos:</span> {campos.cantidadDisparos.trim() || '0'}</p>
+                <p><span className="font-semibold">Tecnico:</span> {campos.tecnicoRadiologia.trim() || '________________'}</p>
+              </div>
             </div>
 
-            <div className="absolute left-[51.8%] top-[89.8%] w-[23.5%] rounded border border-slate-500/70 bg-white/90 px-1.5 py-1 text-[7px] leading-[1.2] print:text-[7.3px]">
-              <p className="font-semibold uppercase">Cirugia multiple</p>
-              <p>Aplica: {campos.cirugiasMultiples ? 'Si' : 'No'}</p>
-              <p>Tipo: {campos.cirugiasMultiples ? tipoCirugiaMultipleLabel[campos.tipoCirugiaMultiple] : 'No aplica'}</p>
-              <p>Monitoreo: {campos.monitoreoIntraoperatorio}</p>
-              <p>Rx intensificador: {campos.radiografiaConIntensificador}</p>
-              <p>Disparos: {campos.cantidadDisparos.trim() || '0'}</p>
-              <p>Tecnico: {campos.tecnicoRadiologia.trim() || '________________'}</p>
-            </div>
+            <div className="grid grid-cols-1 gap-2">
+              <div className="px-2 pt-5">
+                <div className="border-b border-slate-700" />
+                <p className="mt-1 text-[10px] font-semibold">Firma y sello del cirujano</p>
+                <p className="text-[10px]">Nombre: {campos.cirujano || '________________'}</p>
+                <p className="text-[10px]">Matricula: {cirujanoMatricula ? String(cirujanoMatricula) : '________________'}</p>
+              </div>
 
-            <div className="absolute left-[76.3%] top-[94.0%] w-[21.8%] text-[7px] leading-[1.2] print:text-[7.4px]">
-              <p className="truncate font-semibold">Dr/a. {campos.cirujano.trim() || '________________'}</p>
-              <p>Matricula: {cirujanoMatricula ? String(cirujanoMatricula) : '________________'}</p>
+              <div className="px-2 pt-5">
+                <div className="border-b border-slate-700" />
+                <p className="mt-1 text-[10px] font-semibold">Firma y sello del radiologo</p>
+                <p className="text-[10px]">Nombre: {campos.tecnicoRadiologia || '________________'}</p>
+                <p className="text-[10px]">Matricula: __________________</p>
+              </div>
             </div>
           </div>
         </div>

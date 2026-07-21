@@ -750,14 +750,18 @@ export function FichaQuirurgicaNotasCirujano({
               <div className="px-2 py-1 font-semibold uppercase">5 FIRMA</div>
             </div>
 
-            <div
-              className="relative h-[221mm] overflow-hidden"
-              style={{
-                backgroundImage:
-                  'repeating-linear-gradient(to bottom, transparent 0, transparent 7.7mm, rgb(0 0 0) 7.7mm, rgb(0 0 0) 7.9mm)',
-              }}
-            >
-              <div className="absolute inset-0 z-10 px-2 pt-[0.9mm] pb-[48mm] text-[9.8px] leading-[7.8mm] whitespace-pre-wrap break-words">
+            <div className="relative h-[221mm] overflow-hidden">
+              <div className="pointer-events-none absolute inset-x-0 top-0 bottom-[48mm] z-0">
+                {Array.from({ length: 22 }).map((_, index) => (
+                  <div
+                    key={`renglon-${index}`}
+                    className="absolute left-0 right-0 border-b border-black/90"
+                    style={{ top: `${(index + 1) * 7.8}mm` }}
+                  />
+                ))}
+              </div>
+
+              <div className="absolute inset-0 z-10 px-2 pt-[0.9mm] pb-[48mm] pr-2 text-[9.8px] leading-[7.8mm] whitespace-pre-wrap break-words">
                 {desarrolloTexto}
               </div>
 
@@ -770,13 +774,15 @@ export function FichaQuirurgicaNotasCirujano({
                   <p>Rx intensificador: {campos.radiografiaConIntensificador}</p>
                   <p>Disparos: {campos.cantidadDisparos.trim() || '0'}</p>
                   <p className="pt-0.5 font-semibold">Firma y sello del radiologo</p>
-                  <p>Nombre: {campos.tecnicoRadiologia.trim() || '________________'}</p>
+                  <div className="h-[5mm]" />
+                  <div className="border-b border-black" />
+                  <p className="mt-1">Nombre: {campos.tecnicoRadiologia.trim() || '________________'}</p>
                   <p>Matricula: __________________</p>
                 </div>
               </div>
 
-              <div className="absolute bottom-0 right-0 z-20 h-[46mm] w-[33%] border-l border-t border-black bg-white px-2">
-                <div className="h-[11mm]" />
+              <div className="absolute bottom-0 right-0 z-20 h-[47mm] w-[34%] border-l border-t border-black bg-white px-2">
+                <div className="h-[16mm]" />
                 <div className="border-b border-black" />
                 <p className="mt-1 text-[10px] font-semibold">Firma y sello del cirujano</p>
                 <p className="text-[10px]">Nombre: {campos.cirujano || '________________'}</p>

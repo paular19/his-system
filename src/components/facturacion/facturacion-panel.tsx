@@ -2072,9 +2072,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setError(null)
         setMensaje(null)
         try {
-            // Si el usuario tildó filas explícitamente, usar solo esas.
-            // Si no tildó ninguna, usar todas las seleccionables (facturar todo).
-            const source = prestacionesSeleccionadas.length > 0
+            // Si el usuario interactuó con la selección, respetar estrictamente lo tildado.
+            // Si nunca tocó selección, usar todas las seleccionables (facturar todo).
+            const huboSeleccionExplicita = Object.keys(seleccion).length > 0
+            const source = huboSeleccionExplicita
                 ? prestacionesSeleccionadas
                 : prestacionesSeleccionables
 
@@ -2138,7 +2139,12 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     }
                 })
 
-            if (prestaciones.length === 0) throw new Error('No hay prácticas pendientes con orden y autorización para facturar')
+            if (prestaciones.length === 0) {
+                if (huboSeleccionExplicita) {
+                    throw new Error('No hay prácticas seleccionadas para facturar')
+                }
+                throw new Error('No hay prácticas pendientes con orden y autorización para facturar')
+            }
 
             const res = await fetch('/api/facturacion/ordenes/cargar', {
                 method: 'POST',
@@ -3617,6 +3623,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const aplicaOrdenCompleta = Boolean(
                                                     aplicarOrdenCompletaPorFila[p.uid] && ordenParaEdicionGlobal
                                                 )
+                                                const practicaSeleccionada = Boolean(seleccion[p.uid])
                                                 return (
                                                     <Fragment key={p.uid}>
                                                         <tr className={yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
@@ -3630,9 +3637,20 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                 Cirugía
                                                                             </span>
                                                                         )}
-                                                                        <span className={`text-[11px] font-medium ${seleccion[p.uid] ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                                                            {seleccion[p.uid] ? 'Incluida por orden' : 'Seleccionar en cabecera de orden'}
-                                                                        </span>
+                                                                        <label className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${practicaSeleccionada ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-white text-slate-700'}`}>
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={practicaSeleccionada}
+                                                                                onChange={(e) => {
+                                                                                    const nextChecked = e.target.checked
+                                                                                    setSeleccion((prev) => ({
+                                                                                        ...prev,
+                                                                                        [p.uid]: nextChecked,
+                                                                                    }))
+                                                                                }}
+                                                                            />
+                                                                            {practicaSeleccionada ? 'Práctica incluida' : 'Seleccionar práctica'}
+                                                                        </label>
                                                                     </div>
                                                                 ) : (
                                                                     <div className="flex flex-wrap items-center gap-2">

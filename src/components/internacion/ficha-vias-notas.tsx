@@ -90,6 +90,16 @@ export function FichaViasNotas({
     `4) ${notas.item4.trim() || '............................................................'}`,
   ].join('\n')
 
+  const viaFechaLabel = formatearFechaHoraArgentina(viaActiva.fechaHora, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+  const viaHoraLabel = formatearFechaHoraArgentina(viaActiva.fechaHora, {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
   if (!viaActiva) {
     return (
       <section className="his-card p-5 text-sm text-gray-500">
@@ -213,46 +223,109 @@ export function FichaViasNotas({
         {mensaje && <p className="text-xs text-green-700">{mensaje}</p>}
       </section>
 
-      <section className="hidden print:block border border-gray-400 p-3 text-[11px]">
-        <div className="border-b pb-2 mb-2">
-          <h2 className="text-sm font-semibold">Ficha de via</h2>
-          <p>Internacion INT-{numeroIngreso}</p>
-          <p>Paciente: {pacienteNombre ?? '—'}</p>
-          <p>DNI: {pacienteDni ?? '—'}</p>
-          <p>Obra social: {obraSocial ?? '—'}</p>
-          <p>
-            Via: {etiquetaTipoVia(viaActiva.tipo)} · Fecha/Hora:{' '}
-            {formatearFechaHoraArgentina(viaActiva.fechaHora, {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </p>
-          <p>Profesional que indica: {viaActiva.profesionalNombre}</p>
-        </div>
+      <section className="hidden print:block">
+        <div className="mx-auto w-full max-w-225 rounded bg-white text-[10.2px] text-black print:max-w-none print:rounded-none print:text-[9.8px]">
+          <div className="border border-black print:h-[274mm] print:overflow-hidden">
+            <div className="grid grid-cols-[46%_22%_32%] border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">APELLIDO Y NOMBRE</span> {(pacienteNombre ?? '').trim()}
+              </div>
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">DNI N</span> {(pacienteDni ?? '').trim()}
+              </div>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">O SOCIAL</span> {(obraSocial ?? '').trim()}
+              </div>
+            </div>
 
-        <table className="w-full border-collapse">
-          <tbody>
-            <tr>
-              <td className="border border-gray-400 p-2 align-top w-10">1</td>
-              <td className="border border-gray-400 p-2 align-top whitespace-pre-wrap">{notas.item1 || ' '}</td>
-            </tr>
-            <tr>
-              <td className="border border-gray-400 p-2 align-top">2</td>
-              <td className="border border-gray-400 p-2 align-top whitespace-pre-wrap">{notas.item2 || ' '}</td>
-            </tr>
-            <tr>
-              <td className="border border-gray-400 p-2 align-top">3</td>
-              <td className="border border-gray-400 p-2 align-top whitespace-pre-wrap">{notas.item3 || ' '}</td>
-            </tr>
-            <tr>
-              <td className="border border-gray-400 p-2 align-top">4</td>
-              <td className="border border-gray-400 p-2 align-top whitespace-pre-wrap">{notas.item4 || ' '}</td>
-            </tr>
-          </tbody>
-        </table>
+            <div className="grid grid-cols-2 border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">PROFESIONAL QUE INDICA</span> {viaActiva.profesionalNombre.trim()}
+              </div>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">TIPO DE VIA</span> {etiquetaTipoVia(viaActiva.tipo)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">INTERNACION</span> INT-{numeroIngreso}
+              </div>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">FICHA</span> VIA
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">OBSERVACIONES</span>
+              </div>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">DESARROLLO EN RENGLONES</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-[20%_48%_32%] border-b border-black">
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">FECHA</span> {viaFechaLabel}
+              </div>
+              <div className="border-r border-black px-2 py-1">
+                <span className="font-semibold uppercase">HORA</span> {viaHoraLabel}
+              </div>
+              <div className="px-2 py-1">
+                <span className="font-semibold uppercase">TERMINO</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-[16%_30%_30%_24%] border-b border-black">
+              <div className="border-r border-black px-2 py-1 font-semibold uppercase">ORDENAMIENTO</div>
+              <div className="border-r border-black px-2 py-1 font-semibold uppercase">1</div>
+              <div className="border-r border-black px-2 py-1 font-semibold uppercase">2</div>
+              <div className="px-2 py-1 font-semibold uppercase">3</div>
+            </div>
+
+            <div className="grid grid-cols-[16%_44%_40%] border-b border-black">
+              <div className="border-r border-black px-2 py-1" />
+              <div className="border-r border-black px-2 py-1 font-semibold uppercase">4</div>
+              <div className="px-2 py-1 font-semibold uppercase">FIRMA</div>
+            </div>
+
+            <div className="relative h-[221mm] overflow-hidden">
+              <div className="pointer-events-none absolute inset-x-0 top-0 bottom-[48mm] z-0">
+                {Array.from({ length: 22 }).map((_, index) => (
+                  <div
+                    key={`renglon-${index}`}
+                    className="absolute left-0 right-0 border-b border-black/90"
+                    style={{ top: `${(index + 1) * 7.8}mm` }}
+                  />
+                ))}
+              </div>
+
+              <div className="absolute inset-0 z-10 px-2 pt-[0.9mm] pb-[48mm] pr-2 text-[9.8px] leading-[7.8mm] whitespace-pre-wrap wrap-break-word">
+                {desarrolloTexto}
+              </div>
+
+              <div className="absolute bottom-0 left-0 z-20 h-[46mm] w-[33%] border-r border-t border-black bg-white px-2 py-1 text-[8.7px]">
+                <p className="font-semibold uppercase">DATOS DE VIA</p>
+                <div className="mt-0.5 space-y-0.5">
+                  <p>Tipo: {etiquetaTipoVia(viaActiva.tipo)}</p>
+                  <p>Profesional: {viaActiva.profesionalNombre.trim() || '________________'}</p>
+                  <p>Fecha: {viaFechaLabel || '________________'}</p>
+                  <p>Hora: {viaHoraLabel || '________________'}</p>
+                  <p>Internacion: INT-{numeroIngreso}</p>
+                </div>
+              </div>
+
+              <div className="absolute bottom-0 right-0 z-20 h-[47mm] w-[34%] border-l border-t border-black bg-white px-2">
+                <div className="h-[16mm]" />
+                <div className="border-b border-black" />
+                <p className="mt-1 text-[10px] font-semibold">Firma y sello</p>
+                <p className="text-[10px]">Profesional que indica: {viaActiva.profesionalNombre || '________________'}</p>
+                <p className="text-[10px]">Matricula: __________________</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
     </>
   )

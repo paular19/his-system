@@ -72,6 +72,7 @@ type DiferencialesCirugiaEditState = {
     diferentesViasDiferentesPatologia: boolean
     dobleCirugia: boolean
     practicaBaseId: string
+    practicaSecundariaId: string
 }
 
 type CirugiaPracticaEditable = {
@@ -81,6 +82,7 @@ type CirugiaPracticaEditable = {
     importeTotalReferencia: number
     importeGastosReferencia: number
     esPracticaBase: boolean
+    esPracticaSecundaria: boolean
     aplicaDiferencial: boolean
 }
 
@@ -253,6 +255,7 @@ function calcularRecargosDiferencial(diferenciales: PrestacionFacturableItem['di
     gastos: number
 } {
     if (!diferenciales) return { especialista: 0, gastos: 0 }
+    if (diferenciales.aplicaDiferencial === false) return { especialista: 0, gastos: 0 }
 
     const esPrincipalDobleCirugia = Boolean(diferenciales.dobleCirugia && diferenciales.esPracticaBase)
 
@@ -976,13 +979,25 @@ function buildEditState(p: PrestacionFacturableItem): EditState {
 
 function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): DiferencialesCirugiaEditState {
     const baseIdActual = cirugia.diferenciales?.practicaBaseId ?? null
+    const secundariaIdActual = cirugia.diferenciales?.practicaSecundariaId ?? null
     const baseIdPorMayorTotal =
         [...cirugia.practicas]
             .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)[0]?.practicaId ??
         cirugia.practicas[0]?.practicaId ??
         null
+    const secundariaIdPorMayorTotal =
+        [...cirugia.practicas]
+            .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)
+            .find((practica) => practica.practicaId !== (baseIdActual ?? baseIdPorMayorTotal))?.practicaId ??
+        null
     const dobleCirugia = Boolean(cirugia.diferenciales?.dobleCirugia)
     const baseIdFinal = dobleCirugia ? (baseIdActual ?? baseIdPorMayorTotal) : baseIdActual
+    const secundariaIdFinal =
+        dobleCirugia
+            ? ((secundariaIdActual && secundariaIdActual !== baseIdFinal
+                ? secundariaIdActual
+                : secundariaIdPorMayorTotal) ?? null)
+            : secundariaIdActual
 
     return {
         esFeriado: Boolean(cirugia.diferenciales?.esFeriado),
@@ -992,6 +1007,7 @@ function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): Diferenc
         diferentesViasDiferentesPatologia: Boolean(cirugia.diferenciales?.diferentesViasDiferentesPatologia),
         dobleCirugia,
         practicaBaseId: baseIdFinal ? String(baseIdFinal) : '',
+        practicaSecundariaId: secundariaIdFinal ? String(secundariaIdFinal) : '',
     }
 }
 
@@ -1392,6 +1408,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     return 0
                 })(),
                 esPracticaBase: Boolean(p.diferenciales?.esPracticaBase),
+                esPracticaSecundaria: Boolean(p.diferenciales?.esPracticaSecundaria),
                 aplicaDiferencial: Boolean(p.diferenciales?.aplicaDiferencial),
             }
 
@@ -2468,9 +2485,26 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)[0]?.practicaId ??
                 cirugia.practicas[0]?.practicaId ??
                 null)
+        const practicaSecundariaId = draft.practicaSecundariaId
+            ? Number.parseInt(draft.practicaSecundariaId, 10)
+            : (cirugia.practicas
+                .slice()
+                .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)
+                .find((p) => p.practicaId !== practicaBaseId)?.practicaId ??
+                null)
 
         if (draft.dobleCirugia && (!practicaBaseId || !cirugia.practicas.some((p) => p.practicaId === practicaBaseId))) {
             setError('Debe seleccionar la práctica principal para aplicar doble cirugía')
+            return
+        }
+
+        if (draft.dobleCirugia && (!practicaSecundariaId || !cirugia.practicas.some((p) => p.practicaId === practicaSecundariaId))) {
+            setError('Debe seleccionar la práctica secundaria para aplicar doble cirugía')
+            return
+        }
+
+        if (draft.dobleCirugia && practicaBaseId && practicaSecundariaId && practicaBaseId === practicaSecundariaId) {
+            setError('La práctica principal y la secundaria deben ser distintas')
             return
         }
 
@@ -2484,6 +2518,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     ingresoId: contexto.ingreso.id,
                     cirugiaProgramadaId: cirugia.cirugiaId,
                     practicaBaseId: draft.dobleCirugia ? practicaBaseId : null,
+                    practicaSecundariaId: draft.dobleCirugia ? practicaSecundariaId : null,
                     esFeriado: draft.esFeriado,
                     esNocturna: draft.esNocturna,
                     mismaViaPatologia: draft.mismaViaPatologia,
@@ -3012,7 +3047,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                     <div>
                                         <h4 className="text-sm font-semibold text-amber-900">Diferenciales de cirugía</h4>
                                         <p className="text-xs text-amber-700">
-                                            En cirugía múltiple, elegí la práctica principal (mayor total) y el sistema aplicará diferenciales quirúrgicos al resto.
+                                            En cirugía múltiple, elegí práctica principal y práctica secundaria. El diferencial quirúrgico se aplica solo a la secundaria.
                                         </p>
                                         <p className="text-xs text-amber-700">
                                             Por ahora, feriado y nocturna no impactan montos en facturación.
@@ -3026,9 +3061,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
                                     {cirugiasEditables.map((cirugia) => {
                                         const draft = diferencialesCirugiaEdit[cirugia.cirugiaId] ?? buildDiferencialesCirugiaState(cirugia)
-                                        const practicaBaseId = draft.practicaBaseId ? Number.parseInt(draft.practicaBaseId, 10) : null
-                                        const practicaBase = cirugia.practicas.find((p) => p.practicaId === practicaBaseId) ?? null
-                                        const practicasConDiferencial = cirugia.practicas.filter((p) => p.practicaId !== practicaBaseId)
                                         const etiquetasAplicadas = etiquetasCamposDiferencialCirugia(draft)
 
                                         return (
@@ -3098,7 +3130,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 [cirugia.cirugiaId]: { ...draft, diferentesViasPatologia: e.target.checked },
                                                             }))}
                                                         />
-                                                        Distintas vías / misma patología
+                                                        Misma vía / misma patología
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3110,7 +3142,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 [cirugia.cirugiaId]: { ...draft, diferentesViasDiferentesPatologia: e.target.checked },
                                                             }))}
                                                         />
-                                                        Distintas vías / distinta patología
+                                                        Distinta vía / distinta patología
                                                     </label>
                                                     <label className="inline-flex items-center gap-2 font-semibold">
                                                         <input
@@ -3121,13 +3153,23 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 if (cirugia.practicas.length < 2) return
                                                                 if (diferencialesCirugiaCongelados) return
                                                                 const checked = e.target.checked
+                                                                const practicaBaseDefault =
+                                                                    draft.practicaBaseId || String(cirugia.practicas[0]?.practicaId ?? '')
+                                                                const practicaSecundariaDefault =
+                                                                    cirugia.practicas
+                                                                        .find((p) => String(p.practicaId) !== practicaBaseDefault)
+                                                                        ?.practicaId ??
+                                                                    null
                                                                 setDiferencialesCirugiaEdit((prev) => ({
                                                                     ...prev,
                                                                     [cirugia.cirugiaId]: {
                                                                         ...draft,
                                                                         dobleCirugia: checked,
                                                                         practicaBaseId: checked
-                                                                            ? (draft.practicaBaseId || String(cirugia.practicas[0]?.practicaId ?? ''))
+                                                                            ? practicaBaseDefault
+                                                                            : '',
+                                                                        practicaSecundariaId: checked
+                                                                            ? (draft.practicaSecundariaId || (practicaSecundariaDefault ? String(practicaSecundariaDefault) : ''))
                                                                             : '',
                                                                     },
                                                                 }))
@@ -3148,10 +3190,24 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         Práctica principal (100% quirúrgico)
                                                         <select
                                                             value={draft.practicaBaseId}
-                                                            onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
-                                                                ...prev,
-                                                                [cirugia.cirugiaId]: { ...draft, practicaBaseId: e.target.value },
-                                                            }))}
+                                                            onChange={(e) => {
+                                                                const baseId = e.target.value
+                                                                setDiferencialesCirugiaEdit((prev) => {
+                                                                    const secundariaActual = draft.practicaSecundariaId
+                                                                    const secundariaValida =
+                                                                        secundariaActual && secundariaActual !== baseId
+                                                                            ? secundariaActual
+                                                                            : ''
+                                                                    return {
+                                                                        ...prev,
+                                                                        [cirugia.cirugiaId]: {
+                                                                            ...draft,
+                                                                            practicaBaseId: baseId,
+                                                                            practicaSecundariaId: secundariaValida,
+                                                                        },
+                                                                    }
+                                                                })
+                                                            }}
                                                             disabled={diferencialesCirugiaCongelados || !draft.dobleCirugia}
                                                             className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs disabled:bg-amber-100"
                                                         >
@@ -3163,12 +3219,27 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             ))}
                                                         </select>
                                                     </label>
-                                                    <div className="text-xs text-amber-900 rounded border border-amber-200 bg-white px-2 py-2">
-                                                        <div><span className="font-semibold">Principal:</span> {practicaBase ? `${practicaBase.descripcion} (${formatCurrency(practicaBase.importeTotalReferencia)})` : 'Sin selección'}</div>
-                                                        <div><span className="font-semibold">Secundarias:</span> {draft.dobleCirugia ? (practicasConDiferencial.length > 0 ? practicasConDiferencial.map((p) => p.descripcion).join(' · ') : 'Ninguna') : 'No aplica (cirugía no múltiple)'}</div>
-                                                        <div><span className="font-semibold">Regla:</span> en principal no se aplican recargos quirúrgicos de múltiple; por ahora feriado/nocturna no impactan monto.</div>
-                                                        <div><span className="font-semibold">Criterio automático:</span> mayor importe TOTAL.</div>
-                                                    </div>
+                                                    <label className="text-xs text-amber-900">
+                                                        Práctica secundaria (con diferencial)
+                                                        <select
+                                                            value={draft.practicaSecundariaId}
+                                                            onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
+                                                                ...prev,
+                                                                [cirugia.cirugiaId]: { ...draft, practicaSecundariaId: e.target.value },
+                                                            }))}
+                                                            disabled={diferencialesCirugiaCongelados || !draft.dobleCirugia}
+                                                            className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs disabled:bg-amber-100"
+                                                        >
+                                                            <option value="">-- Seleccionar práctica secundaria --</option>
+                                                            {cirugia.practicas
+                                                                .filter((practica) => String(practica.practicaId) !== draft.practicaBaseId)
+                                                                .map((practica) => (
+                                                                    <option key={practica.practicaId} value={String(practica.practicaId)}>
+                                                                        {practica.descripcion} · Total {formatCurrency(practica.importeTotalReferencia)} · Gastos {formatCurrency(practica.importeGastosReferencia)}
+                                                                    </option>
+                                                                ))}
+                                                        </select>
+                                                    </label>
                                                 </div>
                                             </div>
                                         )
@@ -3594,7 +3665,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 if (p.diferenciales?.dobleCirugia && p.diferenciales?.esPracticaBase) {
                                                     diferencialesActivos.push('Principal (100% quirúrgico en doble cirugía)')
                                                 }
-                                                if (p.diferenciales?.dobleCirugia && !p.diferenciales?.esPracticaBase && p.diferenciales?.aplicaDiferencial) {
+                                                if (p.diferenciales?.dobleCirugia && p.diferenciales?.esPracticaSecundaria && p.diferenciales?.aplicaDiferencial) {
                                                     diferencialesActivos.push('Secundaria con diferencial')
                                                 }
                                                 const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)

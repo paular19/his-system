@@ -220,6 +220,7 @@ export const ActualizarDiferencialesCirugiaFacturacionSchema = z.object({
     ingresoId: z.number().int().positive(),
     cirugiaProgramadaId: z.number().int().positive(),
     practicaBaseId: z.number().int().positive().optional().nullable(),
+    practicaSecundariaId: z.number().int().positive().optional().nullable(),
     esFeriado: z.boolean().default(false),
     esNocturna: z.boolean().default(false),
     mismaViaPatologia: z.boolean().default(false),

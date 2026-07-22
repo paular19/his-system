@@ -1019,6 +1019,25 @@ function claveCirugiaPracticaSinFecha(codigo: string, cantidad: number): string 
     return `${normalizarCodigoPracticaFacturacion(codigo)}:${Number(cantidad)}`
 }
 
+function parsePracticaSecundariaIdDesdeDescripcion(
+    descripcion: string | null | undefined
+): number | null {
+    if (!descripcion) return null
+    const match = /SECUNDARIA:(\d+)/.exec(descripcion)
+    if (!match || !match[1]) return null
+    const id = Number.parseInt(match[1], 10)
+    return Number.isFinite(id) && id > 0 ? id : null
+}
+
+function buildDescripcionDiferencialCirugiaFacturacion(
+    practicaSecundariaId: number | null | undefined
+): string {
+    if (practicaSecundariaId && Number.isFinite(practicaSecundariaId) && practicaSecundariaId > 0) {
+        return `Diferenciales de cirugía configurados en facturación [SECUNDARIA:${practicaSecundariaId}]`
+    }
+    return 'Diferenciales de cirugía configurados en facturación'
+}
+
 function resolverInfoCirugiaConFallback<T extends { cirugiaId: number }>(
     porClaveCompleta: Map<string, T>,
     porClaveSinFecha: Map<string, T[]>,
@@ -1366,6 +1385,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 fechaCirugia: true,
                 diferenciales: {
                     select: {
+                        descripcion: true,
                         esFeriado: true,
                         esNocturna: true,
                         mismaViaPatologia: true,
@@ -1598,19 +1618,36 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     >()
     const diferencialesPorPracticaId = new Map<number, NonNullable<PrestacionFacturableItem['diferenciales']>>()
     const practicaBaseAutomaticaPorCirugia = new Map<number, number>()
+    const practicaSecundariaAutomaticaPorCirugia = new Map<number, number>()
 
     for (const cirugia of ingreso.cirugiasProgramadas) {
         const practicaBaseId =
             cirugia.diferenciales.find((d) => d.practicaBaseId != null)?.practicaBaseId ?? null
+        const mismaViaPatologia = cirugia.diferenciales.some((d) => d.mismaViaPatologia)
+        const diferentesViasPatologia = cirugia.diferenciales.some((d) => d.diferentesViasPatologia)
+        const diferentesViasDiferentesPatologia = cirugia.diferenciales.some((d) => d.diferentesViasDiferentesPatologia)
+        const dobleCirugia = cirugia.diferenciales.some((d) => d.dobleCirugia)
+        const fallbackMismaViaMismaPatologia =
+            dobleCirugia &&
+            !mismaViaPatologia &&
+            !diferentesViasPatologia &&
+            !diferentesViasDiferentesPatologia
+        const practicaSecundariaId =
+            cirugia.diferenciales
+                .map((d) => parsePracticaSecundariaIdDesdeDescripcion(d.descripcion))
+                .find((id) => id != null) ??
+            null
         const diferenciales: NonNullable<PrestacionFacturableItem['diferenciales']> = {
             esFeriado: cirugia.diferenciales.some((d) => d.esFeriado),
             esNocturna: cirugia.diferenciales.some((d) => d.esNocturna),
-            mismaViaPatologia: cirugia.diferenciales.some((d) => d.mismaViaPatologia),
-            diferentesViasPatologia: cirugia.diferenciales.some((d) => d.diferentesViasPatologia),
-            diferentesViasDiferentesPatologia: cirugia.diferenciales.some((d) => d.diferentesViasDiferentesPatologia),
-            dobleCirugia: cirugia.diferenciales.some((d) => d.dobleCirugia),
+            mismaViaPatologia,
+            diferentesViasPatologia: diferentesViasPatologia || fallbackMismaViaMismaPatologia,
+            diferentesViasDiferentesPatologia,
+            dobleCirugia,
             practicaBaseId,
+            practicaSecundariaId,
             esPracticaBase: false,
+            esPracticaSecundaria: false,
             aplicaDiferencial: false,
         }
 
@@ -1688,6 +1725,56 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     for (const [cirugiaId, candidata] of candidatasBasePorCirugia) {
         practicaBaseAutomaticaPorCirugia.set(cirugiaId, candidata.practicaId)
+    }
+
+    const candidatasSecundariaPorCirugia = new Map<
+        number,
+        { practicaId: number; gastoReferencia: number; importeReferencia: number }
+    >()
+
+    for (const practicaIngreso of ingreso.practicas) {
+        const infoCirugia = resolverInfoCirugiaConFallback(
+            cirugiaPracticas,
+            cirugiaPracticasPorCodigoCantidad,
+            practicaIngreso.codigoPractica,
+            Number(practicaIngreso.cantidad),
+            practicaIngreso.fecha
+        )
+        if (!infoCirugia?.diferenciales?.dobleCirugia) continue
+
+        const practicaBaseId = practicaBaseAutomaticaPorCirugia.get(infoCirugia.cirugiaId) ?? null
+        if (practicaBaseId != null && practicaIngreso.id === practicaBaseId) continue
+
+        const cantidad = Math.max(1, Number(practicaIngreso.cantidad) || 1)
+        const importeReferencia =
+            practicaIngreso.importeTotal != null ? Number(String(practicaIngreso.importeTotal)) : 0
+        const valorGastosUnitario =
+            practicaIngreso.nomencladorPractica?.valorGastos != null
+                ? Number(practicaIngreso.nomencladorPractica.valorGastos)
+                : null
+        const esGastoPorCodigo = normalizarCodigoPracticaFacturacion(practicaIngreso.codigoPractica).includes('GA')
+        const esGastoPorDescripcion = descripcionEsGasto(practicaIngreso.nomencladorPractica?.descripcion)
+        const gastoReferencia =
+            valorGastosUnitario != null && valorGastosUnitario > 0
+                ? Number((valorGastosUnitario * cantidad).toFixed(2))
+                : (esGastoPorCodigo || esGastoPorDescripcion ? importeReferencia : 0)
+
+        const actual = candidatasSecundariaPorCirugia.get(infoCirugia.cirugiaId)
+        if (
+            !actual ||
+            importeReferencia > actual.importeReferencia ||
+            (importeReferencia === actual.importeReferencia && gastoReferencia > actual.gastoReferencia)
+        ) {
+            candidatasSecundariaPorCirugia.set(infoCirugia.cirugiaId, {
+                practicaId: practicaIngreso.id,
+                gastoReferencia,
+                importeReferencia,
+            })
+        }
+    }
+
+    for (const [cirugiaId, candidata] of candidatasSecundariaPorCirugia) {
+        practicaSecundariaAutomaticaPorCirugia.set(cirugiaId, candidata.practicaId)
     }
 
     for (const o of ingreso.ordenes) {
@@ -1973,10 +2060,22 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 null
             )
             : null
+        const practicaSecundariaIdEfectiva = diferencialCirugia
+            ? (
+                diferencialCirugia.diferenciales.practicaSecundariaId ??
+                practicaSecundariaAutomaticaPorCirugia.get(diferencialCirugia.cirugiaId) ??
+                null
+            )
+            : null
         const esPracticaBaseDobleCirugia = Boolean(
             diferencialCirugia?.diferenciales?.dobleCirugia &&
             practicaBaseIdEfectiva != null &&
             practicaBaseIdEfectiva === p.id
+        )
+        const esPracticaSecundariaDobleCirugia = Boolean(
+            diferencialCirugia?.diferenciales?.dobleCirugia &&
+            practicaSecundariaIdEfectiva != null &&
+            practicaSecundariaIdEfectiva === p.id
         )
         const diferencialesCirugiaRaw = diferencialCirugia?.diferenciales ?? null
         const diferencialesCirugiaCalculados = (() => {
@@ -1989,17 +2088,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 esNocturna: false,
             }
 
-            if (!esPracticaBaseDobleCirugia) return diferencialesSoloMultiple
-
-            // En doble cirugía, la práctica principal queda al 100% quirúrgico,
-            // y los recargos se aplican solo a las secundarias.
-            return {
-                ...diferencialesSoloMultiple,
-                mismaViaPatologia: false,
-                diferentesViasPatologia: false,
-                diferentesViasDiferentesPatologia: false,
-                dobleCirugia: false,
+            // En doble cirugía solo aplica diferencial a la práctica secundaria seleccionada.
+            if (diferencialesCirugiaRaw.dobleCirugia) {
+                return esPracticaSecundariaDobleCirugia ? diferencialesSoloMultiple : null
             }
+
+            return diferencialesSoloMultiple
         })()
         const aplicarDiferencialesCirugia = tieneDiferencialesActivos(diferencialesCirugiaCalculados)
 
@@ -2114,7 +2208,9 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             ? {
                 ...diferencialCirugia.diferenciales,
                 practicaBaseId: practicaBaseIdEfectiva,
+                practicaSecundariaId: practicaSecundariaIdEfectiva,
                 esPracticaBase: esPracticaBaseDobleCirugia,
+                esPracticaSecundaria: esPracticaSecundariaDobleCirugia,
                 aplicaDiferencial: aplicarDiferencialesCirugia,
             }
             : null
@@ -3736,13 +3832,29 @@ export async function actualizarDiferencialesCirugiaFacturacion(
         }
 
         if (data.dobleCirugia && !data.practicaBaseId) {
-            throw new Error('Debe seleccionar la cirugía base al 100% para usar doble cirugía')
+            throw new Error('Debe seleccionar la práctica principal para usar doble cirugía')
         }
 
-        if (data.practicaBaseId) {
-            const practicaBase = await tx.practica.findFirst({
+        if (data.dobleCirugia && !data.practicaSecundariaId) {
+            throw new Error('Debe seleccionar la cirugía secundaria para usar doble cirugía')
+        }
+
+        if (
+            data.dobleCirugia &&
+            data.practicaBaseId &&
+            data.practicaSecundariaId &&
+            data.practicaBaseId === data.practicaSecundariaId
+        ) {
+            throw new Error('La cirugía principal y secundaria deben ser prácticas distintas')
+        }
+
+        const validarPracticaEnCirugia = async (
+            practicaId: number,
+            etiqueta: 'principal' | 'secundaria'
+        ) => {
+            const practica = await tx.practica.findFirst({
                 where: {
-                    id: data.practicaBaseId,
+                    id: practicaId,
                     ingresoId: data.ingresoId,
                 },
                 select: {
@@ -3753,8 +3865,8 @@ export async function actualizarDiferencialesCirugiaFacturacion(
                 },
             })
 
-            if (!practicaBase) {
-                throw new Error('La práctica base seleccionada no pertenece al ingreso')
+            if (!practica) {
+                throw new Error(`La práctica ${etiqueta} seleccionada no pertenece al ingreso`)
             }
 
             const clavesCirugia = new Set(
@@ -3762,33 +3874,43 @@ export async function actualizarDiferencialesCirugiaFacturacion(
                     claveCirugiaPractica(p.codigo, Number(p.cantidad), cirugia.fechaCirugia)
                 )
             )
-            const clavePracticaBase = claveCirugiaPractica(
-                practicaBase.codigoPractica,
-                Number(practicaBase.cantidad),
-                practicaBase.fecha
+            const clavePractica = claveCirugiaPractica(
+                practica.codigoPractica,
+                Number(practica.cantidad),
+                practica.fecha
             )
 
-            const coincideExacto = clavesCirugia.has(clavePracticaBase)
-            const coincidePorCodigoCantidadUnico = (() => {
+            const coincideExacto = clavesCirugia.has(clavePractica)
+            const coincidePorCodigoCantidad = (() => {
                 if (coincideExacto) return true
 
-                const claveBaseSinFecha = claveCirugiaPracticaSinFecha(
-                    practicaBase.codigoPractica,
-                    Number(practicaBase.cantidad)
+                const claveSinFecha = claveCirugiaPracticaSinFecha(
+                    practica.codigoPractica,
+                    Number(practica.cantidad)
                 )
-                const coincidencias = cirugia.practicas.filter(
+                return cirugia.practicas.some(
                     (p) =>
-                        claveCirugiaPracticaSinFecha(p.codigo, Number(p.cantidad)) === claveBaseSinFecha
+                        claveCirugiaPracticaSinFecha(p.codigo, Number(p.cantidad)) === claveSinFecha
                 )
-                return coincidencias.length === 1
             })()
 
-            if (!coincidePorCodigoCantidadUnico) {
-                throw new Error('La práctica base seleccionada no corresponde a la cirugía indicada')
+            if (!coincidePorCodigoCantidad) {
+                throw new Error(`La práctica ${etiqueta} seleccionada no corresponde a la cirugía indicada`)
             }
         }
 
+        if (data.practicaBaseId) {
+            await validarPracticaEnCirugia(data.practicaBaseId, 'principal')
+        }
+
+        if (data.practicaSecundariaId) {
+            await validarPracticaEnCirugia(data.practicaSecundariaId, 'secundaria')
+        }
+
         const payload = {
+            descripcion: buildDescripcionDiferencialCirugiaFacturacion(
+                data.dobleCirugia ? (data.practicaSecundariaId ?? null) : null
+            ),
             esFeriado: data.esFeriado,
             esNocturna: data.esNocturna,
             mismaViaPatologia: data.mismaViaPatologia,
@@ -3807,7 +3929,6 @@ export async function actualizarDiferencialesCirugiaFacturacion(
                 data: {
                     cirugiaId: cirugia.id,
                     tipo: 'QUIRURGICA',
-                    descripcion: 'Diferenciales de cirugía configurados en facturación',
                     ...payload,
                 },
             })

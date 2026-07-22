@@ -72,7 +72,9 @@ export interface PrestacionFacturableItem {
         diferentesViasDiferentesPatologia: boolean
         dobleCirugia?: boolean
         practicaBaseId?: number | null
+        practicaSecundariaId?: number | null
         esPracticaBase?: boolean
+        esPracticaSecundaria?: boolean
         aplicaDiferencial?: boolean
     } | null
     desglose?: {

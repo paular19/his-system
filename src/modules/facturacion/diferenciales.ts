@@ -83,8 +83,8 @@ export function resumenDiferenciales(diferenciales?: DiferencialesFacturacion | 
     if (diferenciales.esFeriado) etiquetas.push('Feriado')
     if (diferenciales.esNocturna) etiquetas.push('Nocturna')
     if (diferenciales.mismaViaPatologia) etiquetas.push('Misma vía / distinta patología')
-    if (diferenciales.diferentesViasPatologia) etiquetas.push('Distintas vías / misma patología')
-    if (diferenciales.diferentesViasDiferentesPatologia) etiquetas.push('Distintas vías / distinta patología')
+    if (diferenciales.diferentesViasPatologia) etiquetas.push('Misma vía / misma patología')
+    if (diferenciales.diferentesViasDiferentesPatologia) etiquetas.push('Distinta vía / distinta patología')
     if (diferenciales.dobleCirugia) etiquetas.push('Doble cirugía')
     return etiquetas
 }

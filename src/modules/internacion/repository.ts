@@ -2018,6 +2018,8 @@ export async function guardarCondicionalCirugiaMultiple(
 
     const mismaViaPatologia =
       data.cirugiasMultiples && data.tipoCirugiaMultiple === 'MISMA_VIA_DISTINTA_PATOLOGIA'
+    const diferentesViasPatologia =
+      data.cirugiasMultiples && data.tipoCirugiaMultiple === 'MISMA_VIA_MISMA_PATOLOGIA'
     const diferentesViasDiferentesPatologia =
       data.cirugiasMultiples && data.tipoCirugiaMultiple === 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
 
@@ -2025,7 +2027,7 @@ export async function guardarCondicionalCirugiaMultiple(
       esFeriado: false,
       esNocturna: false,
       mismaViaPatologia,
-      diferentesViasPatologia: false,
+      diferentesViasPatologia,
       diferentesViasDiferentesPatologia,
       dobleCirugia: data.cirugiasMultiples,
       practicaBaseId: null,

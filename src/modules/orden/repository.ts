@@ -1061,7 +1061,7 @@ export async function buscarPracticas(
   query: string,
   convenioId?: number
 ): Promise<NomencladorPracticaItem[]> {
-  const whereBase = {
+  const whereBase: Prisma.NomencladorPracticaWhereInput = {
     OR: [
       { descripcion: { contains: query, mode: 'insensitive' as const } },
       { codigo: { contains: query, mode: 'insensitive' as const } },

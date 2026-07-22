@@ -429,6 +429,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     <PracticaSection
                                         ingresoId={ingresoId}
                                         convenioId={detalle.obraSocial?.id ?? null}
+                                        sectorInternacionActual={detalle.cama?.sector ?? null}
                                         practicas={detalle.practicas}
                                         puedeCrear={puedeEditarPracticas}
                                         matriculaTratanteDefault={matriculaTratanteDefault}
@@ -455,6 +456,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     <CirugiaUrgenciaSection
                                         ingresoId={ingresoId}
                                         pacienteId={detalle.paciente.id}
+                                        sectorInternacionActual={detalle.cama?.sector ?? null}
                                         obraSocialIdInicial={detalle.obraSocial?.id ?? null}
                                         planIdInicial={detalle.plan?.id ?? null}
                                         obraSocialCoseguroIdInicial={detalle.obraSocialCoseguroId ?? null}

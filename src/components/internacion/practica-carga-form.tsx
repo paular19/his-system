@@ -30,6 +30,8 @@ interface NomencladorItem {
     valorGastos: number | null
 }
 
+type TipoInternacionFiltro = 'UTI' | 'INTERNACION_NORMAL'
+
 interface ProfesionalConMatricula {
     id: number
     nombre: string
@@ -62,6 +64,7 @@ interface GuardarResult {
 interface PracticaCargaFormProps {
     convenioId: number | null
     matriculaTratanteDefault?: number | null
+    sectorInternacionActual?: string | null
     onGuardar: (entradas: PracticaCargaEntrada[]) => Promise<GuardarResult>
     onCancel?: () => void
     titulo?: string
@@ -85,9 +88,15 @@ function etiquetaSubitem(subitem: SubitemCodigo): string {
     return 'Ayudante 3 (A3)'
 }
 
+function esSectorUti(sector: string | null | undefined): boolean {
+    const normalized = (sector ?? '').trim().toUpperCase()
+    return normalized === 'CU' || normalized === 'UTI' || normalized === 'TERAPIA_INTENSIVA'
+}
+
 export function PracticaCargaForm({
     convenioId,
     matriculaTratanteDefault,
+    sectorInternacionActual,
     onGuardar,
     onCancel,
     titulo = 'Nueva practica',
@@ -95,6 +104,9 @@ export function PracticaCargaForm({
     const datalistId = `clasificacion-practica-list-${useId().replace(/:/g, '')}`
 
     const [busqueda, setBusqueda] = useState('')
+    const [tipoInternacionFiltro, setTipoInternacionFiltro] = useState<TipoInternacionFiltro>(
+        esSectorUti(sectorInternacionActual) ? 'UTI' : 'INTERNACION_NORMAL'
+    )
     const [resultados, setResultados] = useState<NomencladorItem[]>([])
     const [buscando, setBuscando] = useState(false)
     const [practicaSeleccionada, setPracticaSeleccionada] = useState<NomencladorItem | null>(null)
@@ -212,6 +224,10 @@ export function PracticaCargaForm({
             cancelled = true
         }
     }, [])
+
+    useEffect(() => {
+        setTipoInternacionFiltro(esSectorUti(sectorInternacionActual) ? 'UTI' : 'INTERNACION_NORMAL')
+    }, [sectorInternacionActual])
 
     useEffect(() => {
         if (subitemsSeleccionadosForm.length === 0) {
@@ -509,7 +525,26 @@ export function PracticaCargaForm({
             <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{titulo}</p>
 
             <div className="relative">
-                <label className="block text-xs text-gray-500 mb-1">Buscar en nomenclador</label>
+                <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
+                    <label className="block text-xs text-gray-500">Buscar en nomenclador</label>
+                    <label className="inline-flex items-center gap-2 text-xs text-gray-600">
+                        Tipo de internación
+                        <select
+                            value={tipoInternacionFiltro}
+                            onChange={(e) => {
+                                const next = e.target.value as TipoInternacionFiltro
+                                setTipoInternacionFiltro(next)
+                            }}
+                            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700"
+                        >
+                            <option value="INTERNACION_NORMAL">PISO (Internación normal)</option>
+                            <option value="UTI">UTI (CU)</option>
+                        </select>
+                    </label>
+                </div>
+                <p className="mb-2 text-[11px] text-gray-500">
+                    Este selector determina el contexto del paciente. No filtra por códigos porque el nomenclador no distingue UTI/PISO.
+                </p>
                 <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
                     <input

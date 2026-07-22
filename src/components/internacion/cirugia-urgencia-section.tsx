@@ -127,6 +127,10 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
     return normalizado.length > 0 ? normalizado : null
 }
 
+function grupoTieneNumeroAutorizacion(grupo: GrupoPracticasAutorizadasCirugia): boolean {
+    return normalizarNumeroAutorizacion(grupo.numeroAutorizacion) != null
+}
+
 function practicaInternacionFacturada(practica: PracticaInternacionItem | null | undefined): boolean {
     if (!practica) return false
     return Boolean(practica.facturada)
@@ -135,6 +139,7 @@ function practicaInternacionFacturada(practica: PracticaInternacionItem | null |
 interface CirugiaUrgenciaSectionProps {
     ingresoId: number
     pacienteId: number
+    sectorInternacionActual?: string | null
     obraSocialIdInicial: number | null
     planIdInicial: number | null
     obraSocialCoseguroIdInicial: number | null
@@ -153,6 +158,7 @@ interface CirugiaUrgenciaSectionProps {
 export function CirugiaUrgenciaSection({
     ingresoId,
     pacienteId,
+    sectorInternacionActual,
     obraSocialIdInicial,
     planIdInicial,
     obraSocialCoseguroIdInicial,
@@ -948,6 +954,9 @@ export function CirugiaUrgenciaSection({
 
                             <PracticaCargaForm
                                 convenioId={obraSocialIdInicial}
+                                sectorInternacionActual={
+                                    cirugias.find((cirugia) => cirugia.id === cirugiaActivaId)?.cama?.sector ?? sectorInternacionActual
+                                }
                                 matriculaTratanteDefault={matriculaTratanteDefault}
                                 onGuardar={guardarPracticasEnCirugia}
                                 onCancel={() => {
@@ -1043,6 +1052,12 @@ export function CirugiaUrgenciaSection({
                                     (id) => estadoPracticaCirugiaPorId.get(id)?.pendiente === true
                                 )
                                 const gruposAutorizadosCirugia = gruposAutorizadosPorCirugia.get(c.id) ?? []
+                                const gruposPendientesAutorizacion = gruposAutorizadosCirugia.filter(
+                                    (grupo) => !grupoTieneNumeroAutorizacion(grupo)
+                                ).length
+                                const gruposYaAutorizados = gruposAutorizadosCirugia.filter(
+                                    (grupo) => grupoTieneNumeroAutorizacion(grupo)
+                                ).length
                                 const todasSeleccionadasCirugia =
                                     practicaIdsPendientesCirugiaItem.length > 0
                                     && practicaIdsPendientesCirugiaItem.every((id) => practicasSeleccionadasVigentes.includes(id))
@@ -1080,9 +1095,9 @@ export function CirugiaUrgenciaSection({
                                         </div>
 
                                         <div>
-                                            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">Pendientes de autorizacion</p>
+                                            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">Pendientes de generación</p>
                                             {practicasPendientesCirugiaItem.length === 0 ? (
-                                                <p className="text-xs text-gray-500">No hay practicas pendientes.</p>
+                                                <p className="text-xs text-gray-500">No hay practicas pendientes de generación.</p>
                                             ) : (
                                                 <div className="overflow-x-auto border rounded-md">
                                                     <table className="min-w-full text-xs">
@@ -1102,7 +1117,7 @@ export function CirugiaUrgenciaSection({
                                                                 <th className="text-left px-2 py-1 border-b">Codigo</th>
                                                                 <th className="text-left px-2 py-1 border-b">Descripcion</th>
                                                                 <th className="text-right px-2 py-1 border-b">Cant.</th>
-                                                                <th className="text-left px-2 py-1 border-b">Autorizacion</th>
+                                                                <th className="text-left px-2 py-1 border-b">Estado</th>
                                                                 {puedeCrear && <th className="text-right px-2 py-1 border-b">Acciones</th>}
                                                             </tr>
                                                         </thead>
@@ -1137,7 +1152,7 @@ export function CirugiaUrgenciaSection({
                                                                         <td className="px-2 py-1 border-b font-mono">{p.codigo}</td>
                                                                         <td className="px-2 py-1 border-b">{p.descripcion}</td>
                                                                         <td className="px-2 py-1 border-b text-right">{String(Number(p.cantidad))}</td>
-                                                                        <td className="px-2 py-1 border-b">Pendiente</td>
+                                                                        <td className="px-2 py-1 border-b">Pendiente de generación</td>
                                                                         {puedeCrear && (
                                                                             <td className="px-2 py-1 border-b">
                                                                                 <div className="flex items-center justify-end gap-1.5">
@@ -1177,10 +1192,13 @@ export function CirugiaUrgenciaSection({
 
                                         <div className="space-y-2">
                                             <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
-                                                Ya autorizadas ({gruposAutorizadosCirugia.length})
+                                                Órdenes generadas ({gruposAutorizadosCirugia.length})
+                                            </p>
+                                            <p className="text-[11px] text-emerald-800">
+                                                Pendientes de autorización: {gruposPendientesAutorizacion} · Ya autorizadas: {gruposYaAutorizados}
                                             </p>
                                             {gruposAutorizadosCirugia.length === 0 ? (
-                                                <p className="text-xs text-gray-400">No hay practicas autorizadas.</p>
+                                                <p className="text-xs text-gray-400">No hay órdenes generadas.</p>
                                             ) : (
                                                 gruposAutorizadosCirugia.map((grupo) => {
                                                     const grupoKey = `${c.id}-${grupo.key}`
@@ -1191,6 +1209,7 @@ export function CirugiaUrgenciaSection({
                                                         ? grupo.practicas
                                                         : grupo.practicas.slice(0, limitePracticas)
                                                     const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
+                                                    const grupoYaAutorizado = grupoTieneNumeroAutorizacion(grupo)
                                                     const destinoAbrir =
                                                         grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                                             ? `/dashboard/ambulatorio/${grupo.puestoNumero}/${grupo.ordenNumero}`
@@ -1266,6 +1285,9 @@ export function CirugiaUrgenciaSection({
                                                                             )}
                                                                         </div>
                                                                         <p className="text-emerald-800">N° autorizacion: {grupo.numeroAutorizacion ?? '-'}</p>
+                                                                        <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-700 font-medium'}>
+                                                                            Estado: {grupoYaAutorizado ? 'Ya autorizada' : 'Pendiente de autorización'}
+                                                                        </p>
                                                                         <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
                                                                     </div>
 

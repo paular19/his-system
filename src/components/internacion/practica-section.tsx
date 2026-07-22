@@ -23,8 +23,13 @@ import {
 } from '@/lib/practicas-subitems'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
-import { agruparPracticasAutorizadasPorOrden, obtenerDestinoGrupoPracticasAutorizadas } from '@/lib/practicas-autorizadas'
+import {
+    agruparPracticasAutorizadasPorOrden,
+    obtenerDestinoGrupoPracticasAutorizadas,
+    type GrupoPracticasAutorizadas,
+} from '@/lib/practicas-autorizadas'
 import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 
 interface NomencladorItem {
     convenioId: number
@@ -50,6 +55,7 @@ const formatoMoneda = new Intl.NumberFormat('es-AR', {
 })
 
 const MATRICULA_ANESTESISTA_DEFAULT = 6
+const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const PRACTICAS_LISTA_POR_PAGINA = 8
 const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
 const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
@@ -112,6 +118,7 @@ function clasificacionInferidaPractica(practica: Pick<PracticaItem, 'codigoPract
 interface PracticaSectionProps {
     ingresoId: number
     convenioId: number | null
+    sectorInternacionActual?: string | null
     practicas: PracticaItem[]
     puedeCrear: boolean
     matriculaTratanteDefault?: number | null
@@ -120,14 +127,6 @@ interface PracticaSectionProps {
     permitirGenerarSinPendientes?: boolean
     incluirPracticaIdsEnGenerarAutorizacion?: boolean
     forzarNavegacionCompletaGenerarAutorizacion?: boolean
-}
-
-interface OrdenGeneradaGrupo {
-    clasificacion: string
-    puestoNumero: number
-    numero: number
-    practicaIds: number[]
-    seleccionadaImpresion: boolean
 }
 
 type PracticaEditDraft = {
@@ -150,9 +149,19 @@ function practicaFacturada(practica: PracticaItem): boolean {
     return Boolean((practica.puestoNumero ?? 0) > 0 && (practica.ordenNumero ?? 0) > 0)
 }
 
+function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
+    const normalizada = value?.trim() ?? ''
+    return normalizada.length > 0 ? normalizada : null
+}
+
+function grupoTieneNumeroAutorizacion(grupo: GrupoPracticasAutorizadas): boolean {
+    return normalizarNumeroAutorizacion(grupo.numeroAutorizacion) != null
+}
+
 export function PracticaSection({
     ingresoId,
     convenioId,
+    sectorInternacionActual,
     practicas: practicasIniciales,
     puedeCrear,
     matriculaTratanteDefault,
@@ -210,7 +219,8 @@ export function PracticaSection({
     const [mostrarPopupTitularAgrupada, setMostrarPopupTitularAgrupada] = useState(false)
     const [imprimirTrasAgrupar, setImprimirTrasAgrupar] = useState(false)
     const [clasificacionesExpandidas, setClasificacionesExpandidas] = useState<Record<string, boolean>>({})
-    const [ordenesGeneradas, setOrdenesGeneradas] = useState<OrdenGeneradaGrupo[]>([])
+    const [medicoFirmanteId, setMedicoFirmanteId] = useState('')
+    const [firmanteEditadoManualmente, setFirmanteEditadoManualmente] = useState(false)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
     const [practicaEditando, setPracticaEditando] = useState<PracticaItem | null>(null)
@@ -1001,6 +1011,11 @@ export function PracticaSection({
         setError(null)
         setGenerandoOrdenes(true)
         try {
+            const profesionalIdFirmante = Number.parseInt(medicoFirmanteId, 10)
+            const medicoFirmanteMatricula = Number.isFinite(profesionalIdFirmante)
+                ? (matriculaPorProfesionalId.get(profesionalIdFirmante) ?? null)
+                : matriculaFirmanteSugerida
+
             const clasificacionPayload = Object.fromEntries(
                 idsPendientesSeleccionadas.map((id) => {
                     const practica = practicas.find((p) => p.id === id)
@@ -1017,6 +1032,7 @@ export function PracticaSection({
                 titularOrdenAgrupada: agruparEnUnaOrden
                     ? (titularOrdenAgrupadaOverride ?? titularOrdenAgrupada)
                     : undefined,
+                cirujanoFirmanteMatricula: medicoFirmanteMatricula ?? undefined,
             })
 
             if ('error' in result && result.error) {
@@ -1061,17 +1077,10 @@ export function PracticaSection({
                     ordenesPorGrupo: Array<{ clasificacion: string; puestoNumero: number; numero: number; practicaIds: number[] }>
                 }).ordenesPorGrupo)
                 : []
-
-            const gruposConSeleccion = grupos.map((g) => ({
-                ...g,
-                seleccionadaImpresion: true,
-            }))
-
-            setOrdenesGeneradas(gruposConSeleccion)
             setPracticasSeleccionadas((prev) => prev.filter((id) => !idsPendientesSeleccionadas.includes(id)))
 
-            if (imprimirDespues && gruposConSeleccion.length > 0) {
-                const ordenesParam = gruposConSeleccion
+            if (imprimirDespues && grupos.length > 0) {
+                const ordenesParam = grupos
                     .map((o) => `${o.puestoNumero}-${o.numero}`)
                     .join(',')
                 const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
@@ -1110,34 +1119,6 @@ export function PracticaSection({
         setMostrarPopupTitularAgrupada(false)
         const titularSeleccionado = titularOrdenAgrupada || titularesAgrupadosDisponibles[0] || 'HONORARIOS'
         void handleGenerarOrdenes(imprimirTrasAgrupar, true, titularSeleccionado)
-    }
-
-    const alternarSeleccionOrdenGenerada = (puestoNumero: number, numero: number, checked: boolean) => {
-        setOrdenesGeneradas((prev) => prev.map((o) => {
-            if (o.puestoNumero !== puestoNumero || o.numero !== numero) return o
-            return { ...o, seleccionadaImpresion: checked }
-        }))
-    }
-
-    const handleImprimirOrdenes = (soloSeleccionadas: boolean) => {
-        const base = soloSeleccionadas
-            ? ordenesGeneradas.filter((o) => o.seleccionadaImpresion)
-            : ordenesGeneradas
-
-        if (base.length === 0) {
-            setError('No hay órdenes seleccionadas para imprimir')
-            return
-        }
-
-        const ordenesParam = base
-            .map((o) => `${o.puestoNumero}-${o.numero}`)
-            .join(',')
-        const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
-        if (typeof window !== 'undefined') {
-            window.open(url, '_blank')
-            return
-        }
-        router.push(url)
     }
 
     const handleAnularOrdenDesdeGrupo = async (puestoNumero: number, ordenNumero: number, grupoKey: string) => {
@@ -1204,6 +1185,104 @@ export function PracticaSection({
         const pendientesIds = new Set(practicasPendientes.map((p) => p.id))
         return practicasSeleccionadas.filter((id) => pendientesIds.has(id))
     }, [practicasPendientes, practicasSeleccionadas])
+
+    const matriculaPorProfesionalId = useMemo(() => {
+        const map = new Map<number, number>()
+        for (const profesional of profesionalesConMatricula) {
+            map.set(profesional.id, profesional.matricula)
+        }
+        return map
+    }, [profesionalesConMatricula])
+
+    const profesionalIdPorMatricula = useMemo(() => {
+        const map = new Map<number, number>()
+        for (const profesional of profesionalesConMatricula) {
+            map.set(profesional.matricula, profesional.id)
+        }
+        return map
+    }, [profesionalesConMatricula])
+
+    const matriculaFirmanteSugerida = useMemo(() => {
+        const idsRelevantes = idsPendientesSeleccionadas.length > 0
+            ? idsPendientesSeleccionadas
+            : practicasPendientes.map((practica) => practica.id)
+
+        for (const practicaId of idsRelevantes) {
+            const practica = practicas.find((item) => item.id === practicaId)
+            if (!practica) continue
+
+            const matriculaEspecialista = practica.matriculaEspecialista
+            if (matriculaEspecialista == null || matriculaEspecialista <= 0) continue
+            if (matriculaEspecialista === MATRICULA_PATOLOGIA_DEFAULT) continue
+            if (practica.codigoPractica.trim().startsWith('15')) continue
+
+            return matriculaEspecialista
+        }
+
+        return null
+    }, [idsPendientesSeleccionadas, practicasPendientes, practicas])
+
+    const matriculaFirmantePorDefecto = useMemo(() => {
+        if (matriculaTratanteDefault != null && matriculaTratanteDefault > 0) {
+            return matriculaTratanteDefault
+        }
+        return matriculaFirmanteSugerida
+    }, [matriculaTratanteDefault, matriculaFirmanteSugerida])
+
+    const firmaPrevistaTexto = useMemo(() => {
+        const profesionalSeleccionadoId = Number.parseInt(medicoFirmanteId, 10)
+        if (Number.isFinite(profesionalSeleccionadoId)) {
+            const profesionalSeleccionado = profesionalesConMatricula.find(
+                (profesional) => profesional.id === profesionalSeleccionadoId
+            )
+            if (profesionalSeleccionado) {
+                return `${profesionalSeleccionado.nombre} · MP ${profesionalSeleccionado.matricula}`
+            }
+        }
+
+        if (matriculaFirmanteSugerida != null) {
+            const sugerido = profesionalesConMatricula.find(
+                (profesional) => profesional.matricula === matriculaFirmanteSugerida
+            )
+            if (sugerido) {
+                return `${sugerido.nombre} · MP ${sugerido.matricula} (sugerido)`
+            }
+
+            return `Matrícula ${matriculaFirmanteSugerida} (sugerida)`
+        }
+
+        return 'Sin firmante seleccionado. Se usará el profesional de la internación.'
+    }, [medicoFirmanteId, profesionalesConMatricula, matriculaFirmanteSugerida])
+
+    useEffect(() => {
+        const profesionalIdSugerido =
+            matriculaFirmantePorDefecto != null
+                ? (profesionalIdPorMatricula.get(matriculaFirmantePorDefecto) ?? null)
+                : null
+
+        if (!profesionalIdSugerido) return
+        if (firmanteEditadoManualmente && medicoFirmanteId) return
+
+        const siguiente = String(profesionalIdSugerido)
+        if (medicoFirmanteId === siguiente) return
+
+        setMedicoFirmanteId(siguiente)
+    }, [
+        medicoFirmanteId,
+        matriculaFirmantePorDefecto,
+        profesionalIdPorMatricula,
+        firmanteEditadoManualmente,
+    ])
+
+    useEffect(() => {
+        if (!medicoFirmanteId) return
+
+        const profesionalId = Number.parseInt(medicoFirmanteId, 10)
+        if (!Number.isFinite(profesionalId) || !matriculaPorProfesionalId.has(profesionalId)) {
+            setMedicoFirmanteId('')
+            setFirmanteEditadoManualmente(false)
+        }
+    }, [medicoFirmanteId, matriculaPorProfesionalId])
 
     const titularesAgrupadosDisponibles = useMemo(() => {
         const componentesPresentes = new Set<string>()
@@ -1335,6 +1414,16 @@ export function PracticaSection({
     const ordenesAutorizadasFiltradas = useMemo(
         () => agruparPracticasAutorizadasPorOrden(practicasAutorizadas, practicaAutorizadaIdsFiltradas),
         [practicasAutorizadas, practicaAutorizadaIdsFiltradas]
+    )
+
+    const ordenesGeneradasPendientesAutorizacion = useMemo(
+        () => ordenesAutorizadasFiltradas.filter((grupo) => !grupoTieneNumeroAutorizacion(grupo)).length,
+        [ordenesAutorizadasFiltradas]
+    )
+
+    const ordenesGeneradasYaAutorizadas = useMemo(
+        () => ordenesAutorizadasFiltradas.filter((grupo) => grupoTieneNumeroAutorizacion(grupo)).length,
+        [ordenesAutorizadasFiltradas]
     )
 
     const totalPaginasPendientes = Math.max(1, Math.ceil(practicasPendientesFiltradasOrdenadas.length / PRACTICAS_LISTA_POR_PAGINA))
@@ -1488,6 +1577,7 @@ export function PracticaSection({
                     {mostrarForm && puedeCrear && (
                         <PracticaCargaForm
                             convenioId={convenioId}
+                            sectorInternacionActual={sectorInternacionActual}
                             matriculaTratanteDefault={matriculaTratanteDefault}
                             onGuardar={handleGuardarDesdeFormulario}
                             onCancel={() => setMostrarForm(false)}
@@ -1531,7 +1621,7 @@ export function PracticaSection({
                             </div>
                             <div className="space-y-2">
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                                    Pendientes de autorización ({practicasPendientesFiltradas.length})
+                                    Pendientes de generación ({practicasPendientesFiltradas.length})
                                 </p>
                                 {puedeCrear && practicasPendientesFiltradas.length > 0 && (
                                     <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs flex flex-wrap items-center gap-3">
@@ -1544,6 +1634,28 @@ export function PracticaSection({
                                                 className="h-4 w-4 rounded border-amber-300 text-amber-700 focus:ring-amber-500"
                                             />
                                             Seleccionar todas (filtro actual)
+                                        </label>
+                                        <label className="w-full max-w-xl text-[11px] text-amber-900">
+                                            Médico firmante
+                                            <ProfesionalSelect
+                                                profesionales={profesionalesConMatricula}
+                                                value={medicoFirmanteId}
+                                                onChange={(nextValue) => {
+                                                    setMedicoFirmanteId(nextValue)
+                                                    setFirmanteEditadoManualmente(true)
+                                                }}
+                                                disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
+                                                placeholderOption="-- Seleccionar firmante --"
+                                                searchPlaceholder="Buscar por nombre o matricula"
+                                                selectClassName="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
+                                                searchClassName="mt-1 w-full rounded border border-amber-200 bg-white px-2 py-1 text-[11px] text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
+                                            />
+                                            <span className="mt-1 block text-[10px] text-amber-800">
+                                                Por defecto se usa el tratante; podés editarlo antes de generar.
+                                            </span>
+                                            <span className="block text-[10px] text-amber-800">
+                                                Firma prevista: {firmaPrevistaTexto}
+                                            </span>
                                         </label>
                                         {puedeGenerarOrdenes && (
                                             <>
@@ -1583,55 +1695,8 @@ export function PracticaSection({
                                         )}
                                     </div>
                                 )}
-                                {ordenesGeneradas.length > 0 && (
-                                    <div className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
-                                        <p className="text-xs font-semibold text-emerald-900">
-                                            Órdenes generadas por categoría
-                                        </p>
-                                        <div className="space-y-1.5">
-                                            {ordenesGeneradas.map((o) => (
-                                                <label
-                                                    key={`${o.puestoNumero}-${o.numero}`}
-                                                    className="flex items-center justify-between gap-3 rounded-md border border-emerald-100 bg-white px-2 py-1.5 text-xs"
-                                                >
-                                                    <span className="inline-flex items-center gap-2 min-w-0">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={o.seleccionadaImpresion}
-                                                            onChange={(e) => alternarSeleccionOrdenGenerada(o.puestoNumero, o.numero, e.target.checked)}
-                                                            className="h-4 w-4 rounded border-emerald-300 text-emerald-700 focus:ring-emerald-500"
-                                                        />
-                                                        <span className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-800">
-                                                            {o.clasificacion}
-                                                        </span>
-                                                        <span className="font-mono text-gray-700">
-                                                            {formatearNumeroOrden(o.puestoNumero, o.numero)}
-                                                        </span>
-                                                    </span>
-                                                    <span className="text-gray-500">{o.practicaIds.length} práctica(s)</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleImprimirOrdenes(true)}
-                                                className="inline-flex items-center rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
-                                            >
-                                                Imprimir seleccionadas
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleImprimirOrdenes(false)}
-                                                className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
-                                            >
-                                                Imprimir todas
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
                                 {practicasPendientesFiltradasOrdenadas.length === 0 ? (
-                                    <p className="text-xs text-gray-400">No hay prácticas pendientes.</p>
+                                    <p className="text-xs text-gray-400">No hay prácticas pendientes de generación.</p>
                                 ) : (
                                     practicasPendientesPaginadasAgrupadas.map((grupo) => {
                                         const expandida = Boolean(clasificacionesExpandidas[grupo.clasificacion])
@@ -1793,10 +1858,13 @@ export function PracticaSection({
 
                             <div className="space-y-2">
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                    Ya autorizadas ({ordenesAutorizadasFiltradas.length})
+                                    Órdenes generadas ({ordenesAutorizadasFiltradas.length})
+                                </p>
+                                <p className="text-[11px] text-emerald-800">
+                                    Pendientes de autorización: {ordenesGeneradasPendientesAutorizacion} · Ya autorizadas: {ordenesGeneradasYaAutorizadas}
                                 </p>
                                 {ordenesAutorizadasFiltradas.length === 0 ? (
-                                    <p className="text-xs text-gray-400">No hay prácticas autorizadas.</p>
+                                    <p className="text-xs text-gray-400">No hay órdenes generadas.</p>
                                 ) : (
                                     ordenesAutorizadasPaginadas.map((grupo) => {
                                         const destinoAutorizada = obtenerDestinoGrupoPracticasAutorizadas(grupo)
@@ -1818,6 +1886,7 @@ export function PracticaSection({
                                             ? grupo.practicas
                                             : grupo.practicas.slice(0, limitePracticas)
                                         const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
+                                        const grupoYaAutorizado = grupoTieneNumeroAutorizacion(grupo)
                                         const tituloGrupo = grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                             ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                             : `Autorización ${grupo.numeroAutorizacion ?? '-'}`
@@ -1872,6 +1941,9 @@ export function PracticaSection({
                                                                 )}
                                                             </div>
                                                             <p className="text-emerald-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
+                                                            <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-700 font-medium'}>
+                                                                Estado: {grupoYaAutorizado ? 'Ya autorizada' : 'Pendiente de autorización'}
+                                                            </p>
                                                             <p className="text-emerald-800">Fecha última práctica: {fmtFecha(grupo.fechaReferencia)}</p>
                                                             <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
                                                             <p className="text-emerald-800">

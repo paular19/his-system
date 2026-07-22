@@ -4,15 +4,13 @@ import { ROLES, tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { obtenerInternacionDetalle } from '@/modules/internacion/service'
-import { EvolucionSection } from '@/components/internacion/evolucion-section'
-import { MedicacionSection } from '@/components/internacion/medicacion-section'
-import { DescartableSection } from '@/components/internacion/descartable-section'
 import { TransferenciaCama } from '@/components/internacion/transferencia-cama'
 import { PracticaSection } from '@/components/internacion/practica-section'
 import { DiagnosticosSection } from '@/components/internacion/diagnosticos-section'
 import { TratanteSection } from '@/components/internacion/tratante-section'
 import { CirugiaUrgenciaSection } from '@/components/internacion/cirugia-urgencia-section'
 import { ObservacionesSection } from '@/components/internacion/observaciones-section'
+import { ViasSection } from '@/components/internacion/vias-section'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
@@ -457,15 +455,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
 
                     {!esVistaAdmision && (
                         <>
-                            {/* Columna central + derecha: evolución + medicaciones */}
+                            {/* Columna central + derecha */}
                             <div className="lg:col-span-2 min-w-0 space-y-4">
-                                <EvolucionSection
-                                    ingresoId={ingresoId}
-                                    evoluciones={detalle.evoluciones}
-                                    profesionales={profesionales}
-                                    puedeCrear={puedeCrear}
-                                />
-
                                 <div id="internacion-practicas">
                                     <PracticaSection
                                         ingresoId={ingresoId}
@@ -478,21 +469,17 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     />
                                 </div>
 
-                                <MedicacionSection
+                                <ViasSection
                                     ingresoId={ingresoId}
-                                    medicaciones={detalle.medicaciones}
+                                    numeroIngreso={detalle.numeroIngreso}
                                     profesionales={profesionales}
                                     puedeCrear={puedeCrear}
-                                    puedeModificar={puedeModificar}
                                 />
 
-                                <DescartableSection
-                                    ingresoId={ingresoId}
-                                    descartables={detalle.descartables}
-                                    profesionales={profesionales}
-                                    puedeCrear={puedeCrear}
-                                    puedeModificar={puedeModificar}
-                                />
+                                {/* Secciones pausadas temporalmente por flujo actual:
+                                - Evolucion Clinica
+                                - Medicaciones
+                                - Descartables */}
 
                                 {detalle.paciente && (
                                     <CirugiaUrgenciaSection

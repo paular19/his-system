@@ -173,13 +173,6 @@ export function PresupuestoCotizador({ usuario }: PresupuestoCotizadorProps) {
       `}</style>
 
       <div className="presupuesto-screen space-y-5 print:hidden">
-        <div className="his-card p-4 border-l-4 border-blue-600 bg-blue-50/40">
-          <p className="text-sm font-medium text-blue-900">Presupuesto para paciente sin coseguro</p>
-          <p className="text-sm text-blue-800 mt-1">
-            Cargue practicas del nomenclador y el sistema calcula automaticamente el 20% a abonar por el paciente.
-          </p>
-        </div>
-
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
           <section className="xl:col-span-2 space-y-5">
             <div className="his-card p-4 space-y-4">

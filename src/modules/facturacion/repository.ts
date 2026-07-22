@@ -1019,7 +1019,7 @@ function claveCirugiaPracticaSinFecha(codigo: string, cantidad: number): string 
     return `${normalizarCodigoPracticaFacturacion(codigo)}:${Number(cantidad)}`
 }
 
-function resolverInfoCirugiaConFallback<T>(
+function resolverInfoCirugiaConFallback<T extends { cirugiaId: number }>(
     porClaveCompleta: Map<string, T>,
     porClaveSinFecha: Map<string, T[]>,
     codigo: string,
@@ -1032,6 +1032,21 @@ function resolverInfoCirugiaConFallback<T>(
     const candidatos = porClaveSinFecha.get(claveCirugiaPracticaSinFecha(codigo, cantidad)) ?? []
     if (candidatos.length === 1) {
         return candidatos[0] ?? null
+    }
+
+    // Puede haber múltiples filas repetidas (mismo código/cantidad)
+    // dentro de una misma cirugía; en ese caso no es ambiguo.
+    if (candidatos.length > 1) {
+        const porCirugia = new Map<number, T>()
+        for (const candidato of candidatos) {
+            if (!porCirugia.has(candidato.cirugiaId)) {
+                porCirugia.set(candidato.cirugiaId, candidato)
+            }
+        }
+        if (porCirugia.size === 1) {
+            const unico = porCirugia.values().next().value
+            return unico ?? null
+        }
     }
 
     return null

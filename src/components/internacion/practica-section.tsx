@@ -58,6 +58,7 @@ const MATRICULA_ANESTESISTA_DEFAULT = 6
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const PRACTICAS_LISTA_POR_PAGINA = 8
 const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
+type SectorPracticaFiltro = 'UTI' | 'PISO'
 const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
     HE: 1,
     HA: 2,
@@ -84,6 +85,11 @@ function normalizarBusquedaLista(value: string): string {
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .trim()
+}
+
+function esSectorUti(sector: string | null | undefined): boolean {
+    const normalized = (sector ?? '').trim().toUpperCase()
+    return normalized === 'CU' || normalized === 'UTI' || normalized === 'TERAPIA_INTENSIVA'
 }
 
 function practicaActiva(estado: string | null | undefined): boolean {
@@ -119,6 +125,7 @@ interface PracticaSectionProps {
     ingresoId: number
     convenioId: number | null
     sectorInternacionActual?: string | null
+    sectorPorPracticaId?: Record<number, SectorPracticaFiltro>
     practicas: PracticaItem[]
     puedeCrear: boolean
     matriculaTratanteDefault?: number | null
@@ -162,6 +169,7 @@ export function PracticaSection({
     ingresoId,
     convenioId,
     sectorInternacionActual,
+    sectorPorPracticaId,
     practicas: practicasIniciales,
     puedeCrear,
     matriculaTratanteDefault,
@@ -179,6 +187,8 @@ export function PracticaSection({
     const [filtroLista, setFiltroLista] = useState('')
     const [paginaPendientes, setPaginaPendientes] = useState(1)
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
+    const [mostrarUti, setMostrarUti] = useState(true)
+    const [mostrarPiso, setMostrarPiso] = useState(true)
 
     // Búsqueda nomenclador
     const [busqueda, setBusqueda] = useState('')
@@ -1175,10 +1185,21 @@ export function PracticaSection({
         })
 
     const practicasVigentes = practicas.filter((p) => practicaActiva(p.estado))
-    const practicasPendientes = practicasVigentes.filter(
+    const sectorFallbackPracticas: SectorPracticaFiltro = esSectorUti(sectorInternacionActual) ? 'UTI' : 'PISO'
+    const practicasVigentesFiltradasPorSector = useMemo(
+        () =>
+            practicasVigentes.filter((practica) => {
+                const sector = sectorPorPracticaId?.[practica.id] ?? sectorFallbackPracticas
+                if (sector === 'UTI') return mostrarUti
+                return mostrarPiso
+            }),
+        [practicasVigentes, sectorPorPracticaId, sectorFallbackPracticas, mostrarUti, mostrarPiso]
+    )
+
+    const practicasPendientes = practicasVigentesFiltradasPorSector.filter(
         (p) => (p.ordenPractica?.length ?? 0) === 0
     )
-    const practicasAutorizadas = practicasVigentes.filter(
+    const practicasAutorizadas = practicasVigentesFiltradasPorSector.filter(
         (p) => (p.ordenPractica?.length ?? 0) > 0
     )
     const idsPendientesSeleccionadas = useMemo(() => {
@@ -1406,14 +1427,9 @@ export function PracticaSection({
         })
     }, [practicasAutorizadas, terminoFiltroLista])
 
-    const practicaAutorizadaIdsFiltradas = useMemo(
-        () => new Set(practicasAutorizadasFiltradas.map((p) => p.id)),
-        [practicasAutorizadasFiltradas]
-    )
-
     const ordenesAutorizadasFiltradas = useMemo(
-        () => agruparPracticasAutorizadasPorOrden(practicasAutorizadas, practicaAutorizadaIdsFiltradas),
-        [practicasAutorizadas, practicaAutorizadaIdsFiltradas]
+        () => agruparPracticasAutorizadasPorOrden(practicasAutorizadasFiltradas),
+        [practicasAutorizadasFiltradas]
     )
 
     const ordenesGeneradasPendientesAutorizacion = useMemo(
@@ -1466,7 +1482,7 @@ export function PracticaSection({
     useEffect(() => {
         setPaginaPendientes(1)
         setPaginaAutorizadas(1)
-    }, [filtroLista])
+    }, [filtroLista, mostrarUti, mostrarPiso])
 
     return (
         <div className="his-card">
@@ -1618,6 +1634,27 @@ export function PracticaSection({
                                 <p className="text-xs text-gray-500">
                                     {practicasPendientesFiltradas.length + practicasAutorizadasFiltradas.length} de {practicas.length}
                                 </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                                <span className="text-[11px] font-medium text-gray-700">Mostrar prácticas cargadas:</span>
+                                <label className="inline-flex items-center gap-1.5 text-xs text-gray-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={mostrarUti}
+                                        onChange={(e) => setMostrarUti(e.target.checked)}
+                                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    UTI
+                                </label>
+                                <label className="inline-flex items-center gap-1.5 text-xs text-gray-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={mostrarPiso}
+                                        onChange={(e) => setMostrarPiso(e.target.checked)}
+                                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    PISO
+                                </label>
                             </div>
                             <div className="space-y-2">
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
@@ -1860,9 +1897,14 @@ export function PracticaSection({
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
                                     Órdenes generadas ({ordenesAutorizadasFiltradas.length})
                                 </p>
-                                <p className="text-[11px] text-emerald-800">
-                                    Pendientes de autorización: {ordenesGeneradasPendientesAutorizacion} · Ya autorizadas: {ordenesGeneradasYaAutorizadas}
-                                </p>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                                        Pendientes de autorización ({ordenesGeneradasPendientesAutorizacion})
+                                    </p>
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                        Ya autorizadas ({ordenesGeneradasYaAutorizadas})
+                                    </p>
+                                </div>
                                 {ordenesAutorizadasFiltradas.length === 0 ? (
                                     <p className="text-xs text-gray-400">No hay órdenes generadas.</p>
                                 ) : (

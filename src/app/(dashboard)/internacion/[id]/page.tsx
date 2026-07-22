@@ -36,6 +36,41 @@ interface PageProps {
     params: Promise<{ id: string }>
 }
 
+type SectorPracticaFiltro = 'UTI' | 'PISO'
+
+function esSectorUti(sector: string | null | undefined): boolean {
+    const normalized = (sector ?? '').trim().toUpperCase()
+    return normalized === 'CU' || normalized === 'UTI' || normalized === 'TERAPIA_INTENSIVA'
+}
+
+function resolverSectorPorFecha(
+    fechaPractica: Date | string,
+    transferencias: Array<{
+        fecha: Date
+        camaOrigen: { sector: string } | null
+        camaDestino: { sector: string } | null
+    }>,
+    sectorActual: string | null | undefined
+): SectorPracticaFiltro {
+    const practicaMs = new Date(fechaPractica).getTime()
+    const transferenciasOrdenadas = [...transferencias]
+        .filter((item) => Number.isFinite(new Date(item.fecha).getTime()))
+        .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+
+    let sectorVigente: string | null | undefined =
+        transferenciasOrdenadas[0]?.camaOrigen?.sector ??
+        transferenciasOrdenadas[0]?.camaDestino?.sector ??
+        sectorActual
+
+    for (const transferencia of transferenciasOrdenadas) {
+        const transferenciaMs = new Date(transferencia.fecha).getTime()
+        if (!Number.isFinite(transferenciaMs) || transferenciaMs > practicaMs) break
+        sectorVigente = transferencia.camaDestino?.sector ?? sectorVigente
+    }
+
+    return esSectorUti(sectorVigente) ? 'UTI' : 'PISO'
+}
+
 function resolverApellidoParaTitulo(nombreCompleto: string | null | undefined): string | null {
     const raw = nombreCompleto?.trim()
     if (!raw) return null
@@ -291,6 +326,12 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     }
 
     const practicasInternacionParaCirugia = Array.from(practicasInternacionParaCirugiaMap.values())
+    const sectorPorPracticaId = Object.fromEntries(
+        practicasInternacionParaCirugia.map((practica) => [
+            practica.id,
+            resolverSectorPorFecha(practica.fecha, detalle.transferencias, detalle.cama?.sector ?? null),
+        ])
+    ) as Record<number, SectorPracticaFiltro>
 
     return (
         <>
@@ -430,6 +471,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                         ingresoId={ingresoId}
                                         convenioId={detalle.obraSocial?.id ?? null}
                                         sectorInternacionActual={detalle.cama?.sector ?? null}
+                                        sectorPorPracticaId={sectorPorPracticaId}
                                         practicas={detalle.practicas}
                                         puedeCrear={puedeEditarPracticas}
                                         matriculaTratanteDefault={matriculaTratanteDefault}
@@ -457,6 +499,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                         ingresoId={ingresoId}
                                         pacienteId={detalle.paciente.id}
                                         sectorInternacionActual={detalle.cama?.sector ?? null}
+                                        sectorPorPracticaId={sectorPorPracticaId}
                                         obraSocialIdInicial={detalle.obraSocial?.id ?? null}
                                         planIdInicial={detalle.plan?.id ?? null}
                                         obraSocialCoseguroIdInicial={detalle.obraSocialCoseguroId ?? null}

@@ -121,10 +121,17 @@ type PracticaCirugiaEditDraft = {
 }
 
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
+const ORDENES_GENERADAS_POR_PAGINA = 5
+type SectorPracticaFiltro = 'UTI' | 'PISO'
 
 function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
     const normalizado = value?.trim() ?? ''
     return normalizado.length > 0 ? normalizado : null
+}
+
+function esSectorUti(sector: string | null | undefined): boolean {
+    const normalized = (sector ?? '').trim().toUpperCase()
+    return normalized === 'CU' || normalized === 'UTI' || normalized === 'TERAPIA_INTENSIVA'
 }
 
 function grupoTieneNumeroAutorizacion(grupo: GrupoPracticasAutorizadasCirugia): boolean {
@@ -140,6 +147,7 @@ interface CirugiaUrgenciaSectionProps {
     ingresoId: number
     pacienteId: number
     sectorInternacionActual?: string | null
+    sectorPorPracticaId?: Record<number, SectorPracticaFiltro>
     obraSocialIdInicial: number | null
     planIdInicial: number | null
     obraSocialCoseguroIdInicial: number | null
@@ -159,6 +167,7 @@ export function CirugiaUrgenciaSection({
     ingresoId,
     pacienteId,
     sectorInternacionActual,
+    sectorPorPracticaId,
     obraSocialIdInicial,
     planIdInicial,
     obraSocialCoseguroIdInicial,
@@ -177,12 +186,15 @@ export function CirugiaUrgenciaSection({
     const [creandoCirugia, setCreandoCirugia] = useState(false)
     const [generandoOrdenAgrupada, setGenerandoOrdenAgrupada] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [mostrarUti, setMostrarUti] = useState(true)
+    const [mostrarPiso, setMostrarPiso] = useState(true)
     const [practicasSeleccionadasImpresion, setPracticasSeleccionadasImpresion] = useState<number[]>([])
     const [profesionalesFirmantes, setProfesionalesFirmantes] = useState<ProfesionalConMatricula[]>([])
     const [cirujanoFirmanteId, setCirujanoFirmanteId] = useState('')
     const [firmanteEditadoManualmente, setFirmanteEditadoManualmente] = useState(false)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
+    const [paginaOrdenesGeneradasPorCirugia, setPaginaOrdenesGeneradasPorCirugia] = useState<Record<number, number>>({})
     const [eliminandoPracticaCirugiaId, setEliminandoPracticaCirugiaId] = useState<number | null>(null)
     const [anulandoOrdenGrupoKey, setAnulandoOrdenGrupoKey] = useState<string | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
@@ -249,6 +261,13 @@ export function CirugiaUrgenciaSection({
         () => new Map(practicasInternacion.map((practica) => [practica.id, practica] as const)),
         [practicasInternacion]
     )
+
+    const sectorFallbackPracticas: SectorPracticaFiltro = esSectorUti(sectorInternacionActual) ? 'UTI' : 'PISO'
+    const coincideFiltroSectorPractica = (practicaId: number): boolean => {
+        const sector = sectorPorPracticaId?.[practicaId] ?? sectorFallbackPracticas
+        if (sector === 'UTI') return mostrarUti
+        return mostrarPiso
+    }
 
     const matriculaPorProfesionalId = useMemo(() => {
         const map = new Map<number, number>()
@@ -409,18 +428,35 @@ export function CirugiaUrgenciaSection({
                         return a.descripcion.localeCompare(b.descripcion)
                     }),
                 }))
+                .map((grupo) => {
+                    const fechaReferenciaMs = grupo.practicas.reduce((max, practica) => {
+                        const estadoPractica = estadoPracticaCirugiaPorId.get(practica.id)
+                        const practicaInternacion = estadoPractica
+                            ? practicasInternacionPorId.get(estadoPractica.practicaInternacionId)
+                            : null
+                        const ms = practicaInternacion ? new Date(practicaInternacion.fecha).getTime() : 0
+                        return Math.max(max, Number.isFinite(ms) ? ms : 0)
+                    }, 0)
+
+                    return {
+                        ...grupo,
+                        fechaReferenciaMs,
+                    }
+                })
                 .sort((a, b) => {
+                    if (a.fechaReferenciaMs !== b.fechaReferenciaMs) return b.fechaReferenciaMs - a.fechaReferenciaMs
                     if (a.tipo !== b.tipo) return a.tipo === 'orden' ? -1 : 1
                     if (a.puestoNumero !== b.puestoNumero) return (b.puestoNumero ?? 0) - (a.puestoNumero ?? 0)
                     if (a.ordenNumero !== b.ordenNumero) return (b.ordenNumero ?? 0) - (a.ordenNumero ?? 0)
                     return a.key.localeCompare(b.key)
                 })
+                .map(({ fechaReferenciaMs: _, ...grupo }) => grupo)
 
             resultado.set(cirugia.id, lista)
         }
 
         return resultado
-    }, [cirugias, estadoPracticaCirugiaPorId])
+    }, [cirugias, estadoPracticaCirugiaPorId, practicasInternacionPorId])
 
     const matriculaFirmanteSugerida = useMemo(() => {
         const idsRelevantes = practicasSeleccionadasVigentes.length > 0
@@ -503,6 +539,10 @@ export function CirugiaUrgenciaSection({
             setFirmanteEditadoManualmente(false)
         }
     }, [cirujanoFirmanteId, matriculaPorProfesionalId])
+
+    useEffect(() => {
+        setPaginaOrdenesGeneradasPorCirugia({})
+    }, [mostrarUti, mostrarPiso])
 
     const limpiarForm = () => {
         setError(null)
@@ -1041,17 +1081,66 @@ export function CirugiaUrgenciaSection({
                                 </div>
                             )}
 
+                            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                <span className="text-[11px] font-medium text-gray-700">Mostrar prácticas/órdenes cargadas:</span>
+                                <label className="inline-flex items-center gap-1.5 text-xs text-gray-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={mostrarUti}
+                                        onChange={(e) => setMostrarUti(e.target.checked)}
+                                        className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    UTI
+                                </label>
+                                <label className="inline-flex items-center gap-1.5 text-xs text-gray-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={mostrarPiso}
+                                        onChange={(e) => setMostrarPiso(e.target.checked)}
+                                        className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    PISO
+                                </label>
+                            </div>
+
                             {cirugias.map((c) => {
                                 const practicasPendientesCirugiaItem = c.practicas.filter((practica) => {
                                     const estadoPractica = estadoPracticaCirugiaPorId.get(practica.id)
-                                    return estadoPractica?.pendiente !== false
+                                    return estadoPractica?.pendiente !== false && coincideFiltroSectorPractica(practica.id)
                                 })
 
                                 const practicaIdsCirugia = practicasPendientesCirugiaItem.map((practica) => practica.id)
                                 const practicaIdsPendientesCirugiaItem = practicaIdsCirugia.filter(
                                     (id) => estadoPracticaCirugiaPorId.get(id)?.pendiente === true
                                 )
-                                const gruposAutorizadosCirugia = gruposAutorizadosPorCirugia.get(c.id) ?? []
+                                const gruposAutorizadosCirugia = (gruposAutorizadosPorCirugia.get(c.id) ?? [])
+                                    .map((grupo) => {
+                                        const practicasFiltradas = grupo.practicas.filter((practica) => coincideFiltroSectorPractica(practica.id))
+                                        if (practicasFiltradas.length === 0) return null
+
+                                        return {
+                                            ...grupo,
+                                            practicas: practicasFiltradas,
+                                            totalCantidad: practicasFiltradas.reduce(
+                                                (total, practica) => total + (Number.isFinite(practica.cantidad) ? Number(practica.cantidad) : 0),
+                                                0
+                                            ),
+                                        }
+                                    })
+                                    .filter((grupo): grupo is GrupoPracticasAutorizadasCirugia => grupo != null)
+
+                                const totalPaginasOrdenesGeneradas = Math.max(
+                                    1,
+                                    Math.ceil(gruposAutorizadosCirugia.length / ORDENES_GENERADAS_POR_PAGINA)
+                                )
+                                const paginaOrdenesGeneradasActual = Math.min(
+                                    paginaOrdenesGeneradasPorCirugia[c.id] ?? 1,
+                                    totalPaginasOrdenesGeneradas
+                                )
+                                const gruposAutorizadosCirugiaPaginados = gruposAutorizadosCirugia.slice(
+                                    (paginaOrdenesGeneradasActual - 1) * ORDENES_GENERADAS_POR_PAGINA,
+                                    paginaOrdenesGeneradasActual * ORDENES_GENERADAS_POR_PAGINA
+                                )
                                 const gruposPendientesAutorizacion = gruposAutorizadosCirugia.filter(
                                     (grupo) => !grupoTieneNumeroAutorizacion(grupo)
                                 ).length
@@ -1194,13 +1283,18 @@ export function CirugiaUrgenciaSection({
                                             <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
                                                 Órdenes generadas ({gruposAutorizadosCirugia.length})
                                             </p>
-                                            <p className="text-[11px] text-emerald-800">
-                                                Pendientes de autorización: {gruposPendientesAutorizacion} · Ya autorizadas: {gruposYaAutorizados}
-                                            </p>
+                                            <div className="flex flex-wrap items-center gap-3">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                                                    Pendientes de autorización ({gruposPendientesAutorizacion})
+                                                </p>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                    Ya autorizadas ({gruposYaAutorizados})
+                                                </p>
+                                            </div>
                                             {gruposAutorizadosCirugia.length === 0 ? (
                                                 <p className="text-xs text-gray-400">No hay órdenes generadas.</p>
                                             ) : (
-                                                gruposAutorizadosCirugia.map((grupo) => {
+                                                gruposAutorizadosCirugiaPaginados.map((grupo) => {
                                                     const grupoKey = `${c.id}-${grupo.key}`
                                                     const abierta = ordenesAutorizadasAbiertas[grupoKey] ?? false
                                                     const expandida = ordenesAutorizadasExpandidas[grupoKey] ?? false
@@ -1363,6 +1457,37 @@ export function CirugiaUrgenciaSection({
                                                         </div>
                                                     )
                                                 })
+                                            )}
+                                            {gruposAutorizadosCirugia.length > ORDENES_GENERADAS_POR_PAGINA && (
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <p className="text-xs text-gray-500">
+                                                        Página {paginaOrdenesGeneradasActual} de {totalPaginasOrdenesGeneradas}
+                                                    </p>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPaginaOrdenesGeneradasPorCirugia((prev) => ({
+                                                                ...prev,
+                                                                [c.id]: Math.max(1, (prev[c.id] ?? 1) - 1),
+                                                            }))}
+                                                            disabled={paginaOrdenesGeneradasActual <= 1}
+                                                            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                        >
+                                                            Anterior
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPaginaOrdenesGeneradasPorCirugia((prev) => ({
+                                                                ...prev,
+                                                                [c.id]: Math.min(totalPaginasOrdenesGeneradas, (prev[c.id] ?? 1) + 1),
+                                                            }))}
+                                                            disabled={paginaOrdenesGeneradasActual >= totalPaginasOrdenesGeneradas}
+                                                            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                        >
+                                                            Siguiente
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
                                     </article>

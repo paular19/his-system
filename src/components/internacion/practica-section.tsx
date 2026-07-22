@@ -189,6 +189,8 @@ export function PracticaSection({
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
     const [mostrarUti, setMostrarUti] = useState(true)
     const [mostrarPiso, setMostrarPiso] = useState(true)
+    const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(true)
+    const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
 
     // Búsqueda nomenclador
     const [busqueda, setBusqueda] = useState('')
@@ -1479,6 +1481,14 @@ export function PracticaSection({
         return ordenesAutorizadasFiltradas.slice(desde, desde + PRACTICAS_LISTA_POR_PAGINA)
     }, [paginaAutorizadasActual, ordenesAutorizadasFiltradas])
 
+    const ordenesAutorizadasPaginadasVisibles = useMemo(
+        () => ordenesAutorizadasPaginadas.filter((grupo) => {
+            const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
+            return yaAutorizada ? mostrarOrdenesYaAutorizadas : mostrarOrdenesPendientesAutorizacion
+        }),
+        [ordenesAutorizadasPaginadas, mostrarOrdenesPendientesAutorizacion, mostrarOrdenesYaAutorizadas]
+    )
+
     useEffect(() => {
         setPaginaPendientes(1)
         setPaginaAutorizadas(1)
@@ -1897,18 +1907,42 @@ export function PracticaSection({
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
                                     Órdenes generadas ({ordenesAutorizadasFiltradas.length})
                                 </p>
-                                <div className="flex flex-wrap items-center gap-3">
-                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                                        Pendientes de autorización ({ordenesGeneradasPendientesAutorizacion})
-                                    </p>
-                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                        Ya autorizadas ({ordenesGeneradasYaAutorizadas})
-                                    </p>
+                                <div className="space-y-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMostrarOrdenesPendientesAutorizacion((prev) => !prev)}
+                                        disabled={ordenesGeneradasPendientesAutorizacion === 0}
+                                        className="flex w-full items-center justify-between rounded border border-amber-200 bg-amber-50/50 px-2 py-1 text-left disabled:opacity-60"
+                                    >
+                                        <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                                            Pendientes de autorización ({ordenesGeneradasPendientesAutorizacion})
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800">
+                                            {mostrarOrdenesPendientesAutorizacion ? 'Contraer' : 'Expandir'}
+                                            {mostrarOrdenesPendientesAutorizacion ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMostrarOrdenesYaAutorizadas((prev) => !prev)}
+                                        disabled={ordenesGeneradasYaAutorizadas === 0}
+                                        className="flex w-full items-center justify-between rounded border border-emerald-200 bg-emerald-50/50 px-2 py-1 text-left disabled:opacity-60"
+                                    >
+                                        <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                            Ya autorizadas ({ordenesGeneradasYaAutorizadas})
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800">
+                                            {mostrarOrdenesYaAutorizadas ? 'Contraer' : 'Expandir'}
+                                            {mostrarOrdenesYaAutorizadas ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                        </span>
+                                    </button>
                                 </div>
                                 {ordenesAutorizadasFiltradas.length === 0 ? (
                                     <p className="text-xs text-gray-400">No hay órdenes generadas.</p>
+                                ) : ordenesAutorizadasPaginadasVisibles.length === 0 ? (
+                                    <p className="text-xs text-gray-500">No hay órdenes visibles con los paneles cerrados.</p>
                                 ) : (
-                                    ordenesAutorizadasPaginadas.map((grupo) => {
+                                    ordenesAutorizadasPaginadasVisibles.map((grupo) => {
                                         const destinoAutorizada = obtenerDestinoGrupoPracticasAutorizadas(grupo)
                                         const destinoOrdenImpresion =
                                             grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero

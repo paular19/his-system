@@ -190,6 +190,8 @@ export function CirugiaUrgenciaSection({
     const [mostrarPiso, setMostrarPiso] = useState(true)
     const [practicasSeleccionadasImpresion, setPracticasSeleccionadasImpresion] = useState<number[]>([])
     const [profesionalesFirmantes, setProfesionalesFirmantes] = useState<ProfesionalConMatricula[]>([])
+    const [mostrarPendientesAutorizacionPorCirugia, setMostrarPendientesAutorizacionPorCirugia] = useState<Record<number, boolean>>({})
+    const [mostrarYaAutorizadasPorCirugia, setMostrarYaAutorizadasPorCirugia] = useState<Record<number, boolean>>({})
     const [cirujanoFirmanteId, setCirujanoFirmanteId] = useState('')
     const [firmanteEditadoManualmente, setFirmanteEditadoManualmente] = useState(false)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
@@ -1147,6 +1149,12 @@ export function CirugiaUrgenciaSection({
                                 const gruposYaAutorizados = gruposAutorizadosCirugia.filter(
                                     (grupo) => grupoTieneNumeroAutorizacion(grupo)
                                 ).length
+                                const mostrarPendientesAutorizacion = mostrarPendientesAutorizacionPorCirugia[c.id] ?? true
+                                const mostrarYaAutorizadas = mostrarYaAutorizadasPorCirugia[c.id] ?? true
+                                const gruposAutorizadosCirugiaVisibles = gruposAutorizadosCirugiaPaginados.filter((grupo) => {
+                                    const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
+                                    return yaAutorizada ? mostrarYaAutorizadas : mostrarPendientesAutorizacion
+                                })
                                 const todasSeleccionadasCirugia =
                                     practicaIdsPendientesCirugiaItem.length > 0
                                     && practicaIdsPendientesCirugiaItem.every((id) => practicasSeleccionadasVigentes.includes(id))
@@ -1283,18 +1291,48 @@ export function CirugiaUrgenciaSection({
                                             <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
                                                 Órdenes generadas ({gruposAutorizadosCirugia.length})
                                             </p>
-                                            <div className="flex flex-wrap items-center gap-3">
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                                                    Pendientes de autorización ({gruposPendientesAutorizacion})
-                                                </p>
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                                    Ya autorizadas ({gruposYaAutorizados})
-                                                </p>
+                                            <div className="space-y-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMostrarPendientesAutorizacionPorCirugia((prev) => ({
+                                                        ...prev,
+                                                        [c.id]: !(prev[c.id] ?? true),
+                                                    }))}
+                                                    disabled={gruposPendientesAutorizacion === 0}
+                                                    className="flex w-full items-center justify-between rounded border border-amber-200 bg-amber-50/50 px-2 py-1 text-left disabled:opacity-60"
+                                                >
+                                                    <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                                                        Pendientes de autorización ({gruposPendientesAutorizacion})
+                                                    </span>
+                                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800">
+                                                        {mostrarPendientesAutorizacion ? 'Contraer' : 'Expandir'}
+                                                        {mostrarPendientesAutorizacion ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMostrarYaAutorizadasPorCirugia((prev) => ({
+                                                        ...prev,
+                                                        [c.id]: !(prev[c.id] ?? true),
+                                                    }))}
+                                                    disabled={gruposYaAutorizados === 0}
+                                                    className="flex w-full items-center justify-between rounded border border-emerald-200 bg-emerald-50/50 px-2 py-1 text-left disabled:opacity-60"
+                                                >
+                                                    <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                        Ya autorizadas ({gruposYaAutorizados})
+                                                    </span>
+                                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800">
+                                                        {mostrarYaAutorizadas ? 'Contraer' : 'Expandir'}
+                                                        {mostrarYaAutorizadas ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                                    </span>
+                                                </button>
                                             </div>
                                             {gruposAutorizadosCirugia.length === 0 ? (
                                                 <p className="text-xs text-gray-400">No hay órdenes generadas.</p>
+                                            ) : gruposAutorizadosCirugiaVisibles.length === 0 ? (
+                                                <p className="text-xs text-gray-500">No hay órdenes visibles con los paneles cerrados.</p>
                                             ) : (
-                                                gruposAutorizadosCirugiaPaginados.map((grupo) => {
+                                                gruposAutorizadosCirugiaVisibles.map((grupo) => {
                                                     const grupoKey = `${c.id}-${grupo.key}`
                                                     const abierta = ordenesAutorizadasAbiertas[grupoKey] ?? false
                                                     const expandida = ordenesAutorizadasExpandidas[grupoKey] ?? false

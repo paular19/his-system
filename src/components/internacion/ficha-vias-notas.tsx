@@ -90,6 +90,14 @@ export function FichaViasNotas({
     `4) ${notas.item4.trim() || '............................................................'}`,
   ].join('\n')
 
+  if (!viaActiva) {
+    return (
+      <section className="his-card p-5 text-sm text-gray-500">
+        No hay vias registradas para esta internacion. Cargalas primero desde la ficha de internacion.
+      </section>
+    )
+  }
+
   const viaFechaLabel = formatearFechaHoraArgentina(viaActiva.fechaHora, {
     day: '2-digit',
     month: '2-digit',
@@ -99,14 +107,6 @@ export function FichaViasNotas({
     hour: '2-digit',
     minute: '2-digit',
   })
-
-  if (!viaActiva) {
-    return (
-      <section className="his-card p-5 text-sm text-gray-500">
-        No hay vias registradas para esta internacion. Cargalas primero desde la ficha de internacion.
-      </section>
-    )
-  }
 
   return (
     <>

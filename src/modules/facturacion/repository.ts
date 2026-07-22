@@ -31,7 +31,7 @@ import type {
     PrestacionFacturableItem,
 } from './types'
 import { calcularImporteFacturable, resolverReglaFacturacion } from './cobertura'
-import { aplicarDiferencialesAValores } from './diferenciales'
+import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './diferenciales'
 import { crearOrdenAmbulatorio } from '@/modules/orden/service'
 import { claveDiaArgentina } from '@/lib/utils/argentina-date'
 
@@ -1660,8 +1660,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const actual = candidatasBasePorCirugia.get(infoCirugia.cirugiaId)
         if (
             !actual ||
-            gastoReferencia > actual.gastoReferencia ||
-            (gastoReferencia === actual.gastoReferencia && importeReferencia > actual.importeReferencia)
+            importeReferencia > actual.importeReferencia ||
+            (importeReferencia === actual.importeReferencia && gastoReferencia > actual.gastoReferencia)
         ) {
             candidatasBasePorCirugia.set(infoCirugia.cirugiaId, {
                 practicaId: practicaIngreso.id,
@@ -1963,7 +1963,30 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             practicaBaseIdEfectiva != null &&
             practicaBaseIdEfectiva === p.id
         )
-        const aplicarDiferencialesCirugia = Boolean(diferencialCirugia) && !esPracticaBaseDobleCirugia
+        const diferencialesCirugiaRaw = diferencialCirugia?.diferenciales ?? null
+        const diferencialesCirugiaCalculados = (() => {
+            if (!diferencialesCirugiaRaw) return null
+
+            // Temporalmente, feriado/nocturna no impactan montos en facturación.
+            const diferencialesSoloMultiple = {
+                ...diferencialesCirugiaRaw,
+                esFeriado: false,
+                esNocturna: false,
+            }
+
+            if (!esPracticaBaseDobleCirugia) return diferencialesSoloMultiple
+
+            // En doble cirugía, la práctica principal queda al 100% quirúrgico,
+            // y los recargos se aplican solo a las secundarias.
+            return {
+                ...diferencialesSoloMultiple,
+                mismaViaPatologia: false,
+                diferentesViasPatologia: false,
+                diferentesViasDiferentesPatologia: false,
+                dobleCirugia: false,
+            }
+        })()
+        const aplicarDiferencialesCirugia = tieneDiferencialesActivos(diferencialesCirugiaCalculados)
 
         const precioNomenclador = valoresPractica.get(normalizarCodigoPractica(p.codigoPractica)) ?? 0
         const coberturaBase = calcularImporteFacturable(
@@ -1986,7 +2009,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const desgloseConDiferencial = desgloseBase
             ? aplicarDiferencialesAValores(
                 desgloseBase,
-                aplicarDiferencialesCirugia ? (diferencialCirugia?.diferenciales ?? null) : null
+                aplicarDiferencialesCirugia ? diferencialesCirugiaCalculados : null
             )
             : null
         const importeFromDb = p.importeTotal != null ? Number(String(p.importeTotal)) : null

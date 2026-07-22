@@ -254,16 +254,14 @@ function calcularRecargosDiferencial(diferenciales: PrestacionFacturableItem['di
 } {
     if (!diferenciales) return { especialista: 0, gastos: 0 }
 
+    const esPrincipalDobleCirugia = Boolean(diferenciales.dobleCirugia && diferenciales.esPracticaBase)
+
     const especialista =
-        (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia ? 75 : 0) +
-        (diferenciales.esFeriado ? 20 : 0) +
-        (diferenciales.esNocturna ? 20 : 0)
+        (!esPrincipalDobleCirugia && (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia) ? 75 : 0)
 
     const gastos =
-        (diferenciales.mismaViaPatologia ? 30 : 0) +
-        (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia ? 50 : 0) +
-        (diferenciales.esFeriado ? 20 : 0) +
-        (diferenciales.esNocturna ? 20 : 0)
+        (!esPrincipalDobleCirugia && diferenciales.mismaViaPatologia ? 30 : 0) +
+        (!esPrincipalDobleCirugia && (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia) ? 50 : 0)
 
     return { especialista, gastos }
 }
@@ -272,9 +270,12 @@ function etiquetasCamposDiferencial(
     diferenciales: PrestacionFacturableItem['diferenciales'] | null | undefined
 ): string[] {
     if (!diferenciales) return []
-    if (diferenciales.aplicaDiferencial === false) return ['Base 100%']
 
     const recargos = calcularRecargosDiferencial(diferenciales)
+    if (recargos.especialista === 0 && recargos.gastos === 0) {
+        return ['Base 100%']
+    }
+
     const etiquetas: string[] = []
     if (recargos.especialista > 0) etiquetas.push(`Especialista +${recargos.especialista}%`)
     if (recargos.gastos > 0) etiquetas.push(`Gastos +${recargos.gastos}%`)
@@ -283,15 +284,11 @@ function etiquetasCamposDiferencial(
 
 function etiquetasCamposDiferencialCirugia(draft: DiferencialesCirugiaEditState): string[] {
     const recargosEspecialista =
-        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 75 : 0) +
-        (draft.esFeriado ? 20 : 0) +
-        (draft.esNocturna ? 20 : 0)
+        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 75 : 0)
 
     const recargosGastos =
         (draft.mismaViaPatologia ? 30 : 0) +
-        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 50 : 0) +
-        (draft.esFeriado ? 20 : 0) +
-        (draft.esNocturna ? 20 : 0)
+        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 50 : 0)
 
     const etiquetas: string[] = []
     if (recargosEspecialista > 0) etiquetas.push(`Especialista +${recargosEspecialista}%`)
@@ -979,12 +976,13 @@ function buildEditState(p: PrestacionFacturableItem): EditState {
 
 function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): DiferencialesCirugiaEditState {
     const baseIdActual = cirugia.diferenciales?.practicaBaseId ?? null
-    const baseIdPorGastos =
-        cirugia.practicas.find((practica) => practica.importeGastosReferencia > 0)?.practicaId ??
+    const baseIdPorMayorTotal =
+        [...cirugia.practicas]
+            .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)[0]?.practicaId ??
         cirugia.practicas[0]?.practicaId ??
         null
     const dobleCirugia = Boolean(cirugia.diferenciales?.dobleCirugia)
-    const baseIdFinal = dobleCirugia ? (baseIdActual ?? baseIdPorGastos) : baseIdActual
+    const baseIdFinal = dobleCirugia ? (baseIdActual ?? baseIdPorMayorTotal) : baseIdActual
 
     return {
         esFeriado: Boolean(cirugia.diferenciales?.esFeriado),
@@ -1417,10 +1415,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             .map((cirugia) => ({
                 ...cirugia,
                 practicas: [...cirugia.practicas].sort((a, b) => {
-                    if (b.importeGastosReferencia !== a.importeGastosReferencia) {
-                        return b.importeGastosReferencia - a.importeGastosReferencia
+                    if (b.importeTotalReferencia !== a.importeTotalReferencia) {
+                        return b.importeTotalReferencia - a.importeTotalReferencia
                     }
-                    return b.importeTotalReferencia - a.importeTotalReferencia
+                    return b.importeGastosReferencia - a.importeGastosReferencia
                 }),
             }))
             .sort((a, b) => b.cirugiaId - a.cirugiaId)
@@ -2465,12 +2463,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         const draft = diferencialesCirugiaEdit[cirugia.cirugiaId] ?? buildDiferencialesCirugiaState(cirugia)
         const practicaBaseId = draft.practicaBaseId
             ? Number.parseInt(draft.practicaBaseId, 10)
-            : (cirugia.practicas.find((p) => p.importeGastosReferencia > 0)?.practicaId ??
+            : (cirugia.practicas
+                .slice()
+                .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)[0]?.practicaId ??
                 cirugia.practicas[0]?.practicaId ??
                 null)
 
         if (draft.dobleCirugia && (!practicaBaseId || !cirugia.practicas.some((p) => p.practicaId === practicaBaseId))) {
-            setError('Debe seleccionar la cirugía base al 100% para aplicar doble cirugía')
+            setError('Debe seleccionar la práctica principal para aplicar doble cirugía')
             return
         }
 
@@ -3012,7 +3012,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                     <div>
                                         <h4 className="text-sm font-semibold text-amber-900">Diferenciales de cirugía</h4>
                                         <p className="text-xs text-amber-700">
-                                            Definí la cirugía base al 100% y qué diferenciales se aplican al resto.
+                                            En cirugía múltiple, elegí la práctica principal (mayor total) y el sistema aplicará diferenciales quirúrgicos al resto.
+                                        </p>
+                                        <p className="text-xs text-amber-700">
+                                            Por ahora, feriado y nocturna no impactan montos en facturación.
                                         </p>
                                         {diferencialesCirugiaCongelados && (
                                             <p className="mt-1 text-xs font-medium text-amber-800">
@@ -3142,7 +3145,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
                                                     <label className="text-xs text-amber-900">
-                                                        Cirugía base al 100%
+                                                        Práctica principal (100% quirúrgico)
                                                         <select
                                                             value={draft.practicaBaseId}
                                                             onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
@@ -3152,7 +3155,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             disabled={diferencialesCirugiaCongelados || !draft.dobleCirugia}
                                                             className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs disabled:bg-amber-100"
                                                         >
-                                                            <option value="">-- Seleccionar práctica base --</option>
+                                                            <option value="">-- Seleccionar práctica principal --</option>
                                                             {cirugia.practicas.map((practica) => (
                                                                 <option key={practica.practicaId} value={String(practica.practicaId)}>
                                                                     {practica.descripcion} · Total {formatCurrency(practica.importeTotalReferencia)} · Gastos {formatCurrency(practica.importeGastosReferencia)}
@@ -3161,9 +3164,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         </select>
                                                     </label>
                                                     <div className="text-xs text-amber-900 rounded border border-amber-200 bg-white px-2 py-2">
-                                                        <div><span className="font-semibold">Base 100%:</span> {practicaBase ? `${practicaBase.descripcion} (${formatCurrency(practicaBase.importeTotalReferencia)})` : 'Sin selección'}</div>
-                                                        <div><span className="font-semibold">Con diferenciales:</span> {draft.dobleCirugia ? (practicasConDiferencial.length > 0 ? practicasConDiferencial.map((p) => p.descripcion).join(' · ') : 'Ninguna') : 'Todas las prácticas de la cirugía'}</div>
-                                                        <div><span className="font-semibold">Criterio automático:</span> mayor importe de GASTOS.</div>
+                                                        <div><span className="font-semibold">Principal:</span> {practicaBase ? `${practicaBase.descripcion} (${formatCurrency(practicaBase.importeTotalReferencia)})` : 'Sin selección'}</div>
+                                                        <div><span className="font-semibold">Secundarias:</span> {draft.dobleCirugia ? (practicasConDiferencial.length > 0 ? practicasConDiferencial.map((p) => p.descripcion).join(' · ') : 'Ninguna') : 'No aplica (cirugía no múltiple)'}</div>
+                                                        <div><span className="font-semibold">Regla:</span> en principal no se aplican recargos quirúrgicos de múltiple; por ahora feriado/nocturna no impactan monto.</div>
+                                                        <div><span className="font-semibold">Criterio automático:</span> mayor importe TOTAL.</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -3588,9 +3592,9 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
                                                 const diferencialesActivos = resumenDiferenciales(p.diferenciales)
                                                 if (p.diferenciales?.dobleCirugia && p.diferenciales?.esPracticaBase) {
-                                                    diferencialesActivos.push('Base 100% (doble cirugía)')
+                                                    diferencialesActivos.push('Principal (100% quirúrgico en doble cirugía)')
                                                 }
-                                                if (p.diferenciales?.dobleCirugia && p.diferenciales?.aplicaDiferencial) {
+                                                if (p.diferenciales?.dobleCirugia && !p.diferenciales?.esPracticaBase && p.diferenciales?.aplicaDiferencial) {
                                                     diferencialesActivos.push('Secundaria con diferencial')
                                                 }
                                                 const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)

@@ -19,7 +19,9 @@ function buildCacheKey(q: string, convenioId?: number): string {
 export async function GET(request: NextRequest) {
   try {
     const usuario = await getUsuarioSesionLectura()
-    if (!tienePermiso(usuario.rol, 'AMBULATORIO', 'LEER')) {
+    const puedeBuscarPorAmbulatorio = tienePermiso(usuario.rol, 'AMBULATORIO', 'LEER')
+    const puedeBuscarPorCotizador = tienePermiso(usuario.rol, 'COTIZADOR', 'LEER')
+    if (!puedeBuscarPorAmbulatorio && !puedeBuscarPorCotizador) {
       return apiForbidden()
     }
 

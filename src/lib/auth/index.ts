@@ -24,6 +24,7 @@ type SessionClaimsLike = {
 const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
   // ADMISION
   'ficacode@gmail.com': ROLES.ADMISION,
+  'barrionuevodamarisbelen@gmail.com': ROLES.ADMISION,
 
   // ADMIN
   'ivictoria123@hotmail.com': ROLES.ADMIN,
@@ -36,7 +37,6 @@ const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
   'serapiogabriela40@gmail.com': ROLES.FACTURACION,
 
   // OPERADOR
-  'barrionuevodamarisbelen@gmail.com': ROLES.OPERADOR,
   'emilio_xeneize_22@hotmail.com.ar': ROLES.OPERADOR,
   'ivanagtarcaya78@gmail.com': ROLES.OPERADOR,
   'lucianolozanoj2@gmail.com': ROLES.OPERADOR,

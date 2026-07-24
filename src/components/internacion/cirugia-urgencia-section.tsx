@@ -1063,6 +1063,8 @@ export function CirugiaUrgenciaSection({
                                                 {puedeCrear && (
                                                     <Link
                                                         href={`/dashboard/internacion/${ingresoId}/practicas?cirugiaId=${c.id}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
                                                         className="text-xs font-medium text-emerald-700 border border-emerald-200 rounded-md px-2 py-1 hover:bg-emerald-50"
                                                     >
                                                         Agregar practica

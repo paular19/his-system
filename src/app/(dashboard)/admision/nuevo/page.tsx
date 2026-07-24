@@ -8,7 +8,11 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import type { PacienteResumen } from '@/modules/admision/types'
-import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
+import {
+  getCatalogoCoberturaAtencion,
+  getProfesionalesActivosCatalogo,
+  getSubtiposAdmisionCatalogo,
+} from '@/lib/catalogos/atencion-cache'
 
 export const metadata: Metadata = { title: 'Nueva Admisión' }
 
@@ -22,66 +26,17 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
     redirect('/dashboard/admision')
   }
 
-  const profesionales = await prisma.profesional.findMany({
-    where: { estado: 'A' },
-    select: { id: true, nombre: true, matricula: true },
-    orderBy: { nombre: 'asc' },
-  })
+  const [
+    profesionales,
+    subtipos,
+    catalogoCobertura,
+  ] = await Promise.all([
+    getProfesionalesActivosCatalogo(),
+    getSubtiposAdmisionCatalogo(),
+    getCatalogoCoberturaAtencion(),
+  ])
 
-  const codigosSubtipoAdmision = ['RAY', 'GUA', 'CUR', 'SUT', 'ECG', 'ECO', 'DER', 'TUR']
-  const ordenSubtipos = new Map(codigosSubtipoAdmision.map((codigo, i) => [codigo, i]))
-
-  const subtiposRaw = await prisma.subtipoAdmision.findMany({
-    where: {
-      estado: 'A',
-      codigo: { in: codigosSubtipoAdmision },
-    },
-    select: { codigo: true, descripcion: true },
-  })
-
-  const subtipos = subtiposRaw.sort(
-    (a, b) => (ordenSubtipos.get(a.codigo) ?? 999) - (ordenSubtipos.get(b.codigo) ?? 999)
-  )
-
-  let obraSociales: Array<{ id: number; nombre: string; requiereCoseguro: boolean }> = []
-  let planes: Array<{ id: number; nombre: string; obraSocialId: number | null }> = []
-  let coseguros: Array<{ id: number; nombre: string }> = []
-
-  try {
-    const rows = await prisma.obraSocial.findMany({
-      where: { estado: 'A' },
-      select: { id: true, nombre: true, requiereCoseguro: true },
-      orderBy: { nombre: 'asc' },
-    })
-    obraSociales = filtrarObrasSocialesPrincipales(rows).map((os) => ({
-      id: os.id,
-      nombre: os.nombre,
-      requiereCoseguro: os.requiereCoseguro === 'S',
-    }))
-  } catch (error) {
-    console.error('[ADMISION] No se pudieron cargar obras sociales:', error)
-  }
-
-  try {
-    coseguros = await asegurarCosegurosIPSS()
-  } catch (error) {
-    console.error('[ADMISION] No se pudieron asegurar/cargar coseguros de IPSS:', error)
-  }
-
-  try {
-    const rows = await prisma.planObraSocial.findMany({
-      where: { estado: 'A' },
-      select: { id: true, descripcion: true, obraSocialId: true },
-      orderBy: { descripcion: 'asc' },
-    })
-    planes = rows.map((p) => ({
-      id: p.id,
-      nombre: p.descripcion,
-      obraSocialId: p.obraSocialId,
-    }))
-  } catch {
-    // PlanOSoc puede no existir aún
-  }
+  const { obraSociales, planes, coseguros } = catalogoCobertura
 
   // Pre-cargar paciente si se pasó pacienteId por query param
   const params = await searchParams

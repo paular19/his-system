@@ -1090,6 +1090,8 @@ export function PracticaSection({
                     {puedeCrear && (
                         <Link
                             href={`/dashboard/internacion/${ingresoId}/practicas`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50"
                         >
                             <Plus className="h-3.5 w-3.5" />

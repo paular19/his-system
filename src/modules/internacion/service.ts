@@ -106,7 +106,7 @@ export async function obtenerInternacionDetalle(
   const detalle = await repo.obtenerInternacionDetalle(id)
   if (!detalle) throw new Error(`Internación con ID ${id} no encontrada`)
 
-  await registrarAudit({
+  void registrarAudit({
     usuario,
     accion: 'CONSULTAR',
     entidad: 'Internacion',

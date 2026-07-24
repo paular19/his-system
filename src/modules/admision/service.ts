@@ -306,7 +306,7 @@ export async function obtenerIngreso(
     throw new Error(`Ingreso con ID ${id} no encontrado`)
   }
 
-  await registrarAudit({
+  void registrarAudit({
     usuario,
     accion: 'CONSULTAR',
     entidad: 'Ingreso',

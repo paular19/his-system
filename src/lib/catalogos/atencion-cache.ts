@@ -1,0 +1,135 @@
+import 'server-only'
+
+import { unstable_cache } from 'next/cache'
+import { prisma } from '@/lib/db'
+import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
+
+export type CatalogoProfesional = {
+    id: number
+    nombre: string
+    matricula: number | null
+}
+
+export type CatalogoObraSocial = {
+    id: number
+    nombre: string
+    requiereCoseguro: boolean
+}
+
+export type CatalogoPlan = {
+    id: number
+    nombre: string
+    obraSocialId: number | null
+}
+
+export type CatalogoCoseguro = {
+    id: number
+    nombre: string
+}
+
+export type CatalogoSubtipoAdmision = {
+    codigo: string
+    descripcion: string
+}
+
+const CODIGOS_SUBTIPO_ADMISION = ['RAY', 'GUA', 'CUR', 'SUT', 'ECG', 'ECO', 'DER', 'TUR'] as const
+
+const getProfesionalesActivosCached = unstable_cache(
+    async (): Promise<CatalogoProfesional[]> => {
+        return prisma.profesional.findMany({
+            where: { estado: 'A' },
+            select: { id: true, nombre: true, matricula: true },
+            orderBy: { nombre: 'asc' },
+        })
+    },
+    ['catalogo-profesionales-activos-v1'],
+    { revalidate: 300, tags: ['catalogo-profesionales'] }
+)
+
+const getObrasSocialesActivasCached = unstable_cache(
+    async (): Promise<CatalogoObraSocial[]> => {
+        const rows = await prisma.obraSocial.findMany({
+            where: { estado: 'A' },
+            select: { id: true, nombre: true, requiereCoseguro: true },
+            orderBy: { nombre: 'asc' },
+        })
+
+        return filtrarObrasSocialesPrincipales(rows).map((os) => ({
+            id: os.id,
+            nombre: os.nombre,
+            requiereCoseguro: os.requiereCoseguro === 'S',
+        }))
+    },
+    ['catalogo-obras-sociales-v1'],
+    { revalidate: 300, tags: ['catalogo-obras-sociales'] }
+)
+
+const getPlanesObraSocialActivosCached = unstable_cache(
+    async (): Promise<CatalogoPlan[]> => {
+        const rows = await prisma.planObraSocial.findMany({
+            where: { estado: 'A' },
+            select: { id: true, descripcion: true, obraSocialId: true },
+            orderBy: { descripcion: 'asc' },
+        })
+
+        return rows.map((plan) => ({
+            id: plan.id,
+            nombre: plan.descripcion,
+            obraSocialId: plan.obraSocialId,
+        }))
+    },
+    ['catalogo-planes-obras-sociales-v1'],
+    { revalidate: 300, tags: ['catalogo-planes-obras-sociales'] }
+)
+
+const getCosegurosIPSSCached = unstable_cache(
+    async (): Promise<CatalogoCoseguro[]> => {
+        return asegurarCosegurosIPSS()
+    },
+    ['catalogo-coseguros-ipss-v1'],
+    { revalidate: 300, tags: ['catalogo-coseguros-ipss'] }
+)
+
+const getSubtiposAdmisionCached = unstable_cache(
+    async (): Promise<CatalogoSubtipoAdmision[]> => {
+        const ordenSubtipos = new Map<string, number>(
+            CODIGOS_SUBTIPO_ADMISION.map((codigo, index) => [codigo, index])
+        )
+
+        const rows = await prisma.subtipoAdmision.findMany({
+            where: {
+                estado: 'A',
+                codigo: { in: [...CODIGOS_SUBTIPO_ADMISION] },
+            },
+            select: { codigo: true, descripcion: true },
+        })
+
+        return rows.sort(
+            (a, b) => (ordenSubtipos.get(a.codigo) ?? 999) - (ordenSubtipos.get(b.codigo) ?? 999)
+        )
+    },
+    ['catalogo-subtipos-admision-v1'],
+    { revalidate: 300, tags: ['catalogo-subtipos-admision'] }
+)
+
+export async function getProfesionalesActivosCatalogo(): Promise<CatalogoProfesional[]> {
+    return getProfesionalesActivosCached()
+}
+
+export async function getCatalogoCoberturaAtencion(): Promise<{
+    obraSociales: CatalogoObraSocial[]
+    planes: CatalogoPlan[]
+    coseguros: CatalogoCoseguro[]
+}> {
+    const [obraSociales, planes, coseguros] = await Promise.all([
+        getObrasSocialesActivasCached(),
+        getPlanesObraSocialActivosCached(),
+        getCosegurosIPSSCached(),
+    ])
+
+    return { obraSociales, planes, coseguros }
+}
+
+export async function getSubtiposAdmisionCatalogo(): Promise<CatalogoSubtipoAdmision[]> {
+    return getSubtiposAdmisionCached()
+}

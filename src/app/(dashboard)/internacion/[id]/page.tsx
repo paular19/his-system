@@ -13,7 +13,10 @@ import { ObservacionesSection } from '@/components/internacion/observaciones-sec
 import { ViasSection } from '@/components/internacion/vias-section'
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
+import {
+    getCatalogoCoberturaAtencion,
+    getProfesionalesActivosCatalogo,
+} from '@/lib/catalogos/atencion-cache'
 import {
     ChevronRight,
     User,
@@ -136,41 +139,17 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const esVistaAdmision = usuario.rol === ROLES.ADMISION
 
     // Load profesionales y camas disponibles para los formularios
-    const [profesionales, camasDisponibles, obrasSocialesRows, planesRows, coseguros] = await Promise.all([
-        prisma.profesional.findMany({
-            where: { estado: 'A' },
-            select: { id: true, nombre: true, matricula: true },
-            orderBy: { nombre: 'asc' },
-        }),
+    const [profesionales, camasDisponibles, catalogoCobertura] = await Promise.all([
+        getProfesionalesActivosCatalogo(),
         prisma.cama.findMany({
             where: { estado: 'DISPONIBLE' },
             select: { id: true, identificador: true, habitacion: true, sector: true, estado: true, observaciones: true, sedeId: true, usuario: true, fechaEstado: true },
             orderBy: [{ sector: 'asc' }, { identificador: 'asc' }],
         }),
-        prisma.obraSocial.findMany({
-            where: { estado: 'A' },
-            select: { id: true, nombre: true, requiereCoseguro: true },
-            orderBy: { nombre: 'asc' },
-        }),
-        prisma.planObraSocial.findMany({
-            where: { estado: 'A' },
-            select: { id: true, descripcion: true, obraSocialId: true },
-            orderBy: { descripcion: 'asc' },
-        }),
-        asegurarCosegurosIPSS(),
+        getCatalogoCoberturaAtencion(),
     ])
 
-    const obraSociales = filtrarObrasSocialesPrincipales(obrasSocialesRows).map((os) => ({
-        id: os.id,
-        nombre: os.nombre,
-        requiereCoseguro: os.requiereCoseguro === 'S',
-    }))
-
-    const planes = planesRows.map((p) => ({
-        id: p.id,
-        nombre: p.descripcion,
-        obraSocialId: p.obraSocialId,
-    }))
+    const { obraSociales, planes, coseguros } = catalogoCobertura
 
     const camasDisponiblesSimple = camasDisponibles.map((c) => ({
         id: c.id,

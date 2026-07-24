@@ -1088,24 +1088,12 @@ export function PracticaSection({
                 </button>
                 <div className="flex items-center gap-2">
                     {puedeCrear && (
-                        <button
-                            onClick={() => {
-                                setMostrarPedidoLaboratorio((v) => !v)
-                                if (mostrarPedidoLaboratorio) limpiarPedidoLaboratorio()
-                            }}
-                            className="flex items-center gap-1 text-xs font-medium text-indigo-700 hover:text-indigo-800 border border-indigo-200 rounded-lg px-2.5 py-1 hover:bg-indigo-50"
-                        >
-                            <Plus className="h-3.5 w-3.5" />
-                            Agregar pedido de laboratorio
-                        </button>
-                    )}
-                    {puedeCrear && (
                         <Link
                             href={`/dashboard/internacion/${ingresoId}/practicas`}
                             className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50"
                         >
                             <Plus className="h-3.5 w-3.5" />
-                            Carga rápida de prácticas
+                            Cargar prácticas
                         </Link>
                     )}
                 </div>
@@ -1113,78 +1101,7 @@ export function PracticaSection({
 
             {expandido && (
                 <div className="p-4 space-y-4">
-                    {mostrarPedidoLaboratorio && puedeCrear && (
-                        <div className="border border-indigo-100 bg-indigo-50/40 rounded-xl p-4 space-y-3">
-                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                                Nuevo pedido de laboratorio
-                            </p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Número de protocolo</label>
-                                    <input
-                                        type="text"
-                                        value={numeroProtocoloLaboratorio}
-                                        onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)}
-                                        placeholder="Ej: 123456"
-                                        className="his-input text-sm w-full"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Diagnóstico</label>
-                                    <input
-                                        type="text"
-                                        value={diagnosticoLaboratorio}
-                                        onChange={(e) => setDiagnosticoLaboratorio(e.target.value)}
-                                        placeholder="Diagnóstico clínico"
-                                        className="his-input text-sm w-full"
-                                    />
-                                </div>
-                            </div>
-                            {error && (
-                                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
-                                    {error}
-                                </p>
-                            )}
-                            <div className="flex gap-2 pt-1">
-                                <button
-                                    onClick={handleCrearPedidoLaboratorio}
-                                    disabled={guardandoPedidoLaboratorio}
-                                    className="flex items-center gap-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-50"
-                                >
-                                    {guardandoPedidoLaboratorio ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                        <Plus className="h-3.5 w-3.5" />
-                                    )}
-                                    Guardar
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setMostrarPedidoLaboratorio(false)
-                                        limpiarPedidoLaboratorio()
-                                    }}
-                                    className="text-xs text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-1.5 hover:bg-gray-50"
-                                >
-                                    Cancelar
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    <datalist id="clasificacion-practica-list">
-                        <option value="HE" />
-                        <option value="HA" />
-                        <option value="GA" />
-                        <option value="HP" />
-                        <option value="A1" />
-                        <option value="A2" />
-                        <option value="A3" />
-                        <option value="HE+GA" />
-                        <option value="HE+HA" />
-                        <option value="HA+GA" />
-                    </datalist>
-
-                    {/* Lista de prácticas */}
+                    {/* Historial de órdenes */}
                     {practicas.length === 0 ? (
                         <p className="text-xs text-gray-400 text-center py-3">
                             Sin prácticas registradas
@@ -1198,16 +1115,16 @@ export function PracticaSection({
                                         type="text"
                                         value={filtroLista}
                                         onChange={(e) => setFiltroLista(e.target.value)}
-                                        placeholder="Filtrar prácticas por código, descripción o autorización..."
+                                        placeholder="Filtrar órdenes por número, autorización, código o descripción..."
                                         className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
                                 <p className="text-xs text-gray-500">
-                                    {practicasPendientesFiltradas.length + practicasAutorizadasFiltradas.length} de {practicas.length}
+                                    {ordenesAutorizadasFiltradas.length} orden(es)
                                 </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
-                                <span className="text-[11px] font-medium text-gray-700">Mostrar prácticas cargadas:</span>
+                                <span className="text-[11px] font-medium text-gray-700">Mostrar órdenes según sector al cargar la práctica:</span>
                                 <label className="inline-flex items-center gap-1.5 text-xs text-gray-700">
                                     <input
                                         type="checkbox"
@@ -1228,246 +1145,17 @@ export function PracticaSection({
                                 </label>
                             </div>
                             <div className="space-y-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                                    Pendientes de generación ({practicasPendientesFiltradas.length})
-                                </p>
-                                {puedeCrear && practicasPendientesFiltradas.length > 0 && (
-                                    <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs flex flex-wrap items-center gap-3">
-                                        <label className="inline-flex items-center gap-2 text-amber-900">
-                                            <input
-                                                type="checkbox"
-                                                checked={todasFiltradasSeleccionadas}
-                                                onChange={(e) => alternarSeleccionTodas(idsPendientesFiltradas, e.target.checked)}
-                                                disabled={eliminandoPracticas}
-                                                className="h-4 w-4 rounded border-amber-300 text-amber-700 focus:ring-amber-500"
-                                            />
-                                            Seleccionar todas (filtro actual)
-                                        </label>
-                                        <label className="w-full max-w-xl text-[11px] text-amber-900">
-                                            Médico firmante
-                                            <ProfesionalSelect
-                                                profesionales={profesionalesConMatricula}
-                                                value={medicoFirmanteId}
-                                                onChange={(nextValue) => {
-                                                    setMedicoFirmanteId(nextValue)
-                                                    setFirmanteEditadoManualmente(true)
-                                                }}
-                                                disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
-                                                placeholderOption="-- Seleccionar firmante --"
-                                                searchPlaceholder="Buscar por nombre o matricula"
-                                                selectClassName="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
-                                                searchClassName="mt-1 w-full rounded border border-amber-200 bg-white px-2 py-1 text-[11px] text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
-                                            />
-                                            <span className="mt-1 block text-[10px] text-amber-800">
-                                                Por defecto se usa el tratante; podés editarlo antes de generar.
-                                            </span>
-                                            <span className="block text-[10px] text-amber-800">
-                                                Firma prevista: {firmaPrevistaTexto}
-                                            </span>
-                                        </label>
-                                        {puedeGenerarOrdenes && (
-                                            <>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void handleGenerarOrdenes(false)}
-                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
-                                                    className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                                >
-                                                    Generar órdenes
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void handleGenerarOrdenes(true)}
-                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
-                                                    className="inline-flex items-center rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-                                                >
-                                                    Generar órdenes e imprimir
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleClickAgruparYGenerarOrden(false)}
-                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
-                                                    className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                                                >
-                                                    Agrupar y generar órdenes
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleClickAgruparYGenerarOrden(true)}
-                                                    disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
-                                                    className="inline-flex items-center rounded-md border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
-                                                >
-                                                    Agrupar, generar e imprimir
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                                {practicasPendientesFiltradasOrdenadas.length === 0 ? (
-                                    <p className="text-xs text-gray-400">No hay prácticas pendientes de generación.</p>
-                                ) : (
-                                    practicasPendientesPaginadasAgrupadas.map((grupo) => {
-                                        const expandida = Boolean(clasificacionesExpandidas[grupo.clasificacion])
-                                        return (
-                                            <div
-                                                key={`grupo-${grupo.clasificacion}`}
-                                                className="text-xs border rounded-lg px-2.5 py-2 bg-white"
-                                            >
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => alternarExpansionClasificacion(grupo.clasificacion)}
-                                                        className="inline-flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-100"
-                                                    >
-                                                        <span>{grupo.clasificacion}</span>
-                                                        {expandida ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => alternarExpansionClasificacion(grupo.clasificacion)}
-                                                        className="inline-flex items-center rounded border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
-                                                    >
-                                                        {expandida ? 'Contraer' : `Ampliar (${grupo.items.length})`}
-                                                    </button>
-                                                </div>
-                                                {expandida && (
-                                                    <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
-                                                        {grupo.items.map((p) => (
-                                                            <div
-                                                                key={p.id}
-                                                                className="flex flex-col gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 md:flex-row md:flex-wrap md:items-center"
-                                                            >
-                                                                {puedeCrear && (
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={practicasSeleccionadas.includes(p.id)}
-                                                                        onChange={(e) => alternarSeleccionPractica(p.id, e.target.checked)}
-                                                                        disabled={eliminandoPracticas}
-                                                                        className="h-3.5 w-3.5 rounded border-gray-300 text-amber-700 focus:ring-amber-500"
-                                                                    />
-                                                                )}
-                                                                <span className="font-mono text-gray-400 shrink-0">
-                                                                    {p.codigoPractica.trim()}
-                                                                </span>
-                                                                <span className="font-medium text-gray-800 wrap-break-word">
-                                                                    {p.descripcionPractica ?? p.codigoPractica.trim()}
-                                                                </span>
-                                                                <span className="text-gray-500">{fmtFecha(p.fecha)}</span>
-                                                                {p.cantidad > 1 && <span className="text-gray-500">Cant: {p.cantidad}</span>}
-                                                                {p.numeroAutorizacion && <span className="text-gray-500">Aut: {p.numeroAutorizacion}</span>}
-                                                                {esPedidoLaboratorio(p) && (
-                                                                    <span className="text-indigo-700">
-                                                                        Prot: {p.numeroProtocoloLaboratorio?.trim() || '-'}
-                                                                    </span>
-                                                                )}
-                                                                {!esPedidoLaboratorio(p) && (
-                                                                    <span
-                                                                        className={`px-1.5 py-0.5 rounded ${p.facturable
-                                                                            ? 'bg-green-50 text-green-700'
-                                                                            : 'bg-gray-100 text-gray-500'
-                                                                            }`}
-                                                                    >
-                                                                        {p.facturable ? 'Facturable' : 'No facturable'}
-                                                                    </span>
-                                                                )}
-                                                                <span className="text-[11px] text-gray-500">Clasif.</span>
-                                                                <input
-                                                                    type="text"
-                                                                    value={obtenerClasificacionPractica(p)}
-                                                                    onChange={(e) => {
-                                                                        const raw = e.target.value.toUpperCase()
-                                                                        setClasificacionPorPracticaId((prev) => ({
-                                                                            ...prev,
-                                                                            [p.id]: normalizarClasificacionAgrupacion(raw) ?? raw.replace(/\s+/g, ''),
-                                                                        }))
-                                                                    }}
-                                                                    list="clasificacion-practica-list"
-                                                                    className="w-20 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-700"
-                                                                />
-                                                                {puedeCrear && p.cantidad > 1 && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => void handleDesagruparPractica(p.id)}
-                                                                        disabled={desagrupandoPracticaId === p.id}
-                                                                        className="rounded-md border border-blue-200 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                                                    >
-                                                                        {desagrupandoPracticaId === p.id ? '...' : 'Desagrupar'}
-                                                                    </button>
-                                                                )}
-                                                                {p.estado && p.estado !== 'A' && (
-                                                                    <span className="text-gray-400">{p.estado}</span>
-                                                                )}
-                                                                {practicaFacturada(p) && (
-                                                                    <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
-                                                                        Facturada
-                                                                    </span>
-                                                                )}
-                                                                {puedeCrear && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => abrirEdicionPractica(p)}
-                                                                        disabled={guardandoPracticaEditando || practicaFacturada(p)}
-                                                                        title={practicaFacturada(p)
-                                                                            ? 'Práctica facturada. Anulá la orden en Facturación para editar.'
-                                                                            : 'Editar práctica'}
-                                                                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 disabled:opacity-50"
-                                                                    >
-                                                                        <Pencil className="h-3.5 w-3.5" />
-                                                                    </button>
-                                                                )}
-                                                                {puedeCrear && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => void handleEliminarPracticasSeleccionadas([p.id])}
-                                                                        disabled={eliminandoPracticas}
-                                                                        title="Eliminar práctica"
-                                                                        aria-label="Eliminar práctica"
-                                                                        className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                                                    >
-                                                                        {eliminandoPracticas
-                                                                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                                            : <Trash2 className="h-3.5 w-3.5" />}
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )
-                                    })
-                                )}
-                                {practicasPendientesFiltradasOrdenadas.length > PRACTICAS_LISTA_POR_PAGINA && (
-                                    <div className="flex items-center justify-between gap-2">
-                                        <p className="text-xs text-gray-500">
-                                            Página {paginaPendientesActual} de {totalPaginasPendientes}
-                                        </p>
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => setPaginaPendientes((prev) => Math.max(1, prev - 1))}
-                                                disabled={paginaPendientesActual <= 1}
-                                                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                            >
-                                                Anterior
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setPaginaPendientes((prev) => Math.min(totalPaginasPendientes, prev + 1))}
-                                                disabled={paginaPendientesActual >= totalPaginasPendientes}
-                                                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                            >
-                                                Siguiente
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="space-y-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                    Órdenes generadas ({ordenesAutorizadasFiltradas.length})
-                                </p>
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                        Histórico de órdenes ({ordenesAutorizadasFiltradas.length})
+                                    </p>
+                                    <Link
+                                        href={`/dashboard/internacion/${ingresoId}/practicas`}
+                                        className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                                    >
+                                        Ver más
+                                    </Link>
+                                </div>
                                 <div className="space-y-1">
                                     <button
                                         type="button"

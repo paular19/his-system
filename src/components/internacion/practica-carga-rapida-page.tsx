@@ -143,8 +143,6 @@ export function PracticaCargaRapidaPage({
     const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
-    const [ordenesGeneradasSesionKeys, setOrdenesGeneradasSesionKeys] = useState<string[]>([])
-    const [mostrarOrdenesSesion, setMostrarOrdenesSesion] = useState(true)
     const [mostrarOrdenesHistoricas, setMostrarOrdenesHistoricas] = useState(true)
     const [busquedaHistorico, setBusquedaHistorico] = useState('')
     const [paginaHistorico, setPaginaHistorico] = useState(1)
@@ -281,24 +279,6 @@ export function PracticaCargaRapidaPage({
         () => ordenesAutorizadas.filter((grupo) => grupoTieneNumeroAutorizacion(grupo)),
         [ordenesAutorizadas]
     )
-
-    const ordenesAutorizadasSesion = useMemo(() => {
-        const keysSesion = new Set(ordenesGeneradasSesionKeys)
-        return ordenesAutorizadas.filter((grupo) => {
-            if (grupo.tipo !== 'orden') return false
-            if (grupo.puestoNumero == null || grupo.ordenNumero == null) return false
-            return keysSesion.has(`${grupo.puestoNumero}-${grupo.ordenNumero}`)
-        })
-    }, [ordenesAutorizadas, ordenesGeneradasSesionKeys])
-
-    const ordenesAutorizadasHistoricas = useMemo(() => {
-        const keysSesion = new Set(ordenesGeneradasSesionKeys)
-        return ordenesAutorizadas.filter((grupo) => {
-            if (grupo.tipo !== 'orden') return true
-            if (grupo.puestoNumero == null || grupo.ordenNumero == null) return true
-            return !keysSesion.has(`${grupo.puestoNumero}-${grupo.ordenNumero}`)
-        })
-    }, [ordenesAutorizadas, ordenesGeneradasSesionKeys])
 
     const matriculaPorProfesionalId = useMemo(() => {
         const map = new Map<number, number>()
@@ -567,11 +547,6 @@ export function PracticaCargaRapidaPage({
 
             setPracticasSeleccionadas((prev) => prev.filter((id) => !practicaIds.includes(id)))
 
-            if (grupos.length > 0) {
-                const nuevasKeys = grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`)
-                setOrdenesGeneradasSesionKeys((prev) => Array.from(new Set([...nuevasKeys, ...prev])))
-            }
-
             if (imprimirDespues && grupos.length > 0) {
                 const ordenesUnicas = Array.from(
                     new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
@@ -591,12 +566,7 @@ export function PracticaCargaRapidaPage({
     const todasPendientesSeleccionadas =
         practicasPendientes.length > 0 && practicasPendientes.every((practica) => practicasSeleccionadas.includes(practica.id))
 
-    const gruposFiltradosSesion = ordenesAutorizadasSesion.filter((grupo) => {
-        const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
-        return yaAutorizada ? mostrarOrdenesYaAutorizadas : mostrarOrdenesPendientesAutorizacion
-    })
-
-    const gruposFiltradosHistoricos = ordenesAutorizadasHistoricas.filter((grupo) => {
+    const gruposFiltradosHistoricos = ordenesAutorizadas.filter((grupo) => {
         const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
         return yaAutorizada ? mostrarOrdenesYaAutorizadas : mostrarOrdenesPendientesAutorizacion
     })
@@ -962,33 +932,11 @@ export function PracticaCargaRapidaPage({
                             <div className="space-y-2">
                                 <button
                                     type="button"
-                                    onClick={() => setMostrarOrdenesSesion((prev) => !prev)}
-                                    className="flex w-full items-center justify-between rounded border border-blue-200 bg-blue-50/50 px-2 py-1 text-left"
-                                >
-                                    <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-                                        Generadas en esta sesion ({ordenesAutorizadasSesion.length})
-                                    </span>
-                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-800">
-                                        {mostrarOrdenesSesion ? 'Contraer' : 'Expandir'}
-                                        {mostrarOrdenesSesion ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                                    </span>
-                                </button>
-
-                                {mostrarOrdenesSesion && gruposFiltradosSesion.length === 0 ? (
-                                    <p className="rounded border border-blue-100 bg-blue-50/40 px-2 py-1 text-[11px] text-blue-700">
-                                        En esta sesion no hay ordenes que coincidan con los filtros actuales.
-                                    </p>
-                                ) : (
-                                    mostrarOrdenesSesion && gruposFiltradosSesion.map(renderGrupoOrden)
-                                )}
-
-                                <button
-                                    type="button"
                                     onClick={() => setMostrarOrdenesHistoricas((prev) => !prev)}
                                     className="flex w-full items-center justify-between rounded border border-gray-300 bg-gray-50 px-2 py-1 text-left"
                                 >
                                     <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
-                                        Historico de ordenes ({ordenesAutorizadasHistoricas.length})
+                                        Historico de ordenes ({ordenesAutorizadas.length})
                                     </span>
                                     <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-800">
                                         {mostrarOrdenesHistoricas ? 'Contraer' : 'Expandir'}

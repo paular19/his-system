@@ -8,6 +8,7 @@ import { TransferenciaCama } from '@/components/internacion/transferencia-cama'
 import { DiagnosticosSection } from '@/components/internacion/diagnosticos-section'
 import { TratanteSection } from '@/components/internacion/tratante-section'
 import { ObservacionesSection } from '@/components/internacion/observaciones-section'
+import { SoporteRespiratorioSection } from '@/components/internacion/soporte-respiratorio-section'
 import { ViasSection } from '@/components/internacion/vias-section'
 import { InternacionPanelClinicoLazy } from '@/components/internacion/internacion-panel-clinico-lazy'
 import Link from 'next/link'
@@ -74,7 +75,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         ingreso?.paciente?.nombreCompleto ?? ingreso?.nombre ?? null
     )
 
-    return { title: apellido ? `Internación - ${apellido}` : 'Internación' }
+    return { title: apellido ? `INT-${apellido}` : 'Internación' }
 }
 
 export default async function InternacionDetallePage({ params }: PageProps) {
@@ -291,12 +292,22 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             </dl>
                         </div>
 
-                        <ObservacionesSection
-                            ingresoId={ingresoId}
-                            observacionesIniciales={detalle.observaciones ?? null}
-                            puedeModificar={puedeModificar}
-                            profesionales={profesionales}
-                        />
+                        {esVistaAdmision && (
+                            <>
+                                <SoporteRespiratorioSection
+                                    ingresoId={ingresoId}
+                                    observacionesIniciales={detalle.observaciones ?? null}
+                                    puedeModificar={puedeModificar}
+                                    profesionales={profesionales}
+                                />
+
+                                <ObservacionesSection
+                                    ingresoId={ingresoId}
+                                    observacionesIniciales={detalle.observaciones ?? null}
+                                    puedeModificar={puedeModificar}
+                                />
+                            </>
+                        )}
 
                         <DiagnosticosSection
                             ingresoId={ingresoId}
@@ -349,6 +360,19 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     numeroIngreso={detalle.numeroIngreso}
                                     profesionales={profesionales}
                                     puedeCrear={puedeCrear}
+                                />
+
+                                <SoporteRespiratorioSection
+                                    ingresoId={ingresoId}
+                                    observacionesIniciales={detalle.observaciones ?? null}
+                                    puedeModificar={puedeModificar}
+                                    profesionales={profesionales}
+                                />
+
+                                <ObservacionesSection
+                                    ingresoId={ingresoId}
+                                    observacionesIniciales={detalle.observaciones ?? null}
+                                    puedeModificar={puedeModificar}
                                 />
                             </div>
                         </>

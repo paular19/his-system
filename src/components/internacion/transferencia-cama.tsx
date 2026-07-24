@@ -66,6 +66,8 @@ export function TransferenciaCama({
     const [descripcionPatologiaDefinitiva, setDescripcionPatologiaDefinitiva] = useState('')
     const [altaGuardando, setAltaGuardando] = useState(false)
     const [altaError, setAltaError] = useState<string | null>(null)
+    const [altaExito, setAltaExito] = useState<string | null>(null)
+    const [confirmacionAlta, setConfirmacionAlta] = useState(false)
 
     // Refresh camas disponibles (excluir la cama actual del listado)
     const camasParaTransferir = camasDisponibles.filter((c) => c.id !== cama?.id)
@@ -105,6 +107,19 @@ export function TransferenciaCama({
         e.preventDefault()
         setAltaGuardando(true)
         setAltaError(null)
+        setAltaExito(null)
+
+        if (!fechaEgreso) {
+            setAltaError('Debe completar fecha y hora de egreso.')
+            setAltaGuardando(false)
+            return
+        }
+
+        if (!confirmacionAlta) {
+            setAltaError('Debe confirmar el alta para continuar.')
+            setAltaGuardando(false)
+            return
+        }
 
         const motivoCodigo = motivoEgresoCodigo.trim().toUpperCase()
         if (motivoCodigo.length > 2) {
@@ -130,6 +145,12 @@ export function TransferenciaCama({
                 throw new Error(json.error ?? 'Error al registrar el alta')
             }
 
+            setAltaExito('Alta registrada correctamente. Actualizando ficha...')
+            setMostrarAlta(false)
+            setConfirmacionAlta(false)
+            setDescripcionPatologiaDefinitiva('')
+            setMotivoEgresoCodigo('')
+            setFechaEgreso(ahoraLocalDateTimeInput())
             router.refresh()
         } catch (err) {
             setAltaError(err instanceof Error ? err.message : 'Error inesperado')
@@ -345,7 +366,11 @@ export function TransferenciaCama({
                         {estadoInternacion === 'A' && (
                             <button
                                 type="button"
-                                onClick={() => setMostrarAlta((v) => !v)}
+                                onClick={() => {
+                                    setAltaError(null)
+                                    setAltaExito(null)
+                                    setMostrarAlta((v) => !v)
+                                }}
                                 className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 transition-colors"
                             >
                                 {mostrarAlta ? 'Ocultar alta' : 'Dar alta'}
@@ -353,8 +378,18 @@ export function TransferenciaCama({
                         )}
                     </div>
 
+                    {altaExito && (
+                        <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
+                            {altaExito}
+                        </p>
+                    )}
+
                     {estadoInternacion === 'A' && mostrarAlta && (
                         <form onSubmit={registrarAlta} className="space-y-3 rounded-xl border border-rose-200 bg-white p-4">
+                            <div className="rounded-lg border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">
+                                Esta acción marca la internación como egresada y libera la cama actual.
+                            </div>
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-medium text-gray-700 mb-1">Fecha de egreso</label>
@@ -392,6 +427,16 @@ export function TransferenciaCama({
                                 </div>
                             </div>
 
+                            <label className="inline-flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={confirmacionAlta}
+                                    onChange={(e) => setConfirmacionAlta(e.target.checked)}
+                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                                />
+                                <span>Confirmo registrar el alta y liberar la cama actual.</span>
+                            </label>
+
                             {altaError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">{altaError}</p>}
 
                             <div className="flex items-center justify-end gap-2">
@@ -404,10 +449,10 @@ export function TransferenciaCama({
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={altaGuardando}
+                                    disabled={altaGuardando || !confirmacionAlta || !fechaEgreso}
                                     className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-60"
                                 >
-                                    {altaGuardando ? 'Registrando…' : 'Confirmar alta'}
+                                    {altaGuardando ? 'Registrando alta...' : 'Confirmar alta'}
                                 </button>
                             </div>
                         </form>

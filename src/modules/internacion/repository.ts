@@ -2269,7 +2269,7 @@ export async function actualizarObservacionesInternacion(
   if (metadataFueEnviada) {
     const actual = parseObservacionesInternacion(ingreso.observaciones)
     observacionesFinal = serializarObservacionesInternacion({
-      observaciones: data.observaciones,
+      observaciones: data.observaciones !== undefined ? data.observaciones : actual.observaciones,
       checklistDocumental: data.checklistDocumental ?? actual.checklistDocumental,
       armRegistros:
         data.armRegistros?.map((item) => ({

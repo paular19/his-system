@@ -122,6 +122,83 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const ingresoId = parseInt(id, 10)
     if (isNaN(ingresoId)) notFound()
 
+    const puedeModificar = tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')
+    const puedeCrear = puedeModificar || tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+    const puedeCambiarCama = puedeModificar || tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+    const puedeEditarPracticas =
+        puedeCrear ||
+        tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+    const esVistaAdmision = usuario.rol === ROLES.ADMISION
+
+    const catalogosPromise = (async () => {
+        const tCatalogosInicio = Date.now()
+        const [profesionales, camasDisponibles, catalogoCobertura] = await Promise.all([
+            getProfesionalesActivosCatalogo(),
+            puedeCambiarCama
+                ? prisma.cama.findMany({
+                    where: { estado: 'DISPONIBLE' },
+                    select: { id: true, identificador: true, habitacion: true, sector: true, estado: true, observaciones: true, sedeId: true, usuario: true, fechaEstado: true },
+                    orderBy: [{ sector: 'asc' }, { identificador: 'asc' }],
+                })
+                : Promise.resolve([]),
+            getCatalogoCoberturaAtencion(),
+        ])
+
+        return {
+            profesionales,
+            camasDisponibles,
+            catalogoCobertura,
+            msCatalogos: Date.now() - tCatalogosInicio,
+        }
+    })()
+
+    const practicasCirugiaEspejoPromise = (async () => {
+        const tEspejoCirugiaInicio = Date.now()
+        const practicasCirugiaEspejo = esVistaAdmision
+            ? []
+            : await prisma.practica.findMany({
+                where: {
+                    ingresoId,
+                    OR: [{ estado: 'A' }, { estado: null }],
+                    usuarioRegistro: 'CIRUGIA',
+                },
+                select: {
+                    id: true,
+                    codigoPractica: true,
+                    fecha: true,
+                    cantidad: true,
+                    numeroAutorizacion: true,
+                    facturable: true,
+                    puestoNumero: true,
+                    ordenNumero: true,
+                    estado: true,
+                    usuarioRegistro: true,
+                    matriculaEspecialista: true,
+                    matriculaAnestesista: true,
+                    ordenPractica: {
+                        where: {
+                            orden: {
+                                estado: { not: 'X' },
+                            },
+                        },
+                        select: {
+                            puestoNumero: true,
+                            ordenNumero: true,
+                            item: true,
+                            numeroAutorizacion: true,
+                        },
+                    },
+                },
+                orderBy: { id: 'asc' },
+            })
+
+        return {
+            practicasCirugiaEspejo,
+            msEspejoCirugia: Date.now() - tEspejoCirugiaInicio,
+        }
+    })()
+
     const tDetalleInicio = Date.now()
     let detalle
     try {
@@ -133,27 +210,9 @@ export default async function InternacionDetallePage({ params }: PageProps) {
 
     if (detalle.tipoIngresoCodigo !== 'INT') notFound()
 
-    const puedeModificar = tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')
-    const puedeCrear = puedeModificar || tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
-    const puedeCambiarCama = puedeModificar || tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
-    const puedeEditarPracticas =
-        puedeCrear ||
-        tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
-        tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
-    const esVistaAdmision = usuario.rol === ROLES.ADMISION
-
-    // Load profesionales y camas disponibles para los formularios
-    const tCatalogosInicio = Date.now()
-    const [profesionales, camasDisponibles, catalogoCobertura] = await Promise.all([
-        getProfesionalesActivosCatalogo(),
-        prisma.cama.findMany({
-            where: { estado: 'DISPONIBLE' },
-            select: { id: true, identificador: true, habitacion: true, sector: true, estado: true, observaciones: true, sedeId: true, usuario: true, fechaEstado: true },
-            orderBy: [{ sector: 'asc' }, { identificador: 'asc' }],
-        }),
-        getCatalogoCoberturaAtencion(),
-    ])
-    const msCatalogos = Date.now() - tCatalogosInicio
+    const [catalogosData, espejoData] = await Promise.all([catalogosPromise, practicasCirugiaEspejoPromise])
+    const { profesionales, camasDisponibles, catalogoCobertura, msCatalogos } = catalogosData
+    const { practicasCirugiaEspejo, msEspejoCirugia } = espejoData
 
     const { obraSociales, planes, coseguros } = catalogoCobertura
 
@@ -205,44 +264,6 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         (detalle.profesionalTratante?.id
             ? profesionales.find((p) => p.id === detalle.profesionalTratante?.id)?.matricula ?? null
             : null)
-
-    const tEspejoCirugiaInicio = Date.now()
-    const practicasCirugiaEspejo = await prisma.practica.findMany({
-        where: {
-            ingresoId,
-            OR: [{ estado: 'A' }, { estado: null }],
-            usuarioRegistro: 'CIRUGIA',
-        },
-        select: {
-            id: true,
-            codigoPractica: true,
-            fecha: true,
-            cantidad: true,
-            numeroAutorizacion: true,
-            facturable: true,
-            puestoNumero: true,
-            ordenNumero: true,
-            estado: true,
-            usuarioRegistro: true,
-            matriculaEspecialista: true,
-            matriculaAnestesista: true,
-            ordenPractica: {
-                where: {
-                    orden: {
-                        estado: { not: 'X' },
-                    },
-                },
-                select: {
-                    puestoNumero: true,
-                    ordenNumero: true,
-                    item: true,
-                    numeroAutorizacion: true,
-                },
-            },
-        },
-        orderBy: { id: 'asc' },
-    })
-    const msEspejoCirugia = Date.now() - tEspejoCirugiaInicio
 
     const practicasInternacionParaCirugiaMap = new Map<number, {
         id: number

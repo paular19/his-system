@@ -1221,7 +1221,11 @@ export function PracticaSection({
                                         return (
                                             <div
                                                 key={grupo.key}
-                                                className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5 text-xs"
+                                                className={`rounded-lg p-2.5 text-xs ${
+                                                    grupoYaAutorizado
+                                                        ? 'border border-emerald-200 bg-emerald-50/40'
+                                                        : 'border border-amber-300 bg-amber-100/60'
+                                                }`}
                                             >
                                                 <button
                                                     type="button"
@@ -1229,25 +1233,33 @@ export function PracticaSection({
                                                         ...prev,
                                                         [grupo.key]: !(prev[grupo.key] ?? false),
                                                     }))}
-                                                    className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left hover:bg-emerald-100/40"
+                                                    className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${
+                                                        grupoYaAutorizado ? 'hover:bg-emerald-100/40' : 'hover:bg-amber-200/50'
+                                                    }`}
                                                 >
-                                                    <span className="flex items-center gap-2 text-emerald-900">
+                                                    <span className={`flex items-center gap-2 ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
                                                         <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
                                                         <span className="font-semibold">{tituloGrupo}</span>
                                                     </span>
-                                                    <span className="text-[11px] text-emerald-700">{grupo.practicas.length} práctica(s)</span>
+                                                    <span className={`text-[11px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
+                                                        {grupo.practicas.length} práctica(s)
+                                                    </span>
                                                 </button>
 
                                                 {abierta && (
                                                     <div className="mt-2 grid gap-3 md:grid-cols-2">
-                                                        <div className="space-y-1.5 text-emerald-900">
+                                                        <div className={`space-y-1.5 ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
                                                             <div className="flex items-center gap-2 flex-wrap">
                                                                 {destinoAbrir && (
                                                                     <Link
                                                                         href={destinoAbrir}
                                                                         target={destinoOrdenImpresion ? '_blank' : undefined}
                                                                         rel={destinoOrdenImpresion ? 'noopener noreferrer' : undefined}
-                                                                        className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
+                                                                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                                                            grupoYaAutorizado
+                                                                                ? 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200'
+                                                                                : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                                                                        }`}
                                                                     >
                                                                         {destinoOrdenImpresion ? 'Abrir orden' : 'Abrir'}
                                                                     </Link>
@@ -1267,22 +1279,26 @@ export function PracticaSection({
                                                                     </button>
                                                                 )}
                                                             </div>
-                                                            <p className="text-emerald-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
-                                                            <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-700 font-medium'}>
+                                                            <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
+                                                            <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900 font-semibold'}>
                                                                 Estado: {grupoYaAutorizado ? 'Ya autorizada' : 'Pendiente de autorización'}
                                                             </p>
-                                                            <p className="text-emerald-800">Fecha última práctica: {fmtFecha(grupo.fechaReferencia)}</p>
-                                                            <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
-                                                            <p className="text-emerald-800">
+                                                            <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>Fecha última práctica: {fmtFecha(grupo.fechaReferencia)}</p>
+                                                            <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>Cantidad total: {grupo.totalCantidad}</p>
+                                                            <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>
                                                                 {grupo.matriculasFirmantes.length > 1
                                                                     ? 'Matrículas firmantes'
                                                                     : 'Matrícula firmante'}: {grupo.matriculasFirmantes.length > 0 ? grupo.matriculasFirmantes.join(', ') : '-'}
                                                             </p>
                                                         </div>
 
-                                                        <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
+                                                        <div className={`rounded-md bg-white/70 p-2 ${
+                                                            grupoYaAutorizado ? 'border border-emerald-200' : 'border border-amber-300'
+                                                        }`}>
                                                             <div className="flex items-center justify-between gap-2">
-                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                                <p className={`text-[11px] font-semibold uppercase tracking-wide ${
+                                                                    grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'
+                                                                }`}>
                                                                     Prácticas de la orden ({grupo.practicas.length})
                                                                 </p>
                                                                 {grupo.practicas.length > limitePracticas && (
@@ -1303,16 +1319,20 @@ export function PracticaSection({
                                                                 {practicasVisibles.map((practica) => (
                                                                     <div
                                                                         key={`${grupo.key}-${practica.id}`}
-                                                                        className="rounded border border-emerald-100 bg-white px-2 py-1.5"
+                                                                        className={`rounded bg-white px-2 py-1.5 ${
+                                                                            grupoYaAutorizado ? 'border border-emerald-100' : 'border border-amber-200'
+                                                                        }`}
                                                                     >
-                                                                        <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                                                        <div className={`flex items-center justify-between gap-2 ${
+                                                                            grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'
+                                                                        }`}>
                                                                             <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
                                                                             <span className="font-medium">Cant. {practica.cantidad}</span>
                                                                         </div>
-                                                                        <p className="text-emerald-900">
+                                                                        <p className={grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}>
                                                                             {practica.descripcionPractica ?? practica.codigoPractica.trim()}
                                                                         </p>
-                                                                        <p className="text-[11px] text-emerald-700">{fmtFecha(practica.fecha)}</p>
+                                                                        <p className={grupoYaAutorizado ? 'text-[11px] text-emerald-700' : 'text-[11px] text-amber-800'}>{fmtFecha(practica.fecha)}</p>
                                                                         {esPedidoLaboratorio(practica) && (
                                                                             <div className="mt-1 text-[11px] text-indigo-700 space-y-0.5">
                                                                                 <p>Protocolo N° {practica.numeroProtocoloLaboratorio?.trim() || '-'}</p>

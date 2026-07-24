@@ -72,6 +72,7 @@ interface PracticaCargaFormProps {
     autoFocusBusqueda?: boolean
     soloFechaPractica?: boolean
     onGuardadoExitoso?: (entradas: PracticaCargaEntrada[]) => void
+    ocultarContextoBusquedaRapida?: boolean
 }
 
 const formatoMoneda = new Intl.NumberFormat('es-AR', {
@@ -119,6 +120,7 @@ export function PracticaCargaForm({
     autoFocusBusqueda = false,
     soloFechaPractica = false,
     onGuardadoExitoso,
+    ocultarContextoBusquedaRapida = false,
 }: PracticaCargaFormProps) {
     const datalistId = `clasificacion-practica-list-${useId().replace(/:/g, '')}`
 
@@ -576,26 +578,30 @@ export function PracticaCargaForm({
             <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{titulo}</p>
 
             <div className="relative">
-                <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
-                    <label className="block text-xs text-gray-500">Buscar en nomenclador</label>
-                    <label className="inline-flex items-center gap-2 text-xs text-gray-600">
-                        Tipo de internación
-                        <select
-                            value={tipoInternacionFiltro}
-                            onChange={(e) => {
-                                const next = e.target.value as TipoInternacionFiltro
-                                setTipoInternacionFiltro(next)
-                            }}
-                            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700"
-                        >
-                            <option value="INTERNACION_NORMAL">PISO (Internación normal)</option>
-                            <option value="UTI">UTI (CU)</option>
-                        </select>
-                    </label>
-                </div>
-                <p className="mb-2 text-[11px] text-gray-500">
-                    Este selector determina el contexto del paciente. No filtra por códigos porque el nomenclador no distingue UTI/PISO.
-                </p>
+                {!ocultarContextoBusquedaRapida && (
+                    <>
+                        <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
+                            <label className="block text-xs text-gray-500">Buscar en nomenclador</label>
+                            <label className="inline-flex items-center gap-2 text-xs text-gray-600">
+                                Tipo de internación
+                                <select
+                                    value={tipoInternacionFiltro}
+                                    onChange={(e) => {
+                                        const next = e.target.value as TipoInternacionFiltro
+                                        setTipoInternacionFiltro(next)
+                                    }}
+                                    className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700"
+                                >
+                                    <option value="INTERNACION_NORMAL">PISO (Internación normal)</option>
+                                    <option value="UTI">UTI (CU)</option>
+                                </select>
+                            </label>
+                        </div>
+                        <p className="mb-2 text-[11px] text-gray-500">
+                            Este selector determina el contexto del paciente. No filtra por códigos porque el nomenclador no distingue UTI/PISO.
+                        </p>
+                    </>
+                )}
                 <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
                     <input
@@ -604,28 +610,9 @@ export function PracticaCargaForm({
                         value={busqueda}
                         onChange={(e) => buscarPractica(e.target.value)}
                         onKeyDown={(e) => {
-                            if (e.key !== 'Enter') return
-                            if (!modoCargaRapida || practicaSeleccionada) return
-                            const codigo = busqueda.trim().toUpperCase()
-                            if (!esCodigoPracticaCompleto(codigo)) return
-
+                            if (e.key !== 'Enter' || !modoCargaRapida || guardando) return
                             e.preventDefault()
-                            const exactaLocal = resultados.find(
-                                (item) => item.codigo.trim().toUpperCase() === codigo
-                            )
-                            if (exactaLocal) {
-                                seleccionarPractica(exactaLocal, true)
-                                return
-                            }
-
-                            void (async () => {
-                                try {
-                                    const exactaRemota = await resolverPracticaExactaPorCodigo(codigo)
-                                    if (exactaRemota) seleccionarPractica(exactaRemota, true)
-                                } catch {
-                                    // El guardado posterior mostrará error si no se puede resolver.
-                                }
-                            })()
+                            void handleGuardar()
                         }}
                         autoFocus={autoFocusBusqueda}
                         placeholder="Codigo o descripcion (min. 2 caracteres)..."

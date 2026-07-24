@@ -24,6 +24,7 @@ import {
     Calendar,
     FileText,
     Activity,
+    Plus,
 } from 'lucide-react'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 import {
@@ -236,6 +237,16 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                 }`}>
                                 {estadoLabel(detalle.estado)}
                             </span>
+                            {puedeEditarPracticas && (
+                                <Link
+                                    href={`/dashboard/internacion/${ingresoId}/practicas`}
+                                    prefetch
+                                    className="flex items-center gap-1.5 text-xs font-medium border rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                                >
+                                    <Plus className="h-3.5 w-3.5" />
+                                    Carga rápida
+                                </Link>
+                            )}
                             <Link
                                 href={`/dashboard/internacion/${ingresoId}/informe`}
                                 className="flex items-center gap-1.5 text-xs font-medium border rounded-lg px-3 py-1.5 hover:bg-gray-50"

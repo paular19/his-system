@@ -15,6 +15,11 @@ import {
 } from '@/lib/practicas-autorizadas'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { useBackgroundRefresh } from '@/lib/utils/client-mutation'
+import {
+    abrirVentanaImpresionPendiente,
+    cerrarVentanaImpresion,
+    navegarVentanaImpresion,
+} from '@/lib/utils/print-window'
 
 interface ProfesionalConMatricula {
     id: number
@@ -600,6 +605,8 @@ export function PracticaSection({
 
         setError(null)
         setGenerandoOrdenes(true)
+        const ventanaImpresion = imprimirDespues ? abrirVentanaImpresionPendiente() : null
+        let impresionDisparada = false
         try {
             const profesionalIdFirmante = Number.parseInt(medicoFirmanteId, 10)
             const medicoFirmanteMatricula = Number.isFinite(profesionalIdFirmante)
@@ -674,9 +681,8 @@ export function PracticaSection({
                     .map((o) => `${o.puestoNumero}-${o.numero}`)
                     .join(',')
                 const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
-                if (typeof window !== 'undefined') {
-                    window.open(url, '_blank')
-                }
+                navegarVentanaImpresion(ventanaImpresion, url)
+                impresionDisparada = true
             }
 
             if (refrescarDespuesCambios) {
@@ -685,6 +691,9 @@ export function PracticaSection({
         } catch {
             setError('Error al generar órdenes desde internación')
         } finally {
+            if (!impresionDisparada) {
+                cerrarVentanaImpresion(ventanaImpresion)
+            }
             setGenerandoOrdenes(false)
         }
     }

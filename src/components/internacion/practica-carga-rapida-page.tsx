@@ -25,6 +25,11 @@ import {
 } from '@/lib/practicas-autorizadas'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
+import {
+    abrirVentanaImpresionPendiente,
+    cerrarVentanaImpresion,
+    navegarVentanaImpresion,
+} from '@/lib/utils/print-window'
 
 type GuardadaSesionItem = {
     id: string
@@ -75,6 +80,7 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
 }
 
 const ORDENES_HISTORICO_POR_PAGINA = 8
+const STORAGE_ORDENES_SESION_PREFIX = 'internacion-ordenes-generadas-sesion'
 
 function practicaActiva(estado: string | null | undefined): boolean {
     return (estado?.trim().toUpperCase() ?? 'A') !== 'X'
@@ -169,6 +175,42 @@ export function PracticaCargaRapidaPage({
     const [mostrarOrdenesHistoricas, setMostrarOrdenesHistoricas] = useState(true)
     const [busquedaHistorico, setBusquedaHistorico] = useState('')
     const [paginaHistorico, setPaginaHistorico] = useState(1)
+    const [ordenesGeneradasSesion, setOrdenesGeneradasSesion] = useState<string[]>([])
+
+    const storageOrdenesSesionKey = `${STORAGE_ORDENES_SESION_PREFIX}:${ingresoId}`
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+
+        try {
+            const raw = window.sessionStorage.getItem(storageOrdenesSesionKey)
+            if (!raw) {
+                setOrdenesGeneradasSesion([])
+                return
+            }
+
+            const parsed: unknown = JSON.parse(raw)
+            if (!Array.isArray(parsed)) {
+                setOrdenesGeneradasSesion([])
+                return
+            }
+
+            const claves = parsed.filter((item): item is string => typeof item === 'string' && item.length > 0)
+            setOrdenesGeneradasSesion(Array.from(new Set(claves)))
+        } catch {
+            setOrdenesGeneradasSesion([])
+        }
+    }, [storageOrdenesSesionKey])
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+
+        try {
+            window.sessionStorage.setItem(storageOrdenesSesionKey, JSON.stringify(ordenesGeneradasSesion))
+        } catch {
+            // Ignore session storage write failures.
+        }
+    }, [storageOrdenesSesionKey, ordenesGeneradasSesion])
 
     useEffect(() => {
         setPracticas(
@@ -369,6 +411,11 @@ export function PracticaCargaRapidaPage({
     const ordenesConAutorizacion = useMemo(
         () => ordenesAutorizadas.filter((grupo) => grupoTieneNumeroAutorizacion(grupo)),
         [ordenesAutorizadas]
+    )
+
+    const ordenesGeneradasSesionSet = useMemo(
+        () => new Set(ordenesGeneradasSesion),
+        [ordenesGeneradasSesion]
     )
 
     const matriculaPorProfesionalId = useMemo(() => {
@@ -655,6 +702,8 @@ export function PracticaCargaRapidaPage({
 
         setMensajeError(null)
         setGenerandoOrdenes(true)
+        const ventanaImpresion = imprimirDespues ? abrirVentanaImpresionPendiente() : null
+        let impresionDisparada = false
 
         try {
             const result = await generarOrdenesDesdeInternacionAction({
@@ -726,18 +775,28 @@ export function PracticaCargaRapidaPage({
 
             setPracticasSeleccionadas((prev) => prev.filter((id) => !practicaIds.includes(id)))
 
+            if (grupos.length > 0) {
+                const nuevasOrdenesSesion = Array.from(
+                    new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
+                )
+                setOrdenesGeneradasSesion((prev) => Array.from(new Set([...nuevasOrdenesSesion, ...prev])))
+                setGuardadasSesion([])
+            }
+
             if (imprimirDespues && grupos.length > 0) {
                 const ordenesUnicas = Array.from(
                     new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
                 )
                 const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesUnicas.join(','))}`
-                if (typeof window !== 'undefined') {
-                    window.open(url, '_blank')
-                }
+                navegarVentanaImpresion(ventanaImpresion, url)
+                impresionDisparada = true
             }
         } catch {
             setMensajeError('Error al generar ordenes desde internacion')
         } finally {
+            if (!impresionDisparada) {
+                cerrarVentanaImpresion(ventanaImpresion)
+            }
             setGenerandoOrdenes(false)
         }
     }
@@ -801,15 +860,67 @@ export function PracticaCargaRapidaPage({
         const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
         const destinoAbrir = obtenerDestinoGrupoPracticasAutorizadas(grupo)
         const sinAutorizacion = !grupoTieneNumeroAutorizacion(grupo)
+        const claveOrdenSesion =
+            grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null
+                ? `${grupo.puestoNumero}-${grupo.ordenNumero}`
+                : null
+        const generadaEnSesion = claveOrdenSesion != null && ordenesGeneradasSesionSet.has(claveOrdenSesion)
+
+        const contenedorClase = generadaEnSesion
+            ? 'border border-blue-300 bg-blue-100/60'
+            : sinAutorizacion
+                ? 'border border-amber-300 bg-amber-100/60'
+                : 'border border-emerald-200 bg-emerald-50/40'
+
+        const tituloClase = generadaEnSesion
+            ? 'text-blue-900'
+            : sinAutorizacion
+                ? 'text-amber-900'
+                : 'text-emerald-900'
+
+        const hoverClase = generadaEnSesion
+            ? 'hover:bg-blue-200/50'
+            : sinAutorizacion
+                ? 'hover:bg-amber-200/50'
+                : 'hover:bg-emerald-100/40'
+
+        const contadorClase = generadaEnSesion
+            ? 'text-blue-800'
+            : sinAutorizacion
+                ? 'text-amber-800'
+                : 'text-emerald-700'
+
+        const badgeEstadoClase = generadaEnSesion
+            ? 'text-blue-800'
+            : grupoTieneNumeroAutorizacion(grupo)
+                ? 'text-emerald-800'
+                : 'text-amber-900 font-semibold'
+
+        const bloqueDetalleClase = generadaEnSesion
+            ? 'rounded-md border border-blue-200 bg-white/80 p-2'
+            : 'rounded-md border border-emerald-200 bg-white/70 p-2'
+
+        const tituloDetalleClase = generadaEnSesion
+            ? 'text-[11px] font-semibold uppercase tracking-wide text-blue-700'
+            : 'text-[11px] font-semibold uppercase tracking-wide text-emerald-700'
+
+        const botonExpandirClase = generadaEnSesion
+            ? 'rounded border border-blue-300 px-2 py-0.5 text-[11px] font-medium text-blue-800 hover:bg-blue-50'
+            : 'rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50'
+
+        const itemClase = generadaEnSesion
+            ? 'rounded border border-blue-100 bg-white px-2 py-1.5'
+            : 'rounded border border-emerald-100 bg-white px-2 py-1.5'
+
+        const itemTextoClase = generadaEnSesion ? 'text-blue-900' : 'text-emerald-900'
+        const itemFechaClase = generadaEnSesion ? 'text-[11px] text-blue-700' : 'text-[11px] text-emerald-700'
+        const restantesClase = generadaEnSesion ? 'mt-1 text-[11px] text-blue-700' : 'mt-1 text-[11px] text-emerald-700'
+        const estadoSesionEtiqueta = generadaEnSesion ? 'Sesion actual' : null
 
         return (
             <div
                 key={grupo.key}
-                className={`rounded-lg p-2.5 text-xs ${
-                    sinAutorizacion
-                        ? 'border border-amber-300 bg-amber-100/60'
-                        : 'border border-emerald-200 bg-emerald-50/40'
-                }`}
+                className={`rounded-lg p-2.5 text-xs ${contenedorClase}`}
             >
                 <button
                     type="button"
@@ -817,19 +928,22 @@ export function PracticaCargaRapidaPage({
                         ...prev,
                         [grupo.key]: !(prev[grupo.key] ?? false),
                     }))}
-                    className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${
-                        sinAutorizacion ? 'hover:bg-amber-200/50' : 'hover:bg-emerald-100/40'
-                    }`}
+                    className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${hoverClase}`}
                 >
-                    <span className={`flex items-center gap-2 ${sinAutorizacion ? 'text-amber-900' : 'text-emerald-900'}`}>
+                    <span className={`flex items-center gap-2 ${tituloClase}`}>
                         <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
                         <span className="font-semibold">
                             {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                 ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                 : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
                         </span>
+                        {estadoSesionEtiqueta && (
+                            <span className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                                {estadoSesionEtiqueta}
+                            </span>
+                        )}
                     </span>
-                    <span className={`text-[11px] ${sinAutorizacion ? 'text-amber-800' : 'text-emerald-700'}`}>
+                    <span className={`text-[11px] ${contadorClase}`}>
                         {grupo.practicas.length} practica(s)
                     </span>
                 </button>
@@ -842,19 +956,21 @@ export function PracticaCargaRapidaPage({
                                     href={destinoAbrir}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
+                                    className={generadaEnSesion
+                                        ? 'inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-900 hover:bg-blue-200'
+                                        : 'inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200'}
                                 >
                                     Abrir orden
                                 </Link>
                             )}
-                            <span className={grupoTieneNumeroAutorizacion(grupo) ? 'text-emerald-800' : 'text-amber-900 font-semibold'}>
+                            <span className={badgeEstadoClase}>
                                 Estado: {grupoTieneNumeroAutorizacion(grupo) ? 'Autorizada' : 'Pendiente de autorizacion'}
                             </span>
                         </div>
 
-                        <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
+                        <div className={bloqueDetalleClase}>
                             <div className="flex items-center justify-between gap-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                <p className={tituloDetalleClase}>
                                     Practicas de la orden ({grupo.practicas.length})
                                 </p>
                                 {grupo.practicas.length > limitePracticas && (
@@ -864,7 +980,7 @@ export function PracticaCargaRapidaPage({
                                             ...prev,
                                             [grupo.key]: !(prev[grupo.key] ?? false),
                                         }))}
-                                        className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50"
+                                        className={botonExpandirClase}
                                     >
                                         {expandida ? 'Contraer' : 'Expandir'}
                                     </button>
@@ -873,13 +989,13 @@ export function PracticaCargaRapidaPage({
 
                             <div className="mt-2 space-y-1.5">
                                 {practicasVisibles.map((practica) => (
-                                    <div key={`${grupo.key}-${practica.id}`} className="rounded border border-emerald-100 bg-white px-2 py-1.5">
-                                        <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                    <div key={`${grupo.key}-${practica.id}`} className={itemClase}>
+                                        <div className={`flex items-center justify-between gap-2 ${itemTextoClase}`}>
                                             <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
                                             <span className="font-medium">Cant. {practica.cantidad}</span>
                                         </div>
-                                        <p className="text-emerald-900">{descripcionParaMostrar(practica)}</p>
-                                        <p className="text-[11px] text-emerald-700">
+                                        <p className={itemTextoClase}>{descripcionParaMostrar(practica)}</p>
+                                        <p className={itemFechaClase}>
                                             {formatearFechaArgentina(practica.fecha, {
                                                 day: '2-digit',
                                                 month: '2-digit',
@@ -896,7 +1012,7 @@ export function PracticaCargaRapidaPage({
                             </div>
 
                             {!expandida && restantes > 0 && (
-                                <p className="mt-1 text-[11px] text-emerald-700">+{restantes} practica(s) mas</p>
+                                <p className={restantesClase}>+{restantes} practica(s) mas</p>
                             )}
                         </div>
                     </div>

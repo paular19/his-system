@@ -22,26 +22,31 @@ async function obtenerPracticasIngreso(ingresoId: number): Promise<PracticaAdmis
 
 export async function generarOrdenesPendientesAdmision(
   ingresoId: number,
-  opciones?: { soloIds?: Set<number> }
+  opciones?: { soloIds?: Set<number>; idsPendientesConfirmados?: number[] }
 ): Promise<{ ok: true; cantidad: number; ordenes: Array<{ puestoNumero: number; numero: number }> } | { ok: false; error: string }> {
   try {
-    const practicas = await obtenerPracticasIngreso(ingresoId)
+    let idsPendientesResueltos: number[]
 
-    const idsPendientes = practicas
-      .filter((p) => {
-        if (!estaPendienteDeOrden(p)) return false
-        if (!opciones?.soloIds) return true
-        return opciones.soloIds.has(p.id)
-      })
-      .map((p) => p.id)
+    if (Array.isArray(opciones?.idsPendientesConfirmados)) {
+      idsPendientesResueltos = Array.from(new Set(opciones.idsPendientesConfirmados))
+    } else {
+      const practicas = await obtenerPracticasIngreso(ingresoId)
+      idsPendientesResueltos = practicas
+        .filter((p) => {
+          if (!estaPendienteDeOrden(p)) return false
+          if (!opciones?.soloIds) return true
+          return opciones.soloIds.has(p.id)
+        })
+        .map((p) => p.id)
+    }
 
-    if (idsPendientes.length === 0) {
+    if (idsPendientesResueltos.length === 0) {
       return { ok: true, cantidad: 0, ordenes: [] }
     }
 
     const result = await generarOrdenesDesdeInternacionAction({
       ingresoId,
-      practicaIds: idsPendientes,
+      practicaIds: idsPendientesResueltos,
     })
 
     if ('error' in result && result.error) {

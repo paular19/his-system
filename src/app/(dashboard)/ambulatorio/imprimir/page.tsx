@@ -13,7 +13,7 @@ interface PageProps {
 }
 
 function parseOrdenesParam(raw: string): Array<{ puestoNumero: number; numero: number }> {
-  return raw
+  const refs = raw
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean)
@@ -24,6 +24,17 @@ function parseOrdenesParam(raw: string): Array<{ puestoNumero: number; numero: n
       return { puestoNumero, numero }
     })
     .filter((x) => Number.isFinite(x.puestoNumero) && Number.isFinite(x.numero))
+
+  const vistos = new Set<string>()
+  const unicos: Array<{ puestoNumero: number; numero: number }> = []
+  for (const ref of refs) {
+    const key = `${ref.puestoNumero}-${ref.numero}`
+    if (vistos.has(key)) continue
+    vistos.add(key)
+    unicos.push(ref)
+  }
+
+  return unicos
 }
 
 export default async function ImprimirAutorizacionesPage({ searchParams }: PageProps) {

@@ -18,6 +18,11 @@ import type { IngresoDetalle } from '@/modules/admision/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 import { agruparPracticasAutorizadasPorOrden, obtenerDestinoGrupoPracticasAutorizadas } from '@/lib/practicas-autorizadas'
+import {
+    abrirVentanaImpresionPendiente,
+    cerrarVentanaImpresion,
+    navegarVentanaImpresion,
+} from '@/lib/utils/print-window'
 
 interface FichaIngresoClientProps {
     ingreso: IngresoDetalle
@@ -279,11 +284,14 @@ export function FichaIngresoClient({
         const seleccionActual = [...practicasSeleccionadas]
         if (seleccionActual.length === 0) return
 
+        const ventanaImpresion = imprimirDespues ? abrirVentanaImpresionPendiente() : null
+        let impresionDisparada = false
+
         setErrorGenerarOrdenes(null)
         setGenerandoOrdenes(true)
         try {
             const result = await generarOrdenesPendientesAdmision(ingreso.id, {
-                soloIds: new Set(seleccionActual),
+                idsPendientesConfirmados: seleccionActual,
             })
 
             if (!result.ok) {
@@ -291,16 +299,23 @@ export function FichaIngresoClient({
                 return
             }
 
-            await recargarPracticasIngreso()
+            void recargarPracticasIngreso()
             setPracticasSeleccionadas((prev) => prev.filter((id) => !seleccionActual.includes(id)))
 
             if (imprimirDespues && result.ordenes.length > 0) {
                 const ordenesParam = result.ordenes.map((o) => `${o.puestoNumero}-${o.numero}`).join(',')
-                window.open(`/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`, '_blank', 'noopener,noreferrer')
+                navegarVentanaImpresion(
+                    ventanaImpresion,
+                    `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+                )
+                impresionDisparada = true
             }
         } catch {
             setErrorGenerarOrdenes('Error al generar órdenes')
         } finally {
+            if (!impresionDisparada) {
+                cerrarVentanaImpresion(ventanaImpresion)
+            }
             setGenerandoOrdenes(false)
         }
     }

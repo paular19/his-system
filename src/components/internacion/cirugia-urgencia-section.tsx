@@ -9,6 +9,11 @@ import { fechaAInputLocal, fechaHoraAInputLocal, formatearFechaArgentina } from 
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { useBackgroundRefresh } from '@/lib/utils/client-mutation'
+import {
+    abrirVentanaImpresionPendiente,
+    cerrarVentanaImpresion,
+    navegarVentanaImpresion,
+} from '@/lib/utils/print-window'
 
 type OpcionObraSocial = {
     id: number
@@ -852,6 +857,8 @@ export function CirugiaUrgenciaSection({
 
         setError(null)
         setGenerandoOrdenAgrupada(true)
+        const ventanaImpresion = imprimirDespues ? abrirVentanaImpresionPendiente() : null
+        let impresionDisparada = false
         try {
             const result = await generarOrdenesDesdeInternacionAction({
                 ingresoId,
@@ -892,9 +899,8 @@ export function CirugiaUrgenciaSection({
 
             if (imprimirDespues) {
                 const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
-                if (typeof window !== 'undefined') {
-                    window.open(url, '_blank')
-                }
+                navegarVentanaImpresion(ventanaImpresion, url)
+                impresionDisparada = true
                 refreshInBackground()
                 return
             }
@@ -903,6 +909,9 @@ export function CirugiaUrgenciaSection({
         } catch {
             setError('No se pudo generar la orden agrupada')
         } finally {
+            if (!impresionDisparada) {
+                cerrarVentanaImpresion(ventanaImpresion)
+            }
             setGenerandoOrdenAgrupada(false)
         }
     }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PracticaSection } from '@/components/internacion/practica-section'
 import { CirugiaUrgenciaSection } from '@/components/internacion/cirugia-urgencia-section'
+import Link from 'next/link'
 
 type SectorPracticaFiltro = 'UTI' | 'PISO'
 
@@ -290,6 +291,21 @@ export function InternacionPanelClinicoLazy({
   if (loading) {
     return (
       <div className="space-y-4">
+        {puedeEditarPracticas && (
+          <div className="his-card border border-blue-100 bg-blue-50/60 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-blue-700">Atajo de carga</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Link
+                href={`/dashboard/internacion/${ingresoId}/practicas`}
+                prefetch
+                className="inline-flex items-center rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
+              >
+                Agregar practicas
+              </Link>
+              <span className="text-xs text-blue-700">El panel clinico sigue cargando en segundo plano.</span>
+            </div>
+          </div>
+        )}
         <div className="his-card p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Cargando practicas</p>
           <div className="mt-3 h-16 animate-pulse rounded-md bg-gray-100" />

@@ -3,11 +3,10 @@ import { CirugiaProgramadaForm } from '@/components/cirugia'
 import { getUsuarioSesion } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
-import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
-import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
+import { getCatalogoCoberturaAtencion } from '@/lib/catalogos/atencion-cache'
 
 export const metadata: Metadata = { title: 'Nueva cirugia programada' }
 
@@ -17,31 +16,7 @@ export default async function NuevaCirugiaPage() {
         redirect('/dashboard/cirugia')
     }
 
-    const [obrasSocialesRows, planesRows, coseguros] = await Promise.all([
-        prisma.obraSocial.findMany({
-            where: { estado: 'A' },
-            select: { id: true, nombre: true, requiereCoseguro: true },
-            orderBy: { nombre: 'asc' },
-        }),
-        prisma.planObraSocial.findMany({
-            where: { estado: 'A' },
-            select: { id: true, descripcion: true, obraSocialId: true },
-            orderBy: { descripcion: 'asc' },
-        }),
-        asegurarCosegurosIPSS(),
-    ])
-
-    const obraSociales = filtrarObrasSocialesPrincipales(obrasSocialesRows).map((os) => ({
-        id: os.id,
-        nombre: os.nombre,
-        requiereCoseguro: os.requiereCoseguro === 'S',
-    }))
-
-    const planes = planesRows.map((p) => ({
-        id: p.id,
-        nombre: p.descripcion,
-        obraSocialId: p.obraSocialId,
-    }))
+    const { obraSociales, planes, coseguros } = await getCatalogoCoberturaAtencion()
 
     return (
         <>

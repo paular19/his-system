@@ -9,7 +9,10 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import type { PacienteResumen } from '@/modules/admision/types'
-import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
+import {
+  getCatalogoCoberturaAtencion,
+  getProfesionalesActivosCatalogo,
+} from '@/lib/catalogos/atencion-cache'
 
 export const metadata: Metadata = { title: 'Nueva Internación' }
 
@@ -26,55 +29,13 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
   const params = await searchParams
 
   // Datos necesarios para el formulario
-  const [profesionales, camasDisponibles] = await Promise.all([
-    prisma.profesional.findMany({
-      where: { estado: 'A' },
-      select: { id: true, nombre: true, matricula: true },
-      orderBy: { nombre: 'asc' },
-    }),
+  const [profesionales, camasDisponibles, catalogoCobertura] = await Promise.all([
+    getProfesionalesActivosCatalogo(),
     obtenerCamasDisponibles(),
+    getCatalogoCoberturaAtencion(),
   ])
 
-  let obraSociales: Array<{ id: number; nombre: string; requiereCoseguro: boolean }> = []
-  let planes: Array<{ id: number; nombre: string; obraSocialId: number | null }> = []
-
-  try {
-    const rows = await prisma.$queryRaw<
-      Array<{ id: number; nombre: string; requiereCoseguro: boolean; activa: boolean }>
-    >`
-      SELECT
-        "OSID"::int AS id,
-        COALESCE(NULLIF(BTRIM("OSNom"), ''), 'Sin nombre') AS nombre,
-        CASE
-          WHEN LOWER(BTRIM(COALESCE("OSReqCoseg", ''))) IN ('s', 'si', 'sí', '1') THEN true
-          ELSE false
-        END AS "requiereCoseguro",
-        CASE
-          WHEN LOWER(BTRIM(COALESCE("OSEstad", 'A'))) = 'a' THEN true
-          ELSE false
-        END AS activa
-      FROM "ObraSocial"
-      ORDER BY nombre ASC
-    `
-    obraSociales = filtrarObrasSocialesPrincipales(rows)
-      .filter((r) => r.activa)
-      .map(({ id, nombre, requiereCoseguro }) => ({ id, nombre, requiereCoseguro }))
-  } catch {
-    // Tabla puede estar vacía
-  }
-
-  try {
-    planes = await prisma.$queryRaw<Array<{ id: number; nombre: string; obraSocialId: number | null }>>`
-      SELECT
-        "PosID"::int AS id,
-        COALESCE(NULLIF(BTRIM("PosDescrip"), ''), CONCAT('Plan ', "PosID"::text)) AS nombre,
-        "OSID"::int AS "obraSocialId"
-      FROM "PlanOSoc"
-      ORDER BY nombre ASC
-    `
-  } catch {
-    // Tabla puede no existir
-  }
+  const { obraSociales, planes } = catalogoCobertura
 
   // Paciente inicial si viene por query param
   let pacienteInicial: PacienteResumen | null = null

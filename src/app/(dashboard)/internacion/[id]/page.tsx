@@ -32,6 +32,7 @@ import {
     formatearFechaHoraArgentina,
 } from '@/lib/utils/argentina-date'
 import { calcularEdad } from '@/lib/utils'
+import { logServerPerf } from '@/lib/perf/server-perf'
 
 interface PageProps {
     params: Promise<{ id: string }>
@@ -113,6 +114,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function InternacionDetallePage({ params }: PageProps) {
+    const tInicio = Date.now()
     const usuario = await getUsuarioSesion()
     if (!tienePermiso(usuario.rol, 'INTERNACION', 'LEER')) redirect('/dashboard')
 
@@ -120,12 +122,14 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const ingresoId = parseInt(id, 10)
     if (isNaN(ingresoId)) notFound()
 
+    const tDetalleInicio = Date.now()
     let detalle
     try {
         detalle = await obtenerInternacionDetalle(ingresoId, usuario.codigoUsuario)
     } catch {
         notFound()
     }
+    const msDetalle = Date.now() - tDetalleInicio
 
     if (detalle.tipoIngresoCodigo !== 'INT') notFound()
 
@@ -139,6 +143,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const esVistaAdmision = usuario.rol === ROLES.ADMISION
 
     // Load profesionales y camas disponibles para los formularios
+    const tCatalogosInicio = Date.now()
     const [profesionales, camasDisponibles, catalogoCobertura] = await Promise.all([
         getProfesionalesActivosCatalogo(),
         prisma.cama.findMany({
@@ -148,6 +153,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         }),
         getCatalogoCoberturaAtencion(),
     ])
+    const msCatalogos = Date.now() - tCatalogosInicio
 
     const { obraSociales, planes, coseguros } = catalogoCobertura
 
@@ -200,6 +206,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             ? profesionales.find((p) => p.id === detalle.profesionalTratante?.id)?.matricula ?? null
             : null)
 
+    const tEspejoCirugiaInicio = Date.now()
     const practicasCirugiaEspejo = await prisma.practica.findMany({
         where: {
             ingresoId,
@@ -235,6 +242,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         },
         orderBy: { id: 'asc' },
     })
+    const msEspejoCirugia = Date.now() - tEspejoCirugiaInicio
 
     const practicasInternacionParaCirugiaMap = new Map<number, {
         id: number
@@ -309,6 +317,16 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             resolverSectorPorFecha(practica.fecha, detalle.transferencias, detalle.cama?.sector ?? null),
         ])
     ) as Record<number, SectorPracticaFiltro>
+
+    logServerPerf('internacion.ficha', {
+        ingresoId,
+        msDetalle,
+        msCatalogos,
+        msEspejoCirugia,
+        practicas: detalle.practicas.length,
+        cirugias: detalle.cirugiasUrgencia.length,
+        totalMs: Date.now() - tInicio,
+    })
 
     return (
         <>

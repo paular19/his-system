@@ -5,6 +5,7 @@ import { redirect, notFound } from 'next/navigation'
 import { obtenerIngreso } from '@/modules/admision/service'
 import type { Metadata } from 'next'
 import { FichaIngresoClient } from '@/components/admision/ficha-ingreso-client'
+import { logServerPerf } from '@/lib/perf/server-perf'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -16,6 +17,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function FichaIngresoPage({ params }: PageProps) {
+  const tInicio = Date.now()
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'LEER')) redirect('/dashboard')
 
@@ -23,6 +25,7 @@ export default async function FichaIngresoPage({ params }: PageProps) {
   const ingresoId = parseInt(id, 10)
   if (isNaN(ingresoId)) notFound()
 
+  const tIngresoInicio = Date.now()
   let ingreso
   try {
     ingreso = await obtenerIngreso(ingresoId, usuario.clerkId)
@@ -34,12 +37,14 @@ export default async function FichaIngresoPage({ params }: PageProps) {
     console.error(`[admision] Error cargando ingreso ${ingresoId}`, error)
     throw error
   }
+  const msIngreso = Date.now() - tIngresoInicio
 
   const puedeModificar = tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')
   const puedeAgregarDiagnostico = tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
   const puedeGenerarAutorizacion = tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
 
   // Serializar campos Decimal → tipos planos para Client Components
+  const tSerializacionInicio = Date.now()
   const ingresoSerializado = {
     ...ingreso,
     paciente: ingreso.paciente
@@ -50,6 +55,15 @@ export default async function FichaIngresoPage({ params }: PageProps) {
       cantidad: Number(String(p.cantidad)),
     })),
   }
+  const msSerializacion = Date.now() - tSerializacionInicio
+
+  logServerPerf('admision.ficha', {
+    ingresoId,
+    msIngreso,
+    msSerializacion,
+    practicas: ingreso.practicas.length,
+    totalMs: Date.now() - tInicio,
+  })
 
   return (
     <>

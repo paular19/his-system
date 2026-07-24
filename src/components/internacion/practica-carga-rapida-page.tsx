@@ -11,7 +11,6 @@ import {
     Printer,
     Settings2,
 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
 import type { PracticaItem } from '@/modules/internacion/types'
@@ -150,7 +149,6 @@ export function PracticaCargaRapidaPage({
     puedeCrear,
     practicasIniciales,
 }: PracticaCargaRapidaPageProps) {
-    const router = useRouter()
     const [practicas, setPracticas] = useState<PracticaItem[]>(
         practicasIniciales
             .filter((practica) => practicaActiva(practica.estado))
@@ -621,10 +619,30 @@ export function PracticaCargaRapidaPage({
                 }).asignaciones)
                 : []
 
+            const grupos = Array.isArray((result as { ordenesPorGrupo?: unknown }).ordenesPorGrupo)
+                ? ((result as {
+                    ordenesPorGrupo: Array<{ clasificacion: string; puestoNumero: number; numero: number; practicaIds: number[] }>
+                }).ordenesPorGrupo)
+                : []
+
             const asignacionPorPracticaId = new Map(asignaciones.map((item) => [item.practicaId, item] as const))
+            const asignacionFallbackPorPracticaId = new Map<number, { puestoNumero: number; numero: number; item: number }>()
+
+            for (const grupo of grupos) {
+                grupo.practicaIds.forEach((practicaId, idx) => {
+                    if (asignacionFallbackPorPracticaId.has(practicaId)) return
+                    asignacionFallbackPorPracticaId.set(practicaId, {
+                        puestoNumero: grupo.puestoNumero,
+                        numero: grupo.numero,
+                        item: idx + 1,
+                    })
+                })
+            }
 
             setPracticas((prev) => prev.map((practica) => {
-                const asignada = asignacionPorPracticaId.get(practica.id)
+                const asignada =
+                    asignacionPorPracticaId.get(practica.id) ??
+                    asignacionFallbackPorPracticaId.get(practica.id)
                 if (!asignada) return practica
 
                 const yaVinculada = practica.ordenPractica.some(
@@ -650,12 +668,6 @@ export function PracticaCargaRapidaPage({
             }))
 
             setPracticasSeleccionadas((prev) => prev.filter((id) => !practicaIds.includes(id)))
-
-            const grupos = Array.isArray((result as { ordenesPorGrupo?: unknown }).ordenesPorGrupo)
-                ? ((result as {
-                    ordenesPorGrupo: Array<{ clasificacion: string; puestoNumero: number; numero: number; practicaIds: number[] }>
-                }).ordenesPorGrupo)
-                : []
 
             if (grupos.length > 0) {
                 const nuevasKeys = grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`)
@@ -692,8 +704,6 @@ export function PracticaCargaRapidaPage({
                     }
                 }
             }
-
-            router.refresh()
         } catch {
             setMensajeError('Error al generar ordenes desde internacion')
         } finally {
@@ -888,7 +898,7 @@ export function PracticaCargaRapidaPage({
     return (
         <>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-                <div className="order-2 space-y-4">
+                <div className="order-2 space-y-4 lg:order-0 lg:col-start-1">
                     {puedeCrear ? (
                         <PracticaCargaForm
                             convenioId={convenioId}
@@ -1234,7 +1244,7 @@ export function PracticaCargaRapidaPage({
                     </div>
                 </div>
 
-                <div className="order-1 space-y-4">
+                <div className="order-1 space-y-4 lg:order-0 lg:col-start-2">
                     <div className="his-card p-4 space-y-3">
                         <div className="flex items-center gap-2">
                             <ClipboardList className="h-4 w-4 text-blue-600" />

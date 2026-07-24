@@ -42,7 +42,6 @@ type ProfesionalConMatricula = {
 }
 
 type ComponenteOrden = 'HE' | 'HA' | 'GA' | 'HP' | 'A1' | 'A2' | 'A3'
-type ModoAgrupacionPersonalizada = 'VARIAS_LINEAS' | 'MISMA_LINEA'
 
 interface PracticaCargaRapidaPageProps {
     ingresoId: number
@@ -64,17 +63,6 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
     A3: 7,
 }
 
-const COMPONENTES_IMPRESION: Array<{ codigo: ComponenteOrden; label: string }> = [
-    { codigo: 'HE', label: 'Honorarios especialista (HE)' },
-    { codigo: 'HA', label: 'Honorarios anestesista (HA)' },
-    { codigo: 'GA', label: 'Derechos/Gastos (GA)' },
-    { codigo: 'HP', label: 'Honorarios patologia (HP)' },
-    { codigo: 'A1', label: 'Ayudante 1 (A1)' },
-    { codigo: 'A2', label: 'Ayudante 2 (A2)' },
-    { codigo: 'A3', label: 'Ayudante 3 (A3)' },
-]
-
-const COMPONENTES_ORDEN: readonly ComponenteOrden[] = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3']
 const ORDENES_HISTORICO_POR_PAGINA = 8
 
 function practicaActiva(estado: string | null | undefined): boolean {
@@ -121,18 +109,6 @@ function grupoTieneNumeroAutorizacion(grupo: GrupoPracticasAutorizadas): boolean
     return normalizarNumeroAutorizacion(grupo.numeroAutorizacion) != null
 }
 
-function esComponenteOrden(value: string): value is ComponenteOrden {
-    return COMPONENTES_ORDEN.includes(value as ComponenteOrden)
-}
-
-function componentesDesdeClasificacion(clasificacion: string | null | undefined): ComponenteOrden[] {
-    const normalizada = normalizarClasificacionAgrupacion(clasificacion)
-    if (!normalizada) return []
-    return normalizada
-        .split('+')
-        .filter(esComponenteOrden)
-}
-
 function normalizarBusqueda(value: string): string {
     return value
         .normalize('NFD')
@@ -162,20 +138,7 @@ export function PracticaCargaRapidaPage({
     const [profesionalesConMatricula, setProfesionalesConMatricula] = useState<ProfesionalConMatricula[]>([])
     const [medicoFirmanteId, setMedicoFirmanteId] = useState('')
     const [firmanteEditadoManualmente, setFirmanteEditadoManualmente] = useState(false)
-    const [modoAgrupacionPersonalizada, setModoAgrupacionPersonalizada] = useState<ModoAgrupacionPersonalizada>('VARIAS_LINEAS')
-    const [tituloOrdenPersonalizada, setTituloOrdenPersonalizada] = useState('')
-    const [tituloEditadoManualmente, setTituloEditadoManualmente] = useState(false)
     const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
-    const [mostrarPopupImpresion, setMostrarPopupImpresion] = useState(false)
-    const [componentesImpresion, setComponentesImpresion] = useState<Record<ComponenteOrden, boolean>>({
-        HE: true,
-        HA: true,
-        GA: true,
-        HP: true,
-        A1: true,
-        A2: true,
-        A3: true,
-    })
     const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(true)
     const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
@@ -303,33 +266,6 @@ export function PracticaCargaRapidaPage({
             )
         )
     }, [guardadasSesion, practicasPendientes])
-
-    const componentesSeleccionados = useMemo(() => {
-        const encontrados = new Set<ComponenteOrden>()
-        for (const practicaId of idsPendientesSeleccionadas) {
-            const practica = practicas.find((item) => item.id === practicaId)
-            if (!practica) continue
-            const clasificacion = obtenerClasificacionPractica(practica)
-            for (const componente of componentesDesdeClasificacion(clasificacion)) {
-                encontrados.add(componente)
-            }
-        }
-
-        return COMPONENTES_ORDEN.filter((componente) => encontrados.has(componente))
-    }, [idsPendientesSeleccionadas, practicas, clasificacionPorPracticaId])
-
-    const mezclaComponentesSeleccionados = componentesSeleccionados.length > 1
-
-    const tituloSugeridoOrdenPersonalizada = useMemo(() => {
-        if (componentesSeleccionados.length === 0) return 'ORDEN PERSONALIZADA'
-        return tituloDesdeClasificacion(componentesSeleccionados.join('+'))
-    }, [componentesSeleccionados])
-
-    useEffect(() => {
-        if (!tituloEditadoManualmente) {
-            setTituloOrdenPersonalizada(tituloSugeridoOrdenPersonalizada)
-        }
-    }, [tituloSugeridoOrdenPersonalizada, tituloEditadoManualmente])
 
     const ordenesAutorizadas = useMemo(
         () => agruparPracticasAutorizadasPorOrden(practicasAutorizadas),
@@ -535,50 +471,14 @@ export function PracticaCargaRapidaPage({
         })
     }
 
-    const abrirPopupImpresion = () => {
-        if (idsPendientesSeleccionadas.length === 0) {
-            setMensajeError('Selecciona al menos una practica pendiente para generar ordenes')
-            return
-        }
-
-        const disponibles = new Set<ComponenteOrden>()
-        for (const practicaId of idsPendientesSeleccionadas) {
-            const practica = practicas.find((item) => item.id === practicaId)
-            if (!practica) continue
-            const clasificacion = obtenerClasificacionPractica(practica)
-            for (const componente of componentesDesdeClasificacion(clasificacion)) {
-                disponibles.add(componente)
-            }
-        }
-
-        setComponentesImpresion((prev) => {
-            const next = { ...prev }
-            for (const componente of COMPONENTES_ORDEN) {
-                next[componente] = disponibles.size === 0 ? true : disponibles.has(componente)
-            }
-            return next
-        })
-        setMostrarPopupImpresion(true)
-    }
-
     const ejecutarGeneracionOrdenes = async (
         imprimirDespues: boolean,
-        componentesFiltro?: Set<ComponenteOrden>,
-        practicaIdsObjetivo?: number[],
-        usarAgrupacionPersonalizada = true
+        practicaIdsObjetivo?: number[]
     ) => {
         const practicaIds = practicaIdsObjetivo ?? idsPendientesSeleccionadas
 
         if (practicaIds.length === 0) {
             setMensajeError('Selecciona al menos una practica pendiente para generar ordenes')
-            return
-        }
-
-        const agruparEnUnaOrden = usarAgrupacionPersonalizada && modoAgrupacionPersonalizada === 'MISMA_LINEA'
-        const titularOrdenAgrupada = tituloOrdenPersonalizada.trim()
-
-        if (agruparEnUnaOrden && titularOrdenAgrupada.length === 0) {
-            setMensajeError('Define el titulo de la orden personalizada para continuar')
             return
         }
 
@@ -603,8 +503,6 @@ export function PracticaCargaRapidaPage({
                 ingresoId,
                 practicaIds,
                 clasificacionPorPracticaId: clasificacionPayload,
-                agruparEnUnaOrden,
-                titularOrdenAgrupada: agruparEnUnaOrden ? titularOrdenAgrupada : undefined,
                 cirujanoFirmanteMatricula: medicoFirmanteMatricula ?? undefined,
             })
 
@@ -675,33 +573,12 @@ export function PracticaCargaRapidaPage({
             }
 
             if (imprimirDespues && grupos.length > 0) {
-                const gruposFiltrados = componentesFiltro && componentesFiltro.size > 0
-                    ? grupos.filter((grupo) => {
-                        const clasificacion = normalizarClasificacionAgrupacion(grupo.clasificacion) ?? grupo.clasificacion
-                        if (Array.from(componentesFiltro).some((componente) => clasificacion.split('+').includes(componente))) {
-                            return true
-                        }
-
-                        return grupo.practicaIds.some((practicaId) => {
-                            const clasificacionPractica = clasificacionPayload[String(practicaId)]
-                            if (!clasificacionPractica) return false
-                            return Array.from(componentesFiltro).some((componente) =>
-                                componentesDesdeClasificacion(clasificacionPractica).includes(componente)
-                            )
-                        })
-                    })
-                    : grupos
-
-                if (gruposFiltrados.length === 0) {
-                    setMensajeError('No hay ordenes generadas para los componentes seleccionados en la impresion')
-                } else {
-                    const ordenesUnicas = Array.from(
-                        new Set(gruposFiltrados.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
-                    )
-                    const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesUnicas.join(','))}`
-                    if (typeof window !== 'undefined') {
-                        window.open(url, '_blank')
-                    }
+                const ordenesUnicas = Array.from(
+                    new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
+                )
+                const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesUnicas.join(','))}`
+                if (typeof window !== 'undefined') {
+                    window.open(url, '_blank')
                 }
             }
         } catch {
@@ -709,22 +586,6 @@ export function PracticaCargaRapidaPage({
         } finally {
             setGenerandoOrdenes(false)
         }
-    }
-
-    const confirmarImpresionPorComponentes = () => {
-        const componentesSeleccionados = new Set<ComponenteOrden>(
-            COMPONENTES_IMPRESION
-                .filter((item) => componentesImpresion[item.codigo])
-                .map((item) => item.codigo)
-        )
-
-        if (componentesSeleccionados.size === 0) {
-            setMensajeError('Marca al menos un componente para imprimir')
-            return
-        }
-
-        setMostrarPopupImpresion(false)
-        void ejecutarGeneracionOrdenes(true, componentesSeleccionados)
     }
 
     const todasPendientesSeleccionadas =
@@ -1014,58 +875,6 @@ export function PracticaCargaRapidaPage({
 
                                 {idsPendientesSeleccionadas.length > 0 ? (
                                     <>
-                                        <div className="space-y-2 rounded-md border border-amber-200 bg-white p-2">
-                                            <p className="text-[11px] font-medium text-amber-900">
-                                                Flujo de agrupacion (como en ficha de internacion)
-                                            </p>
-                                            <label className="inline-flex items-center gap-2 text-xs text-amber-900">
-                                                <input
-                                                    type="radio"
-                                                    name="modo-agrupacion-personalizada"
-                                                    checked={modoAgrupacionPersonalizada === 'VARIAS_LINEAS'}
-                                                    onChange={() => setModoAgrupacionPersonalizada('VARIAS_LINEAS')}
-                                                    className="h-3.5 w-3.5 border-amber-300 text-amber-700 focus:ring-amber-500"
-                                                />
-                                                Varias lineas (separar por componente)
-                                            </label>
-                                            <label className="inline-flex items-center gap-2 text-xs text-amber-900">
-                                                <input
-                                                    type="radio"
-                                                    name="modo-agrupacion-personalizada"
-                                                    checked={modoAgrupacionPersonalizada === 'MISMA_LINEA'}
-                                                    onChange={() => setModoAgrupacionPersonalizada('MISMA_LINEA')}
-                                                    className="h-3.5 w-3.5 border-amber-300 text-amber-700 focus:ring-amber-500"
-                                                />
-                                                Una misma linea (una orden personalizada)
-                                            </label>
-
-                                            <p className="text-[10px] text-amber-800">
-                                                Componentes seleccionados: {componentesSeleccionados.length > 0 ? componentesSeleccionados.join(' + ') : 'Sin componentes detectados'}
-                                            </p>
-
-                                            {mezclaComponentesSeleccionados && (
-                                                <p className="text-[10px] text-amber-800">
-                                                    Mezcla detectada (derechos, especialista, anestesista, etc.). Elegi si queres un solo titulo o varios por componente.
-                                                </p>
-                                            )}
-
-                                            {modoAgrupacionPersonalizada === 'MISMA_LINEA' && (
-                                                <label className="block text-[11px] text-amber-900">
-                                                    Titulo de la orden personalizada
-                                                    <input
-                                                        type="text"
-                                                        value={tituloOrdenPersonalizada}
-                                                        onChange={(e) => {
-                                                            setTituloOrdenPersonalizada(e.target.value)
-                                                            setTituloEditadoManualmente(true)
-                                                        }}
-                                                        placeholder="Ej: DERECHOS + HONORARIO ESPECIALISTA"
-                                                        className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900"
-                                                    />
-                                                </label>
-                                            )}
-                                        </div>
-
                                         <label className="block w-full text-[11px] text-amber-900">
                                             Medico firmante
                                             <ProfesionalSelect
@@ -1103,20 +912,11 @@ export function PracticaCargaRapidaPage({
                                                 <Printer className="h-3.5 w-3.5" />
                                                 Generar orden e imprimir
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={abrirPopupImpresion}
-                                                disabled={generandoOrdenes}
-                                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                                            >
-                                                <Printer className="h-3.5 w-3.5" />
-                                                Imprimir por componentes
-                                            </button>
                                         </div>
                                     </>
                                 ) : (
                                     <p className="rounded-md border border-amber-200 bg-white px-2 py-1.5 text-[11px] text-amber-900">
-                                        Selecciona una o mas practicas para habilitar el flujo de agrupacion, titulo y medico firmante.
+                                        Selecciona una o mas practicas para habilitar la generacion de ordenes y el medico firmante.
                                     </p>
                                 )}
                             </div>
@@ -1261,7 +1061,7 @@ export function PracticaCargaRapidaPage({
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
-                                onClick={() => void ejecutarGeneracionOrdenes(false, undefined, idsPendientesSesion, false)}
+                                onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesSesion)}
                                 disabled={generandoOrdenes || idsPendientesSesion.length === 0}
                                 className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                             >
@@ -1270,7 +1070,7 @@ export function PracticaCargaRapidaPage({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => void ejecutarGeneracionOrdenes(true, undefined, idsPendientesSesion, false)}
+                                onClick={() => void ejecutarGeneracionOrdenes(true, idsPendientesSesion)}
                                 disabled={generandoOrdenes || idsPendientesSesion.length === 0}
                                 className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                             >
@@ -1308,52 +1108,6 @@ export function PracticaCargaRapidaPage({
                 </div>
             </div>
 
-            {mostrarPopupImpresion && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-                    <div className="w-full max-w-md space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-xl">
-                        <h3 className="text-sm font-semibold text-gray-900">Seleccionar componentes para imprimir</h3>
-                        <p className="text-xs text-gray-600">
-                            Marca que grupos queres imprimir despues de generar las ordenes.
-                        </p>
-
-                        <div className="space-y-2">
-                            {COMPONENTES_IMPRESION.map((componente) => (
-                                <label key={`imp-${componente.codigo}`} className="inline-flex w-full items-center gap-2 text-xs text-gray-700">
-                                    <input
-                                        type="checkbox"
-                                        checked={componentesImpresion[componente.codigo]}
-                                        onChange={(e) => setComponentesImpresion((prev) => ({
-                                            ...prev,
-                                            [componente.codigo]: e.target.checked,
-                                        }))}
-                                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    {componente.label}
-                                </label>
-                            ))}
-                        </div>
-
-                        <div className="flex items-center justify-end gap-2 pt-1">
-                            <button
-                                type="button"
-                                onClick={() => setMostrarPopupImpresion(false)}
-                                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={confirmarImpresionPorComponentes}
-                                disabled={generandoOrdenes}
-                                className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                            >
-                                {generandoOrdenes && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                                Generar e imprimir
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </>
     )
 }

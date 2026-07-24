@@ -28,6 +28,7 @@ import { ProfesionalSelect } from '@/components/ui/profesional-select'
 
 type GuardadaSesionItem = {
     id: string
+    practicaId: number
     codigo: string
     descripcion: string
     cantidad: number
@@ -75,6 +76,7 @@ const COMPONENTES_IMPRESION: Array<{ codigo: ComponenteOrden; label: string }> =
 ]
 
 const COMPONENTES_ORDEN: readonly ComponenteOrden[] = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3']
+const ORDENES_HISTORICO_POR_PAGINA = 8
 
 function practicaActiva(estado: string | null | undefined): boolean {
     return (estado?.trim().toUpperCase() ?? 'A') !== 'X'
@@ -132,6 +134,14 @@ function componentesDesdeClasificacion(clasificacion: string | null | undefined)
         .filter(esComponenteOrden)
 }
 
+function normalizarBusqueda(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+}
+
 export function PracticaCargaRapidaPage({
     ingresoId,
     convenioId,
@@ -175,6 +185,8 @@ export function PracticaCargaRapidaPage({
     const [ordenesGeneradasSesionKeys, setOrdenesGeneradasSesionKeys] = useState<string[]>([])
     const [mostrarOrdenesSesion, setMostrarOrdenesSesion] = useState(true)
     const [mostrarOrdenesHistoricas, setMostrarOrdenesHistoricas] = useState(true)
+    const [busquedaHistorico, setBusquedaHistorico] = useState('')
+    const [paginaHistorico, setPaginaHistorico] = useState(1)
 
     useEffect(() => {
         let cancelled = false
@@ -282,6 +294,17 @@ export function PracticaCargaRapidaPage({
         const pendientesIds = new Set(practicasPendientes.map((practica) => practica.id))
         return practicasSeleccionadas.filter((id) => pendientesIds.has(id))
     }, [practicasPendientes, practicasSeleccionadas])
+
+    const idsPendientesSesion = useMemo(() => {
+        const pendientes = new Set(practicasPendientes.map((practica) => practica.id))
+        return Array.from(
+            new Set(
+                guardadasSesion
+                    .map((item) => item.practicaId)
+                    .filter((id) => pendientes.has(id))
+            )
+        )
+    }, [guardadasSesion, practicasPendientes])
 
     const componentesSeleccionados = useMemo(() => {
         const encontrados = new Set<ComponenteOrden>()
@@ -431,6 +454,7 @@ export function PracticaCargaRapidaPage({
             const entrada = entradasCrear[idx]
             return {
                 id: `${practicaCreada.id}-${Date.now()}-${idx}`,
+                practicaId: practicaCreada.id,
                 codigo: practicaCreada.codigoPractica.trim(),
                 descripcion: descripcionParaMostrar(practicaCreada),
                 cantidad: Number(practicaCreada.cantidad),
@@ -539,13 +563,20 @@ export function PracticaCargaRapidaPage({
         setMostrarPopupImpresion(true)
     }
 
-    const ejecutarGeneracionOrdenes = async (imprimirDespues: boolean, componentesFiltro?: Set<ComponenteOrden>) => {
-        if (idsPendientesSeleccionadas.length === 0) {
+    const ejecutarGeneracionOrdenes = async (
+        imprimirDespues: boolean,
+        componentesFiltro?: Set<ComponenteOrden>,
+        practicaIdsObjetivo?: number[],
+        usarAgrupacionPersonalizada = true
+    ) => {
+        const practicaIds = practicaIdsObjetivo ?? idsPendientesSeleccionadas
+
+        if (practicaIds.length === 0) {
             setMensajeError('Selecciona al menos una practica pendiente para generar ordenes')
             return
         }
 
-        const agruparEnUnaOrden = modoAgrupacionPersonalizada === 'MISMA_LINEA'
+        const agruparEnUnaOrden = usarAgrupacionPersonalizada && modoAgrupacionPersonalizada === 'MISMA_LINEA'
         const titularOrdenAgrupada = tituloOrdenPersonalizada.trim()
 
         if (agruparEnUnaOrden && titularOrdenAgrupada.length === 0) {
@@ -559,7 +590,7 @@ export function PracticaCargaRapidaPage({
             : matriculaFirmanteSugerida
 
         const clasificacionPayload = Object.fromEntries(
-            idsPendientesSeleccionadas.map((id) => {
+            practicaIds.map((id) => {
                 const practica = practicas.find((item) => item.id === id)
                 const clasificacion = practica ? obtenerClasificacionPractica(practica) : 'HE'
                 return [String(id), clasificacion]
@@ -572,7 +603,7 @@ export function PracticaCargaRapidaPage({
         try {
             const result = await generarOrdenesDesdeInternacionAction({
                 ingresoId,
-                practicaIds: idsPendientesSeleccionadas,
+                practicaIds,
                 clasificacionPorPracticaId: clasificacionPayload,
                 agruparEnUnaOrden,
                 titularOrdenAgrupada: agruparEnUnaOrden ? titularOrdenAgrupada : undefined,
@@ -618,7 +649,7 @@ export function PracticaCargaRapidaPage({
                 }
             }))
 
-            setPracticasSeleccionadas((prev) => prev.filter((id) => !idsPendientesSeleccionadas.includes(id)))
+            setPracticasSeleccionadas((prev) => prev.filter((id) => !practicaIds.includes(id)))
 
             const grupos = Array.isArray((result as { ordenesPorGrupo?: unknown }).ordenesPorGrupo)
                 ? ((result as {
@@ -698,6 +729,49 @@ export function PracticaCargaRapidaPage({
         const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
         return yaAutorizada ? mostrarOrdenesYaAutorizadas : mostrarOrdenesPendientesAutorizacion
     })
+
+    const gruposHistoricosBuscadosYOrdenados = useMemo(() => {
+        const query = normalizarBusqueda(busquedaHistorico)
+
+        const filtrados = gruposFiltradosHistoricos.filter((grupo) => {
+            if (!query) return true
+
+            const numeroOrden =
+                grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null
+                    ? formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)
+                    : ''
+            const numeroAut = grupo.numeroAutorizacion ?? ''
+            const codigos = grupo.practicas.map((p) => p.codigoPractica.trim()).join(' ')
+            const descripciones = grupo.practicas.map((p) => descripcionParaMostrar(p)).join(' ')
+            const textoGrupo = normalizarBusqueda(`${numeroOrden} ${numeroAut} ${codigos} ${descripciones}`)
+            return textoGrupo.includes(query)
+        })
+
+        return [...filtrados].sort((a, b) => {
+            const aConAut = grupoTieneNumeroAutorizacion(a) ? 1 : 0
+            const bConAut = grupoTieneNumeroAutorizacion(b) ? 1 : 0
+            if (aConAut !== bConAut) return aConAut - bConAut
+            return 0
+        })
+    }, [gruposFiltradosHistoricos, busquedaHistorico])
+
+    const totalPaginasHistorico = Math.max(
+        1,
+        Math.ceil(gruposHistoricosBuscadosYOrdenados.length / ORDENES_HISTORICO_POR_PAGINA)
+    )
+
+    useEffect(() => {
+        setPaginaHistorico(1)
+    }, [busquedaHistorico, mostrarOrdenesPendientesAutorizacion, mostrarOrdenesYaAutorizadas])
+
+    useEffect(() => {
+        setPaginaHistorico((prev) => Math.min(prev, totalPaginasHistorico))
+    }, [totalPaginasHistorico])
+
+    const gruposHistoricosPaginados = useMemo(() => {
+        const inicio = (paginaHistorico - 1) * ORDENES_HISTORICO_POR_PAGINA
+        return gruposHistoricosBuscadosYOrdenados.slice(inicio, inicio + ORDENES_HISTORICO_POR_PAGINA)
+    }, [gruposHistoricosBuscadosYOrdenados, paginaHistorico])
 
     const renderGrupoOrden = (grupo: GrupoPracticasAutorizadas) => {
         const abierta = ordenesAutorizadasAbiertas[grupo.key] ?? false
@@ -814,7 +888,7 @@ export function PracticaCargaRapidaPage({
     return (
         <>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-                <div className="space-y-4">
+                <div className="order-2 space-y-4">
                     {puedeCrear ? (
                         <PracticaCargaForm
                             convenioId={convenioId}
@@ -1112,19 +1186,55 @@ export function PracticaCargaRapidaPage({
                                     </span>
                                 </button>
 
-                                {mostrarOrdenesHistoricas && gruposFiltradosHistoricos.length === 0 ? (
+                                {mostrarOrdenesHistoricas && (
+                                    <div className="rounded border border-gray-200 bg-gray-50 p-2">
+                                        <input
+                                            type="text"
+                                            value={busquedaHistorico}
+                                            onChange={(e) => setBusquedaHistorico(e.target.value)}
+                                            placeholder="Buscar por orden, autorizacion, codigo o descripcion"
+                                            className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700"
+                                        />
+                                    </div>
+                                )}
+
+                                {mostrarOrdenesHistoricas && gruposHistoricosBuscadosYOrdenados.length === 0 ? (
                                     <p className="rounded border border-gray-200 bg-gray-50/60 px-2 py-1 text-[11px] text-gray-600">
                                         No hay ordenes historicas que coincidan con los filtros actuales.
                                     </p>
                                 ) : (
-                                    mostrarOrdenesHistoricas && gruposFiltradosHistoricos.map(renderGrupoOrden)
+                                    mostrarOrdenesHistoricas && gruposHistoricosPaginados.map(renderGrupoOrden)
+                                )}
+
+                                {mostrarOrdenesHistoricas && gruposHistoricosBuscadosYOrdenados.length > 0 && (
+                                    <div className="flex items-center justify-between rounded border border-gray-200 bg-white px-2 py-1.5 text-[11px] text-gray-700">
+                                        <span>Pagina {paginaHistorico} de {totalPaginasHistorico}</span>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPaginaHistorico((prev) => Math.max(1, prev - 1))}
+                                                disabled={paginaHistorico <= 1}
+                                                className="rounded border border-gray-300 px-2 py-0.5 disabled:opacity-50"
+                                            >
+                                                Anterior
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPaginaHistorico((prev) => Math.min(totalPaginasHistorico, prev + 1))}
+                                                disabled={paginaHistorico >= totalPaginasHistorico}
+                                                className="rounded border border-gray-300 px-2 py-0.5 disabled:opacity-50"
+                                            >
+                                                Siguiente
+                                            </button>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         )}
                     </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="order-1 space-y-4">
                     <div className="his-card p-4 space-y-3">
                         <div className="flex items-center gap-2">
                             <ClipboardList className="h-4 w-4 text-blue-600" />
@@ -1133,6 +1243,31 @@ export function PracticaCargaRapidaPage({
                         <p className="text-xs text-gray-600">
                             Este panel confirma al instante cada codigo guardado para validar la carga sin perder ritmo.
                         </p>
+
+                        <div className="rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5 text-[11px] text-blue-800">
+                            Pendientes de esta sesion: {idsPendientesSesion.length}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={() => void ejecutarGeneracionOrdenes(false, undefined, idsPendientesSesion, false)}
+                                disabled={generandoOrdenes || idsPendientesSesion.length === 0}
+                                className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                                {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                                Generar orden (sesion)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void ejecutarGeneracionOrdenes(true, undefined, idsPendientesSesion, false)}
+                                disabled={generandoOrdenes || idsPendientesSesion.length === 0}
+                                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                            >
+                                <Printer className="h-3.5 w-3.5" />
+                                Generar orden e imprimir (sesion)
+                            </button>
+                        </div>
 
                         {guardadasSesion.length === 0 ? (
                             <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">

@@ -50,6 +50,15 @@ interface PracticaCargaRapidaPageProps {
     matriculaTratanteDefault?: number | null
     puedeCrear: boolean
     practicasIniciales: PracticaItem[]
+    contextoCirugia?: {
+        cirugiaId: number
+        pacienteId: number
+        fechaCirugia: string | Date
+        obraSocialId: number | null
+        planId: number | null
+        obraSocialCoseguroId: number | null
+        numeroAfiliado: string | null
+    } | null
 }
 
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
@@ -117,6 +126,15 @@ function normalizarBusqueda(value: string): string {
         .trim()
 }
 
+function fechaAInputLocalSimple(value: string | Date): string {
+    const parsed = new Date(value)
+    const fecha = Number.isFinite(parsed.getTime()) ? parsed : new Date()
+    const year = fecha.getFullYear()
+    const month = String(fecha.getMonth() + 1).padStart(2, '0')
+    const day = String(fecha.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
 export function PracticaCargaRapidaPage({
     ingresoId,
     convenioId,
@@ -124,7 +142,9 @@ export function PracticaCargaRapidaPage({
     matriculaTratanteDefault,
     puedeCrear,
     practicasIniciales,
+    contextoCirugia,
 }: PracticaCargaRapidaPageProps) {
+    const modoCirugia = contextoCirugia != null
     const [practicas, setPracticas] = useState<PracticaItem[]>(
         practicasIniciales
             .filter((practica) => practicaActiva(practica.estado))
@@ -384,8 +404,88 @@ export function PracticaCargaRapidaPage({
         setGuardadasSesion((prev) => [...nuevas, ...prev])
     }
 
+    const registrarGuardadasSesionDesdeEntradas = (entradasCrear: PracticaCargaEntrada[]) => {
+        if (entradasCrear.length === 0) return
+
+        const nuevas = entradasCrear.map((entrada, idx) => ({
+            id: `cirugia-${Date.now()}-${idx}`,
+            practicaId: -1 * (Date.now() + idx),
+            codigo: entrada.payload.codigoPractica.trim(),
+            descripcion: (entrada.payload.descripcionPractica ?? '').trim() || entrada.payload.codigoPractica.trim(),
+            cantidad: Number(entrada.payload.cantidad ?? 1),
+            clasificacion: entrada.clasificacion ?? 'HE',
+            fecha: formatearFechaArgentina(entrada.payload.fecha, {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+            }),
+        }))
+
+        setGuardadasSesion((prev) => [...nuevas, ...prev])
+    }
+
     const handleGuardarPracticas = async (entradasCrear: PracticaCargaEntrada[]) => {
         setMensajeError(null)
+
+        if (contextoCirugia) {
+            if (!contextoCirugia.obraSocialId) {
+                const mensaje = 'La internacion no tiene obra social asignada. Actualizala para cargar practicas de cirugia.'
+                setMensajeError(mensaje)
+                return { ok: false, error: mensaje }
+            }
+
+            try {
+                const practicasExpandida = entradasCrear.map((entrada) => ({
+                    convenioId: entrada.payload.convenioId,
+                    codigo: entrada.payload.codigoPractica,
+                    descripcion: entrada.payload.descripcionPractica,
+                    cantidad: entrada.payload.cantidad,
+                    importeTotal: entrada.payload.importeBaseUnitario,
+                    matriculaEspecialista: entrada.payload.matriculaEspecialista,
+                    matriculaAnestesista: entrada.payload.matriculaAnestesista,
+                }))
+
+                const res = await fetch(`/api/internacion/${ingresoId}/cirugia-urgencia`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cirugiaId: contextoCirugia.cirugiaId,
+                        pacienteId: contextoCirugia.pacienteId,
+                        fechaCirugia: fechaAInputLocalSimple(contextoCirugia.fechaCirugia),
+                        horaCirugia: null,
+                        camaId: null,
+                        obraSocialId: contextoCirugia.obraSocialId,
+                        planId: contextoCirugia.planId,
+                        obraSocialCoseguroId: contextoCirugia.obraSocialCoseguroId,
+                        numeroAfiliado: contextoCirugia.numeroAfiliado,
+                        diagnostico: null,
+                        observaciones: null,
+                        practicas: practicasExpandida,
+                        diferenciales: {
+                            esFeriado: false,
+                            esNocturna: false,
+                            mismaViaPatologia: false,
+                            diferentesViasPatologia: false,
+                            diferentesViasDiferentesPatologia: false,
+                        },
+                    }),
+                })
+
+                const json = await res.json().catch(() => null)
+                if (!res.ok) {
+                    const mensaje = json?.error ?? 'No se pudo registrar la practica en la cirugia seleccionada'
+                    setMensajeError(mensaje)
+                    return { ok: false, error: mensaje }
+                }
+
+                registrarGuardadasSesionDesdeEntradas(entradasCrear)
+                return { ok: true }
+            } catch {
+                const mensaje = 'Error de conexion al guardar practicas de cirugia'
+                setMensajeError(mensaje)
+                return { ok: false, error: mensaje }
+            }
+        }
 
         try {
             const practicasCreadas: PracticaItem[] = []
@@ -736,7 +836,7 @@ export function PracticaCargaRapidaPage({
                             sectorInternacionActual={sectorInternacionActual}
                             matriculaTratanteDefault={matriculaTratanteDefault}
                             onGuardar={handleGuardarPracticas}
-                            titulo="Carga rapida de practicas"
+                            titulo={modoCirugia ? 'Carga rapida de practicas de cirugia' : 'Carga rapida de practicas'}
                             modoCargaRapida
                             autoFocusBusqueda
                             soloFechaPractica
@@ -754,6 +854,7 @@ export function PracticaCargaRapidaPage({
                         </p>
                     )}
 
+                    {!modoCirugia && (
                     <div className="his-card p-4 space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <h3 className="text-sm font-semibold text-gray-900">Gestion de grupos de practicas</h3>
@@ -892,7 +993,9 @@ export function PracticaCargaRapidaPage({
                             </div>
                         )}
                     </div>
+                    )}
 
+                    {!modoCirugia && (
                     <div className="his-card p-4 space-y-3">
                         <h3 className="text-sm font-semibold text-gray-900">Ordenes generadas</h3>
 
@@ -990,6 +1093,7 @@ export function PracticaCargaRapidaPage({
                             </div>
                         )}
                     </div>
+                    )}
                 </div>
 
                 <div className="order-1 space-y-4 lg:order-0 lg:col-start-2">
@@ -999,33 +1103,39 @@ export function PracticaCargaRapidaPage({
                             <h3 className="text-sm font-semibold text-gray-900">Codigos agregados en esta sesion</h3>
                         </div>
                         <p className="text-xs text-gray-600">
-                            Este panel confirma al instante cada codigo guardado para validar la carga sin perder ritmo.
+                            {modoCirugia
+                                ? `Este panel confirma al instante cada codigo guardado para la cirugia #${contextoCirugia?.cirugiaId}.`
+                                : 'Este panel confirma al instante cada codigo guardado para validar la carga sin perder ritmo.'}
                         </p>
 
-                        <div className="rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5 text-[11px] text-blue-800">
-                            Pendientes de esta sesion: {idsPendientesSesion.length}
-                        </div>
+                        {!modoCirugia && (
+                            <>
+                                <div className="rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5 text-[11px] text-blue-800">
+                                    Pendientes de esta sesion: {idsPendientesSesion.length}
+                                </div>
 
-                        <div className="flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesSesion)}
-                                disabled={generandoOrdenes || idsPendientesSesion.length === 0}
-                                className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                            >
-                                {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                                Generar orden (sesion)
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => void ejecutarGeneracionOrdenes(true, idsPendientesSesion)}
-                                disabled={generandoOrdenes || idsPendientesSesion.length === 0}
-                                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                            >
-                                <Printer className="h-3.5 w-3.5" />
-                                Generar orden e imprimir (sesion)
-                            </button>
-                        </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesSesion)}
+                                        disabled={generandoOrdenes || idsPendientesSesion.length === 0}
+                                        className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                    >
+                                        {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                                        Generar orden (sesion)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void ejecutarGeneracionOrdenes(true, idsPendientesSesion)}
+                                        disabled={generandoOrdenes || idsPendientesSesion.length === 0}
+                                        className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                    >
+                                        <Printer className="h-3.5 w-3.5" />
+                                        Generar orden e imprimir (sesion)
+                                    </button>
+                                </div>
+                            </>
+                        )}
 
                         {guardadasSesion.length === 0 ? (
                             <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">

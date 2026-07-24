@@ -9,9 +9,10 @@ import { notFound, redirect } from 'next/navigation'
 
 interface PageProps {
     params: Promise<{ id: string }>
+    searchParams: Promise<{ cirugiaId?: string }>
 }
 
-export default async function InternacionPracticasRapidasPage({ params }: PageProps) {
+export default async function InternacionPracticasRapidasPage({ params, searchParams }: PageProps) {
     const usuario = await getUsuarioSesion()
     if (!tienePermiso(usuario.rol, 'INTERNACION', 'LEER')) redirect('/dashboard')
 
@@ -21,6 +22,7 @@ export default async function InternacionPracticasRapidasPage({ params }: PagePr
         (usuario.rol === ROLES.ADMIN)
 
     const { id } = await params
+    const { cirugiaId: cirugiaIdParam } = await searchParams
     const ingresoId = parseInt(id, 10)
     if (Number.isNaN(ingresoId)) notFound()
 
@@ -33,9 +35,28 @@ export default async function InternacionPracticasRapidasPage({ params }: PagePr
 
     if (!detalle || detalle.tipoIngresoCodigo !== 'INT') notFound()
 
+    const cirugiaId = cirugiaIdParam ? Number.parseInt(cirugiaIdParam, 10) : null
+    const cirugiaObjetivo =
+        cirugiaId != null && Number.isFinite(cirugiaId)
+            ? (detalle.cirugiasUrgencia.find((cirugia) => cirugia.id === cirugiaId) ?? null)
+            : null
+
+    const contextoCirugia =
+        cirugiaObjetivo && detalle.paciente
+            ? {
+                cirugiaId: cirugiaObjetivo.id,
+                pacienteId: detalle.paciente.id,
+                fechaCirugia: cirugiaObjetivo.fechaCirugia,
+                obraSocialId: detalle.obraSocial?.id ?? null,
+                planId: detalle.plan?.id ?? null,
+                obraSocialCoseguroId: detalle.obraSocialCoseguroId ?? null,
+                numeroAfiliado: detalle.numeroAfiliado ?? null,
+            }
+            : null
+
     return (
         <>
-            <Header titulo="Carga rapida de practicas" />
+            <Header titulo={contextoCirugia ? 'Carga de practicas de cirugia' : 'Carga rapida de practicas'} />
             <div className="p-6 space-y-4 max-w-7xl">
                 <nav className="flex items-center gap-1 text-xs text-gray-500">
                     <Link href="/dashboard/internacion" className="hover:text-gray-700">Internacion</Link>
@@ -49,14 +70,22 @@ export default async function InternacionPracticasRapidasPage({ params }: PagePr
 
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900">Carga centralizada de practicas</h2>
+                        <h2 className="text-lg font-semibold text-gray-900">
+                            {contextoCirugia
+                                ? `Carga de practicas para cirugia #${contextoCirugia.cirugiaId}`
+                                : 'Carga centralizada de practicas'}
+                        </h2>
                         <p className="text-sm text-gray-600">
-                            Carga continua por codigo, sin hora, con confirmacion visual inmediata de cada practica.
+                            {contextoCirugia
+                                ? 'Carga continua por codigo para esta cirugia, con confirmacion visual inmediata de cada practica.'
+                                : 'Carga continua por codigo, sin hora, con confirmacion visual inmediata de cada practica.'}
                         </p>
                     </div>
 
                     <Link
-                        href={`/dashboard/internacion/${ingresoId}#internacion-practicas`}
+                        href={contextoCirugia
+                            ? `/dashboard/internacion/${ingresoId}#internacion-cirugia`
+                            : `/dashboard/internacion/${ingresoId}#internacion-practicas`}
                         className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     >
                         <ArrowLeft className="h-4 w-4" />
@@ -71,6 +100,7 @@ export default async function InternacionPracticasRapidasPage({ params }: PagePr
                     matriculaTratanteDefault={detalle.profesionalTratante?.matricula ?? null}
                     puedeCrear={puedeCrear}
                     practicasIniciales={detalle.practicas}
+                    contextoCirugia={contextoCirugia}
                 />
             </div>
         </>

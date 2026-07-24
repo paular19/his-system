@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { Plus, Scissors, ChevronDown, ChevronUp, Loader2, ChevronRight, Pencil, Trash2, Ban } from 'lucide-react'
 import { anularOrdenAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 import { fechaAInputLocal, fechaHoraAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
-import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 
@@ -148,10 +147,6 @@ interface CirugiaUrgenciaSectionProps {
     pacienteId: number
     sectorInternacionActual?: string | null
     sectorPorPracticaId?: Record<number, SectorPracticaFiltro>
-    obraSocialIdInicial: number | null
-    planIdInicial: number | null
-    obraSocialCoseguroIdInicial: number | null
-    numeroAfiliadoInicial: string | null
     puedeCrear: boolean
     obraSociales: OpcionObraSocial[]
     planes: OpcionPlan[]
@@ -168,10 +163,6 @@ export function CirugiaUrgenciaSection({
     pacienteId,
     sectorInternacionActual,
     sectorPorPracticaId,
-    obraSocialIdInicial,
-    planIdInicial,
-    obraSocialCoseguroIdInicial,
-    numeroAfiliadoInicial,
     puedeCrear,
     cirugias: cirugiasIniciales,
     practicasInternacion,
@@ -181,8 +172,6 @@ export function CirugiaUrgenciaSection({
 
     const [cirugias, setCirugias] = useState<CirugiaUrgenciaItem[]>(cirugiasIniciales)
     const [expandido, setExpandido] = useState(true)
-    const [mostrarForm, setMostrarForm] = useState(false)
-    const [cirugiaActivaId, setCirugiaActivaId] = useState<number | null>(null)
     const [creandoCirugia, setCreandoCirugia] = useState(false)
     const [generandoOrdenAgrupada, setGenerandoOrdenAgrupada] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -546,10 +535,6 @@ export function CirugiaUrgenciaSection({
         setPaginaOrdenesGeneradasPorCirugia({})
     }, [mostrarUti, mostrarPiso])
 
-    const limpiarForm = () => {
-        setError(null)
-    }
-
     const abrirEdicionPracticaCirugia = (cirugiaId: number, practicaCirugiaId: number) => {
         const estado = estadoPracticaCirugiaPorId.get(practicaCirugiaId)
         if (!estado) {
@@ -749,87 +734,11 @@ export function CirugiaUrgenciaSection({
 
             const nuevaCirugia = json.data as CirugiaUrgenciaItem
             setCirugias((prev) => [nuevaCirugia, ...prev])
-            setCirugiaActivaId(nuevaCirugia.id)
-            setMostrarForm(true)
             router.refresh()
         } catch (err) {
             setError(err instanceof Error ? err.message : 'No se pudo crear la cirugia')
         } finally {
             setCreandoCirugia(false)
-        }
-    }
-
-    const guardarPracticasEnCirugia = async (entradas: PracticaCargaEntrada[]) => {
-        if (entradas.length === 0) return { ok: false, error: 'No hay practicas para agregar' }
-
-        if (!cirugiaActivaId) {
-            const mensaje = 'Primero crea una cirugia con el boton Agregar'
-            setError(mensaje)
-            return { ok: false, error: mensaje }
-        }
-
-        if (!obraSocialIdInicial) {
-            const mensaje = 'La internacion no tiene obra social asignada. Actualizala para cargar practicas de cirugia.'
-            setError(mensaje)
-            return { ok: false, error: mensaje }
-        }
-
-        setError(null)
-        try {
-            const practicasExpandida = entradas.map((entrada) => ({
-                convenioId: entrada.payload.convenioId,
-                codigo: entrada.payload.codigoPractica,
-                descripcion: entrada.payload.descripcionPractica,
-                cantidad: entrada.payload.cantidad,
-                importeTotal: entrada.payload.importeBaseUnitario,
-                matriculaEspecialista: entrada.payload.matriculaEspecialista,
-                matriculaAnestesista: entrada.payload.matriculaAnestesista,
-            }))
-
-            const res = await fetch(`/api/internacion/${ingresoId}/cirugia-urgencia`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    cirugiaId: cirugiaActivaId,
-                    pacienteId,
-                    fechaCirugia: fechaAInputLocal(
-                        cirugias.find((cirugia) => cirugia.id === cirugiaActivaId)?.fechaCirugia ?? new Date()
-                    ),
-                    horaCirugia: null,
-                    camaId: null,
-                    obraSocialId: obraSocialIdInicial,
-                    planId: planIdInicial,
-                    obraSocialCoseguroId: obraSocialCoseguroIdInicial,
-                    numeroAfiliado: numeroAfiliadoInicial ?? null,
-                    diagnostico: null,
-                    observaciones: null,
-                    practicas: practicasExpandida,
-                    diferenciales: {
-                        esFeriado: false,
-                        esNocturna: false,
-                        mismaViaPatologia: false,
-                        diferentesViasPatologia: false,
-                        diferentesViasDiferentesPatologia: false,
-                    },
-                }),
-            })
-
-            const json = await res.json()
-            if (!res.ok) {
-                const mensaje = json.error ?? 'No se pudo registrar la cirugia'
-                setError(mensaje)
-                return { ok: false, error: mensaje }
-            }
-
-            setCirugias((prev) =>
-                prev.map((cirugia) => (cirugia.id === cirugiaActivaId ? (json.data as CirugiaUrgenciaItem) : cirugia))
-            )
-            router.refresh()
-            return { ok: true }
-        } catch {
-            const mensaje = 'Error de conexion al guardar la cirugia'
-            setError(mensaje)
-            return { ok: false, error: mensaje }
         }
     }
 
@@ -985,29 +894,6 @@ export function CirugiaUrgenciaSection({
                     {error && (
                         <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
                             {error}
-                        </div>
-                    )}
-
-                    {mostrarForm && puedeCrear && (
-                        <div className="space-y-4 border border-blue-100 bg-blue-50/40 rounded-xl p-4">
-                            <p className="text-xs text-gray-600">
-                                Cargando practicas en cirugia #{cirugiaActivaId ?? '—'}. Los datos administrativos y diferenciales se completan en la ficha quirurgica.
-                            </p>
-
-                            <PracticaCargaForm
-                                convenioId={obraSocialIdInicial}
-                                sectorInternacionActual={
-                                    cirugias.find((cirugia) => cirugia.id === cirugiaActivaId)?.cama?.sector ?? sectorInternacionActual
-                                }
-                                matriculaTratanteDefault={matriculaTratanteDefault}
-                                onGuardar={guardarPracticasEnCirugia}
-                                onCancel={() => {
-                                    limpiarForm()
-                                    setMostrarForm(false)
-                                    setCirugiaActivaId(null)
-                                }}
-                                titulo="Nueva practica"
-                            />
                         </div>
                     )}
 
@@ -1168,17 +1054,12 @@ export function CirugiaUrgenciaSection({
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs text-gray-500">Cirugia #{c.id}</span>
                                                 {puedeCrear && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setCirugiaActivaId(c.id)
-                                                            setMostrarForm(true)
-                                                            setError(null)
-                                                        }}
+                                                    <Link
+                                                        href={`/dashboard/internacion/${ingresoId}/practicas?cirugiaId=${c.id}`}
                                                         className="text-xs font-medium text-emerald-700 border border-emerald-200 rounded-md px-2 py-1 hover:bg-emerald-50"
                                                     >
                                                         Agregar practica
-                                                    </button>
+                                                    </Link>
                                                 )}
                                                 <Link
                                                     href={`/dashboard/internacion/${ingresoId}/ficha-quirurgica#cirugia-${c.id}`}

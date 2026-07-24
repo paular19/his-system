@@ -482,24 +482,22 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                 - Descartables */}
 
                                 {detalle.paciente && (
-                                    <CirugiaUrgenciaSection
-                                        ingresoId={ingresoId}
-                                        pacienteId={detalle.paciente.id}
-                                        sectorInternacionActual={detalle.cama?.sector ?? null}
-                                        sectorPorPracticaId={sectorPorPracticaId}
-                                        obraSocialIdInicial={detalle.obraSocial?.id ?? null}
-                                        planIdInicial={detalle.plan?.id ?? null}
-                                        obraSocialCoseguroIdInicial={detalle.obraSocialCoseguroId ?? null}
-                                        numeroAfiliadoInicial={detalle.numeroAfiliado}
-                                        puedeCrear={puedeCrear}
-                                        obraSociales={obraSociales}
-                                        planes={planes}
-                                        coseguros={coseguros}
-                                        camasDisponibles={camasDisponiblesSimple}
-                                        cirugias={detalle.cirugiasUrgencia}
-                                        practicasInternacion={practicasInternacionParaCirugia}
-                                        matriculaTratanteDefault={matriculaTratanteDefault}
-                                    />
+                                    <div id="internacion-cirugia">
+                                        <CirugiaUrgenciaSection
+                                            ingresoId={ingresoId}
+                                            pacienteId={detalle.paciente.id}
+                                            sectorInternacionActual={detalle.cama?.sector ?? null}
+                                            sectorPorPracticaId={sectorPorPracticaId}
+                                            puedeCrear={puedeCrear}
+                                            obraSociales={obraSociales}
+                                            planes={planes}
+                                            coseguros={coseguros}
+                                            camasDisponibles={camasDisponiblesSimple}
+                                            cirugias={detalle.cirugiasUrgencia}
+                                            practicasInternacion={practicasInternacionParaCirugia}
+                                            matriculaTratanteDefault={matriculaTratanteDefault}
+                                        />
+                                    </div>
                                 )}
                             </div>
                         </>

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { ClipboardCheck, FileText, Loader2 } from 'lucide-react'
 import {
   parseObservacionesInternacion,
@@ -9,6 +8,7 @@ import {
   tieneChecklistCompleto,
   type ChecklistDocumental,
 } from '@/modules/internacion/observaciones-meta'
+import { useBackgroundRefresh } from '@/lib/utils/client-mutation'
 
 interface ObservacionesSectionProps {
   ingresoId: number
@@ -21,7 +21,7 @@ export function ObservacionesSection({
   observacionesIniciales,
   puedeModificar,
 }: ObservacionesSectionProps) {
-  const router = useRouter()
+  const { refreshInBackground } = useBackgroundRefresh()
   const parsedInicial = useMemo(
     () => parseObservacionesInternacion(observacionesIniciales),
     [observacionesIniciales]
@@ -78,7 +78,7 @@ export function ObservacionesSection({
       }
 
       setEditando(false)
-      router.refresh()
+      refreshInBackground()
     } catch {
       setError('Error de conexión al guardar observaciones')
     } finally {

@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Activity, Loader2 } from 'lucide-react'
 import { formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import { parseObservacionesInternacion } from '@/modules/internacion/observaciones-meta'
+import { useBackgroundRefresh } from '@/lib/utils/client-mutation'
 
 interface SoporteRespiratorioSectionProps {
   ingresoId: number
@@ -90,7 +90,7 @@ export function SoporteRespiratorioSection({
   puedeModificar,
   profesionales,
 }: SoporteRespiratorioSectionProps) {
-  const router = useRouter()
+  const { refreshInBackground } = useBackgroundRefresh()
   const parsedInicial = useMemo(
     () => parseObservacionesInternacion(observacionesIniciales),
     [observacionesIniciales]
@@ -231,7 +231,7 @@ export function SoporteRespiratorioSection({
       }
 
       setEditando(false)
-      router.refresh()
+      refreshInBackground()
     } catch {
       setError('Error de conexión al guardar soporte respiratorio')
     } finally {

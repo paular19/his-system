@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, ChevronRight, Trash2, Pencil } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
@@ -15,6 +14,7 @@ import {
     type GrupoPracticasAutorizadas,
 } from '@/lib/practicas-autorizadas'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
+import { useBackgroundRefresh } from '@/lib/utils/client-mutation'
 
 interface ProfesionalConMatricula {
     id: number
@@ -147,7 +147,7 @@ export function PracticaSection({
     incluirPracticaIdsEnGenerarAutorizacion = true,
     forzarNavegacionCompletaGenerarAutorizacion = false,
 }: PracticaSectionProps) {
-    const router = useRouter()
+    const { refreshInBackground } = useBackgroundRefresh()
     const [practicas, setPracticas] = useState<PracticaItem[]>(practicasIniciales)
     const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
     const [expandido, setExpandido] = useState(true)
@@ -370,7 +370,7 @@ export function PracticaSection({
 
             cerrarEdicionPractica()
             if (refrescarDespuesCambios) {
-                router.refresh()
+                refreshInBackground()
             }
         } catch {
             setError('Error de conexión al editar la práctica')
@@ -473,7 +473,7 @@ export function PracticaSection({
             }
 
             if (refrescarDespuesCambios) {
-                router.refresh()
+                refreshInBackground()
             }
         } catch {
             setError('Error de conexión al desagrupar la práctica')
@@ -680,7 +680,7 @@ export function PracticaSection({
             }
 
             if (refrescarDespuesCambios) {
-                router.refresh()
+                refreshInBackground()
             }
         } catch {
             setError('Error al generar órdenes desde internación')
@@ -745,7 +745,7 @@ export function PracticaSection({
             }))
 
             if (refrescarDespuesCambios) {
-                router.refresh()
+                refreshInBackground()
             }
         } catch {
             setError('Error al anular la orden')

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Scissors, ChevronDown, ChevronUp, Loader2, ChevronRight, Pencil, Trash2, Ban } from 'lucide-react'
 import { anularOrdenAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
@@ -9,6 +8,7 @@ import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion
 import { fechaAInputLocal, fechaHoraAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { formatearNumeroOrden } from '@/modules/orden/types'
+import { useBackgroundRefresh } from '@/lib/utils/client-mutation'
 
 type OpcionObraSocial = {
     id: number
@@ -214,7 +214,7 @@ export function CirugiaUrgenciaSection({
     practicasInternacion,
     matriculaTratanteDefault,
 }: CirugiaUrgenciaSectionProps) {
-    const router = useRouter()
+    const { refreshInBackground } = useBackgroundRefresh()
 
     const [cirugias, setCirugias] = useState<CirugiaUrgenciaItem[]>(cirugiasIniciales)
     const [expandido, setExpandido] = useState(true)
@@ -692,7 +692,7 @@ export function CirugiaUrgenciaSection({
             }
 
             cerrarEdicionPracticaCirugia()
-            router.refresh()
+            refreshInBackground()
         } catch {
             setError('Error de conexión al editar la práctica')
         } finally {
@@ -727,7 +727,7 @@ export function CirugiaUrgenciaSection({
             }
 
             setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => id !== practicaCirugiaId))
-            router.refresh()
+            refreshInBackground()
         } catch {
             setError('Error de conexión al eliminar la práctica de cirugía')
         } finally {
@@ -752,7 +752,7 @@ export function CirugiaUrgenciaSection({
                 return
             }
 
-            router.refresh()
+            refreshInBackground()
         } catch {
             setError('No se pudo anular la orden')
         } finally {
@@ -783,7 +783,7 @@ export function CirugiaUrgenciaSection({
 
             const nuevaCirugia = json.data as CirugiaUrgenciaItem
             setCirugias((prev) => [nuevaCirugia, ...prev])
-            router.refresh()
+            refreshInBackground()
         } catch (err) {
             setError(err instanceof Error ? err.message : 'No se pudo crear la cirugia')
         } finally {
@@ -895,11 +895,11 @@ export function CirugiaUrgenciaSection({
                 if (typeof window !== 'undefined') {
                     window.open(url, '_blank')
                 }
-                router.refresh()
+                refreshInBackground()
                 return
             }
 
-            router.refresh()
+            refreshInBackground()
         } catch {
             setError('No se pudo generar la orden agrupada')
         } finally {
@@ -950,12 +950,6 @@ export function CirugiaUrgenciaSection({
                         <p className="text-sm text-gray-500">No hay cirugias registradas.</p>
                     ) : (
                         <div className="space-y-3">
-                            {puedeCrear && (
-                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-                                    La generacion, impresion y agrupacion de ordenes ahora se hace desde la pagina de carga rapida de cada cirugia.
-                                </div>
-                            )}
-
                             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                                 <span className="text-[11px] font-medium text-gray-700">Mostrar prácticas/órdenes cargadas:</span>
                                 <label className="inline-flex items-center gap-1.5 text-xs text-gray-700">

@@ -84,34 +84,34 @@ export async function crearIngreso(
   usuario: string,
   ip?: string
 ): Promise<IngresoConRelaciones> {
-  // Verificar que el paciente existe
-  const paciente = await prisma.paciente.findUnique({
-    where: { id: data.pacienteId },
-  })
+  const subtipoAdmisionCodigo = data.subtipoAdmisionCodigo?.trim() || null
+
+  const [paciente, tipoIngreso, subtipoAdmision, obraSocialNombre] = await Promise.all([
+    prisma.paciente.findUnique({ where: { id: data.pacienteId } }),
+    prisma.tipoIngreso.findUnique({ where: { codigo: data.tipoIngresoCodigo } }),
+    subtipoAdmisionCodigo
+      ? prisma.subtipoAdmision.findUnique({ where: { codigo: subtipoAdmisionCodigo } })
+      : Promise.resolve(null),
+    obtenerNombreObraSocial(data.obraSocialId),
+  ])
+
   if (!paciente) {
     throw new Error(`Paciente con ID ${data.pacienteId} no encontrado`)
   }
 
-  // Verificar que el tipo de ingreso existe
-  const tipoIngreso = await prisma.tipoIngreso.findUnique({
-    where: { codigo: data.tipoIngresoCodigo },
-  })
   if (!tipoIngreso) {
     throw new Error(`Tipo de ingreso "${data.tipoIngresoCodigo}" no válido`)
   }
 
-  // Verificar que el subtipo de admisión existe (solo si se envió)
-  if (data.subtipoAdmisionCodigo && data.subtipoAdmisionCodigo.trim() !== '') {
-    const subtipoAdmision = await prisma.subtipoAdmision.findUnique({
-      where: { codigo: data.subtipoAdmisionCodigo },
-    })
-    if (!subtipoAdmision) {
-      throw new Error(`Subtipo de admisión "${data.subtipoAdmisionCodigo}" no válido`)
-    }
+  if (subtipoAdmisionCodigo && !subtipoAdmision) {
+    throw new Error(`Subtipo de admisión "${subtipoAdmisionCodigo}" no válido`)
   }
 
-  const obraSocialNombre = await obtenerNombreObraSocial(data.obraSocialId)
-  const dataNormalizada = normalizarCoseguroPorObraSocial(data, obraSocialNombre)
+  const dataConSubtipoNormalizado = subtipoAdmisionCodigo
+    ? { ...data, subtipoAdmisionCodigo }
+    : data
+
+  const dataNormalizada = normalizarCoseguroPorObraSocial(dataConSubtipoNormalizado, obraSocialNombre)
   const dataParaCrear =
     dataNormalizada.tipoIngresoCodigo === 'AMB' &&
       omitirFechaEgresoPrevistaAmbulatorio(dataNormalizada.subtipoAdmisionCodigo)

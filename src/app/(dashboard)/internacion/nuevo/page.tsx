@@ -51,6 +51,8 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
           tipoDocumento: true,
           numeroDocumento: true,
           obraSocialId: true,
+          planId: true,
+          obraSocialCoseguroId: true,
           numeroAfiliado: true,
         },
       })
@@ -62,6 +64,8 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
           tipoDocumento: p.tipoDocumento,
           numeroDocumento: p.numeroDocumento,
           obraSocialId: p.obraSocialId,
+          planId: p.planId,
+          obraSocialCoseguroId: p.obraSocialCoseguroId,
           numeroAfiliado: p.numeroAfiliado,
         }
       }

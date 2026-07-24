@@ -58,7 +58,7 @@ export function TratanteSection({
 
     const guardarTratante = async () => {
         if (!tratanteSeleccionado) {
-            setError('Seleccione un médico tratante')
+            setError('Seleccione un medico de cabecera')
             return
         }
 
@@ -74,12 +74,12 @@ export function TratanteSection({
 
             const json = await res.json().catch(() => ({}))
             if (!res.ok || !json.ok) {
-                throw new Error(json?.error ?? 'No se pudo actualizar el médico tratante')
+                throw new Error(json?.error ?? 'No se pudo actualizar el medico de cabecera')
             }
 
             router.refresh()
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'No se pudo actualizar el médico tratante')
+            setError(e instanceof Error ? e.message : 'No se pudo actualizar el medico de cabecera')
         } finally {
             setGuardando(false)
         }
@@ -102,7 +102,7 @@ export function TratanteSection({
         <div className="his-card p-4">
             <div className="flex items-center gap-2 mb-3">
                 <Stethoscope className="h-4 w-4 text-gray-400" />
-                <h3 className="text-sm font-semibold text-gray-900">Médico tratante</h3>
+                <h3 className="text-sm font-semibold text-gray-900">Medico de cabecera</h3>
             </div>
 
             <div className="space-y-2">
@@ -111,7 +111,7 @@ export function TratanteSection({
                     value={tratanteSeleccionado}
                     onChange={setTratanteSeleccionado}
                     disabled={!puedeModificar || guardando}
-                    placeholderOption="Seleccionar médico tratante"
+                    placeholderOption="Seleccionar medico de cabecera"
                 />
                 {puedeModificar && cambiosDetectados && (
                     <button
@@ -130,9 +130,9 @@ export function TratanteSection({
             )}
 
             <div className="mt-4 border-t pt-3">
-                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Histórico de tratantes</p>
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Historico de medicos de cabecera</p>
                 {historialTratantesSinRepetidos.length === 0 ? (
-                    <p className="text-xs text-gray-500">No hay cambios de médico tratante registrados.</p>
+                    <p className="text-xs text-gray-500">No hay cambios de medico de cabecera registrados.</p>
                 ) : (
                     <ul className="space-y-1.5">
                         {historialTratantesSinRepetidos.map((item) => (

@@ -45,11 +45,11 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
 
     try {
       const res = await fetch(
-        `/api/pacientes?q=${encodeURIComponent(busqueda.trim())}&porPagina=10`
+        `/api/pacientes/busqueda-rapida?q=${encodeURIComponent(busqueda.trim())}&limit=10`
       )
       const json = await res.json()
       if (!json.ok) throw new Error(json.error ?? 'Error en búsqueda')
-      setResultados(json.data.items as ApiPaciente[])
+      setResultados(Array.isArray(json.data) ? (json.data as ApiPaciente[]) : [])
       setBuscado(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al buscar')

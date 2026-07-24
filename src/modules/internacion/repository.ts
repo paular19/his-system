@@ -2153,7 +2153,7 @@ export async function transferirCama(
 ): Promise<TransferenciaItem> {
   const ingreso = await prisma.ingreso.findUnique({
     where: { id: data.ingresoId },
-    select: { id: true, camaId: true, fechaIngreso: true },
+    select: { id: true, camaId: true },
   })
   if (!ingreso) throw new Error('Internación no encontrada')
 
@@ -2162,24 +2162,20 @@ export async function transferirCama(
   if (camaDestino.estado !== 'DISPONIBLE') throw new Error('La cama destino no está disponible')
 
   const transferencia = await prisma.$transaction(async (tx) => {
+    const ahora = new Date()
+
     // Liberar cama origen
     if (ingreso.camaId) {
       await tx.cama.update({
         where: { id: ingreso.camaId },
-        data: { estado: 'DISPONIBLE', usuario: usuario.slice(0, 10), fechaEstado: new Date() },
+        data: { estado: 'DISPONIBLE', usuario: usuario.slice(0, 10), fechaEstado: ahora },
       })
     }
 
-    const hoy = new Date()
-    const ingresoEnFuturo =
-      !!ingreso.fechaIngreso && claveDiaArgentina(ingreso.fechaIngreso) > claveDiaArgentina(hoy)
-    const ingresoEsHoy = ingresoDelDiaParaMapa(ingreso.fechaIngreso, hoy)
-
-    // Preingreso futuro: no bloquear la cama antes del día; hoy se reserva y pasado queda ocupada.
-    const estadoDestino = ingresoEnFuturo ? 'DISPONIBLE' : ingresoEsHoy ? 'RESERVADA' : 'OCUPADA'
+    const estadoDestino = data.reservarCama ? 'RESERVADA' : 'OCUPADA'
     await tx.cama.update({
       where: { id: data.camaDestinoId },
-      data: { estado: estadoDestino, usuario: usuario.slice(0, 10), fechaEstado: new Date() },
+      data: { estado: estadoDestino, usuario: usuario.slice(0, 10), fechaEstado: ahora },
     })
 
     // Actualizar ingreso
@@ -2194,11 +2190,11 @@ export async function transferirCama(
         ingresoId: data.ingresoId,
         camaOrigenId: ingreso.camaId ?? null,
         camaDestinoId: data.camaDestinoId,
-        fecha: data.fecha ?? new Date(),
+        fecha: data.fecha ?? ahora,
         motivo: data.motivo ?? null,
         profesionalId: data.profesionalId ?? null,
         usuario: usuario.slice(0, 10),
-        fechaEstado: new Date(),
+        fechaEstado: ahora,
       },
       select: {
         id: true,

@@ -2,13 +2,13 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { BedDouble } from 'lucide-react'
 import { BuscarPaciente } from '@/components/admision/buscar-paciente'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import type { PacienteResumen } from '@/modules/admision/types'
 import type { CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
-import { BedDouble } from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
-import { ProfesionalSelect } from '@/components/ui/profesional-select'
 
 interface ProfesionalOption {
   id: number
@@ -66,10 +66,10 @@ export function InternacionForm({
   const [camaId, setCamaId] = useState(camaInicial?.toString() ?? '')
   const [profesionalGuardiaId, setProfesionalGuardiaId] = useState('')
   const [profesionalTratanteId, setProfesionalTratanteId] = useState('')
-  const [obraSocialId, setObraSocialId] = useState(
-    pacienteInicial?.obraSocialId?.toString() ?? ''
-  )
-  const [planId, setPlanId] = useState('')
+  const [esCirugiaProgramada, setEsCirugiaProgramada] = useState(false)
+  const [fechaCirugiaProgramada, setFechaCirugiaProgramada] = useState(ahoraLocalDateTimeInput())
+  const [obraSocialId, setObraSocialId] = useState(pacienteInicial?.obraSocialId?.toString() ?? '')
+  const [planId, setPlanId] = useState(pacienteInicial?.planId?.toString() ?? '')
   const [numeroAfiliado, setNumeroAfiliado] = useState(pacienteInicial?.numeroAfiliado ?? '')
   const [descripcionPatologia, setDescripcionPatologia] = useState('')
   const [observaciones, setObservaciones] = useState('')
@@ -92,7 +92,7 @@ export function InternacionForm({
     setPaciente(p)
     if (p) {
       setObraSocialId(p.obraSocialId ? p.obraSocialId.toString() : '')
-      setPlanId('')
+      setPlanId(p.planId ? p.planId.toString() : '')
       setNumeroAfiliado(p.numeroAfiliado ?? '')
     } else {
       setObraSocialId('')
@@ -104,12 +104,25 @@ export function InternacionForm({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
-    if (submitEnCursoRef.current || guardando) {
-      return
-    }
+    if (submitEnCursoRef.current || guardando) return
 
     if (!paciente) {
       setError('Seleccione un paciente')
+      return
+    }
+
+    if (!profesionalTratanteId) {
+      setError('Debe asignar un medico de cabecera')
+      return
+    }
+
+    if (esCirugiaProgramada && !camaId) {
+      setError('Para cirugia programada debe seleccionar una cama')
+      return
+    }
+
+    if (esCirugiaProgramada && !fechaCirugiaProgramada) {
+      setError('Debe completar fecha y hora de la cirugia programada')
       return
     }
 
@@ -120,15 +133,14 @@ export function InternacionForm({
     try {
       const body = {
         tipoIngresoCodigo: 'INT',
-        subtipoAdmisionCodigo: null,
+        subtipoAdmisionCodigo: esCirugiaProgramada ? 'PRG' : null,
         pacienteId: paciente.id,
         fechaIngreso: fechaIngreso || undefined,
         fechaEgresoPrevista: fechaEgresoPrevista || undefined,
+        fechaTurno: esCirugiaProgramada ? fechaCirugiaProgramada : undefined,
         camaId: camaId ? parseInt(camaId, 10) : undefined,
         profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : undefined,
-        profesionalTratanteId: profesionalTratanteId
-          ? parseInt(profesionalTratanteId, 10)
-          : undefined,
+        profesionalTratanteId: parseInt(profesionalTratanteId, 10),
         obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : undefined,
         planId: planId ? parseInt(planId, 10) : undefined,
         numeroAfiliado: numeroAfiliado || undefined,
@@ -144,20 +156,10 @@ export function InternacionForm({
 
       if (!res.ok) {
         const data = await res.json()
-        throw new Error(data.error ?? 'Error al crear la internación')
+        throw new Error(data.error ?? 'Error al crear la internacion')
       }
 
       const { data: ingreso } = await res.json()
-
-      // Marcar la cama como OCUPADA
-      if (camaId) {
-        await fetch(`/api/internacion/camas/${camaId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ estado: 'OCUPADA' }),
-        })
-      }
-
       router.push(`/dashboard/internacion/${ingreso.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -187,7 +189,6 @@ export function InternacionForm({
         </div>
       )}
 
-      {/* Paciente */}
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Paciente</h3>
         <BuscarPaciente
@@ -196,9 +197,8 @@ export function InternacionForm({
         />
       </div>
 
-      {/* Datos de internación */}
       <div className="his-card p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Datos de internación</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Datos de internacion</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -225,7 +225,7 @@ export function InternacionForm({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Médico de guardia
+              Medico de guardia
             </label>
             <ProfesionalSelect
               profesionales={profesionales}
@@ -237,33 +237,60 @@ export function InternacionForm({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Médico tratante
+              Medico de cabecera <span className="text-red-500">*</span>
             </label>
             <ProfesionalSelect
               profesionales={profesionales}
               value={profesionalTratanteId}
               onChange={setProfesionalTratanteId}
-              placeholderOption="— Seleccionar —"
+              placeholderOption="— Seleccionar medico de cabecera —"
               selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
             />
           </div>
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Diagnóstico / Motivo de internación
+              Diagnostico / Motivo de internacion
             </label>
             <textarea
               value={descripcionPatologia}
               onChange={(e) => setDescripcionPatologia(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm resize-none h-20"
-              placeholder="Describe el motivo de la internación..."
+              placeholder="Describe el motivo de la internacion..."
             />
           </div>
         </div>
       </div>
 
-      {/* Selección de cama */}
       <div className="his-card p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Asignación de cama</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Asignacion de cama</h3>
+
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <label className="flex items-center gap-2 text-sm text-amber-900">
+            <input
+              type="checkbox"
+              checked={esCirugiaProgramada}
+              onChange={(e) => setEsCirugiaProgramada(e.target.checked)}
+              className="h-4 w-4 rounded border-amber-300"
+            />
+            Internacion por cirugia programada (reserva de cama)
+          </label>
+          {esCirugiaProgramada && (
+            <div className="mt-3 max-w-sm">
+              <label className="block text-xs font-medium text-amber-900 mb-1">
+                Fecha y hora de la cirugia <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="datetime-local"
+                value={fechaCirugiaProgramada}
+                onChange={(e) => setFechaCirugiaProgramada(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+              />
+              <p className="mt-1 text-xs text-amber-800">
+                La cama quedara en estado reservada para esta internacion.
+              </p>
+            </div>
+          )}
+        </div>
 
         {camasDisponibles.length === 0 ? (
           <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-lg">
@@ -302,6 +329,7 @@ export function InternacionForm({
                 <span className="text-sm text-green-700 font-medium">
                   Cama {camaSeleccionada.identificador} seleccionada —{' '}
                   {SECTOR_LABEL[camaSeleccionada.sector] ?? camaSeleccionada.sector}
+                  {esCirugiaProgramada ? ' (se reservara)' : ''}
                 </span>
               </div>
             )}
@@ -309,9 +337,8 @@ export function InternacionForm({
         )}
       </div>
 
-      {/* Cobertura médica */}
       <div className="his-card p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Cobertura médica</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Cobertura medica</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Obra social</label>
@@ -350,13 +377,12 @@ export function InternacionForm({
               value={numeroAfiliado}
               onChange={(e) => setNumeroAfiliado(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm"
-              placeholder="Número de afiliado"
+              placeholder="Numero de afiliado"
             />
           </div>
         </div>
       </div>
 
-      {/* Observaciones */}
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Observaciones</h3>
         <textarea
@@ -367,7 +393,6 @@ export function InternacionForm({
         />
       </div>
 
-      {/* Acciones */}
       <div className="flex items-center justify-end gap-3">
         <button
           type="button"
@@ -382,7 +407,7 @@ export function InternacionForm({
           disabled={guardando || !paciente}
           className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
         >
-          {guardando ? 'Guardando...' : 'Crear internación'}
+          {guardando ? 'Guardando...' : 'Crear internacion'}
         </button>
       </div>
     </form>

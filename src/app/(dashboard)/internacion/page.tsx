@@ -276,9 +276,6 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
                       Ingreso
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">
-                      Alta prevista
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -328,15 +325,6 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                             <Calendar className="h-3.5 w-3.5" />
                             {formatearFechaArgentina(item.fechaIngreso)}
                           </div>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        {item.fechaEgresoPrevista ? (
-                          <span className="text-gray-600">
-                            {formatearFechaArgentina(item.fechaEgresoPrevista)}
-                          </span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}

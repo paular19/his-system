@@ -191,7 +191,6 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
               <DataRow label="Tipo" value={ingreso.tipoInternacion?.descripcion ?? '—'} />
               <DataRow label="Cama" value={ingreso.cama ? `${ingreso.cama.identificador} (${ingreso.cama.sector})` : '—'} />
               <DataRow label="Ingreso" value={fmt(ingreso.fechaIngreso)} />
-              <DataRow label="Alta prevista" value={fmtDate(ingreso.fechaEgresoPrevista)} />
               {ingreso.fechaEgreso && <DataRow label="Alta real" value={fmtDate(ingreso.fechaEgreso)} />}
               <DataRow label="Estancia" value={diasEstancia()} />
             </dl>

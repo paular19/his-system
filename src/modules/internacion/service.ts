@@ -101,9 +101,10 @@ export async function obtenerInternacionesActivas(
 export async function obtenerInternacionDetalle(
   id: number,
   usuario: string,
-  ip?: string
+  ip?: string,
+  options?: { incluirPanelClinico?: boolean }
 ): Promise<InternacionDetalle> {
-  const detalle = await repo.obtenerInternacionDetalle(id)
+  const detalle = await repo.obtenerInternacionDetalle(id, options)
   if (!detalle) throw new Error(`Internación con ID ${id} no encontrada`)
 
   void registrarAudit({
@@ -150,7 +151,12 @@ export async function actualizarObservacionesInternacion(
 ) {
   const resultado = await repo.actualizarObservacionesInternacion(
     data.ingresoId,
-    data.observaciones,
+    {
+      observaciones: data.observaciones,
+      checklistDocumental: data.checklistDocumental,
+      armRegistros: data.armRegistros,
+      oxigenoterapiaRegistros: data.oxigenoterapiaRegistros,
+    },
     usuario
   )
 

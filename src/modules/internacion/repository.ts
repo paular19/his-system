@@ -2,6 +2,10 @@ import { prisma } from '@/lib/db'
 import type { Cama, Prisma } from '@prisma/client'
 import { calcularImporteFacturable, resolverReglaFacturacion } from '@/modules/facturacion/cobertura'
 import { obtenerValorPractica } from '@/modules/facturacion/repository'
+import {
+  parseObservacionesInternacion,
+  serializarObservacionesInternacion,
+} from './observaciones-meta'
 import type {
   CamaConOcupante,
   MapaCamas,
@@ -416,7 +420,12 @@ export async function obtenerInternacionesActivas(
 // DETALLE DE INTERNACIÓN
 // ============================================
 
-export async function obtenerInternacionDetalle(id: number): Promise<InternacionDetalle | null> {
+export async function obtenerInternacionDetalle(
+  id: number,
+  options?: { incluirPanelClinico?: boolean }
+): Promise<InternacionDetalle | null> {
+  const incluirPanelClinico = options?.incluirPanelClinico ?? true
+
   const ingresoBase = await prisma.ingreso.findUnique({
     where: { id },
     select: {
@@ -481,74 +490,78 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
       },
       orderBy: { fecha: 'desc' },
     }),
-    prisma.practica.findMany({
-      where: {
-        ingresoId: id,
-        OR: [{ estado: 'A' }, { estado: null }],
-        NOT: {
-          usuarioRegistro: 'CIRUGIA',
-        },
-      },
-      select: {
-        id: true,
-        ingresoId: true,
-        convenioId: true,
-        codigoPractica: true,
-        fecha: true,
-        cantidad: true,
-        importeTotal: true,
-        numeroAutorizacion: true,
-        numeroProtocoloLab: true,
-        diagnosticoLab: true,
-        matriculaEspecialista: true,
-        matriculaAnestesista: true,
-        puestoNumero: true,
-        ordenNumero: true,
-        ordenItem: true,
-        facturable: true,
-        estado: true,
-        usuarioRegistro: true,
-      },
-    }),
-    prisma.cirugiaProgramada.findMany({
-      where: { internacionId: id },
-      orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
-      select: {
-        id: true,
-        fechaCirugia: true,
-        horaCirugia: true,
-        numeroAutorizacion: true,
-        observaciones: true,
-        cama: {
-          select: {
-            id: true,
-            identificador: true,
-            sector: true,
-            habitacion: true,
+    incluirPanelClinico
+      ? prisma.practica.findMany({
+        where: {
+          ingresoId: id,
+          OR: [{ estado: 'A' }, { estado: null }],
+          NOT: {
+            usuarioRegistro: 'CIRUGIA',
           },
         },
-        practicas: {
-          select: {
-            id: true,
-            codigo: true,
-            descripcion: true,
-            cantidad: true,
-            numeroAutorizacion: true,
-          },
-          orderBy: { id: 'asc' },
+        select: {
+          id: true,
+          ingresoId: true,
+          convenioId: true,
+          codigoPractica: true,
+          fecha: true,
+          cantidad: true,
+          importeTotal: true,
+          numeroAutorizacion: true,
+          numeroProtocoloLab: true,
+          diagnosticoLab: true,
+          matriculaEspecialista: true,
+          matriculaAnestesista: true,
+          puestoNumero: true,
+          ordenNumero: true,
+          ordenItem: true,
+          facturable: true,
+          estado: true,
+          usuarioRegistro: true,
         },
-        diferenciales: {
-          select: {
-            esFeriado: true,
-            esNocturna: true,
-            mismaViaPatologia: true,
-            diferentesViasPatologia: true,
-            diferentesViasDiferentesPatologia: true,
-            dobleCirugia: true,
+      })
+      : Promise.resolve([]),
+    incluirPanelClinico
+      ? prisma.cirugiaProgramada.findMany({
+        where: { internacionId: id },
+        orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true,
+          fechaCirugia: true,
+          horaCirugia: true,
+          numeroAutorizacion: true,
+          observaciones: true,
+          cama: {
+            select: {
+              id: true,
+              identificador: true,
+              sector: true,
+              habitacion: true,
+            },
+          },
+          practicas: {
+            select: {
+              id: true,
+              codigo: true,
+              descripcion: true,
+              cantidad: true,
+              numeroAutorizacion: true,
+            },
+            orderBy: { id: 'asc' },
+          },
+          diferenciales: {
+            select: {
+              esFeriado: true,
+              esNocturna: true,
+              mismaViaPatologia: true,
+              diferentesViasPatologia: true,
+              diferentesViasDiferentesPatologia: true,
+              dobleCirugia: true,
+            },
           },
         },
-      },
-    }),
+      })
+      : Promise.resolve([]),
     prisma.auditLog.findMany({
       where: {
         entidad: 'Ingreso',
@@ -559,10 +572,14 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
     }),
   ])
 
-  const practicaIds = practicasBase.map((p) => p.id)
-  const practicasOrdenadas = [...practicasBase].sort((a, b) => b.fecha.getTime() - a.fecha.getTime())
-  const conveniosPractica = Array.from(new Set(practicasOrdenadas.map((p) => p.convenioId)))
-  const nomencladorRows = conveniosPractica.length
+  const practicaIds = incluirPanelClinico ? practicasBase.map((p) => p.id) : []
+  const practicasOrdenadas = incluirPanelClinico
+    ? [...practicasBase].sort((a, b) => b.fecha.getTime() - a.fecha.getTime())
+    : []
+  const conveniosPractica = incluirPanelClinico
+    ? Array.from(new Set(practicasOrdenadas.map((p) => p.convenioId)))
+    : []
+  const nomencladorRows = incluirPanelClinico && conveniosPractica.length
     ? await prisma.nomencladorPractica.findMany({
       where: {
         convenioId: { in: conveniosPractica },
@@ -600,7 +617,7 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
     })
   }
 
-  const ordenesPracticaRows = practicaIds.length
+  const ordenesPracticaRows = incluirPanelClinico && practicaIds.length
     ? await prisma.ordenPractica.findMany({
       where: {
         practicaId: { in: practicaIds },
@@ -661,59 +678,63 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
     medicaciones: [] as MedicacionItem[],
     descartables: [] as DescartableItem[],
     transferencias: transferencias as TransferenciaItem[],
-    cirugiasUrgencia: cirugiasProgramadas.map((c) => ({
-      ...c,
-      practicas: c.practicas.map((p) => ({
+    cirugiasUrgencia: incluirPanelClinico
+      ? cirugiasProgramadas.map((c) => ({
+        ...c,
+        practicas: c.practicas.map((p) => ({
+          ...p,
+          cantidad: Number(p.cantidad),
+        })),
+      })) as CirugiaUrgenciaItem[]
+      : [],
+    practicas: incluirPanelClinico
+      ? practicasOrdenadas.map((p) => ({
         ...p,
-        cantidad: Number(p.cantidad),
-      })),
-    })) as CirugiaUrgenciaItem[],
-    practicas: practicasOrdenadas.map((p) => ({
-      ...p,
-      usuario: p.usuarioRegistro,
-      facturada:
-        (ordenesPracticaPorId.get(p.id)?.length ?? 0) > 0 ||
-        (p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0),
-      descripcionPractica: (() => {
-        const key = `${p.convenioId}:${p.codigoPractica.trim()}`
-        const descripcionBase = descripcionPorClave.get(key) ?? p.codigoPractica.trim()
-        const componentes = componentesPorClave.get(key) ?? null
-        const cantidad = Number.isFinite(Number(p.cantidad)) && Number(p.cantidad) > 0
-          ? Math.floor(Number(p.cantidad))
-          : 1
-        const importeTotal = p.importeTotal != null ? Number(p.importeTotal) : null
+        usuario: p.usuarioRegistro,
+        facturada:
+          (ordenesPracticaPorId.get(p.id)?.length ?? 0) > 0 ||
+          (p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0),
+        descripcionPractica: (() => {
+          const key = `${p.convenioId}:${p.codigoPractica.trim()}`
+          const descripcionBase = descripcionPorClave.get(key) ?? p.codigoPractica.trim()
+          const componentes = componentesPorClave.get(key) ?? null
+          const cantidad = Number.isFinite(Number(p.cantidad)) && Number(p.cantidad) > 0
+            ? Math.floor(Number(p.cantidad))
+            : 1
+          const importeTotal = p.importeTotal != null ? Number(p.importeTotal) : null
 
-        return construirDescripcionPractica({
-          descripcionBase,
-          matriculaEspecialista: p.matriculaEspecialista,
-          matriculaAnestesista: p.matriculaAnestesista,
-          importeTotal,
-          cantidad,
-          componentes,
-        })
-      })(),
-      numeroProtocoloLaboratorio: p.numeroProtocoloLab,
-      diagnosticoLaboratorio: p.diagnosticoLab,
-      cantidad: Number(p.cantidad),
-      importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
-      ordenPractica:
-        ((ordenesPracticaPorId.get(p.id) ?? []).length > 0
-          ? (ordenesPracticaPorId.get(p.id) ?? [])
-          : null) ??
-        (p.puestoNumero != null &&
-        p.ordenNumero != null &&
-        Number(p.puestoNumero) > 0 &&
-        ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`)
-          ? [
-            {
-              puestoNumero: Number(p.puestoNumero),
-              ordenNumero: Number(p.ordenNumero),
-              item: p.ordenItem != null ? Number(p.ordenItem) : 1,
-              numeroAutorizacion: p.numeroAutorizacion ?? null,
-            },
-          ]
-          : []),
-    })) as PracticaItem[],
+          return construirDescripcionPractica({
+            descripcionBase,
+            matriculaEspecialista: p.matriculaEspecialista,
+            matriculaAnestesista: p.matriculaAnestesista,
+            importeTotal,
+            cantidad,
+            componentes,
+          })
+        })(),
+        numeroProtocoloLaboratorio: p.numeroProtocoloLab,
+        diagnosticoLaboratorio: p.diagnosticoLab,
+        cantidad: Number(p.cantidad),
+        importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
+        ordenPractica:
+          ((ordenesPracticaPorId.get(p.id) ?? []).length > 0
+            ? (ordenesPracticaPorId.get(p.id) ?? [])
+            : null) ??
+          (p.puestoNumero != null &&
+          p.ordenNumero != null &&
+          Number(p.puestoNumero) > 0 &&
+          ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`)
+            ? [
+              {
+                puestoNumero: Number(p.puestoNumero),
+                ordenNumero: Number(p.ordenNumero),
+                item: p.ordenItem != null ? Number(p.ordenItem) : 1,
+                numeroAutorizacion: p.numeroAutorizacion ?? null,
+              },
+            ]
+            : []),
+      })) as PracticaItem[]
+      : [],
     ordenes: [],
   } as InternacionDetalle
 }
@@ -2201,22 +2222,79 @@ export async function transferirCama(
 
 export async function actualizarObservacionesInternacion(
   ingresoId: number,
-  observaciones: string | null | undefined,
+  data: {
+    observaciones: string | null | undefined
+    checklistDocumental?: {
+      DOCUMENTO?: boolean
+      CARNET?: boolean
+      RECIBO_DE_SUELDO?: boolean
+      ORDEN_DE_CONSULTA?: boolean
+      KIT_DE_CIRUGIA?: boolean
+      CONSENTIMIENTO_QUIRURGICO?: boolean
+      DEPOSITO_DE_INGRESO?: boolean
+      AVISO_DE_INTERNACION?: boolean
+    }
+    armRegistros?: Array<{
+      id?: string | null
+      fechaIngreso: Date
+      fechaEgreso?: Date | null
+      profesionalId?: number | null
+    }>
+    oxigenoterapiaRegistros?: Array<{
+      id?: string | null
+      fechaIngreso: Date
+      fechaEgreso?: Date | null
+      litros?: number | null
+      profesionalId?: number | null
+    }>
+  },
   usuario: string
 ): Promise<{ ingresoId: number; observaciones: string | null }> {
   const ingreso = await prisma.ingreso.findUnique({
     where: { id: ingresoId },
-    select: { id: true, tipoIngresoCodigo: true },
+    select: { id: true, tipoIngresoCodigo: true, observaciones: true },
   })
 
   if (!ingreso || ingreso.tipoIngresoCodigo !== 'INT') {
     throw new Error('Internacion no encontrada')
   }
 
+  const metadataFueEnviada =
+    data.checklistDocumental !== undefined ||
+    data.armRegistros !== undefined ||
+    data.oxigenoterapiaRegistros !== undefined
+
+  let observacionesFinal: string | null
+
+  if (metadataFueEnviada) {
+    const actual = parseObservacionesInternacion(ingreso.observaciones)
+    observacionesFinal = serializarObservacionesInternacion({
+      observaciones: data.observaciones,
+      checklistDocumental: data.checklistDocumental ?? actual.checklistDocumental,
+      armRegistros:
+        data.armRegistros?.map((item) => ({
+          id: item.id ?? null,
+          fechaIngreso: item.fechaIngreso,
+          fechaEgreso: item.fechaEgreso ?? null,
+          profesionalId: item.profesionalId ?? null,
+        })) ?? actual.armRegistros,
+      oxigenoterapiaRegistros:
+        data.oxigenoterapiaRegistros?.map((item) => ({
+          id: item.id ?? null,
+          fechaIngreso: item.fechaIngreso,
+          fechaEgreso: item.fechaEgreso ?? null,
+          litros: item.litros ?? null,
+          profesionalId: item.profesionalId ?? null,
+        })) ?? actual.oxigenoterapiaRegistros,
+    })
+  } else {
+    observacionesFinal = data.observaciones ?? null
+  }
+
   const actualizado = await prisma.ingreso.update({
     where: { id: ingresoId },
     data: {
-      observaciones: observaciones ?? null,
+      observaciones: observacionesFinal,
       fechaEstado: new Date(),
       usuario: usuario.slice(0, 10),
     },

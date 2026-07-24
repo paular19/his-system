@@ -460,7 +460,6 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
     transferencias,
     practicasBase,
     cirugiasProgramadas,
-    ordenes,
     historialTratantes,
   ] = await Promise.all([
     prisma.ingresoPatologia.findMany({
@@ -550,28 +549,6 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
         },
       },
     }),
-    prisma.orden.findMany({
-      where: {
-        ingresoId: id,
-        NOT: { estado: 'X' },
-      },
-      select: {
-        puestoNumero: true,
-        numero: true,
-        fechaEmision: true,
-        estado: true,
-        items: {
-          select: {
-            item: true,
-            convenioId: true,
-            codigoPractica: true,
-            cantidad: true,
-            numeroAutorizacion: true,
-          },
-        },
-      },
-      orderBy: { fechaEmision: 'desc' },
-    }),
     prisma.auditLog.findMany({
       where: {
         entidad: 'Ingreso',
@@ -655,24 +632,6 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
     })
     .filter((item): item is NonNullable<typeof item> => item !== null)
 
-  const ordenesActivasSet = new Set(
-    ordenes.map((orden) => `${orden.puestoNumero}:${orden.numero}`)
-  )
-
-  const ordenPorClave = new Map(
-    ordenes.flatMap((o) =>
-      o.items.map((i) => [
-        `${i.convenioId}:${i.codigoPractica.trim()}`,
-        {
-          puestoNumero: o.puestoNumero,
-          ordenNumero: o.numero,
-          item: i.item,
-          numeroAutorizacion: i.numeroAutorizacion,
-        },
-      ])
-    )
-  )
-
   const ordenesPracticaPorId = new Map<
     number,
     Array<{ puestoNumero: number; ordenNumero: number; item: number; numeroAutorizacion: string | null }>
@@ -689,6 +648,10 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
     })
     ordenesPracticaPorId.set(row.practicaId, prev)
   }
+
+  const ordenesActivasSet = new Set(
+    ordenesPracticaRows.map((row) => `${row.puestoNumero}:${row.ordenNumero}`)
+  )
 
   return {
     ...ingresoBase,
@@ -709,10 +672,8 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
       ...p,
       usuario: p.usuarioRegistro,
       facturada:
-        p.puestoNumero != null &&
-        p.ordenNumero != null &&
-        Number(p.puestoNumero) > 0 &&
-        ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`),
+        (ordenesPracticaPorId.get(p.id)?.length ?? 0) > 0 ||
+        (p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0),
       descripcionPractica: (() => {
         const key = `${p.convenioId}:${p.codigoPractica.trim()}`
         const descripcionBase = descripcionPorClave.get(key) ?? p.codigoPractica.trim()
@@ -751,17 +712,9 @@ export async function obtenerInternacionDetalle(id: number): Promise<Internacion
               numeroAutorizacion: p.numeroAutorizacion ?? null,
             },
           ]
-          : ordenPorClave.get(`${p.convenioId}:${p.codigoPractica.trim()}`)
-            ? [ordenPorClave.get(`${p.convenioId}:${p.codigoPractica.trim()}`)!]
-            : []),
+          : []),
     })) as PracticaItem[],
-    ordenes: ordenes.map((o) => ({
-      ...o,
-      items: o.items.map((i) => ({
-        ...i,
-        cantidad: Number(i.cantidad),
-      })),
-    })),
+    ordenes: [],
   } as InternacionDetalle
 }
 

@@ -120,11 +120,6 @@ function grupoTieneNumeroAutorizacion(grupo: GrupoPracticasAutorizadas): boolean
     return normalizarNumeroAutorizacion(grupo.numeroAutorizacion) != null
 }
 
-function contieneComponenteClasificacion(clasificacion: string, componente: ComponenteOrden): boolean {
-    const normalizada = normalizarClasificacionAgrupacion(clasificacion) ?? clasificacion.trim().toUpperCase()
-    return normalizada.split('+').includes(componente)
-}
-
 function esComponenteOrden(value: string): value is ComponenteOrden {
     return COMPONENTES_ORDEN.includes(value as ComponenteOrden)
 }
@@ -177,6 +172,9 @@ export function PracticaCargaRapidaPage({
     const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
+    const [ordenesGeneradasSesionKeys, setOrdenesGeneradasSesionKeys] = useState<string[]>([])
+    const [mostrarOrdenesSesion, setMostrarOrdenesSesion] = useState(true)
+    const [mostrarOrdenesHistoricas, setMostrarOrdenesHistoricas] = useState(true)
 
     useEffect(() => {
         let cancelled = false
@@ -326,6 +324,24 @@ export function PracticaCargaRapidaPage({
         () => ordenesAutorizadas.filter((grupo) => grupoTieneNumeroAutorizacion(grupo)),
         [ordenesAutorizadas]
     )
+
+    const ordenesAutorizadasSesion = useMemo(() => {
+        const keysSesion = new Set(ordenesGeneradasSesionKeys)
+        return ordenesAutorizadas.filter((grupo) => {
+            if (grupo.tipo !== 'orden') return false
+            if (grupo.puestoNumero == null || grupo.ordenNumero == null) return false
+            return keysSesion.has(`${grupo.puestoNumero}-${grupo.ordenNumero}`)
+        })
+    }, [ordenesAutorizadas, ordenesGeneradasSesionKeys])
+
+    const ordenesAutorizadasHistoricas = useMemo(() => {
+        const keysSesion = new Set(ordenesGeneradasSesionKeys)
+        return ordenesAutorizadas.filter((grupo) => {
+            if (grupo.tipo !== 'orden') return true
+            if (grupo.puestoNumero == null || grupo.ordenNumero == null) return true
+            return !keysSesion.has(`${grupo.puestoNumero}-${grupo.ordenNumero}`)
+        })
+    }, [ordenesAutorizadas, ordenesGeneradasSesionKeys])
 
     const matriculaPorProfesionalId = useMemo(() => {
         const map = new Map<number, number>()
@@ -508,16 +524,14 @@ export function PracticaCargaRapidaPage({
             const practica = practicas.find((item) => item.id === practicaId)
             if (!practica) continue
             const clasificacion = obtenerClasificacionPractica(practica)
-            for (const componente of COMPONENTES_IMPRESION.map((item) => item.codigo)) {
-                if (contieneComponenteClasificacion(clasificacion, componente)) {
-                    disponibles.add(componente)
-                }
+            for (const componente of componentesDesdeClasificacion(clasificacion)) {
+                disponibles.add(componente)
             }
         }
 
         setComponentesImpresion((prev) => {
             const next = { ...prev }
-            for (const componente of COMPONENTES_IMPRESION.map((item) => item.codigo)) {
+            for (const componente of COMPONENTES_ORDEN) {
                 next[componente] = disponibles.size === 0 ? true : disponibles.has(componente)
             }
             return next
@@ -583,7 +597,10 @@ export function PracticaCargaRapidaPage({
                 if (!asignada) return practica
 
                 const yaVinculada = practica.ordenPractica.some(
-                    (orden) => orden.puestoNumero === asignada.puestoNumero && orden.ordenNumero === asignada.numero && orden.item === asignada.item
+                    (orden) =>
+                        orden.puestoNumero === asignada.puestoNumero &&
+                        orden.ordenNumero === asignada.numero &&
+                        orden.item === asignada.item
                 )
                 if (yaVinculada) return practica
 
@@ -608,6 +625,11 @@ export function PracticaCargaRapidaPage({
                     ordenesPorGrupo: Array<{ clasificacion: string; puestoNumero: number; numero: number; practicaIds: number[] }>
                 }).ordenesPorGrupo)
                 : []
+
+            if (grupos.length > 0) {
+                const nuevasKeys = grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`)
+                setOrdenesGeneradasSesionKeys((prev) => Array.from(new Set([...nuevasKeys, ...prev])))
+            }
 
             if (imprimirDespues && grupos.length > 0) {
                 const gruposFiltrados = componentesFiltro && componentesFiltro.size > 0
@@ -667,6 +689,128 @@ export function PracticaCargaRapidaPage({
     const todasPendientesSeleccionadas =
         practicasPendientes.length > 0 && practicasPendientes.every((practica) => practicasSeleccionadas.includes(practica.id))
 
+    const gruposFiltradosSesion = ordenesAutorizadasSesion.filter((grupo) => {
+        const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
+        return yaAutorizada ? mostrarOrdenesYaAutorizadas : mostrarOrdenesPendientesAutorizacion
+    })
+
+    const gruposFiltradosHistoricos = ordenesAutorizadasHistoricas.filter((grupo) => {
+        const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
+        return yaAutorizada ? mostrarOrdenesYaAutorizadas : mostrarOrdenesPendientesAutorizacion
+    })
+
+    const renderGrupoOrden = (grupo: GrupoPracticasAutorizadas) => {
+        const abierta = ordenesAutorizadasAbiertas[grupo.key] ?? false
+        const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
+        const limitePracticas = 3
+        const practicasVisibles = expandida ? grupo.practicas : grupo.practicas.slice(0, limitePracticas)
+        const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
+        const destinoAbrir = obtenerDestinoGrupoPracticasAutorizadas(grupo)
+        const sinAutorizacion = !grupoTieneNumeroAutorizacion(grupo)
+
+        return (
+            <div
+                key={grupo.key}
+                className={`rounded-lg p-2.5 text-xs ${
+                    sinAutorizacion
+                        ? 'border border-amber-300 bg-amber-100/60'
+                        : 'border border-emerald-200 bg-emerald-50/40'
+                }`}
+            >
+                <button
+                    type="button"
+                    onClick={() => setOrdenesAutorizadasAbiertas((prev) => ({
+                        ...prev,
+                        [grupo.key]: !(prev[grupo.key] ?? false),
+                    }))}
+                    className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${
+                        sinAutorizacion ? 'hover:bg-amber-200/50' : 'hover:bg-emerald-100/40'
+                    }`}
+                >
+                    <span className={`flex items-center gap-2 ${sinAutorizacion ? 'text-amber-900' : 'text-emerald-900'}`}>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+                        <span className="font-semibold">
+                            {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
+                                : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
+                        </span>
+                    </span>
+                    <span className={`text-[11px] ${sinAutorizacion ? 'text-amber-800' : 'text-emerald-700'}`}>
+                        {grupo.practicas.length} practica(s)
+                    </span>
+                </button>
+
+                {abierta && (
+                    <div className="mt-2 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {destinoAbrir && (
+                                <Link
+                                    href={destinoAbrir}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
+                                >
+                                    Abrir orden
+                                </Link>
+                            )}
+                            <span className={grupoTieneNumeroAutorizacion(grupo) ? 'text-emerald-800' : 'text-amber-900 font-semibold'}>
+                                Estado: {grupoTieneNumeroAutorizacion(grupo) ? 'Autorizada' : 'Pendiente de autorizacion'}
+                            </span>
+                        </div>
+
+                        <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                    Practicas de la orden ({grupo.practicas.length})
+                                </p>
+                                {grupo.practicas.length > limitePracticas && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setOrdenesAutorizadasExpandidas((prev) => ({
+                                            ...prev,
+                                            [grupo.key]: !(prev[grupo.key] ?? false),
+                                        }))}
+                                        className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50"
+                                    >
+                                        {expandida ? 'Contraer' : 'Expandir'}
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="mt-2 space-y-1.5">
+                                {practicasVisibles.map((practica) => (
+                                    <div key={`${grupo.key}-${practica.id}`} className="rounded border border-emerald-100 bg-white px-2 py-1.5">
+                                        <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                            <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
+                                            <span className="font-medium">Cant. {practica.cantidad}</span>
+                                        </div>
+                                        <p className="text-emerald-900">{descripcionParaMostrar(practica)}</p>
+                                        <p className="text-[11px] text-emerald-700">
+                                            {formatearFechaArgentina(practica.fecha, {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric',
+                                            })}
+                                        </p>
+                                        {practicaFacturada(practica) && (
+                                            <span className="mt-1 inline-flex rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                                                Facturada
+                                            </span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+
+                            {!expandida && restantes > 0 && (
+                                <p className="mt-1 text-[11px] text-emerald-700">+{restantes} practica(s) mas</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     return (
         <>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
@@ -725,103 +869,12 @@ export function PracticaCargaRapidaPage({
                                     Seleccionar todas las practicas pendientes
                                 </label>
 
-                                <div className="space-y-2 rounded-md border border-amber-200 bg-white p-2">
-                                    <p className="text-[11px] font-medium text-amber-900">Agrupacion personalizada de seleccionadas</p>
-                                    <label className="inline-flex items-center gap-2 text-xs text-amber-900">
-                                        <input
-                                            type="radio"
-                                            name="modo-agrupacion-personalizada"
-                                            checked={modoAgrupacionPersonalizada === 'VARIAS_LINEAS'}
-                                            onChange={() => setModoAgrupacionPersonalizada('VARIAS_LINEAS')}
-                                            className="h-3.5 w-3.5 border-amber-300 text-amber-700 focus:ring-amber-500"
-                                        />
-                                        Varias lineas (separar por componente)
-                                    </label>
-                                    <label className="inline-flex items-center gap-2 text-xs text-amber-900">
-                                        <input
-                                            type="radio"
-                                            name="modo-agrupacion-personalizada"
-                                            checked={modoAgrupacionPersonalizada === 'MISMA_LINEA'}
-                                            onChange={() => setModoAgrupacionPersonalizada('MISMA_LINEA')}
-                                            className="h-3.5 w-3.5 border-amber-300 text-amber-700 focus:ring-amber-500"
-                                        />
-                                        Una misma linea (una orden personalizada)
-                                    </label>
-
-                                    {idsPendientesSeleccionadas.length > 0 && (
-                                        <p className="text-[10px] text-amber-800">
-                                            Componentes seleccionados: {componentesSeleccionados.length > 0 ? componentesSeleccionados.join(' + ') : 'Sin componentes detectados'}
-                                        </p>
-                                    )}
-
-                                    {mezclaComponentesSeleccionados && (
-                                        <p className="text-[10px] text-amber-800">
-                                            Mezcla detectada (derechos, especialista, anestesista, etc.). Elegi si queres un solo titulo o varios por componente.
-                                        </p>
-                                    )}
-
-                                    {modoAgrupacionPersonalizada === 'MISMA_LINEA' && (
-                                        <label className="block text-[11px] text-amber-900">
-                                            Titulo de la orden personalizada
-                                            <input
-                                                type="text"
-                                                value={tituloOrdenPersonalizada}
-                                                onChange={(e) => {
-                                                    setTituloOrdenPersonalizada(e.target.value)
-                                                    setTituloEditadoManualmente(true)
-                                                }}
-                                                placeholder="Ej: DERECHOS + HONORARIO ESPECIALISTA"
-                                                className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900"
-                                            />
-                                        </label>
-                                    )}
-                                </div>
-
-                                <label className="w-full text-[11px] text-amber-900 block">
-                                    Medico firmante
-                                    <ProfesionalSelect
-                                        profesionales={profesionalesConMatricula}
-                                        value={medicoFirmanteId}
-                                        onChange={(nextValue) => {
-                                            setMedicoFirmanteId(nextValue)
-                                            setFirmanteEditadoManualmente(true)
-                                        }}
-                                        disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
-                                        placeholderOption="-- Seleccionar firmante --"
-                                        searchPlaceholder="Buscar por nombre o matricula"
-                                        selectClassName="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
-                                        searchClassName="mt-1 w-full rounded border border-amber-200 bg-white px-2 py-1 text-[11px] text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
-                                    />
-                                    <span className="mt-1 block text-[10px] text-amber-800">Firma prevista: {firmaPrevistaTexto}</span>
-                                </label>
-
-                                <div className="flex flex-wrap gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => void ejecutarGeneracionOrdenes(false)}
-                                        disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
-                                        className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                    >
-                                        {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                                        Generar ordenes
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={abrirPopupImpresion}
-                                        disabled={generandoOrdenes || idsPendientesSeleccionadas.length === 0}
-                                        className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                    >
-                                        <Printer className="h-3.5 w-3.5" />
-                                        Generar e imprimir ordenes
-                                    </button>
-                                </div>
-
                                 {practicasPendientesAgrupadas.length === 0 ? (
                                     <p className="text-xs text-gray-500">No hay practicas pendientes para editar grupos.</p>
                                 ) : (
-                                    <div className="space-y-2">
+                                    <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-1">
                                         {practicasPendientesAgrupadas.map((grupo) => (
-                                            <div key={`pend-${grupo.clasificacion}`} className="rounded-md border border-gray-200 bg-white p-2">
+                                            <div key={`pend-${grupo.clasificacion}`} className="rounded-md border border-gray-200 bg-white p-1.5">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                                                         {grupo.clasificacion}
@@ -834,7 +887,7 @@ export function PracticaCargaRapidaPage({
                                                     {grupo.items.map((practica) => (
                                                         <div
                                                             key={practica.id}
-                                                            className="flex flex-col gap-1.5 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 md:flex-row md:flex-wrap md:items-center"
+                                                            className="flex flex-col gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1 text-[11px] md:flex-row md:flex-wrap md:items-center"
                                                         >
                                                             <input
                                                                 type="checkbox"
@@ -842,19 +895,19 @@ export function PracticaCargaRapidaPage({
                                                                 onChange={(e) => alternarSeleccionPractica(practica.id, e.target.checked)}
                                                                 className="h-3.5 w-3.5 rounded border-gray-300 text-amber-700 focus:ring-amber-500"
                                                             />
-                                                            <span className="font-mono text-gray-500">{practica.codigoPractica.trim()}</span>
-                                                            <span className="font-medium text-gray-800">
+                                                            <span className="font-mono text-[10px] text-gray-500">{practica.codigoPractica.trim()}</span>
+                                                            <span className="min-w-0 truncate font-medium text-gray-800">
                                                                 {descripcionParaMostrar(practica)}
                                                             </span>
-                                                            <span className="text-gray-500">Cant: {practica.cantidad}</span>
-                                                            <span className="text-gray-500">
+                                                            <span className="text-[10px] text-gray-500">Cant: {practica.cantidad}</span>
+                                                            <span className="text-[10px] text-gray-500">
                                                                 Fecha: {formatearFechaArgentina(practica.fecha, {
                                                                     day: '2-digit',
                                                                     month: '2-digit',
                                                                     year: 'numeric',
                                                                 })}
                                                             </span>
-                                                            <span className="text-[11px] text-gray-500">Clasif.</span>
+                                                            <span className="text-[10px] text-gray-500">Clasif.</span>
                                                             <input
                                                                 type="text"
                                                                 value={obtenerClasificacionPractica(practica)}
@@ -873,6 +926,114 @@ export function PracticaCargaRapidaPage({
                                             </div>
                                         ))}
                                     </div>
+                                )}
+
+                                {idsPendientesSeleccionadas.length > 0 ? (
+                                    <>
+                                        <div className="space-y-2 rounded-md border border-amber-200 bg-white p-2">
+                                            <p className="text-[11px] font-medium text-amber-900">
+                                                Flujo de agrupacion (como en ficha de internacion)
+                                            </p>
+                                            <label className="inline-flex items-center gap-2 text-xs text-amber-900">
+                                                <input
+                                                    type="radio"
+                                                    name="modo-agrupacion-personalizada"
+                                                    checked={modoAgrupacionPersonalizada === 'VARIAS_LINEAS'}
+                                                    onChange={() => setModoAgrupacionPersonalizada('VARIAS_LINEAS')}
+                                                    className="h-3.5 w-3.5 border-amber-300 text-amber-700 focus:ring-amber-500"
+                                                />
+                                                Varias lineas (separar por componente)
+                                            </label>
+                                            <label className="inline-flex items-center gap-2 text-xs text-amber-900">
+                                                <input
+                                                    type="radio"
+                                                    name="modo-agrupacion-personalizada"
+                                                    checked={modoAgrupacionPersonalizada === 'MISMA_LINEA'}
+                                                    onChange={() => setModoAgrupacionPersonalizada('MISMA_LINEA')}
+                                                    className="h-3.5 w-3.5 border-amber-300 text-amber-700 focus:ring-amber-500"
+                                                />
+                                                Una misma linea (una orden personalizada)
+                                            </label>
+
+                                            <p className="text-[10px] text-amber-800">
+                                                Componentes seleccionados: {componentesSeleccionados.length > 0 ? componentesSeleccionados.join(' + ') : 'Sin componentes detectados'}
+                                            </p>
+
+                                            {mezclaComponentesSeleccionados && (
+                                                <p className="text-[10px] text-amber-800">
+                                                    Mezcla detectada (derechos, especialista, anestesista, etc.). Elegi si queres un solo titulo o varios por componente.
+                                                </p>
+                                            )}
+
+                                            {modoAgrupacionPersonalizada === 'MISMA_LINEA' && (
+                                                <label className="block text-[11px] text-amber-900">
+                                                    Titulo de la orden personalizada
+                                                    <input
+                                                        type="text"
+                                                        value={tituloOrdenPersonalizada}
+                                                        onChange={(e) => {
+                                                            setTituloOrdenPersonalizada(e.target.value)
+                                                            setTituloEditadoManualmente(true)
+                                                        }}
+                                                        placeholder="Ej: DERECHOS + HONORARIO ESPECIALISTA"
+                                                        className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900"
+                                                    />
+                                                </label>
+                                            )}
+                                        </div>
+
+                                        <label className="block w-full text-[11px] text-amber-900">
+                                            Medico firmante
+                                            <ProfesionalSelect
+                                                profesionales={profesionalesConMatricula}
+                                                value={medicoFirmanteId}
+                                                onChange={(nextValue) => {
+                                                    setMedicoFirmanteId(nextValue)
+                                                    setFirmanteEditadoManualmente(true)
+                                                }}
+                                                disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
+                                                placeholderOption="-- Seleccionar firmante --"
+                                                searchPlaceholder="Buscar por nombre o matricula"
+                                                selectClassName="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
+                                                searchClassName="mt-1 w-full rounded border border-amber-200 bg-white px-2 py-1 text-[11px] text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
+                                            />
+                                            <span className="mt-1 block text-[10px] text-amber-800">Firma prevista: {firmaPrevistaTexto}</span>
+                                        </label>
+
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => void ejecutarGeneracionOrdenes(false)}
+                                                disabled={generandoOrdenes}
+                                                className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                            >
+                                                {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                                                Generar orden
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => void ejecutarGeneracionOrdenes(true)}
+                                                disabled={generandoOrdenes}
+                                                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                            >
+                                                <Printer className="h-3.5 w-3.5" />
+                                                Generar orden e imprimir
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={abrirPopupImpresion}
+                                                disabled={generandoOrdenes}
+                                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                                            >
+                                                <Printer className="h-3.5 w-3.5" />
+                                                Imprimir por componentes
+                                            </button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <p className="rounded-md border border-amber-200 bg-white px-2 py-1.5 text-[11px] text-amber-900">
+                                        Selecciona una o mas practicas para habilitar el flujo de agrupacion, titulo y medico firmante.
+                                    </p>
                                 )}
                             </div>
                         )}
@@ -915,110 +1076,49 @@ export function PracticaCargaRapidaPage({
                             <p className="text-xs text-gray-500">Todavia no hay ordenes generadas.</p>
                         ) : (
                             <div className="space-y-2">
-                                {ordenesAutorizadas
-                                    .filter((grupo) => {
-                                        const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
-                                        return yaAutorizada ? mostrarOrdenesYaAutorizadas : mostrarOrdenesPendientesAutorizacion
-                                    })
-                                    .map((grupo) => {
-                                        const abierta = ordenesAutorizadasAbiertas[grupo.key] ?? false
-                                        const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
-                                        const limitePracticas = 3
-                                        const practicasVisibles = expandida ? grupo.practicas : grupo.practicas.slice(0, limitePracticas)
-                                        const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
-                                        const destinoAbrir = obtenerDestinoGrupoPracticasAutorizadas(grupo)
+                                <button
+                                    type="button"
+                                    onClick={() => setMostrarOrdenesSesion((prev) => !prev)}
+                                    className="flex w-full items-center justify-between rounded border border-blue-200 bg-blue-50/50 px-2 py-1 text-left"
+                                >
+                                    <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                                        Generadas en esta sesion ({ordenesAutorizadasSesion.length})
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-800">
+                                        {mostrarOrdenesSesion ? 'Contraer' : 'Expandir'}
+                                        {mostrarOrdenesSesion ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                    </span>
+                                </button>
 
-                                        return (
-                                            <div key={grupo.key} className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5 text-xs">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setOrdenesAutorizadasAbiertas((prev) => ({
-                                                        ...prev,
-                                                        [grupo.key]: !(prev[grupo.key] ?? false),
-                                                    }))}
-                                                    className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left hover:bg-emerald-100/40"
-                                                >
-                                                    <span className="flex items-center gap-2 text-emerald-900">
-                                                        <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-                                                        <span className="font-semibold">
-                                                            {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
-                                                                ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
-                                                                : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
-                                                        </span>
-                                                    </span>
-                                                    <span className="text-[11px] text-emerald-700">{grupo.practicas.length} practica(s)</span>
-                                                </button>
+                                {mostrarOrdenesSesion && gruposFiltradosSesion.length === 0 ? (
+                                    <p className="rounded border border-blue-100 bg-blue-50/40 px-2 py-1 text-[11px] text-blue-700">
+                                        En esta sesion no hay ordenes que coincidan con los filtros actuales.
+                                    </p>
+                                ) : (
+                                    mostrarOrdenesSesion && gruposFiltradosSesion.map(renderGrupoOrden)
+                                )}
 
-                                                {abierta && (
-                                                    <div className="mt-2 space-y-2">
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                            {destinoAbrir && (
-                                                                <Link
-                                                                    href={destinoAbrir}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
-                                                                >
-                                                                    Abrir orden
-                                                                </Link>
-                                                            )}
-                                                            <span className={grupoTieneNumeroAutorizacion(grupo) ? 'text-emerald-800' : 'text-amber-700 font-medium'}>
-                                                                Estado: {grupoTieneNumeroAutorizacion(grupo) ? 'Autorizada' : 'Pendiente de autorizacion'}
-                                                            </span>
-                                                        </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setMostrarOrdenesHistoricas((prev) => !prev)}
+                                    className="flex w-full items-center justify-between rounded border border-gray-300 bg-gray-50 px-2 py-1 text-left"
+                                >
+                                    <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
+                                        Historico de ordenes ({ordenesAutorizadasHistoricas.length})
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-800">
+                                        {mostrarOrdenesHistoricas ? 'Contraer' : 'Expandir'}
+                                        {mostrarOrdenesHistoricas ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                    </span>
+                                </button>
 
-                                                        <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                                                    Practicas de la orden ({grupo.practicas.length})
-                                                                </p>
-                                                                {grupo.practicas.length > limitePracticas && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setOrdenesAutorizadasExpandidas((prev) => ({
-                                                                            ...prev,
-                                                                            [grupo.key]: !(prev[grupo.key] ?? false),
-                                                                        }))}
-                                                                        className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50"
-                                                                    >
-                                                                        {expandida ? 'Contraer' : 'Expandir'}
-                                                                    </button>
-                                                                )}
-                                                            </div>
-
-                                                            <div className="mt-2 space-y-1.5">
-                                                                {practicasVisibles.map((practica) => (
-                                                                    <div key={`${grupo.key}-${practica.id}`} className="rounded border border-emerald-100 bg-white px-2 py-1.5">
-                                                                        <div className="flex items-center justify-between gap-2 text-emerald-900">
-                                                                            <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
-                                                                            <span className="font-medium">Cant. {practica.cantidad}</span>
-                                                                        </div>
-                                                                        <p className="text-emerald-900">{descripcionParaMostrar(practica)}</p>
-                                                                        <p className="text-[11px] text-emerald-700">
-                                                                            {formatearFechaArgentina(practica.fecha, {
-                                                                                day: '2-digit',
-                                                                                month: '2-digit',
-                                                                                year: 'numeric',
-                                                                            })}
-                                                                        </p>
-                                                                        {practicaFacturada(practica) && (
-                                                                            <span className="mt-1 inline-flex rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
-                                                                                Facturada
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-
-                                                            {!expandida && restantes > 0 && (
-                                                                <p className="mt-1 text-[11px] text-emerald-700">+{restantes} practica(s) mas</p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )
-                                    })}
+                                {mostrarOrdenesHistoricas && gruposFiltradosHistoricos.length === 0 ? (
+                                    <p className="rounded border border-gray-200 bg-gray-50/60 px-2 py-1 text-[11px] text-gray-600">
+                                        No hay ordenes historicas que coincidan con los filtros actuales.
+                                    </p>
+                                ) : (
+                                    mostrarOrdenesHistoricas && gruposFiltradosHistoricos.map(renderGrupoOrden)
+                                )}
                             </div>
                         )}
                     </div>
@@ -1043,7 +1143,7 @@ export function PracticaCargaRapidaPage({
                                 {guardadasSesion.map((item) => (
                                     <div key={item.id} className="rounded-lg border border-blue-100 bg-blue-50/50 p-2.5">
                                         <div className="flex items-center justify-between gap-2">
-                                            <span className="rounded bg-white px-2 py-1 font-mono text-xs font-semibold text-blue-700 border border-blue-100">
+                                            <span className="rounded border border-blue-100 bg-white px-2 py-1 font-mono text-xs font-semibold text-blue-700">
                                                 {item.codigo}
                                             </span>
                                             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
@@ -1065,7 +1165,7 @@ export function PracticaCargaRapidaPage({
 
             {mostrarPopupImpresion && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-                    <div className="w-full max-w-md rounded-xl border border-blue-200 bg-white p-4 shadow-xl space-y-3">
+                    <div className="w-full max-w-md space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-xl">
                         <h3 className="text-sm font-semibold text-gray-900">Seleccionar componentes para imprimir</h3>
                         <p className="text-xs text-gray-600">
                             Marca que grupos queres imprimir despues de generar las ordenes.

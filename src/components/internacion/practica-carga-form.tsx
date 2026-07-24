@@ -109,6 +109,16 @@ function fechaPracticaAISOString(value: string, soloFechaPractica: boolean): str
     return new Date(value).toISOString()
 }
 
+function clasificacionManualDefaultDesdePractica(practica: NomencladorItem): string {
+    const soloAnestesia = practica.valorAnestesista != null && practica.valorEspecialista == null && practica.valorGastos == null
+    if (soloAnestesia) return 'HA'
+
+    const soloGastos = practica.valorGastos != null && practica.valorEspecialista == null && practica.valorAnestesista == null
+    if (soloGastos) return 'GA'
+
+    return 'HE'
+}
+
 export function PracticaCargaForm({
     convenioId,
     matriculaTratanteDefault,
@@ -386,6 +396,7 @@ export function PracticaCargaForm({
     const handleGuardar = async () => {
         setError(null)
         let practicaBase = practicaSeleccionada
+        let componenteSeleccionActual = componenteSeleccion
         if (!practicaBase && !busqueda.trim()) {
             setError('Selecciona una practica del nomenclador o escribe un codigo')
             return
@@ -411,14 +422,16 @@ export function PracticaCargaForm({
                 setPracticaSeleccionada(matchExacto)
                 setBusqueda(modoCargaRapida ? matchExacto.codigo.trim() : matchExacto.descripcion)
                 setResultados([])
+                const seleccionSugerida = seleccionPorDefecto({
+                    valorEspecialista: matchExacto.valorEspecialista,
+                    valorAyudante: matchExacto.valorAyudante,
+                    valorAnestesista: matchExacto.valorAnestesista,
+                    valorGastos: matchExacto.valorGastos,
+                    valorTotal: matchExacto.valor,
+                })
+                componenteSeleccionActual = seleccionSugerida
                 setComponenteSeleccion(
-                    seleccionPorDefecto({
-                        valorEspecialista: matchExacto.valorEspecialista,
-                        valorAyudante: matchExacto.valorAyudante,
-                        valorAnestesista: matchExacto.valorAnestesista,
-                        valorGastos: matchExacto.valorGastos,
-                        valorTotal: matchExacto.valor,
-                    })
+                    seleccionSugerida
                 )
             } catch {
                 setError('No se pudo validar la practica en nomenclador')
@@ -436,14 +449,14 @@ export function PracticaCargaForm({
             setError('Ingrese matricula para honorario anestesista')
             return
         }
-        if ((practicaBase?.valorGastos != null) && componenteSeleccion.gastos > 0 && !matriculaGastos.trim()) {
+        if ((practicaBase?.valorGastos != null) && componenteSeleccionActual.gastos > 0 && !matriculaGastos.trim()) {
             setError('Ingrese matricula para derechos/gastos')
             return
         }
 
         const requiereEspecialista = practicaBase?.valorEspecialista != null
         const requiereAnestesista = practicaBase?.valorAnestesista != null
-        const requiereGastos = (practicaBase?.valorGastos != null) && componenteSeleccion.gastos > 0
+        const requiereGastos = (practicaBase?.valorGastos != null) && componenteSeleccionActual.gastos > 0
         const matriculaGastosNormalizada =
             matriculaGastos.trim() !== ''
                 ? Number.parseInt(matriculaGastos, 10) || null
@@ -486,18 +499,27 @@ export function PracticaCargaForm({
                           valorGastos: practicaBase.valorGastos,
                           valorTotal: practicaBase.valor,
                       }
-                      const total = calcularTotalSeleccionado(vals, componenteSeleccion)
+                      const total = calcularTotalSeleccionado(vals, componenteSeleccionActual)
                       return total > 0 ? total : null
                   })()
                 : null,
         }
 
-        const subitemsSeleccionados = subitemsSeleccionadosForm
+        const subitemsSeleccionados = practicaBase
+            ? obtenerSubitemsSeleccionados(
+                {
+                    valorEspecialista: practicaBase.valorEspecialista,
+                    valorAyudante: practicaBase.valorAyudante,
+                    valorAnestesista: practicaBase.valorAnestesista,
+                    valorGastos: practicaBase.valorGastos,
+                },
+                componenteSeleccionActual
+            )
+            : []
 
-        const clasificacionManualDefault =
-            practicaBase && practicaBase.valorAnestesista != null && practicaBase.valorEspecialista == null
-                ? 'HA'
-                : 'HE'
+        const clasificacionManualDefault = practicaBase
+            ? clasificacionManualDefaultDesdePractica(practicaBase)
+            : 'HE'
 
         const entradasCrear: PracticaCargaEntrada[] = (() => {
             if (!(subitemsSeleccionados.length > 0 && practicaBase)) {

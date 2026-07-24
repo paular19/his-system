@@ -16,7 +16,7 @@ import {
     obtenerSubitemsSeleccionados,
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
-import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
+import { fechaAInputLocal, fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 
 interface NomencladorItem {
@@ -68,6 +68,10 @@ interface PracticaCargaFormProps {
     onGuardar: (entradas: PracticaCargaEntrada[]) => Promise<GuardarResult>
     onCancel?: () => void
     titulo?: string
+    modoCargaRapida?: boolean
+    autoFocusBusqueda?: boolean
+    soloFechaPractica?: boolean
+    onGuardadoExitoso?: (entradas: PracticaCargaEntrada[]) => void
 }
 
 const formatoMoneda = new Intl.NumberFormat('es-AR', {
@@ -93,6 +97,17 @@ function esSectorUti(sector: string | null | undefined): boolean {
     return normalized === 'CU' || normalized === 'UTI' || normalized === 'TERAPIA_INTENSIVA'
 }
 
+function esCodigoPracticaCompleto(value: string): boolean {
+    return /^[A-Z0-9]{1,8}$/.test(value.trim().toUpperCase())
+}
+
+function fechaPracticaAISOString(value: string, soloFechaPractica: boolean): string {
+    if (soloFechaPractica) {
+        return new Date(`${value}T12:00:00-03:00`).toISOString()
+    }
+    return new Date(value).toISOString()
+}
+
 export function PracticaCargaForm({
     convenioId,
     matriculaTratanteDefault,
@@ -100,6 +115,10 @@ export function PracticaCargaForm({
     onGuardar,
     onCancel,
     titulo = 'Nueva practica',
+    modoCargaRapida = false,
+    autoFocusBusqueda = false,
+    soloFechaPractica = false,
+    onGuardadoExitoso,
 }: PracticaCargaFormProps) {
     const datalistId = `clasificacion-practica-list-${useId().replace(/:/g, '')}`
 
@@ -118,7 +137,7 @@ export function PracticaCargaForm({
         gastos: 0,
     })
 
-    const [fecha, setFecha] = useState(() => fechaHoraAInputLocal())
+    const [fecha, setFecha] = useState(() => (soloFechaPractica ? fechaAInputLocal() : fechaHoraAInputLocal()))
     const [numeroAutorizacion, setNumeroAutorizacion] = useState('')
     const [cantidadGeneralPractica, setCantidadGeneralPractica] = useState('1')
     const [crearPracticaTodaJunta, setCrearPracticaTodaJunta] = useState(false)
@@ -136,6 +155,7 @@ export function PracticaCargaForm({
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const subitemsPreviosRef = useRef<SubitemCodigo[]>([])
+    const busquedaInputRef = useRef<HTMLInputElement | null>(null)
 
     const subitemsSeleccionadosForm = useMemo(() => {
         if (!practicaSeleccionada) return [] as SubitemCodigo[]
@@ -230,6 +250,14 @@ export function PracticaCargaForm({
     }, [sectorInternacionActual])
 
     useEffect(() => {
+        if (!autoFocusBusqueda) return
+        const frame = window.requestAnimationFrame(() => {
+            busquedaInputRef.current?.focus()
+        })
+        return () => window.cancelAnimationFrame(frame)
+    }, [autoFocusBusqueda])
+
+    useEffect(() => {
         if (subitemsSeleccionadosForm.length === 0) {
             setClasificacionPorSubitemNuevo([])
             subitemsPreviosRef.current = []
@@ -279,7 +307,16 @@ export function PracticaCargaForm({
                 if (convenioId) qs.set('convenioId', String(convenioId))
                 const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
                 const json = await res.json()
-                setResultados(Array.isArray(json.data) ? json.data : [])
+                const items: NomencladorItem[] = Array.isArray(json.data) ? json.data : []
+                setResultados(items)
+
+                if (modoCargaRapida && esCodigoPracticaCompleto(q)) {
+                    const codigoBuscado = q.trim().toUpperCase()
+                    const exacta = items.find((item) => item.codigo.trim().toUpperCase() === codigoBuscado)
+                    if (exacta) {
+                        seleccionarPractica(exacta, true)
+                    }
+                }
             } catch {
                 setResultados([])
             } finally {
@@ -288,9 +325,9 @@ export function PracticaCargaForm({
         }, 350)
     }
 
-    const seleccionarPractica = (p: NomencladorItem) => {
+    const seleccionarPractica = (p: NomencladorItem, mantenerCodigoEnBusqueda = false) => {
         setPracticaSeleccionada(p)
-        setBusqueda(p.descripcion)
+        setBusqueda(mantenerCodigoEnBusqueda || modoCargaRapida ? p.codigo.trim() : p.descripcion)
         setResultados([])
         setClasificacionPorSubitemNuevo([])
         subitemsPreviosRef.current = []
@@ -304,13 +341,26 @@ export function PracticaCargaForm({
         setComponenteSeleccion(seleccionPorDefecto(valores))
     }
 
+    const resolverPracticaExactaPorCodigo = async (codigo: string): Promise<NomencladorItem | null> => {
+        const codigoNormalizado = codigo.trim().toUpperCase()
+        if (!esCodigoPracticaCompleto(codigoNormalizado)) return null
+
+        const qs = new URLSearchParams({ q: codigoNormalizado })
+        if (convenioId) qs.set('convenioId', String(convenioId))
+
+        const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
+        const json = await res.json().catch(() => null)
+        const items: NomencladorItem[] = Array.isArray(json?.data) ? json.data : []
+        return items.find((item) => item.codigo.trim().toUpperCase() === codigoNormalizado) ?? null
+    }
+
     const limpiarForm = () => {
         setBusqueda('')
         setResultados([])
         setPracticaSeleccionada(null)
         setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
         setClasificacionPorSubitemNuevo([])
-        setFecha(fechaHoraAInputLocal())
+        setFecha(soloFechaPractica ? fechaAInputLocal() : fechaHoraAInputLocal())
         setNumeroAutorizacion('')
         setCantidadGeneralPractica('1')
         setCrearPracticaTodaJunta(false)
@@ -318,6 +368,12 @@ export function PracticaCargaForm({
         setMatriculaAnestesista(String(MATRICULA_ANESTESISTA_DEFAULT))
         setMatriculaGastos(String(MATRICULA_GASTOS_INTERNACION_DEFAULT))
         setError(null)
+
+        if (autoFocusBusqueda) {
+            window.requestAnimationFrame(() => {
+                busquedaInputRef.current?.focus()
+            })
+        }
     }
 
     const handleCancelar = () => {
@@ -335,20 +391,14 @@ export function PracticaCargaForm({
 
         if (!practicaBase) {
             const codigoManual = busqueda.trim().toUpperCase()
-            if (!/^[A-Z0-9]{1,8}$/.test(codigoManual)) {
+            if (!esCodigoPracticaCompleto(codigoManual)) {
                 setError('El codigo manual debe tener entre 1 y 8 caracteres alfanumericos')
                 return
             }
 
             setBuscando(true)
             try {
-                const qs = new URLSearchParams({ q: codigoManual })
-                if (convenioId) qs.set('convenioId', String(convenioId))
-
-                const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
-                const json = await res.json().catch(() => null)
-                const items: NomencladorItem[] = Array.isArray(json?.data) ? json.data : []
-                const matchExacto = items.find((item) => item.codigo.trim().toUpperCase() === codigoManual)
+                const matchExacto = await resolverPracticaExactaPorCodigo(codigoManual)
 
                 if (!matchExacto) {
                     setError('Selecciona una practica valida del listado de nomenclador antes de guardar')
@@ -357,7 +407,7 @@ export function PracticaCargaForm({
 
                 practicaBase = matchExacto
                 setPracticaSeleccionada(matchExacto)
-                setBusqueda(matchExacto.descripcion)
+                setBusqueda(modoCargaRapida ? matchExacto.codigo.trim() : matchExacto.descripcion)
                 setResultados([])
                 setComponenteSeleccion(
                     seleccionPorDefecto({
@@ -411,7 +461,7 @@ export function PracticaCargaForm({
             convenioId: practicaBase?.convenioId ?? convenioId ?? 0,
             codigoPractica: practicaBase?.codigo ?? busqueda.trim().slice(0, 8).toUpperCase(),
             descripcionPractica: practicaBase?.descripcion ?? busqueda.trim(),
-            fecha: new Date(fecha).toISOString(),
+            fecha: fechaPracticaAISOString(fecha, soloFechaPractica),
             cantidad: cantidadGeneralFinal,
             numeroAutorizacion: numeroAutorizacion.trim() || null,
             matriculaEspecialista:
@@ -511,6 +561,7 @@ export function PracticaCargaForm({
                 return
             }
 
+            onGuardadoExitoso?.(entradasCrear)
             limpiarForm()
             onCancel?.()
         } catch {
@@ -548,9 +599,35 @@ export function PracticaCargaForm({
                 <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
                     <input
+                        ref={busquedaInputRef}
                         type="text"
                         value={busqueda}
                         onChange={(e) => buscarPractica(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return
+                            if (!modoCargaRapida || practicaSeleccionada) return
+                            const codigo = busqueda.trim().toUpperCase()
+                            if (!esCodigoPracticaCompleto(codigo)) return
+
+                            e.preventDefault()
+                            const exactaLocal = resultados.find(
+                                (item) => item.codigo.trim().toUpperCase() === codigo
+                            )
+                            if (exactaLocal) {
+                                seleccionarPractica(exactaLocal, true)
+                                return
+                            }
+
+                            void (async () => {
+                                try {
+                                    const exactaRemota = await resolverPracticaExactaPorCodigo(codigo)
+                                    if (exactaRemota) seleccionarPractica(exactaRemota, true)
+                                } catch {
+                                    // El guardado posterior mostrará error si no se puede resolver.
+                                }
+                            })()
+                        }}
+                        autoFocus={autoFocusBusqueda}
                         placeholder="Codigo o descripcion (min. 2 caracteres)..."
                         className="his-input pl-8 pr-8 text-sm w-full"
                     />
@@ -647,9 +724,9 @@ export function PracticaCargaForm({
 
             <div className="grid grid-cols-1 gap-3">
                 <div>
-                    <label className="block text-xs text-gray-500 mb-1">Fecha y hora</label>
+                    <label className="block text-xs text-gray-500 mb-1">{soloFechaPractica ? 'Fecha' : 'Fecha y hora'}</label>
                     <input
-                        type="datetime-local"
+                        type={soloFechaPractica ? 'date' : 'datetime-local'}
                         value={fecha}
                         onChange={(e) => setFecha(e.target.value)}
                         className="his-input text-sm w-full"

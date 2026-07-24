@@ -21,6 +21,7 @@ import {
     Calendar,
     FileText,
     Activity,
+    Stethoscope,
 } from 'lucide-react'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 import {
@@ -384,6 +385,13 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             >
                                 <Activity className="h-3.5 w-3.5" />
                                 Admisión
+                            </Link>
+                            <Link
+                                href={`/dashboard/internacion/${ingresoId}/practicas`}
+                                className="flex items-center gap-1.5 text-xs font-medium border rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                            >
+                                <Stethoscope className="h-3.5 w-3.5" />
+                                Cargar prácticas
                             </Link>
                         </div>
                     </div>

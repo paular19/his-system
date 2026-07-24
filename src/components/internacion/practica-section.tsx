@@ -7,40 +7,14 @@ import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, ChevronR
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { anularOrdenAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
-import {
-    ComponenteSelector,
-    type ComponenteValores,
-    type ComponenteSeleccion,
-    calcularTotalSeleccionado,
-    seleccionPorDefecto,
-} from '@/components/ui/componente-selector'
-import {
-    esSubitemAnestesista,
-    esSubitemEspecialista,
-    type SubitemCodigo,
-    obtenerSubitemsSeleccionados,
-    valorUnitarioPorSubitem,
-} from '@/lib/practicas-subitems'
-import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
+import { fechaAInputLocal } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
 import {
     agruparPracticasAutorizadasPorOrden,
     obtenerDestinoGrupoPracticasAutorizadas,
     type GrupoPracticasAutorizadas,
 } from '@/lib/practicas-autorizadas'
-import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
-
-interface NomencladorItem {
-    convenioId: number
-    codigo: string
-    descripcion: string
-    valor: number | null
-    valorEspecialista: number | null
-    valorAyudante: number | null
-    valorAnestesista: number | null
-    valorGastos: number | null
-}
 
 interface ProfesionalConMatricula {
     id: number
@@ -54,7 +28,6 @@ const formatoMoneda = new Intl.NumberFormat('es-AR', {
     minimumFractionDigits: 2,
 })
 
-const MATRICULA_ANESTESISTA_DEFAULT = 6
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const PRACTICAS_LISTA_POR_PAGINA = 8
 const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
@@ -69,15 +42,6 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
     A3: 7,
 }
 const ORDEN_COMPONENTES_CLASIFICACION = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3'] as const
-
-function etiquetaSubitem(subitem: SubitemCodigo): string {
-    if (subitem === 'HE') return 'Honorario Especialista (HE)'
-    if (subitem === 'HA') return 'Honorario Anestesista (HA)'
-    if (subitem === 'GA') return 'Derechos/Gastos (GA)'
-    if (subitem === 'A1') return 'Ayudante 1 (A1)'
-    if (subitem === 'A2') return 'Ayudante 2 (A2)'
-    return 'Ayudante 3 (A3)'
-}
 
 function normalizarBusquedaLista(value: string): string {
     return value
@@ -165,6 +129,10 @@ function grupoTieneNumeroAutorizacion(grupo: GrupoPracticasAutorizadas): boolean
     return normalizarNumeroAutorizacion(grupo.numeroAutorizacion) != null
 }
 
+function fechaPracticaAISOString(value: string): string {
+    return new Date(`${value}T12:00:00-03:00`).toISOString()
+}
+
 export function PracticaSection({
     ingresoId,
     convenioId,
@@ -181,7 +149,6 @@ export function PracticaSection({
 }: PracticaSectionProps) {
     const router = useRouter()
     const [practicas, setPracticas] = useState<PracticaItem[]>(practicasIniciales)
-    const [mostrarForm, setMostrarForm] = useState(false)
     const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
     const [expandido, setExpandido] = useState(true)
     const [filtroLista, setFiltroLista] = useState('')
@@ -191,36 +158,11 @@ export function PracticaSection({
     const [mostrarPiso, setMostrarPiso] = useState(true)
     const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(true)
     const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
-
-    // Búsqueda nomenclador
-    const [busqueda, setBusqueda] = useState('')
-    const [resultados, setResultados] = useState<NomencladorItem[]>([])
-    const [buscando, setBuscando] = useState(false)
-    const [practicaSeleccionada, setPracticaSeleccionada] = useState<NomencladorItem | null>(null)
-
-    // Selector de componentes
-    const [componenteSeleccion, setComponenteSeleccion] = useState<ComponenteSeleccion>({
-        especialista: 0, ayudante: 0, anestesista: 0, gastos: 0,
-    })
-
-    // Campos del form
-    const [fecha, setFecha] = useState(() => fechaHoraAInputLocal())
-    const [numeroAutorizacion, setNumeroAutorizacion] = useState('')
-    const [cantidadGeneralPractica, setCantidadGeneralPractica] = useState('1')
-    const [crearPracticaTodaJunta, setCrearPracticaTodaJunta] = useState(false)
-    const [matriculaEspecialista, setMatriculaEspecialista] = useState(
-        matriculaTratanteDefault ? String(matriculaTratanteDefault) : ''
-    )
-    const [matriculaAnestesista, setMatriculaAnestesista] = useState(
-        String(MATRICULA_ANESTESISTA_DEFAULT)
-    )
     const [profesionalesConMatricula, setProfesionalesConMatricula] = useState<ProfesionalConMatricula[]>([])
 
-    const [guardando, setGuardando] = useState(false)
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
-    const [clasificacionPorSubitemNuevo, setClasificacionPorSubitemNuevo] = useState<string[]>([])
     const [desagrupandoPracticaId, setDesagrupandoPracticaId] = useState<number | null>(null)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
@@ -240,9 +182,6 @@ export function PracticaSection({
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
 
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const subitemsPreviosRef = useRef<SubitemCodigo[]>([])
-
     useEffect(() => {
         setPracticas(practicasIniciales)
         const idsValidos = new Set(practicasIniciales.map((p) => p.id))
@@ -258,48 +197,6 @@ export function PracticaSection({
             return next
         })
     }, [practicasIniciales])
-
-    const subitemsSeleccionadosForm = useMemo(() => {
-        if (!practicaSeleccionada) return [] as SubitemCodigo[]
-        return obtenerSubitemsSeleccionados(
-            {
-                valorEspecialista: practicaSeleccionada.valorEspecialista,
-                valorAyudante: practicaSeleccionada.valorAyudante,
-                valorAnestesista: practicaSeleccionada.valorAnestesista,
-                valorGastos: practicaSeleccionada.valorGastos,
-            },
-            componenteSeleccion
-        )
-    }, [practicaSeleccionada, componenteSeleccion])
-
-    const clasificacionesPorComponenteForm = useMemo(() => {
-        const porComponente: Record<keyof ComponenteSeleccion, Array<{ index: number, label: string, value: string }>> = {
-            especialista: [],
-            ayudante: [],
-            anestesista: [],
-            gastos: [],
-        }
-
-        const contador = new Map<string, number>()
-        for (const [idx, subitem] of subitemsSeleccionadosForm.entries()) {
-            const actual = (contador.get(subitem) ?? 0) + 1
-            contador.set(subitem, actual)
-            const totalSubitem = subitemsSeleccionadosForm.filter((x) => x === subitem).length
-            const sufijo = totalSubitem > 1 ? ` #${actual}` : ''
-            const entrada = {
-                index: idx,
-                label: `${subitem}${sufijo}`,
-                value: clasificacionPorSubitemNuevo[idx] ?? subitem,
-            }
-
-            if (subitem === 'HE') porComponente.especialista.push(entrada)
-            else if (subitem === 'HA') porComponente.anestesista.push(entrada)
-            else if (subitem === 'GA') porComponente.gastos.push(entrada)
-            else porComponente.ayudante.push(entrada)
-        }
-
-        return porComponente
-    }, [subitemsSeleccionadosForm, clasificacionPorSubitemNuevo])
 
     useEffect(() => {
         let cancelled = false
@@ -346,100 +243,11 @@ export function PracticaSection({
         }
     }, [])
 
-    useEffect(() => {
-        if (subitemsSeleccionadosForm.length === 0) {
-            setClasificacionPorSubitemNuevo([])
-            subitemsPreviosRef.current = []
-            return
-        }
-
-        setClasificacionPorSubitemNuevo((prev) => {
-            const clavesPrevias = new Map<string, string>()
-            const contadorPrevio = new Map<string, number>()
-            for (let idx = 0; idx < subitemsPreviosRef.current.length; idx += 1) {
-                const subitemPrevio = subitemsPreviosRef.current[idx]
-                if (!subitemPrevio) continue
-                const ocurrenciaPrevia = (contadorPrevio.get(subitemPrevio) ?? 0) + 1
-                contadorPrevio.set(subitemPrevio, ocurrenciaPrevia)
-                const clave = `${subitemPrevio}#${ocurrenciaPrevia}`
-                const clasificacionPrevia = normalizarClasificacionAgrupacion(prev[idx]) ?? prev[idx]?.trim().toUpperCase() ?? ''
-                if (clasificacionPrevia) clavesPrevias.set(clave, clasificacionPrevia)
-            }
-
-            const contadorActual = new Map<string, number>()
-            const next = subitemsSeleccionadosForm.map((subitem) => {
-                const ocurrenciaActual = (contadorActual.get(subitem) ?? 0) + 1
-                contadorActual.set(subitem, ocurrenciaActual)
-                const clave = `${subitem}#${ocurrenciaActual}`
-                return clavesPrevias.get(clave) ?? subitem
-            })
-
-            return next
-        })
-
-        subitemsPreviosRef.current = subitemsSeleccionadosForm
-    }, [subitemsSeleccionadosForm])
-
     const obtenerClasificacionPractica = (practica: PracticaItem): string => {
         return (
             normalizarClasificacionAgrupacion(clasificacionPorPracticaId[practica.id]) ??
             clasificacionInferidaPractica(practica)
         )
-    }
-
-    const buscarPractica = (q: string) => {
-        setBusqueda(q)
-        setPracticaSeleccionada(null)
-        if (debounceRef.current) clearTimeout(debounceRef.current)
-        if (q.trim().length < 2) {
-            setResultados([])
-            return
-        }
-        debounceRef.current = setTimeout(async () => {
-            setBuscando(true)
-            try {
-                const qs = new URLSearchParams({ q: q.trim() })
-                if (convenioId) qs.set('convenioId', String(convenioId))
-                const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
-                const json = await res.json()
-                setResultados(Array.isArray(json.data) ? json.data : [])
-            } catch {
-                setResultados([])
-            } finally {
-                setBuscando(false)
-            }
-        }, 350)
-    }
-
-    const seleccionarPractica = (p: NomencladorItem) => {
-        setPracticaSeleccionada(p)
-        setBusqueda(p.descripcion)
-        setResultados([])
-        setClasificacionPorSubitemNuevo([])
-        subitemsPreviosRef.current = []
-        const valores: ComponenteValores = {
-            valorEspecialista: p.valorEspecialista,
-            valorAyudante: p.valorAyudante,
-            valorAnestesista: p.valorAnestesista,
-            valorGastos: p.valorGastos,
-            valorTotal: p.valor,
-        }
-        setComponenteSeleccion(seleccionPorDefecto(valores))
-    }
-
-    const limpiarForm = () => {
-        setBusqueda('')
-        setResultados([])
-        setPracticaSeleccionada(null)
-        setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
-        setClasificacionPorSubitemNuevo([])
-        setFecha(fechaHoraAInputLocal())
-        setNumeroAutorizacion('')
-        setCantidadGeneralPractica('1')
-        setCrearPracticaTodaJunta(false)
-        setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
-        setMatriculaAnestesista(String(MATRICULA_ANESTESISTA_DEFAULT))
-        setError(null)
     }
 
     const limpiarPedidoLaboratorio = () => {
@@ -467,7 +275,7 @@ export function PracticaSection({
             convenioId: Number(practica.convenioId) > 0 ? Number(practica.convenioId) : (convenioId ?? 0),
             codigoPractica: practica.codigoPractica.trim(),
             descripcionPractica: practica.descripcionPractica ?? '',
-            fecha: fechaHoraAInputLocal(practica.fecha),
+            fecha: fechaAInputLocal(practica.fecha),
             cantidad: String(cantidad),
             numeroAutorizacion: practica.numeroAutorizacion ?? '',
             numeroProtocoloLaboratorio: practica.numeroProtocoloLaboratorio ?? '',
@@ -515,7 +323,7 @@ export function PracticaSection({
             convenioId: convenioIdFinal,
             codigoPractica,
             descripcionPractica: draftPracticaEditando.descripcionPractica.trim() || null,
-            fecha: new Date(draftPracticaEditando.fecha).toISOString(),
+            fecha: fechaPracticaAISOString(draftPracticaEditando.fecha),
             cantidad,
             numeroAutorizacion: draftPracticaEditando.numeroAutorizacion.trim() || null,
             numeroProtocoloLaboratorio: draftPracticaEditando.numeroProtocoloLaboratorio.trim() || null,
@@ -623,236 +431,6 @@ export function PracticaSection({
             setError('Error al guardar el pedido de laboratorio')
         } finally {
             setGuardandoPedidoLaboratorio(false)
-        }
-    }
-
-    const handleGuardarDesdeFormulario = async (entradasCrear: PracticaCargaEntrada[]) => {
-        setError(null)
-        setGuardando(true)
-        try {
-            const practicasCreadas: PracticaItem[] = []
-            const clasificacionesCreadas: Record<number, string> = {}
-
-            for (const entrada of entradasCrear) {
-                const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(entrada.payload),
-                })
-                const json = await res.json()
-                if (!res.ok) {
-                    if (practicasCreadas.length > 0) {
-                        setPracticas((prev) => [...practicasCreadas, ...prev])
-                    }
-                    const mensaje = json.error ?? 'Error al registrar la practica'
-                    setError(mensaje)
-                    return { ok: false, error: mensaje }
-                }
-                practicasCreadas.push(json.data)
-                clasificacionesCreadas[json.data.id] = entrada.clasificacion
-            }
-
-            setPracticas((prev) => [...practicasCreadas, ...prev])
-            setClasificacionPorPracticaId((prev) => ({
-                ...prev,
-                ...clasificacionesCreadas,
-            }))
-
-            return { ok: true }
-        } catch {
-            const mensaje = 'Error de conexion'
-            setError(mensaje)
-            return { ok: false, error: mensaje }
-        } finally {
-            setGuardando(false)
-        }
-    }
-
-    const handleGuardar = async () => {
-        setError(null)
-        let practicaBase = practicaSeleccionada
-        if (!practicaBase && !busqueda.trim()) {
-            return setError('Seleccioná una práctica del nomenclador o escribí un código')
-        }
-
-        if (!practicaBase) {
-            const codigoManual = busqueda.trim().toUpperCase()
-            if (!/^[A-Z0-9]{1,8}$/.test(codigoManual)) {
-                return setError('El código manual debe tener entre 1 y 8 caracteres alfanuméricos')
-            }
-
-            setBuscando(true)
-            try {
-                const qs = new URLSearchParams({ q: codigoManual })
-                if (convenioId) qs.set('convenioId', String(convenioId))
-
-                const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
-                const json = await res.json().catch(() => null)
-                const items: NomencladorItem[] = Array.isArray(json?.data) ? json.data : []
-                const matchExacto = items.find(
-                    (item) => item.codigo.trim().toUpperCase() === codigoManual
-                )
-
-                if (!matchExacto) {
-                    return setError('Seleccioná una práctica válida del listado de nomenclador antes de guardar')
-                }
-
-                practicaBase = matchExacto
-                setPracticaSeleccionada(matchExacto)
-                setBusqueda(matchExacto.descripcion)
-                setResultados([])
-                setComponenteSeleccion(seleccionPorDefecto({
-                    valorEspecialista: matchExacto.valorEspecialista,
-                    valorAyudante: matchExacto.valorAyudante,
-                    valorAnestesista: matchExacto.valorAnestesista,
-                    valorGastos: matchExacto.valorGastos,
-                    valorTotal: matchExacto.valor,
-                }))
-            } catch {
-                return setError('No se pudo validar la práctica en nomenclador')
-            } finally {
-                setBuscando(false)
-            }
-        }
-
-        if ((practicaBase?.valorEspecialista != null) && !matriculaEspecialista.trim()) {
-            return setError('Ingrese matrícula para honorario especialista')
-        }
-        if ((practicaBase?.valorAnestesista != null) && !matriculaAnestesista.trim()) {
-            return setError('Ingrese matrícula para honorario anestesista')
-        }
-
-        const requiereEspecialista = practicaBase?.valorEspecialista != null
-        const requiereAnestesista = practicaBase?.valorAnestesista != null
-        const cantidadGeneral = Number.parseInt(cantidadGeneralPractica, 10)
-        const cantidadGeneralFinal = crearPracticaTodaJunta ? cantidadGeneral : 1
-
-        if (
-            crearPracticaTodaJunta &&
-            (!Number.isFinite(cantidadGeneralFinal) || cantidadGeneralFinal <= 0 || cantidadGeneralFinal > 999)
-        ) {
-            return setError('La cantidad general debe estar entre 1 y 999')
-        }
-
-        const body = {
-            convenioId: practicaBase?.convenioId ?? convenioId ?? 0,
-            codigoPractica: practicaBase?.codigo ?? busqueda.trim().slice(0, 8).toUpperCase(),
-            descripcionPractica: practicaBase?.descripcion ?? busqueda.trim(),
-            fecha: new Date(fecha).toISOString(),
-            cantidad: cantidadGeneralFinal,
-            numeroAutorizacion: numeroAutorizacion.trim() || null,
-            matriculaEspecialista:
-                requiereEspecialista && matriculaEspecialista.trim()
-                    ? parseInt(matriculaEspecialista, 10) || null
-                    : null,
-            matriculaAnestesista:
-                requiereAnestesista && matriculaAnestesista.trim()
-                    ? parseInt(matriculaAnestesista, 10) || null
-                    : null,
-            facturable: true,
-            importeBaseUnitario: practicaBase
-                ? (() => {
-                    const vals: ComponenteValores = {
-                        valorEspecialista: practicaBase.valorEspecialista,
-                        valorAyudante: practicaBase.valorAyudante,
-                        valorAnestesista: practicaBase.valorAnestesista,
-                        valorGastos: practicaBase.valorGastos,
-                        valorTotal: practicaBase.valor,
-                    }
-                    const t = calcularTotalSeleccionado(vals, componenteSeleccion)
-                    return t > 0 ? t : null
-                })()
-                : null,
-        }
-
-        const subitemsSeleccionados = subitemsSeleccionadosForm
-
-        const clasificacionManualDefault =
-            practicaBase && practicaBase.valorAnestesista != null && practicaBase.valorEspecialista == null
-                ? 'HA'
-                : 'HE'
-
-        const entradasCrear = (() => {
-            if (!(subitemsSeleccionados.length > 0 && practicaBase)) {
-                return [{ payload: body, clasificacion: clasificacionManualDefault }]
-            }
-
-            if (crearPracticaTodaJunta) {
-                const clasificacionesSeleccionadas = subitemsSeleccionados.map((subitem, idx) => (
-                    normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
-                ))
-
-                const clasificacionUnica =
-                    normalizarClasificacionAgrupacion(clasificacionesSeleccionadas.join('+')) ??
-                    clasificacionManualDefault
-
-                return [{
-                    payload: {
-                        ...body,
-                        descripcionPractica: body.descripcionPractica,
-                    },
-                    clasificacion: clasificacionUnica,
-                }]
-            }
-
-            return subitemsSeleccionados.map((subitem, idx) => {
-                const valorUnitario = valorUnitarioPorSubitem(subitem, {
-                    valorEspecialista: practicaBase.valorEspecialista,
-                    valorAyudante: practicaBase.valorAyudante,
-                    valorAnestesista: practicaBase.valorAnestesista,
-                    valorGastos: practicaBase.valorGastos,
-                })
-                const clasificacionIndividual =
-                    normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
-
-                return {
-                    payload: {
-                        ...body,
-                        descripcionPractica: `${body.descripcionPractica} · ${etiquetaSubitem(subitem)}`,
-                        cantidad: 1,
-                        importeBaseUnitario: valorUnitario,
-                        matriculaEspecialista: esSubitemEspecialista(subitem) ? body.matriculaEspecialista : null,
-                        matriculaAnestesista: esSubitemAnestesista(subitem) ? body.matriculaAnestesista : null,
-                    },
-                    clasificacion: clasificacionIndividual,
-                }
-            })
-        })()
-
-        setGuardando(true)
-        try {
-            const practicasCreadas: PracticaItem[] = []
-
-            const clasificacionesCreadas: Record<number, string> = {}
-            for (const entrada of entradasCrear) {
-                const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(entrada.payload),
-                })
-                const json = await res.json()
-                if (!res.ok) {
-                    if (practicasCreadas.length > 0) {
-                        setPracticas((prev) => [...practicasCreadas, ...prev])
-                    }
-                    setError(json.error ?? 'Error al registrar la práctica')
-                    return
-                }
-                practicasCreadas.push(json.data)
-                clasificacionesCreadas[json.data.id] = entrada.clasificacion
-            }
-
-            setPracticas((prev) => [...practicasCreadas, ...prev])
-            setClasificacionPorPracticaId((prev) => ({
-                ...prev,
-                ...clasificacionesCreadas,
-            }))
-            limpiarForm()
-            setMostrarForm(false)
-        } catch {
-            setError('Error de conexión')
-        } finally {
-            setGuardando(false)
         }
     }
 
@@ -1177,13 +755,10 @@ export function PracticaSection({
     }
 
     const fmtFecha = (d: Date | string) =>
-        new Date(d).toLocaleString('es-AR', {
+        new Date(d).toLocaleDateString('es-AR', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
         })
 
     const practicasVigentes = practicas.filter((p) => practicaActiva(p.estado))
@@ -1525,16 +1100,13 @@ export function PracticaSection({
                         </button>
                     )}
                     {puedeCrear && (
-                        <button
-                            onClick={() => {
-                                setMostrarForm((v) => !v)
-                                if (mostrarForm) limpiarForm()
-                            }}
+                        <Link
+                            href={`/dashboard/internacion/${ingresoId}/practicas`}
                             className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50"
                         >
                             <Plus className="h-3.5 w-3.5" />
-                            Agregar práctica
-                        </button>
+                            Carga rápida de prácticas
+                        </Link>
                     )}
                 </div>
             </div>
@@ -1597,17 +1169,6 @@ export function PracticaSection({
                                 </button>
                             </div>
                         </div>
-                    )}
-
-                    {/* Formulario */}
-                    {mostrarForm && puedeCrear && (
-                        <PracticaCargaForm
-                            convenioId={convenioId}
-                            sectorInternacionActual={sectorInternacionActual}
-                            matriculaTratanteDefault={matriculaTratanteDefault}
-                            onGuardar={handleGuardarDesdeFormulario}
-                            onCancel={() => setMostrarForm(false)}
-                        />
                     )}
 
                     <datalist id="clasificacion-practica-list">
@@ -2168,9 +1729,9 @@ export function PracticaSection({
                                 />
                             </label>
                             <label className="text-xs text-gray-600">
-                                Fecha y hora
+                                Fecha
                                 <input
-                                    type="datetime-local"
+                                    type="date"
                                     value={draftPracticaEditando.fecha}
                                     onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
                                         ...prev,

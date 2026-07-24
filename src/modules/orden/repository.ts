@@ -1061,6 +1061,57 @@ export async function buscarPracticas(
   query: string,
   convenioId?: number
 ): Promise<NomencladorPracticaItem[]> {
+  const queryNormalizada = query.trim().toUpperCase()
+  const buscarCodigoExacto = /^[A-Z0-9]{1,8}$/.test(queryNormalizada)
+
+  const obtenerExactas = async (convenioFiltrado?: number) => {
+    if (!buscarCodigoExacto) return [] as Array<{
+      convenioId: number
+      codigo: string
+      descripcion: string
+      valorEspecialista: import('@prisma/client').Prisma.Decimal | null
+      valorAyudante: import('@prisma/client').Prisma.Decimal | null
+      valorAnestesista: import('@prisma/client').Prisma.Decimal | null
+      valorGastos: import('@prisma/client').Prisma.Decimal | null
+    }>
+
+    return prisma.nomencladorPractica.findMany({
+      where: {
+        ...(convenioFiltrado ? { convenioId: convenioFiltrado } : {}),
+        codigo: queryNormalizada,
+      },
+      take: 5,
+      orderBy: [{ convenioId: 'asc' }],
+      select: {
+        convenioId: true,
+        codigo: true,
+        descripcion: true,
+        valorEspecialista: true,
+        valorAyudante: true,
+        valorAnestesista: true,
+        valorGastos: true,
+      },
+    })
+  }
+
+  const combinarPriorizandoExactas = <T extends { convenioId: number; codigo: string }>(
+    exactas: T[],
+    restantes: T[]
+  ): T[] => {
+    const vistos = new Set(exactas.map((item) => `${item.convenioId}:${item.codigo.trim().toUpperCase()}`))
+    const combinadas = [...exactas]
+
+    for (const item of restantes) {
+      const key = `${item.convenioId}:${item.codigo.trim().toUpperCase()}`
+      if (vistos.has(key)) continue
+      combinadas.push(item)
+      vistos.add(key)
+      if (combinadas.length >= 20) break
+    }
+
+    return combinadas.slice(0, 20)
+  }
+
   const whereBase: Prisma.NomencladorPracticaWhereInput = {
     OR: [
       { descripcion: { contains: query, mode: 'insensitive' as const } },
@@ -1068,6 +1119,7 @@ export async function buscarPracticas(
     ],
   }
 
+  const exactasPorConvenio = await obtenerExactas(convenioId)
   const porConvenio = await prisma.nomencladorPractica.findMany({
     where: {
       ...(convenioId ? { convenioId } : {}),
@@ -1086,9 +1138,14 @@ export async function buscarPracticas(
     },
   })
 
-  if (!convenioId || porConvenio.length > 0) return enriquecerPracticasConValor(porConvenio)
+  const resultadosPorConvenio = combinarPriorizandoExactas(exactasPorConvenio, porConvenio)
+
+  if (!convenioId || resultadosPorConvenio.length > 0) {
+    return enriquecerPracticasConValor(resultadosPorConvenio)
+  }
 
   // Si el convenio elegido no tiene esa práctica, hacemos fallback global.
+  const exactasGlobales = await obtenerExactas()
   const fallback = await prisma.nomencladorPractica.findMany({
     where: whereBase,
     take: 20,
@@ -1104,7 +1161,7 @@ export async function buscarPracticas(
     },
   })
 
-  return enriquecerPracticasConValor(fallback)
+  return enriquecerPracticasConValor(combinarPriorizandoExactas(exactasGlobales, fallback))
 }
 
 async function enriquecerPracticasConValor(

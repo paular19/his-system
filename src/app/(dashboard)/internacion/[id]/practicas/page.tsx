@@ -41,6 +41,48 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             ? (detalle.cirugiasUrgencia.find((cirugia) => cirugia.id === cirugiaId) ?? null)
             : null
 
+    const practicaIdsInternacionCirugiaObjetivo = (() => {
+        if (!cirugiaObjetivo) return [] as number[]
+
+        const practicasPorCodigo = new Map<string, typeof detalle.practicas>()
+        for (const practica of detalle.practicas) {
+            const estado = (practica.estado ?? 'A').trim().toUpperCase()
+            if (estado === 'X') continue
+
+            const codigo = practica.codigoPractica.trim().toUpperCase()
+            if (!codigo) continue
+
+            const bucket = practicasPorCodigo.get(codigo) ?? []
+            bucket.push(practica)
+            practicasPorCodigo.set(codigo, bucket)
+        }
+
+        for (const bucket of practicasPorCodigo.values()) {
+            bucket.sort((a, b) => a.id - b.id)
+        }
+
+        const usadosPorCodigo = new Set<number>()
+        const ids: number[] = []
+
+        for (const practicaCirugia of cirugiaObjetivo.practicas) {
+            const codigo = practicaCirugia.codigo.trim().toUpperCase()
+            const candidatas = practicasPorCodigo.get(codigo) ?? []
+
+            const candidata = candidatas.find((item) => {
+                if (usadosPorCodigo.has(item.id)) return false
+                const usuario = (item.usuario ?? '').trim().toUpperCase()
+                return usuario === 'CIRUGIA'
+            })
+                ?? candidatas.find((item) => !usadosPorCodigo.has(item.id))
+
+            if (!candidata) continue
+            usadosPorCodigo.add(candidata.id)
+            ids.push(candidata.id)
+        }
+
+        return ids
+    })()
+
     const contextoCirugia =
         cirugiaObjetivo && detalle.paciente
             ? {
@@ -51,6 +93,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                 planId: detalle.plan?.id ?? null,
                 obraSocialCoseguroId: detalle.obraSocialCoseguroId ?? null,
                 numeroAfiliado: detalle.numeroAfiliado ?? null,
+                practicaIdsInternacion: practicaIdsInternacionCirugiaObjetivo,
             }
             : null
 

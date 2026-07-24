@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Scissors, ChevronDown, ChevronUp, Loader2, ChevronRight, Pencil, Trash2, Ban } from 'lucide-react'
 import { anularOrdenAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
+import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 import { fechaAInputLocal, fechaHoraAInputLocal, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { formatearNumeroOrden } from '@/modules/orden/types'
@@ -121,6 +122,7 @@ type PracticaCirugiaEditDraft = {
 
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const ORDENES_GENERADAS_POR_PAGINA = 5
+const PRACTICAS_PENDIENTES_POR_PAGINA = 8
 type SectorPracticaFiltro = 'UTI' | 'PISO'
 
 function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
@@ -140,6 +142,50 @@ function grupoTieneNumeroAutorizacion(grupo: GrupoPracticasAutorizadasCirugia): 
 function practicaInternacionFacturada(practica: PracticaInternacionItem | null | undefined): boolean {
     if (!practica) return false
     return Boolean(practica.facturada)
+}
+
+function siglasIncluidasDesdeTexto(value: string | null | undefined): string | null {
+    const raw = (value ?? '').toUpperCase()
+    const grupos = raw.match(/\(([^)]+)\)/g) ?? []
+    for (const grupo of grupos) {
+        const inner = grupo.slice(1, -1)
+        if (!inner) continue
+        const tokens = inner
+            .split('+')
+            .map((token) => token.trim())
+            .filter(Boolean)
+        if (tokens.length === 0) continue
+        const normalizados = tokens
+            .map((token) => normalizarClasificacionAgrupacion(token))
+            .filter((token): token is string => token != null)
+        if (normalizados.length > 0) {
+            return normalizados.join('+')
+        }
+    }
+    return null
+}
+
+function siglasIncluidasPracticaCirugia(
+    practicaCirugia: { codigo: string; descripcion: string },
+    practicaInternacion: PracticaInternacionItem | null | undefined
+): string {
+    const desdeInternacion =
+        siglasIncluidasDesdeTexto(practicaInternacion?.codigoPractica) ??
+        siglasIncluidasDesdeTexto(
+            (practicaInternacion as unknown as { descripcionPractica?: string | null })?.descripcionPractica
+        )
+    if (desdeInternacion) return desdeInternacion
+
+    const desdeCirugia = siglasIncluidasDesdeTexto(practicaCirugia.descripcion)
+    if (desdeCirugia) return desdeCirugia
+
+    if (practicaInternacion?.codigoPractica.trim() === '66') return 'HE'
+
+    const matEsp = practicaInternacion?.matriculaEspecialista ?? null
+    const matAn = practicaInternacion?.matriculaAnestesista ?? null
+    if (matAn && !matEsp) return 'HA'
+    if (matEsp && !matAn) return 'HE'
+    return 'HE'
 }
 
 interface CirugiaUrgenciaSectionProps {
@@ -181,10 +227,12 @@ export function CirugiaUrgenciaSection({
     const [profesionalesFirmantes, setProfesionalesFirmantes] = useState<ProfesionalConMatricula[]>([])
     const [mostrarPendientesAutorizacionPorCirugia, setMostrarPendientesAutorizacionPorCirugia] = useState<Record<number, boolean>>({})
     const [mostrarYaAutorizadasPorCirugia, setMostrarYaAutorizadasPorCirugia] = useState<Record<number, boolean>>({})
+    const [cirugiasAbiertas, setCirugiasAbiertas] = useState<Record<number, boolean>>({})
     const [cirujanoFirmanteId, setCirujanoFirmanteId] = useState('')
     const [firmanteEditadoManualmente, setFirmanteEditadoManualmente] = useState(false)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
+    const [paginaPendientesPorCirugia, setPaginaPendientesPorCirugia] = useState<Record<number, number>>({})
     const [paginaOrdenesGeneradasPorCirugia, setPaginaOrdenesGeneradasPorCirugia] = useState<Record<number, number>>({})
     const [eliminandoPracticaCirugiaId, setEliminandoPracticaCirugiaId] = useState<number | null>(null)
     const [anulandoOrdenGrupoKey, setAnulandoOrdenGrupoKey] = useState<string | null>(null)
@@ -532,6 +580,7 @@ export function CirugiaUrgenciaSection({
     }, [cirujanoFirmanteId, matriculaPorProfesionalId])
 
     useEffect(() => {
+        setPaginaPendientesPorCirugia({})
         setPaginaOrdenesGeneradasPorCirugia({})
     }, [mostrarUti, mostrarPiso])
 
@@ -902,70 +951,8 @@ export function CirugiaUrgenciaSection({
                     ) : (
                         <div className="space-y-3">
                             {puedeCrear && (
-                                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                                    <div className="min-w-65 flex-1 space-y-1">
-                                        <div className="text-xs text-emerald-800">
-                                            Practicas seleccionadas para generar una sola orden: {practicasSeleccionadasVigentes.length}
-                                        </div>
-                                        <label className="block text-[11px] font-medium text-emerald-800">
-                                            Cirujano firmante
-                                            <ProfesionalSelect
-                                                profesionales={profesionalesFirmantes}
-                                                value={cirujanoFirmanteId}
-                                                onChange={(nextValue) => {
-                                                    setCirujanoFirmanteId(nextValue)
-                                                    setFirmanteEditadoManualmente(true)
-                                                }}
-                                                disabled={generandoOrdenAgrupada || profesionalesFirmantes.length === 0}
-                                                placeholderOption="-- Seleccionar firmante --"
-                                                searchPlaceholder="Buscar por nombre o matricula"
-                                                selectClassName="mt-1 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-900 disabled:bg-emerald-100 disabled:text-emerald-700"
-                                                searchClassName="mt-1 w-full rounded border border-emerald-200 bg-white px-2 py-1 text-[11px] text-emerald-900 disabled:bg-emerald-100 disabled:text-emerald-700"
-                                            />
-                                        </label>
-                                        <p className="text-[10px] text-emerald-700">
-                                            Se sugiere automáticamente el primer especialista no patólogo de las prácticas seleccionadas.
-                                        </p>
-                                        <p className="text-[10px] text-emerald-800">
-                                            Firma prevista: {firmaPrevistaTexto}
-                                        </p>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => alternarSeleccionTodasCirugia(practicaIdsPendientesCirugia, true)}
-                                            disabled={practicaIdsPendientesCirugia.length === 0 || generandoOrdenAgrupada}
-                                            className="rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                                        >
-                                            Seleccionar todas
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setPracticasSeleccionadasImpresion([])}
-                                            disabled={practicasSeleccionadasVigentes.length === 0 || generandoOrdenAgrupada}
-                                            className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                        >
-                                            Limpiar seleccion
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => void generarOrdenAgrupada(false)}
-                                            disabled={practicasSeleccionadasVigentes.length === 0 || generandoOrdenAgrupada}
-                                            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                                        >
-                                            {generandoOrdenAgrupada && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                                            {generandoOrdenAgrupada ? 'Generando...' : 'Generar en una sola orden'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => void generarOrdenAgrupada(true)}
-                                            disabled={practicasSeleccionadasVigentes.length === 0 || generandoOrdenAgrupada}
-                                            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                        >
-                                            {generandoOrdenAgrupada && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                                            {generandoOrdenAgrupada ? 'Generando...' : 'Generar e imprimir'}
-                                        </button>
-                                    </div>
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                                    La generacion, impresion y agrupacion de ordenes ahora se hace desde la pagina de carga rapida de cada cirugia.
                                 </div>
                             )}
 
@@ -992,6 +979,7 @@ export function CirugiaUrgenciaSection({
                             </div>
 
                             {cirugias.map((c) => {
+                                const cirugiaAbierta = cirugiasAbiertas[c.id] ?? false
                                 const practicasPendientesCirugiaItem = c.practicas.filter((practica) => {
                                     const estadoPractica = estadoPracticaCirugiaPorId.get(practica.id)
                                     return estadoPractica?.pendiente !== false && coincideFiltroSectorPractica(practica.id)
@@ -1041,16 +1029,35 @@ export function CirugiaUrgenciaSection({
                                     const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
                                     return yaAutorizada ? mostrarYaAutorizadas : mostrarPendientesAutorizacion
                                 })
-                                const todasSeleccionadasCirugia =
-                                    practicaIdsPendientesCirugiaItem.length > 0
-                                    && practicaIdsPendientesCirugiaItem.every((id) => practicasSeleccionadasVigentes.includes(id))
+                                const totalPaginasPendientes = Math.max(
+                                    1,
+                                    Math.ceil(practicasPendientesCirugiaItem.length / PRACTICAS_PENDIENTES_POR_PAGINA)
+                                )
+                                const paginaPendientesActual = Math.min(
+                                    paginaPendientesPorCirugia[c.id] ?? 1,
+                                    totalPaginasPendientes
+                                )
+                                const practicasPendientesPaginadas = practicasPendientesCirugiaItem.slice(
+                                    (paginaPendientesActual - 1) * PRACTICAS_PENDIENTES_POR_PAGINA,
+                                    paginaPendientesActual * PRACTICAS_PENDIENTES_POR_PAGINA
+                                )
 
                                 return (
                                     <article key={c.id} className="border rounded-lg p-3 bg-white space-y-3">
                                         <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b">
-                                            <p className="text-sm font-medium text-gray-900">
-                                                {formatearFechaArgentina(c.fechaCirugia)} {c.horaCirugia ? ` ${c.horaCirugia}` : ''}
-                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={() => setCirugiasAbiertas((prev) => ({
+                                                    ...prev,
+                                                    [c.id]: !(prev[c.id] ?? false),
+                                                }))}
+                                                className="inline-flex items-center gap-2 text-left"
+                                            >
+                                                <ChevronRight className={`h-4 w-4 text-gray-500 transition-transform ${cirugiaAbierta ? 'rotate-90' : ''}`} />
+                                                <p className="text-sm font-medium text-gray-900">
+                                                    {formatearFechaArgentina(c.fechaCirugia)} {c.horaCirugia ? ` ${c.horaCirugia}` : ''}
+                                                </p>
+                                            </button>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs text-gray-500">Cirugia #{c.id}</span>
                                                 {puedeCrear && (
@@ -1072,6 +1079,9 @@ export function CirugiaUrgenciaSection({
                                             </div>
                                         </div>
 
+                                        {cirugiaAbierta && (
+                                            <>
+
                                         <div>
                                             <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">Pendientes de generación</p>
                                             {practicasPendientesCirugiaItem.length === 0 ? (
@@ -1081,26 +1091,16 @@ export function CirugiaUrgenciaSection({
                                                     <table className="min-w-full text-xs">
                                                         <thead className="bg-gray-50 text-gray-600">
                                                             <tr>
-                                                                {puedeCrear && (
-                                                                    <th className="text-left px-2 py-1 border-b w-9">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={todasSeleccionadasCirugia}
-                                                                                onChange={(e) => alternarSeleccionTodasCirugia(practicaIdsPendientesCirugiaItem, e.target.checked)}
-                                                                            className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500"
-                                                                            title="Seleccionar practicas de esta cirugia"
-                                                                        />
-                                                                    </th>
-                                                                )}
                                                                 <th className="text-left px-2 py-1 border-b">Codigo</th>
                                                                 <th className="text-left px-2 py-1 border-b">Descripcion</th>
+                                                                <th className="text-left px-2 py-1 border-b">Incluye</th>
                                                                 <th className="text-right px-2 py-1 border-b">Cant.</th>
                                                                 <th className="text-left px-2 py-1 border-b">Estado</th>
                                                                 {puedeCrear && <th className="text-right px-2 py-1 border-b">Acciones</th>}
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {practicasPendientesCirugiaItem.map((p) => {
+                                                            {practicasPendientesPaginadas.map((p) => {
                                                                 const estadoPractica = estadoPracticaCirugiaPorId.get(p.id)
                                                                 const esPendiente = estadoPractica?.pendiente === true
                                                                 const practicaInternacion = estadoPractica
@@ -1108,27 +1108,17 @@ export function CirugiaUrgenciaSection({
                                                                     : null
                                                                 const estaFacturada = practicaInternacionFacturada(practicaInternacion)
                                                                 const estaEliminando = eliminandoPracticaCirugiaId === p.id
+                                                                const siglasIncluye = siglasIncluidasPracticaCirugia(p, practicaInternacion)
 
                                                                 return (
                                                                     <tr key={p.id} className="text-gray-700">
-                                                                        {puedeCrear && (
-                                                                            <td className="px-2 py-1 border-b align-middle">
-                                                                                <input
-                                                                                    type="checkbox"
-                                                                                    checked={practicasSeleccionadasVigentes.includes(p.id)}
-                                                                                    onChange={(e) => alternarSeleccionPracticaCirugia(p.id, e.target.checked)}
-                                                                                    disabled={!esPendiente || generandoOrdenAgrupada}
-                                                                                    className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500"
-                                                                                    title={
-                                                                                        esPendiente
-                                                                                            ? 'Practica pendiente para generar orden'
-                                                                                            : 'Esta practica ya tiene orden generada o no esta pendiente'
-                                                                                    }
-                                                                                />
-                                                                            </td>
-                                                                        )}
                                                                         <td className="px-2 py-1 border-b font-mono">{p.codigo}</td>
                                                                         <td className="px-2 py-1 border-b">{p.descripcion}</td>
+                                                                        <td className="px-2 py-1 border-b">
+                                                                            <span className="inline-flex rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                                                                                INCLUYE {siglasIncluye}
+                                                                            </span>
+                                                                        </td>
                                                                         <td className="px-2 py-1 border-b text-right">{String(Number(p.cantidad))}</td>
                                                                         <td className="px-2 py-1 border-b">Pendiente de generación</td>
                                                                         {puedeCrear && (
@@ -1164,6 +1154,37 @@ export function CirugiaUrgenciaSection({
                                                             })}
                                                         </tbody>
                                                     </table>
+                                                </div>
+                                            )}
+                                            {practicasPendientesCirugiaItem.length > PRACTICAS_PENDIENTES_POR_PAGINA && (
+                                                <div className="mt-2 flex items-center justify-between gap-2">
+                                                    <p className="text-xs text-gray-500">
+                                                        Pagina {paginaPendientesActual} de {totalPaginasPendientes}
+                                                    </p>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPaginaPendientesPorCirugia((prev) => ({
+                                                                ...prev,
+                                                                [c.id]: Math.max(1, (prev[c.id] ?? 1) - 1),
+                                                            }))}
+                                                            disabled={paginaPendientesActual <= 1}
+                                                            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                        >
+                                                            Anterior
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPaginaPendientesPorCirugia((prev) => ({
+                                                                ...prev,
+                                                                [c.id]: Math.min(totalPaginasPendientes, (prev[c.id] ?? 1) + 1),
+                                                            }))}
+                                                            disabled={paginaPendientesActual >= totalPaginasPendientes}
+                                                            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                        >
+                                                            Siguiente
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -1249,7 +1270,11 @@ export function CirugiaUrgenciaSection({
                                                     return (
                                                         <div
                                                             key={grupoKey}
-                                                            className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5 text-xs"
+                                                            className={`rounded-lg p-2.5 text-xs ${
+                                                                grupoYaAutorizado
+                                                                    ? 'border border-emerald-200 bg-emerald-50/40'
+                                                                    : 'border border-amber-300 bg-amber-100/60'
+                                                            }`}
                                                         >
                                                             <button
                                                                 type="button"
@@ -1257,13 +1282,17 @@ export function CirugiaUrgenciaSection({
                                                                     ...prev,
                                                                     [grupoKey]: !(prev[grupoKey] ?? false),
                                                                 }))}
-                                                                className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left hover:bg-emerald-100/40"
+                                                                className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${
+                                                                    grupoYaAutorizado ? 'hover:bg-emerald-100/40' : 'hover:bg-amber-200/50'
+                                                                }`}
                                                             >
-                                                                <span className="flex items-center gap-2 text-emerald-900">
+                                                                <span className={`flex items-center gap-2 ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
                                                                     <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
                                                                     <span className="font-semibold">{tituloGrupo}</span>
                                                                 </span>
-                                                                <span className="text-[11px] text-emerald-700">{grupo.practicas.length} practica(s)</span>
+                                                                <span className={`text-[11px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
+                                                                    {grupo.practicas.length} practica(s)
+                                                                </span>
                                                             </button>
 
                                                             {abierta && (
@@ -1275,7 +1304,11 @@ export function CirugiaUrgenciaSection({
                                                                                     href={destinoAbrir}
                                                                                     target="_blank"
                                                                                     rel="noopener noreferrer"
-                                                                                    className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
+                                                                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                                                                        grupoYaAutorizado
+                                                                                            ? 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200'
+                                                                                            : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                                                                                    }`}
                                                                                 >
                                                                                     Abrir orden
                                                                                 </Link>
@@ -1297,16 +1330,22 @@ export function CirugiaUrgenciaSection({
                                                                                 </button>
                                                                             )}
                                                                         </div>
-                                                                        <p className="text-emerald-800">N° autorizacion: {grupo.numeroAutorizacion ?? '-'}</p>
-                                                                        <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-700 font-medium'}>
+                                                                        <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>
+                                                                            N° autorizacion: {grupo.numeroAutorizacion ?? '-'}
+                                                                        </p>
+                                                                        <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900 font-semibold'}>
                                                                             Estado: {grupoYaAutorizado ? 'Ya autorizada' : 'Pendiente de autorización'}
                                                                         </p>
-                                                                        <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
+                                                                        <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>Cantidad total: {grupo.totalCantidad}</p>
                                                                     </div>
 
-                                                                    <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
+                                                                    <div className={`rounded-md bg-white/70 p-2 ${
+                                                                        grupoYaAutorizado ? 'border border-emerald-200' : 'border border-amber-300'
+                                                                    }`}>
                                                                         <div className="flex items-center justify-between gap-2">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                                            <p className={`text-[11px] font-semibold uppercase tracking-wide ${
+                                                                                grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'
+                                                                            }`}>
                                                                                 Practicas de la orden ({grupo.practicas.length})
                                                                             </p>
                                                                             {grupo.practicas.length > limitePracticas && (
@@ -1330,17 +1369,25 @@ export function CirugiaUrgenciaSection({
                                                                                     ? (practicasInternacionPorId.get(estadoPractica.practicaInternacionId) ?? null)
                                                                                     : null
                                                                                 const estaFacturada = practicaInternacionFacturada(practicaInternacion)
+                                                                                const siglasIncluye = siglasIncluidasPracticaCirugia(practica, practicaInternacion)
 
                                                                                 return (
                                                                                     <div
                                                                                         key={`${grupoKey}-${practica.id}`}
-                                                                                        className="rounded border border-emerald-100 bg-white px-2 py-1.5"
+                                                                                        className={`rounded bg-white px-2 py-1.5 ${
+                                                                                            grupoYaAutorizado ? 'border border-emerald-100' : 'border border-amber-200'
+                                                                                        }`}
                                                                                     >
-                                                                                        <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                                                                        <div className={`flex items-center justify-between gap-2 ${
+                                                                                            grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'
+                                                                                        }`}>
                                                                                             <span className="font-mono text-[11px]">{practica.codigo}</span>
                                                                                             <span className="font-medium">Cant. {practica.cantidad}</span>
                                                                                         </div>
-                                                                                        <p className="text-emerald-900">{practica.descripcion}</p>
+                                                                                        <p className={grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}>{practica.descripcion}</p>
+                                                                                        <p className={grupoYaAutorizado ? 'text-[11px] text-emerald-700' : 'text-[11px] text-amber-800'}>
+                                                                                            INCLUYE {siglasIncluye}
+                                                                                        </p>
                                                                                         {puedeCrear && (
                                                                                             <div className="mt-1 flex items-center justify-end gap-2">
                                                                                                 {estaFacturada && (
@@ -1409,6 +1456,9 @@ export function CirugiaUrgenciaSection({
                                                 </div>
                                             )}
                                         </div>
+
+                                            </>
+                                        )}
                                     </article>
                                 )
                             })}

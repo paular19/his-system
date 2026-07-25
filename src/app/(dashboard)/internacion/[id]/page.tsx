@@ -244,7 +244,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     className="flex items-center gap-1.5 text-xs font-medium border rounded-lg px-3 py-1.5 hover:bg-gray-50"
                                 >
                                     <Plus className="h-3.5 w-3.5" />
-                                    Carga rápida
+                                    Practicas
                                 </Link>
                             )}
                             <Link

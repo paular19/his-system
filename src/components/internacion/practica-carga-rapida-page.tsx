@@ -57,6 +57,7 @@ type OrdenRef = {
 type ConfirmacionOrdenUnicaState = {
     imprimirDespues: boolean
     agruparEnUnaOrden: boolean
+    separarPorPractica: boolean
     practicaIds: number[]
     titulosDisponibles: string[]
     requiereElegirTitulo: boolean
@@ -110,8 +111,6 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
 }
 
 const ORDENES_HISTORICO_POR_PAGINA = 8
-const STORAGE_ORDENES_SESION_PREFIX = 'internacion-ordenes-generadas-sesion'
-
 function claveOrden(ref: OrdenRef): string {
     return `${ref.puestoNumero}-${ref.numero}`
 }
@@ -214,41 +213,6 @@ export function PracticaCargaRapidaPage({
     const [popupImpresionSesion, setPopupImpresionSesion] = useState<PopupImpresionSesionState | null>(null)
     const [popupSubitemsSesion, setPopupSubitemsSesion] = useState<PopupSubitemsSesionState | null>(null)
     const [generarImprimirPorSeparadoEditor, setGenerarImprimirPorSeparadoEditor] = useState(false)
-
-    const storageOrdenesSesionKey = `${STORAGE_ORDENES_SESION_PREFIX}:${ingresoId}`
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return
-
-        try {
-            const raw = window.sessionStorage.getItem(storageOrdenesSesionKey)
-            if (!raw) {
-                setOrdenesGeneradasSesion([])
-                return
-            }
-
-            const parsed: unknown = JSON.parse(raw)
-            if (!Array.isArray(parsed)) {
-                setOrdenesGeneradasSesion([])
-                return
-            }
-
-            const claves = parsed.filter((item): item is string => typeof item === 'string' && item.length > 0)
-            setOrdenesGeneradasSesion(Array.from(new Set(claves)))
-        } catch {
-            setOrdenesGeneradasSesion([])
-        }
-    }, [storageOrdenesSesionKey])
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return
-
-        try {
-            window.sessionStorage.setItem(storageOrdenesSesionKey, JSON.stringify(ordenesGeneradasSesion))
-        } catch {
-            // Ignore session storage write failures.
-        }
-    }, [storageOrdenesSesionKey, ordenesGeneradasSesion])
 
     useEffect(() => {
         setPracticas(
@@ -732,12 +696,24 @@ export function PracticaCargaRapidaPage({
             titularOrdenAgrupada?: string | null
             origen?: 'default' | 'sesion'
             firmanteProfesionalId?: string
+            separarPorPractica?: boolean
         }
     ) => {
         const practicaIds = practicaIdsObjetivo ?? idsPendientesSeleccionadas
 
         if (practicaIds.length === 0) {
             setMensajeError('Selecciona al menos una practica pendiente para generar ordenes')
+            return
+        }
+
+        // Modo editor: generar e imprimir por separado debe crear una orden por práctica.
+        if (opciones?.separarPorPractica && practicaIds.length > 1) {
+            for (const practicaId of practicaIds) {
+                await ejecutarGeneracionOrdenes(imprimirDespues, [practicaId], false, {
+                    ...opciones,
+                    separarPorPractica: false,
+                })
+            }
             return
         }
 
@@ -837,10 +813,12 @@ export function PracticaCargaRapidaPage({
             setPracticasSeleccionadas((prev) => prev.filter((id) => !practicaIds.includes(id)))
 
             if (grupos.length > 0) {
-                const nuevasOrdenesSesion = Array.from(
-                    new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
-                )
-                setOrdenesGeneradasSesion((prev) => Array.from(new Set([...nuevasOrdenesSesion, ...prev])))
+                if ((opciones?.origen ?? 'default') === 'sesion') {
+                    const nuevasOrdenesSesion = Array.from(
+                        new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
+                    )
+                    setOrdenesGeneradasSesion((prev) => Array.from(new Set([...nuevasOrdenesSesion, ...prev])))
+                }
                 const idsGeneradas = new Set(practicaIds)
                 setGuardadasSesion((prev) => prev.filter((item) => !idsGeneradas.has(item.practicaId)))
             }
@@ -887,6 +865,7 @@ export function PracticaCargaRapidaPage({
         }
 
         const agruparEnUnaOrden = !generarImprimirPorSeparadoEditor
+        const separarPorPractica = generarImprimirPorSeparadoEditor
 
         const practicasSeleccionadasParaOrden = practicas.filter((practica) =>
             idsPendientesSeleccionadasEditor.includes(practica.id)
@@ -917,7 +896,10 @@ export function PracticaCargaRapidaPage({
                 imprimirDespues,
                 idsPendientesSeleccionadasEditor,
                 agruparEnUnaOrden,
-                { titularOrdenAgrupada: titularSeleccionado }
+                {
+                    titularOrdenAgrupada: titularSeleccionado,
+                    separarPorPractica,
+                }
             )
             return
         }
@@ -925,6 +907,7 @@ export function PracticaCargaRapidaPage({
         setConfirmacionOrdenUnica({
             imprimirDespues,
             agruparEnUnaOrden,
+            separarPorPractica,
             practicaIds: idsPendientesSeleccionadasEditor,
             titulosDisponibles,
             requiereElegirTitulo,
@@ -951,6 +934,7 @@ export function PracticaCargaRapidaPage({
         const payload = {
             titularOrdenAgrupada: confirmacionOrdenUnica.titularSeleccionado,
             firmanteProfesionalId: siguienteFirmanteId,
+            separarPorPractica: confirmacionOrdenUnica.separarPorPractica,
         }
 
         const { imprimirDespues, practicaIds, agruparEnUnaOrden } = confirmacionOrdenUnica
@@ -983,7 +967,7 @@ export function PracticaCargaRapidaPage({
         const opciones = Array.from(mapa.values())
 
         if (opciones.length <= 1) {
-            void ejecutarGeneracionOrdenes(true, idsSesion, false)
+            void ejecutarGeneracionOrdenes(true, idsSesion, false, { origen: 'sesion' })
             return
         }
 
@@ -1031,7 +1015,7 @@ export function PracticaCargaRapidaPage({
             return
         }
 
-        void ejecutarGeneracionOrdenes(true, idsFiltrados, false)
+        void ejecutarGeneracionOrdenes(true, idsFiltrados, false, { origen: 'sesion' })
     }
 
     const alternarOrdenPopupImpresionSesion = (clave: string, checked: boolean) => {
@@ -1195,21 +1179,19 @@ export function PracticaCargaRapidaPage({
                     }))}
                     className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${hoverClase}`}
                 >
-                    <span className="min-w-0">
-                        <span className={`flex items-center gap-2 ${tituloClase}`}>
-                            <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-                            <span className="font-semibold">
-                                {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
-                                    ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
-                                    : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
-                            </span>
-                            {estadoSesionEtiqueta && (
-                                <span className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-                                    {estadoSesionEtiqueta}
-                                </span>
-                            )}
+                    <span className={`flex min-w-0 items-center gap-2 ${tituloClase}`}>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+                        <span className="font-semibold">
+                            {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
+                                : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
                         </span>
-                        <span className={`mt-0.5 block truncate text-[10px] ${contadorClase}`}>
+                        {estadoSesionEtiqueta && (
+                            <span className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                                {estadoSesionEtiqueta}
+                            </span>
+                        )}
+                        <span className={`min-w-0 truncate text-[10px] ${contadorClase}`}>
                             Codigos: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
                         </span>
                     </span>
@@ -1409,10 +1391,16 @@ export function PracticaCargaRapidaPage({
                                     <input
                                         type="checkbox"
                                         checked={generarImprimirPorSeparadoEditor}
-                                        onChange={(e) => setGenerarImprimirPorSeparadoEditor(e.target.checked)}
+                                        onChange={(e) => {
+                                            const checked = e.target.checked
+                                            setGenerarImprimirPorSeparadoEditor(checked)
+                                            if (checked) {
+                                                alternarSeleccionLista(idsPendientesEditor, true)
+                                            }
+                                        }}
                                         className="h-4 w-4 rounded border-amber-300 text-amber-700 focus:ring-amber-500"
                                     />
-                                    Generar e imprimir por separado (por clasificacion)
+                                    Generar e imprimir por separado (una orden por practica)
                                 </label>
 
                                 {practicasPendientesEditorAgrupadas.length === 0 ? (
@@ -1506,7 +1494,7 @@ export function PracticaCargaRapidaPage({
                                                 className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                             >
                                                 {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                                                {generarImprimirPorSeparadoEditor ? 'Generar por separado' : 'Generar una orden'}
+                                                {generarImprimirPorSeparadoEditor ? 'Generar por practica' : 'Generar una orden'}
                                             </button>
                                             <button
                                                 type="button"
@@ -1515,7 +1503,7 @@ export function PracticaCargaRapidaPage({
                                                 className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                             >
                                                 <Printer className="h-3.5 w-3.5" />
-                                                {generarImprimirPorSeparadoEditor ? 'Generar e imprimir por separado' : 'Generar una orden e imprimir'}
+                                                {generarImprimirPorSeparadoEditor ? 'Generar e imprimir por practica' : 'Generar una orden e imprimir'}
                                             </button>
                                         </div>
                                     </>
@@ -1650,7 +1638,7 @@ export function PracticaCargaRapidaPage({
                                 <div className="flex flex-wrap gap-2">
                                     <button
                                         type="button"
-                                        onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesSesion)}
+                                        onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesSesion, false, { origen: 'sesion' })}
                                         disabled={generandoOrdenes || idsPendientesSesion.length === 0}
                                         className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                     >
@@ -1710,7 +1698,7 @@ export function PracticaCargaRapidaPage({
                         <p className="mt-1 text-xs text-gray-700">
                             {confirmacionOrdenUnica.agruparEnUnaOrden
                                 ? 'Las practicas seleccionadas se generaran en una unica orden.'
-                                : 'Las practicas seleccionadas se generaran por separado segun su clasificacion.'}
+                                : 'Las practicas seleccionadas se generaran por separado: una orden por cada practica.'}
                         </p>
 
                         <div className="mt-3 space-y-3">

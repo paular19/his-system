@@ -1,5 +1,6 @@
 import { Header } from '@/components/layout/header'
 import { PracticaCargaRapidaPage } from '@/components/internacion/practica-carga-rapida-page'
+import { InternacionPracticasFichaTable } from '@/components/internacion/internacion-practicas-ficha-table'
 import { getUsuarioSesion } from '@/lib/auth'
 import { ROLES, tienePermiso } from '@/lib/auth/rbac'
 import { obtenerInternacionDetalle } from '@/modules/internacion/service'
@@ -99,7 +100,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
 
     return (
         <>
-            <Header titulo={contextoCirugia ? 'Carga de practicas de cirugia' : 'Carga rapida de practicas'} />
+            <Header titulo={contextoCirugia ? 'Practicas de cirugia' : 'Practicas de internacion'} />
             <div className="p-6 space-y-4 max-w-7xl">
                 <nav className="flex items-center gap-1 text-xs text-gray-500">
                     <Link href="/dashboard/internacion" className="hover:text-gray-700">Internacion</Link>
@@ -115,13 +116,13 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                     <div>
                         <h2 className="text-lg font-semibold text-gray-900">
                             {contextoCirugia
-                                ? `Carga de practicas para cirugia #${contextoCirugia.cirugiaId}`
-                                : 'Carga centralizada de practicas'}
+                                ? `Practicas para cirugia #${contextoCirugia.cirugiaId}`
+                                : 'Practicas de internacion'}
                         </h2>
                         <p className="text-sm text-gray-600">
                             {contextoCirugia
-                                ? 'Carga continua por codigo para esta cirugia, con confirmacion visual inmediata de cada practica.'
-                                : 'Carga continua por codigo, sin hora, con confirmacion visual inmediata de cada practica.'}
+                                ? 'Gestion y carga continua por codigo para esta cirugia, con confirmacion visual inmediata de cada practica.'
+                                : 'Gestion de ordenes y carga continua por codigo, con confirmacion visual inmediata de cada practica.'}
                         </p>
                     </div>
 
@@ -135,6 +136,13 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                         Volver a ficha
                     </Link>
                 </div>
+
+                <InternacionPracticasFichaTable
+                    practicas={detalle.practicas}
+                    obraSocialNombre={detalle.obraSocial?.nombre ?? null}
+                    pacienteNombre={detalle.nombre ?? detalle.paciente?.nombreCompleto ?? null}
+                    pacienteDni={detalle.paciente?.numeroDocumento ?? null}
+                />
 
                 <PracticaCargaRapidaPage
                     ingresoId={ingresoId}

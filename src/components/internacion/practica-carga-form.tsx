@@ -588,7 +588,7 @@ export function PracticaCargaForm({
     }
 
     return (
-        <div className="border border-blue-100 bg-blue-50/40 rounded-xl p-4 space-y-3">
+        <div className="border border-blue-100 bg-blue-50/40 rounded-xl p-3 space-y-2">
             <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{titulo}</p>
 
             <div className="relative">
@@ -611,7 +611,7 @@ export function PracticaCargaForm({
                                 </select>
                             </label>
                         </div>
-                        <p className="mb-2 text-[11px] text-gray-500">
+                        <p className="mb-1 text-[11px] text-gray-500">
                             Este selector determina el contexto del paciente. No filtra por códigos porque el nomenclador no distingue UTI/PISO.
                         </p>
                     </>
@@ -740,7 +740,7 @@ export function PracticaCargaForm({
             )}
 
             {practicaSeleccionada && subitemsSeleccionadosForm.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                     <label className="inline-flex items-center gap-2 text-xs text-gray-600">
                         <input
                             type="checkbox"
@@ -752,7 +752,7 @@ export function PracticaCargaForm({
                     </label>
                     {crearPracticaTodaJunta && (
                         <div>
-                            <label className="block text-xs text-gray-500 mb-1">Cantidad general</label>
+                            <label className="mb-0.5 block text-xs text-gray-500">Cantidad general</label>
                             <input
                                 type="number"
                                 min={1}
@@ -767,9 +767,9 @@ export function PracticaCargaForm({
                 </div>
             )}
 
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-2">
                 <div>
-                    <label className="block text-xs text-gray-500 mb-1">{soloFechaPractica ? 'Fecha' : 'Fecha y hora'}</label>
+                    <label className="mb-0.5 block text-xs text-gray-500">{soloFechaPractica ? 'Fecha' : 'Fecha y hora'}</label>
                     <input
                         type={soloFechaPractica ? 'date' : 'datetime-local'}
                         value={fecha}
@@ -779,9 +779,9 @@ export function PracticaCargaForm({
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-2">
                 <div>
-                    <label className="block text-xs text-gray-500 mb-1">Nro. autorizacion</label>
+                    <label className="mb-0.5 block text-xs text-gray-500">Nro. autorizacion</label>
                     <input
                         type="text"
                         value={numeroAutorizacion}
@@ -876,7 +876,7 @@ export function PracticaCargaForm({
                 <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">{error}</p>
             )}
 
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-0.5">
                 <button
                     onClick={() => void handleGuardar()}
                     disabled={guardando}

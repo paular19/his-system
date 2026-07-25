@@ -639,8 +639,11 @@ export function PracticaCargaForm({
                                 }
 
                                 if (resultados.length > 0) {
-                                    seleccionarPractica(resultados[0], true)
-                                    return
+                                    const primera = resultados[0]
+                                    if (primera) {
+                                        seleccionarPractica(primera, true)
+                                        return
+                                    }
                                 }
 
                                 if (esCodigoPracticaCompleto(codigoBuscado)) {

@@ -49,6 +49,36 @@ type ProfesionalConMatricula = {
 
 type ComponenteOrden = 'HE' | 'HA' | 'GA' | 'HP' | 'A1' | 'A2' | 'A3'
 
+type OrdenRef = {
+    puestoNumero: number
+    numero: number
+}
+
+type ConfirmacionOrdenUnicaState = {
+    imprimirDespues: boolean
+    agruparEnUnaOrden: boolean
+    practicaIds: number[]
+    titulosDisponibles: string[]
+    requiereElegirTitulo: boolean
+    requiereElegirFirmante: boolean
+    titularSeleccionado: string
+    firmanteSeleccionadoId: string
+}
+
+type PopupImpresionSesionState = {
+    ordenes: OrdenRef[]
+    seleccionadas: string[]
+}
+
+type PopupSubitemsSesionState = {
+    opciones: Array<{
+        clasificacion: string
+        titulo: string
+        cantidad: number
+    }>
+    seleccionadas: string[]
+}
+
 interface PracticaCargaRapidaPageProps {
     ingresoId: number
     convenioId: number | null
@@ -81,6 +111,10 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
 
 const ORDENES_HISTORICO_POR_PAGINA = 8
 const STORAGE_ORDENES_SESION_PREFIX = 'internacion-ordenes-generadas-sesion'
+
+function claveOrden(ref: OrdenRef): string {
+    return `${ref.puestoNumero}-${ref.numero}`
+}
 
 function practicaActiva(estado: string | null | undefined): boolean {
     return (estado?.trim().toUpperCase() ?? 'A') !== 'X'
@@ -176,6 +210,10 @@ export function PracticaCargaRapidaPage({
     const [busquedaHistorico, setBusquedaHistorico] = useState('')
     const [paginaHistorico, setPaginaHistorico] = useState(1)
     const [ordenesGeneradasSesion, setOrdenesGeneradasSesion] = useState<string[]>([])
+    const [confirmacionOrdenUnica, setConfirmacionOrdenUnica] = useState<ConfirmacionOrdenUnicaState | null>(null)
+    const [popupImpresionSesion, setPopupImpresionSesion] = useState<PopupImpresionSesionState | null>(null)
+    const [popupSubitemsSesion, setPopupSubitemsSesion] = useState<PopupSubitemsSesionState | null>(null)
+    const [generarImprimirPorSeparadoEditor, setGenerarImprimirPorSeparadoEditor] = useState(false)
 
     const storageOrdenesSesionKey = `${STORAGE_ORDENES_SESION_PREFIX}:${ingresoId}`
 
@@ -675,10 +713,26 @@ export function PracticaCargaRapidaPage({
         alternarSeleccionLista(practicasPendientes.map((practica) => practica.id), checked)
     }
 
+    const abrirImpresionOrdenes = (ordenes: OrdenRef[]) => {
+        if (ordenes.length === 0) return
+
+        const ordenesParam = ordenes
+            .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
+            .join(',')
+        const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+        const ventanaImpresion = abrirVentanaImpresionPendiente()
+        navegarVentanaImpresion(ventanaImpresion, url)
+    }
+
     const ejecutarGeneracionOrdenes = async (
         imprimirDespues: boolean,
         practicaIdsObjetivo?: number[],
-        agruparEnUnaOrden = false
+        agruparEnUnaOrden = false,
+        opciones?: {
+            titularOrdenAgrupada?: string | null
+            origen?: 'default' | 'sesion'
+            firmanteProfesionalId?: string
+        }
     ) => {
         const practicaIds = practicaIdsObjetivo ?? idsPendientesSeleccionadas
 
@@ -687,7 +741,8 @@ export function PracticaCargaRapidaPage({
             return
         }
 
-        const profesionalIdFirmante = Number.parseInt(medicoFirmanteId, 10)
+        const firmanteProfesionalId = opciones?.firmanteProfesionalId ?? medicoFirmanteId
+        const profesionalIdFirmante = Number.parseInt(firmanteProfesionalId, 10)
         const medicoFirmanteMatricula = Number.isFinite(profesionalIdFirmante)
             ? (matriculaPorProfesionalId.get(profesionalIdFirmante) ?? null)
             : matriculaFirmanteSugerida
@@ -702,7 +757,12 @@ export function PracticaCargaRapidaPage({
 
         setMensajeError(null)
         setGenerandoOrdenes(true)
-        const ventanaImpresion = imprimirDespues ? abrirVentanaImpresionPendiente() : null
+        const requierePopupSeleccionImpresionSesion =
+            Boolean(imprimirDespues) && (opciones?.origen ?? 'default') === 'sesion'
+        const ventanaImpresion =
+            imprimirDespues && !requierePopupSeleccionImpresionSesion
+                ? abrirVentanaImpresionPendiente()
+                : null
         let impresionDisparada = false
 
         try {
@@ -711,6 +771,7 @@ export function PracticaCargaRapidaPage({
                 practicaIds,
                 clasificacionPorPracticaId: clasificacionPayload,
                 agruparEnUnaOrden,
+                titularOrdenAgrupada: agruparEnUnaOrden ? (opciones?.titularOrdenAgrupada ?? null) : undefined,
                 cirujanoFirmanteMatricula: medicoFirmanteMatricula ?? undefined,
             })
 
@@ -780,16 +841,34 @@ export function PracticaCargaRapidaPage({
                     new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
                 )
                 setOrdenesGeneradasSesion((prev) => Array.from(new Set([...nuevasOrdenesSesion, ...prev])))
-                setGuardadasSesion([])
+                const idsGeneradas = new Set(practicaIds)
+                setGuardadasSesion((prev) => prev.filter((item) => !idsGeneradas.has(item.practicaId)))
             }
 
             if (imprimirDespues && grupos.length > 0) {
                 const ordenesUnicas = Array.from(
                     new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
-                )
-                const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesUnicas.join(','))}`
-                navegarVentanaImpresion(ventanaImpresion, url)
-                impresionDisparada = true
+                ).map((clave) => {
+                    const [puestoNumeroRaw, numeroRaw] = clave.split('-')
+                    return {
+                        puestoNumero: Number.parseInt(puestoNumeroRaw ?? '', 10),
+                        numero: Number.parseInt(numeroRaw ?? '', 10),
+                    }
+                }).filter((orden) => Number.isFinite(orden.puestoNumero) && Number.isFinite(orden.numero))
+
+                if (requierePopupSeleccionImpresionSesion && ordenesUnicas.length > 1) {
+                    setPopupImpresionSesion({
+                        ordenes: ordenesUnicas,
+                        seleccionadas: ordenesUnicas.map(claveOrden),
+                    })
+                } else {
+                    const ordenesParam = ordenesUnicas
+                        .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
+                        .join(',')
+                    const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+                    navegarVentanaImpresion(ventanaImpresion, url)
+                    impresionDisparada = true
+                }
             }
         } catch {
             setMensajeError('Error al generar ordenes desde internacion')
@@ -799,6 +878,183 @@ export function PracticaCargaRapidaPage({
             }
             setGenerandoOrdenes(false)
         }
+    }
+
+    const solicitarConfirmacionOrdenUnica = (imprimirDespues: boolean) => {
+        if (idsPendientesSeleccionadasEditor.length === 0) {
+            setMensajeError('Selecciona al menos una practica pendiente para generar ordenes')
+            return
+        }
+
+        const agruparEnUnaOrden = !generarImprimirPorSeparadoEditor
+
+        const practicasSeleccionadasParaOrden = practicas.filter((practica) =>
+            idsPendientesSeleccionadasEditor.includes(practica.id)
+        )
+
+        const titulosDisponibles = Array.from(
+            new Set(
+                practicasSeleccionadasParaOrden.map((practica) =>
+                    tituloDesdeClasificacion(obtenerClasificacionPractica(practica))
+                )
+            )
+        )
+
+        const firmantesDisponibles = Array.from(
+            new Set(
+                practicasSeleccionadasParaOrden
+                    .map((practica) => practica.matriculaEspecialista)
+                    .filter((matricula): matricula is number => typeof matricula === 'number' && matricula > 0)
+            )
+        )
+
+        const requiereElegirTitulo = agruparEnUnaOrden && titulosDisponibles.length > 1
+        const requiereElegirFirmante = firmantesDisponibles.length > 1
+        const titularSeleccionado = titulosDisponibles[0] ?? 'HONORARIOS'
+
+        if (!requiereElegirTitulo && !requiereElegirFirmante) {
+            void ejecutarGeneracionOrdenes(
+                imprimirDespues,
+                idsPendientesSeleccionadasEditor,
+                agruparEnUnaOrden,
+                { titularOrdenAgrupada: titularSeleccionado }
+            )
+            return
+        }
+
+        setConfirmacionOrdenUnica({
+            imprimirDespues,
+            agruparEnUnaOrden,
+            practicaIds: idsPendientesSeleccionadasEditor,
+            titulosDisponibles,
+            requiereElegirTitulo,
+            requiereElegirFirmante,
+            titularSeleccionado,
+            firmanteSeleccionadoId: medicoFirmanteId,
+        })
+    }
+
+    const confirmarGeneracionOrdenUnica = () => {
+        if (!confirmacionOrdenUnica) return
+
+        const siguienteFirmanteId = confirmacionOrdenUnica.firmanteSeleccionadoId
+        if (confirmacionOrdenUnica.requiereElegirFirmante && !siguienteFirmanteId) {
+            setMensajeError('Selecciona medico firmante para continuar con una sola orden')
+            return
+        }
+
+        if (siguienteFirmanteId) {
+            setMedicoFirmanteId(siguienteFirmanteId)
+            setFirmanteEditadoManualmente(true)
+        }
+
+        const payload = {
+            titularOrdenAgrupada: confirmacionOrdenUnica.titularSeleccionado,
+            firmanteProfesionalId: siguienteFirmanteId,
+        }
+
+        const { imprimirDespues, practicaIds, agruparEnUnaOrden } = confirmacionOrdenUnica
+        setConfirmacionOrdenUnica(null)
+        void ejecutarGeneracionOrdenes(imprimirDespues, practicaIds, agruparEnUnaOrden, payload)
+    }
+
+    const solicitarGeneracionDesdeSesion = () => {
+        const idsSesion = idsPendientesSesion
+        if (idsSesion.length === 0) {
+            setMensajeError('No hay practicas guardadas en esta sesion para generar ordenes')
+            return
+        }
+
+        const practicasSesion = practicas.filter((practica) => idsSesion.includes(practica.id))
+        const mapa = new Map<string, { clasificacion: string; titulo: string; cantidad: number }>()
+
+        practicasSesion.forEach((practica) => {
+            const clasificacion = obtenerClasificacionPractica(practica)
+            const titulo = tituloDesdeClasificacion(clasificacion)
+            const clave = `${clasificacion}::${titulo}`
+            const existente = mapa.get(clave)
+            if (existente) {
+                existente.cantidad += 1
+                return
+            }
+            mapa.set(clave, { clasificacion, titulo, cantidad: 1 })
+        })
+
+        const opciones = Array.from(mapa.values())
+
+        if (opciones.length <= 1) {
+            void ejecutarGeneracionOrdenes(true, idsSesion, false)
+            return
+        }
+
+        setPopupSubitemsSesion({
+            opciones,
+            seleccionadas: opciones.map((opcion) => opcion.clasificacion),
+        })
+    }
+
+    const alternarSubitemPopupSesion = (clasificacion: string, checked: boolean) => {
+        setPopupSubitemsSesion((prev) => {
+            if (!prev) return prev
+            if (checked) {
+                if (prev.seleccionadas.includes(clasificacion)) return prev
+                return { ...prev, seleccionadas: [...prev.seleccionadas, clasificacion] }
+            }
+            return {
+                ...prev,
+                seleccionadas: prev.seleccionadas.filter((id) => id !== clasificacion),
+            }
+        })
+    }
+
+    const confirmarGeneracionSubitemsSesion = () => {
+        if (!popupSubitemsSesion) return
+        const clasificacionesSeleccionadas = new Set(popupSubitemsSesion.seleccionadas)
+        if (clasificacionesSeleccionadas.size === 0) {
+            setMensajeError('Selecciona al menos un titulo de subitem para generar e imprimir')
+            return
+        }
+
+        const idsSesion = idsPendientesSesion
+        const idsFiltrados = practicas
+            .filter(
+                (practica) =>
+                    idsSesion.includes(practica.id) &&
+                    clasificacionesSeleccionadas.has(obtenerClasificacionPractica(practica))
+            )
+            .map((practica) => practica.id)
+
+        setPopupSubitemsSesion(null)
+
+        if (idsFiltrados.length === 0) {
+            setMensajeError('No hay practicas de los titulos seleccionados para generar')
+            return
+        }
+
+        void ejecutarGeneracionOrdenes(true, idsFiltrados, false)
+    }
+
+    const alternarOrdenPopupImpresionSesion = (clave: string, checked: boolean) => {
+        setPopupImpresionSesion((prev) => {
+            if (!prev) return prev
+            if (checked) {
+                if (prev.seleccionadas.includes(clave)) return prev
+                return { ...prev, seleccionadas: [...prev.seleccionadas, clave] }
+            }
+            return { ...prev, seleccionadas: prev.seleccionadas.filter((id) => id !== clave) }
+        })
+    }
+
+    const imprimirSeleccionPopupSesion = () => {
+        if (!popupImpresionSesion) return
+        const seleccion = new Set(popupImpresionSesion.seleccionadas)
+        const ordenes = popupImpresionSesion.ordenes.filter((orden) => seleccion.has(claveOrden(orden)))
+        if (ordenes.length === 0) {
+            setMensajeError('Selecciona al menos una orden para imprimir')
+            return
+        }
+        abrirImpresionOrdenes(ordenes)
+        setPopupImpresionSesion(null)
     }
 
     const todasPendientesSeleccionadas =
@@ -860,6 +1116,15 @@ export function PracticaCargaRapidaPage({
         const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
         const destinoAbrir = obtenerDestinoGrupoPracticasAutorizadas(grupo)
         const sinAutorizacion = !grupoTieneNumeroAutorizacion(grupo)
+        const codigosGrupo = Array.from(
+            new Set(
+                grupo.practicas
+                    .map((practica) => practica.codigoPractica.trim())
+                    .filter((codigo) => codigo.length > 0)
+            )
+        )
+        const codigosResumen = codigosGrupo.slice(0, 6).join(', ')
+        const codigosRestantes = Math.max(0, codigosGrupo.length - 6)
         const claveOrdenSesion =
             grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null
                 ? `${grupo.puestoNumero}-${grupo.ordenNumero}`
@@ -930,18 +1195,23 @@ export function PracticaCargaRapidaPage({
                     }))}
                     className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${hoverClase}`}
                 >
-                    <span className={`flex items-center gap-2 ${tituloClase}`}>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-                        <span className="font-semibold">
-                            {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
-                                ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
-                                : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
-                        </span>
-                        {estadoSesionEtiqueta && (
-                            <span className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-                                {estadoSesionEtiqueta}
+                    <span className="min-w-0">
+                        <span className={`flex items-center gap-2 ${tituloClase}`}>
+                            <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+                            <span className="font-semibold">
+                                {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
+                                    ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
+                                    : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
                             </span>
-                        )}
+                            {estadoSesionEtiqueta && (
+                                <span className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                                    {estadoSesionEtiqueta}
+                                </span>
+                            )}
+                        </span>
+                        <span className={`mt-0.5 block truncate text-[10px] ${contadorClase}`}>
+                            Codigos: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                        </span>
                     </span>
                     <span className={`text-[11px] ${contadorClase}`}>
                         {grupo.practicas.length} practica(s)
@@ -1135,6 +1405,16 @@ export function PracticaCargaRapidaPage({
                                         : 'Seleccionar todas las practicas pendientes'}
                                 </label>
 
+                                <label className="inline-flex items-center gap-2 text-xs text-amber-900">
+                                    <input
+                                        type="checkbox"
+                                        checked={generarImprimirPorSeparadoEditor}
+                                        onChange={(e) => setGenerarImprimirPorSeparadoEditor(e.target.checked)}
+                                        className="h-4 w-4 rounded border-amber-300 text-amber-700 focus:ring-amber-500"
+                                    />
+                                    Generar e imprimir por separado (por clasificacion)
+                                </label>
+
                                 {practicasPendientesEditorAgrupadas.length === 0 ? (
                                     <p className="text-xs text-gray-500">
                                         {modoCirugia
@@ -1221,21 +1501,21 @@ export function PracticaCargaRapidaPage({
                                         <div className="flex flex-wrap gap-2">
                                             <button
                                                 type="button"
-                                                onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesSeleccionadasEditor, false)}
+                                                onClick={() => solicitarConfirmacionOrdenUnica(false)}
                                                 disabled={generandoOrdenes}
                                                 className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                             >
                                                 {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                                                Generar orden
+                                                {generarImprimirPorSeparadoEditor ? 'Generar por separado' : 'Generar una orden'}
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => void ejecutarGeneracionOrdenes(true, idsPendientesSeleccionadasEditor, false)}
+                                                onClick={() => solicitarConfirmacionOrdenUnica(true)}
                                                 disabled={generandoOrdenes}
                                                 className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                             >
                                                 <Printer className="h-3.5 w-3.5" />
-                                                Generar orden e imprimir
+                                                {generarImprimirPorSeparadoEditor ? 'Generar e imprimir por separado' : 'Generar una orden e imprimir'}
                                             </button>
                                         </div>
                                     </>
@@ -1379,7 +1659,7 @@ export function PracticaCargaRapidaPage({
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => void ejecutarGeneracionOrdenes(true, idsPendientesSesion)}
+                                        onClick={solicitarGeneracionDesdeSesion}
                                         disabled={generandoOrdenes || idsPendientesSesion.length === 0}
                                         className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                     >
@@ -1418,6 +1698,205 @@ export function PracticaCargaRapidaPage({
                     </div>
                 </div>
             </div>
+
+            {confirmacionOrdenUnica && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+                    <div className="w-full max-w-xl rounded-xl border border-amber-200 bg-white p-4 shadow-xl">
+                        <h4 className="text-sm font-semibold text-amber-900">
+                            {confirmacionOrdenUnica.agruparEnUnaOrden
+                                ? 'Confirmar una sola orden'
+                                : 'Confirmar generacion por separado'}
+                        </h4>
+                        <p className="mt-1 text-xs text-gray-700">
+                            {confirmacionOrdenUnica.agruparEnUnaOrden
+                                ? 'Las practicas seleccionadas se generaran en una unica orden.'
+                                : 'Las practicas seleccionadas se generaran por separado segun su clasificacion.'}
+                        </p>
+
+                        <div className="mt-3 space-y-3">
+                            {confirmacionOrdenUnica.requiereElegirTitulo && (
+                                <label className="block text-xs text-amber-900">
+                                    Divergencia de titulo detectada. Selecciona el titulo final de la orden
+                                    <select
+                                        value={confirmacionOrdenUnica.titularSeleccionado}
+                                        onChange={(e) =>
+                                            setConfirmacionOrdenUnica((prev) =>
+                                                prev
+                                                    ? { ...prev, titularSeleccionado: e.target.value }
+                                                    : prev
+                                            )
+                                        }
+                                        className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1.5 text-xs text-amber-900"
+                                    >
+                                        {confirmacionOrdenUnica.titulosDisponibles.map((titulo) => (
+                                            <option key={titulo} value={titulo}>
+                                                {titulo}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                            )}
+
+                            {confirmacionOrdenUnica.requiereElegirFirmante && (
+                                <label className="block text-xs text-amber-900">
+                                    Divergencia de medico firmante detectada. Selecciona el firmante final
+                                    <ProfesionalSelect
+                                        profesionales={profesionalesConMatricula}
+                                        value={confirmacionOrdenUnica.firmanteSeleccionadoId}
+                                        onChange={(nextValue) =>
+                                            setConfirmacionOrdenUnica((prev) =>
+                                                prev
+                                                    ? { ...prev, firmanteSeleccionadoId: nextValue }
+                                                    : prev
+                                            )
+                                        }
+                                        disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
+                                        placeholderOption="-- Seleccionar firmante --"
+                                        searchPlaceholder="Buscar por nombre o matricula"
+                                        selectClassName="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
+                                        searchClassName="mt-1 w-full rounded border border-amber-200 bg-white px-2 py-1 text-[11px] text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
+                                    />
+                                </label>
+                            )}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setConfirmacionOrdenUnica(null)}
+                                className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmarGeneracionOrdenUnica}
+                                disabled={generandoOrdenes}
+                                className="inline-flex items-center rounded border border-amber-300 bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+                            >
+                                Confirmar y generar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {popupSubitemsSesion && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+                    <div className="w-full max-w-xl rounded-xl border border-blue-200 bg-white p-4 shadow-xl">
+                        <h4 className="text-sm font-semibold text-blue-900">Codigos de sesion: titulos a generar e imprimir</h4>
+                        <p className="mt-1 text-xs text-gray-700">
+                            Marca los titulos de subitems que deseas incluir en esta generacion.
+                        </p>
+
+                        <div className="mt-3 max-h-64 space-y-1.5 overflow-y-auto rounded border border-blue-100 bg-blue-50/40 p-2">
+                            {popupSubitemsSesion.opciones.map((opcion) => {
+                                const checked = popupSubitemsSesion.seleccionadas.includes(opcion.clasificacion)
+                                return (
+                                    <label
+                                        key={opcion.clasificacion}
+                                        className="flex items-center justify-between gap-2 rounded border border-blue-100 bg-white px-2 py-1 text-xs text-blue-900"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={(e) => alternarSubitemPopupSesion(opcion.clasificacion, e.target.checked)}
+                                                className="h-3.5 w-3.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <span className="font-semibold">{opcion.titulo}</span>
+                                            <span className="text-[11px] text-blue-700">({opcion.clasificacion})</span>
+                                        </span>
+                                        <span className="text-[11px] font-medium text-blue-800">{opcion.cantidad} codigo(s)</span>
+                                    </label>
+                                )
+                            })}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setPopupSubitemsSesion(null)}
+                                className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmarGeneracionSubitemsSesion}
+                                disabled={generandoOrdenes}
+                                className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                <Printer className="h-3.5 w-3.5" />
+                                Generar e imprimir seleccionados
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {popupImpresionSesion && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+                    <div className="w-full max-w-xl rounded-xl border border-blue-200 bg-white p-4 shadow-xl">
+                        <h4 className="text-sm font-semibold text-blue-900">Impresion de ordenes generadas</h4>
+                        <p className="mt-1 text-xs text-gray-700">
+                            Se generaron varias ordenes por tipo de item. Puedes imprimir todas o seleccionar cuales.
+                        </p>
+
+                        <div className="mt-3 max-h-64 space-y-1.5 overflow-y-auto rounded border border-blue-100 bg-blue-50/40 p-2">
+                            {popupImpresionSesion.ordenes.map((orden) => {
+                                const clave = claveOrden(orden)
+                                const checked = popupImpresionSesion.seleccionadas.includes(clave)
+                                return (
+                                    <label
+                                        key={clave}
+                                        className="flex items-center gap-2 rounded border border-blue-100 bg-white px-2 py-1 text-xs text-blue-900"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={(e) => alternarOrdenPopupImpresionSesion(clave, e.target.checked)}
+                                            className="h-3.5 w-3.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span className="font-medium">
+                                            Orden {formatearNumeroOrden(orden.puestoNumero, orden.numero)}
+                                        </span>
+                                    </label>
+                                )
+                            })}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setPopupImpresionSesion(null)}
+                                className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                            >
+                                No imprimir
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    abrirImpresionOrdenes(popupImpresionSesion.ordenes)
+                                    setPopupImpresionSesion(null)
+                                }}
+                                className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                            >
+                                <Printer className="h-3.5 w-3.5" />
+                                Imprimir todas
+                            </button>
+                            <button
+                                type="button"
+                                onClick={imprimirSeleccionPopupSesion}
+                                className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                            >
+                                <Printer className="h-3.5 w-3.5" />
+                                Imprimir seleccionadas
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </>
     )

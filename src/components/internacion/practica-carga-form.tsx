@@ -152,7 +152,7 @@ export function PracticaCargaForm({
     const [fecha, setFecha] = useState(() => (soloFechaPractica ? fechaAInputLocal() : fechaHoraAInputLocal()))
     const [numeroAutorizacion, setNumeroAutorizacion] = useState('')
     const [cantidadGeneralPractica, setCantidadGeneralPractica] = useState('1')
-    const [crearPracticaTodaJunta, setCrearPracticaTodaJunta] = useState(false)
+    const [crearPracticaTodaJunta, setCrearPracticaTodaJunta] = useState(true)
     const [matriculaEspecialista, setMatriculaEspecialista] = useState(
         matriculaTratanteDefault ? String(matriculaTratanteDefault) : ''
     )
@@ -321,14 +321,6 @@ export function PracticaCargaForm({
                 const json = await res.json()
                 const items: NomencladorItem[] = Array.isArray(json.data) ? json.data : []
                 setResultados(items)
-
-                if (modoCargaRapida && esCodigoPracticaCompleto(q)) {
-                    const codigoBuscado = q.trim().toUpperCase()
-                    const exacta = items.find((item) => item.codigo.trim().toUpperCase() === codigoBuscado)
-                    if (exacta) {
-                        seleccionarPractica(exacta, true)
-                    }
-                }
             } catch {
                 setResultados([])
             } finally {
@@ -375,7 +367,7 @@ export function PracticaCargaForm({
         setFecha(soloFechaPractica ? fechaAInputLocal() : fechaHoraAInputLocal())
         setNumeroAutorizacion('')
         setCantidadGeneralPractica('1')
-        setCrearPracticaTodaJunta(false)
+        setCrearPracticaTodaJunta(true)
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
         setMatriculaAnestesista(String(MATRICULA_ANESTESISTA_DEFAULT))
         setMatriculaGastos(String(MATRICULA_GASTOS_INTERNACION_DEFAULT))
@@ -632,8 +624,49 @@ export function PracticaCargaForm({
                         value={busqueda}
                         onChange={(e) => buscarPractica(e.target.value)}
                         onKeyDown={(e) => {
-                            if (e.key !== 'Enter' || !modoCargaRapida || guardando) return
+                            if (e.key !== 'Enter' || !modoCargaRapida || guardando || buscando) return
                             e.preventDefault()
+
+                            if (!practicaSeleccionada) {
+                                const codigoBuscado = busqueda.trim().toUpperCase()
+                                const exacta = resultados.find(
+                                    (item) => item.codigo.trim().toUpperCase() === codigoBuscado
+                                )
+
+                                if (exacta) {
+                                    seleccionarPractica(exacta, true)
+                                    return
+                                }
+
+                                if (resultados.length > 0) {
+                                    seleccionarPractica(resultados[0], true)
+                                    return
+                                }
+
+                                if (esCodigoPracticaCompleto(codigoBuscado)) {
+                                    void (async () => {
+                                        setError(null)
+                                        setBuscando(true)
+                                        try {
+                                            const matchExacto = await resolverPracticaExactaPorCodigo(codigoBuscado)
+                                            if (!matchExacto) {
+                                                setError('Selecciona una practica valida del listado de nomenclador antes de guardar')
+                                                return
+                                            }
+                                            seleccionarPractica(matchExacto, true)
+                                        } catch {
+                                            setError('No se pudo validar la practica en nomenclador')
+                                        } finally {
+                                            setBuscando(false)
+                                        }
+                                    })()
+                                    return
+                                }
+
+                                setError('Presiona Enter sobre una practica del listado para seleccionarla')
+                                return
+                            }
+
                             void handleGuardar()
                         }}
                         autoFocus={autoFocusBusqueda}
@@ -757,14 +790,14 @@ export function PracticaCargaForm({
             </div>
 
             {practicaSeleccionada && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                     {practicaSeleccionada.valorEspecialista != null && (
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">Matricula especialista (HE)</label>
+                        <div className="space-y-1">
+                            <label className="block text-[11px] text-gray-500">Matricula especialista (HE)</label>
                             <select
                                 value={matriculaEspecialista}
                                 onChange={(e) => setMatriculaEspecialista(e.target.value)}
-                                className="his-input text-sm w-full"
+                                className="his-input h-8 w-full text-xs"
                             >
                                 <option value="">Seleccionar matricula...</option>
                                 {profesionalesConMatricula.map((profesional) => (
@@ -779,17 +812,17 @@ export function PracticaCargaForm({
                                 value={matriculaEspecialista}
                                 onChange={(e) => setMatriculaEspecialista(e.target.value)}
                                 placeholder="Ej: 12345"
-                                className="his-input text-sm w-full mt-2"
+                                className="his-input h-8 w-full text-xs"
                             />
                         </div>
                     )}
                     {practicaSeleccionada.valorAnestesista != null && (
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">Matricula anestesista (HA)</label>
+                        <div className="space-y-1">
+                            <label className="block text-[11px] text-gray-500">Matricula anestesista (HA)</label>
                             <select
                                 value={matriculaAnestesista}
                                 onChange={(e) => setMatriculaAnestesista(e.target.value)}
-                                className="his-input text-sm w-full"
+                                className="his-input h-8 w-full text-xs"
                             >
                                 <option value="">Seleccionar matricula...</option>
                                 {profesionalesConMatricula.map((profesional) => (
@@ -804,17 +837,17 @@ export function PracticaCargaForm({
                                 value={matriculaAnestesista}
                                 onChange={(e) => setMatriculaAnestesista(e.target.value)}
                                 placeholder="Ej: 12345"
-                                className="his-input text-sm w-full mt-2"
+                                className="his-input h-8 w-full text-xs"
                             />
                         </div>
                     )}
                     {practicaSeleccionada.valorGastos != null && (
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">Matricula derechos/gastos (GA)</label>
+                        <div className="space-y-1">
+                            <label className="block text-[11px] text-gray-500">Matricula derechos/gastos (GA)</label>
                             <select
                                 value={matriculaGastos}
                                 onChange={(e) => setMatriculaGastos(e.target.value)}
-                                className="his-input text-sm w-full"
+                                className="his-input h-8 w-full text-xs"
                             >
                                 <option value="">Seleccionar matricula...</option>
                                 {profesionalesConMatricula.map((profesional) => (
@@ -829,7 +862,7 @@ export function PracticaCargaForm({
                                 value={matriculaGastos}
                                 onChange={(e) => setMatriculaGastos(e.target.value)}
                                 placeholder="Ej: 9995"
-                                className="his-input text-sm w-full mt-2"
+                                className="his-input h-8 w-full text-xs"
                             />
                         </div>
                     )}

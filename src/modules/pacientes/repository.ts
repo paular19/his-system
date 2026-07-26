@@ -15,6 +15,18 @@ const incluirRelaciones = {
   obraSocial: true,
 } as const
 
+type PacienteCreateData = Prisma.PacienteUncheckedCreateInput
+
+export type PacienteDuplicadoInfo = {
+  id: number
+  historiaClinica: number | null
+}
+
+export type PacienteCreadoMinimo = {
+  id: number
+  nombreCompleto: string
+}
+
 // ============================================
 // REPOSITORIO PACIENTES
 // Única capa de acceso a datos. Sin SQL directo.
@@ -32,50 +44,74 @@ async function obraSocialEsIPSS(obraSocialId: number | null | undefined): Promis
   return tokens.includes('IPSS') || tokens.includes('IPS')
 }
 
-export async function crearPaciente(
+async function construirDatosCreacionPaciente(
   data: CrearPacienteInput,
   usuarioAlta: string
-): Promise<PacienteConRelaciones> {
+): Promise<PacienteCreateData> {
   const nombreCompleto = generarNombreCompleto(data.apellido, data.nombre)
   const ahora = new Date()
   const esIPSS = await obraSocialEsIPSS(data.obraSocialId ?? null)
   const obraSocialCoseguroId = esIPSS ? (data.obraSocialCoseguroId ?? null) : null
 
+  return {
+    apellido: data.apellido.toUpperCase(),
+    nombre: data.nombre,
+    nombreCompleto,
+    tipoDocumento: data.tipoDocumento ?? null,
+    numeroDocumento: data.numeroDocumento ?? null,
+    cuil: data.cuil ? data.cuil : null,
+    fechaNacimiento: data.fechaNacimiento ?? null,
+    sexo: data.sexo ?? null,
+    estadoCivil: data.estadoCivil ?? null,
+    paisId: data.paisId ?? null,
+    profesionId: data.profesionId ?? null,
+    domicilio: data.domicilio ?? null,
+    provinciaId: data.provinciaId ?? null,
+    localidadId: data.localidadId ?? null,
+    barrioId: data.barrioId ?? null,
+    telefonoFijo: data.telefonoFijo ?? null,
+    telefonoLaboral: data.telefonoLaboral ?? null,
+    celular1: data.celular1 ?? null,
+    celular2: data.celular2 ?? null,
+    email: data.email ?? null,
+    obraSocialId: data.obraSocialId ?? null,
+    planId: data.planId ?? null,
+    numeroAfiliado: data.numeroAfiliado ?? null,
+    obraSocialCoseguroId,
+    nombreTutor: data.nombreTutor ?? null,
+    telefonoTutor: data.telefonoTutor ?? null,
+    empleoTutor: data.empleoTutor ?? null,
+    observaciones: data.observaciones ?? null,
+    usuarioAlta,
+    fechaAlta: ahora,
+    fechaModificacion: ahora,
+  }
+}
+
+export async function crearPaciente(
+  data: CrearPacienteInput,
+  usuarioAlta: string
+): Promise<PacienteConRelaciones> {
+  const dataCreate = await construirDatosCreacionPaciente(data, usuarioAlta)
+
   return prisma.paciente.create({
-    data: {
-      apellido: data.apellido.toUpperCase(),
-      nombre: data.nombre,
-      nombreCompleto,
-      tipoDocumento: data.tipoDocumento ?? null,
-      numeroDocumento: data.numeroDocumento ?? null,
-      cuil: data.cuil ? data.cuil : null,
-      fechaNacimiento: data.fechaNacimiento ?? null,
-      sexo: data.sexo ?? null,
-      estadoCivil: data.estadoCivil ?? null,
-      paisId: data.paisId ?? null,
-      profesionId: data.profesionId ?? null,
-      domicilio: data.domicilio ?? null,
-      provinciaId: data.provinciaId ?? null,
-      localidadId: data.localidadId ?? null,
-      barrioId: data.barrioId ?? null,
-      telefonoFijo: data.telefonoFijo ?? null,
-      telefonoLaboral: data.telefonoLaboral ?? null,
-      celular1: data.celular1 ?? null,
-      celular2: data.celular2 ?? null,
-      email: data.email ?? null,
-      obraSocialId: data.obraSocialId ?? null,
-      planId: data.planId ?? null,
-      numeroAfiliado: data.numeroAfiliado ?? null,
-      obraSocialCoseguroId,
-      nombreTutor: data.nombreTutor ?? null,
-      telefonoTutor: data.telefonoTutor ?? null,
-      empleoTutor: data.empleoTutor ?? null,
-      observaciones: data.observaciones ?? null,
-      usuarioAlta,
-      fechaAlta: ahora,
-      fechaModificacion: ahora,
-    },
+    data: dataCreate,
     include: incluirRelaciones,
+  })
+}
+
+export async function crearPacienteMinimo(
+  data: CrearPacienteInput,
+  usuarioAlta: string
+): Promise<PacienteCreadoMinimo> {
+  const dataCreate = await construirDatosCreacionPaciente(data, usuarioAlta)
+
+  return prisma.paciente.create({
+    data: dataCreate,
+    select: {
+      id: true,
+      nombreCompleto: true,
+    },
   })
 }
 
@@ -103,6 +139,30 @@ export async function obtenerPacientePorCUIL(
   return prisma.paciente.findFirst({
     where: { cuil: new Prisma.Decimal(cuil) },
     include: incluirRelaciones,
+  })
+}
+
+export async function obtenerPacienteDuplicadoPorDNI(
+  numeroDocumento: number
+): Promise<PacienteDuplicadoInfo | null> {
+  return prisma.paciente.findUnique({
+    where: { numeroDocumento },
+    select: {
+      id: true,
+      historiaClinica: true,
+    },
+  })
+}
+
+export async function obtenerPacienteDuplicadoPorCUIL(
+  cuil: string
+): Promise<PacienteDuplicadoInfo | null> {
+  return prisma.paciente.findFirst({
+    where: { cuil: new Prisma.Decimal(cuil) },
+    select: {
+      id: true,
+      historiaClinica: true,
+    },
   })
 }
 

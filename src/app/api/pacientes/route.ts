@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const body: unknown = await request.json()
     const data = CrearPacienteSchema.parse(body)
 
-    const paciente = await pacientesService.crearPaciente(
+    const paciente = await pacientesService.crearPacienteRapido(
       data,
       usuario.codigoUsuario,
       extraerIP(request)

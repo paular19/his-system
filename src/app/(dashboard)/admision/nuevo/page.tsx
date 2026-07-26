@@ -9,7 +9,7 @@ import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import type { PacienteResumen } from '@/modules/admision/types'
 import {
-  getCatalogoCoberturaAtencion,
+  getCatalogoCoberturaAtencionBasico,
   getProfesionalesActivosCatalogo,
   getSubtiposAdmisionCatalogo,
 } from '@/lib/catalogos/atencion-cache'
@@ -33,10 +33,10 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
   ] = await Promise.all([
     getProfesionalesActivosCatalogo(),
     getSubtiposAdmisionCatalogo(),
-    getCatalogoCoberturaAtencion(),
+    getCatalogoCoberturaAtencionBasico(),
   ])
 
-  const { obraSociales, planes, coseguros } = catalogoCobertura
+  const { obraSociales, coseguros } = catalogoCobertura
 
   // Pre-cargar paciente si se pasó pacienteId por query param
   const params = await searchParams
@@ -107,7 +107,6 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
         <AdmisionForm
           profesionales={profesionales}
           obraSociales={obraSociales}
-          planes={planes}
           coseguros={coseguros}
           subtipos={subtipos}
           pacienteInicial={pacienteInicial}

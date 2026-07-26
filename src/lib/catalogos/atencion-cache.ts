@@ -155,6 +155,18 @@ export async function getCatalogoCoberturaAtencion(): Promise<{
     return { obraSociales, planes, coseguros }
 }
 
+export async function getCatalogoCoberturaAtencionBasico(): Promise<{
+    obraSociales: CatalogoObraSocial[]
+    coseguros: CatalogoCoseguro[]
+}> {
+    const [obraSociales, coseguros] = await Promise.all([
+        getObrasSocialesActivasCached(),
+        getCosegurosIPSSCached(),
+    ])
+
+    return { obraSociales, coseguros }
+}
+
 export async function getSubtiposAdmisionCatalogo(): Promise<CatalogoSubtipoAdmision[]> {
     return getSubtiposAdmisionCached()
 }

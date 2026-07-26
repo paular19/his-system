@@ -1015,6 +1015,7 @@ export function FichaIngresoClient({
                     {editingCard === 'practicas' && puedeModificar ? (
                         <PracticaIngresoForm
                             ingreso={ingreso}
+                            practicasActuales={practicasIngreso}
                             onSuccess={() => {
                                 setEditingCard(null)
                                 void (async () => {

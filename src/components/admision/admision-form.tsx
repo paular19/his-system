@@ -43,12 +43,6 @@ interface ObraSocialOption {
   requiereCoseguro: boolean
 }
 
-interface PlanOption {
-  id: number
-  nombre: string
-  obraSocialId: number | null
-}
-
 interface CoseguroOption {
   id: number
   nombre: string
@@ -62,7 +56,6 @@ interface SubtipoAdmisionOption {
 interface AdmisionFormProps {
   profesionales: ProfesionalOption[]
   obraSociales: ObraSocialOption[]
-  planes: PlanOption[]
   coseguros: CoseguroOption[]
   subtipos: SubtipoAdmisionOption[]
   pacienteInicial?: PacienteResumen | null
@@ -98,7 +91,6 @@ function ahoraLocalDateTimeInput(): string {
 export function AdmisionForm({
   profesionales,
   obraSociales,
-  planes,
   coseguros,
   subtipos,
   pacienteInicial,
@@ -160,6 +152,7 @@ export function AdmisionForm({
   const [nuevoDesNombre, setNuevoDesNombre] = useState('')
   const [opcionesInsumosUti, setOpcionesInsumosUti] = useState<Array<{ id: number; nombre: string }>>([])
   const [cargandoInsumosUti, setCargandoInsumosUti] = useState(false)
+  const insumosUtiCargadosRef = useRef(false)
 
   const subtiposConPracticasMeds = ['GUA', 'DER', 'TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'IND', 'PAM']
   const subtiposTurnoPractica = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM']
@@ -196,6 +189,10 @@ export function AdmisionForm({
   }
 
   useEffect(() => {
+    if (!(mostrarMedicacion || mostrarDescartables) || insumosUtiCargadosRef.current) {
+      return
+    }
+
     let activo = true
 
     const cargarInsumos = async () => {
@@ -205,6 +202,7 @@ export function AdmisionForm({
         const json = await res.json()
         if (!activo) return
         setOpcionesInsumosUti(Array.isArray(json.data) ? json.data : [])
+        insumosUtiCargadosRef.current = true
       } catch {
         if (activo) setOpcionesInsumosUti([])
       } finally {
@@ -216,7 +214,7 @@ export function AdmisionForm({
     return () => {
       activo = false
     }
-  }, [])
+  }, [mostrarMedicacion, mostrarDescartables])
 
   useEffect(() => {
     if (!mostrarPanelPracticasMeds || practicas.length === 0) return
@@ -269,9 +267,6 @@ export function AdmisionForm({
     setDescartables((prev) => prev.filter((_, i) => i !== idx))
   }
 
-  const planesDisponibles = obraSocialId
-    ? planes.filter((plan) => String(plan.obraSocialId ?? '') === obraSocialId)
-    : planes
   const obraSocialSeleccionada = obraSociales.find((os) => String(os.id) === obraSocialId)
   const nombreObraSocial = obraSocialSeleccionada?.nombre ?? ''
   const esIPSS = esNombreIPSS(nombreObraSocial)
@@ -452,14 +447,14 @@ export function AdmisionForm({
       }
 
       if (practicasExpandida.length > 0) {
-        const autoOrdenResult = await generarOrdenesPendientesAdmision(result.id)
-        if (!autoOrdenResult.ok) {
-          console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
-        }
+        void generarOrdenesPendientesAdmision(result.id).then((autoOrdenResult) => {
+          if (!autoOrdenResult.ok) {
+            console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
+          }
+        })
       }
 
       router.push(`/dashboard/admision/${result.id}`)
-      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })

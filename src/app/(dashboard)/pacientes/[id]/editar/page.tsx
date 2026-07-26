@@ -4,8 +4,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { obtenerPaciente } from '@/modules/pacientes/service'
 import { PacienteForm } from '@/components/pacientes/paciente-form'
-import { prisma } from '@/lib/db'
-import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
+import { getCatalogoPacienteForm } from '@/lib/catalogos/pacientes-cache'
 import { fechaCalendarioAInput } from '@/lib/utils'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
@@ -38,36 +37,7 @@ export default async function EditarPacientePage({ params }: PageProps) {
     notFound()
   }
 
-  const [obraSocialesRows, planesRows] = await Promise.all([
-    prisma.obraSocial.findMany({
-      select: { id: true, nombre: true, requiereCoseguro: true, estado: true },
-      orderBy: { nombre: 'asc' },
-    }),
-    prisma.planObraSocial.findMany({
-      where: { estado: 'A' },
-      select: { id: true, descripcion: true, obraSocialId: true },
-      orderBy: { descripcion: 'asc' },
-    }),
-  ])
-
-  const obraSociales = filtrarObrasSocialesPrincipales(obraSocialesRows)
-    .filter((os) => (os.estado ?? '').trim().toUpperCase() === 'A')
-    .map((os) => {
-      const req = (os.requiereCoseguro ?? '').trim().toUpperCase()
-      return {
-        id: os.id,
-        nombre: os.nombre.trim(),
-        requiereCoseguro: ['S', 'SI', '1', 'TRUE', 'T'].includes(req),
-      }
-    })
-
-  const planes = planesRows.map((plan) => ({
-    id: plan.id,
-    descripcion: plan.descripcion,
-    obraSocialId: plan.obraSocialId,
-  }))
-
-  const coseguros = await asegurarCosegurosIPSS()
+  const { obraSociales, coseguros } = await getCatalogoPacienteForm()
 
   // Convertir tipos Prisma a valores compatibles con inputs HTML
   const valoresIniciales = {
@@ -124,7 +94,6 @@ export default async function EditarPacientePage({ params }: PageProps) {
           pacienteId={pacienteId}
           valoresIniciales={valoresIniciales}
           obraSociales={obraSociales}
-          planes={planes}
           coseguros={coseguros}
         />
       </div>

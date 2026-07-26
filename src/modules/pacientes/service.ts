@@ -9,14 +9,14 @@ import type { ResultadoPaginado } from '@/types'
 // Lógica de negocio + auditoría
 // ============================================
 
-export async function crearPaciente(
-  data: CrearPacienteInput,
-  usuario: string,
-  ip?: string
-): Promise<PacienteConRelaciones> {
+type PacienteCreadoRapido = {
+  id: number
+}
+
+async function validarDuplicadosParaCreacion(data: CrearPacienteInput): Promise<void> {
   // Verificar duplicado por DNI si se provee
   if (data.numeroDocumento) {
-    const existente = await repo.obtenerPacientePorDNI(data.numeroDocumento)
+    const existente = await repo.obtenerPacienteDuplicadoPorDNI(data.numeroDocumento)
     if (existente) {
       throw new Error(
         `Ya existe un paciente con DNI ${data.numeroDocumento} (HC: ${existente.historiaClinica ?? 'sin HC'})`
@@ -26,13 +26,21 @@ export async function crearPaciente(
 
   // Verificar duplicado por CUIL si se provee
   if (data.cuil) {
-    const existente = await repo.obtenerPacientePorCUIL(data.cuil)
+    const existente = await repo.obtenerPacienteDuplicadoPorCUIL(data.cuil)
     if (existente) {
       throw new Error(
         `Ya existe un paciente con CUIL ${data.cuil} (HC: ${existente.historiaClinica ?? 'sin HC'})`
       )
     }
   }
+}
+
+export async function crearPaciente(
+  data: CrearPacienteInput,
+  usuario: string,
+  ip?: string
+): Promise<PacienteConRelaciones> {
+  await validarDuplicadosParaCreacion(data)
 
   const paciente = await repo.crearPaciente(data, usuario)
 
@@ -46,6 +54,27 @@ export async function crearPaciente(
   })
 
   return paciente
+}
+
+export async function crearPacienteRapido(
+  data: CrearPacienteInput,
+  usuario: string,
+  ip?: string
+): Promise<PacienteCreadoRapido> {
+  await validarDuplicadosParaCreacion(data)
+
+  const paciente = await repo.crearPacienteMinimo(data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'CREAR',
+    entidad: 'Paciente',
+    registroId: paciente.id,
+    detalle: `Paciente creado: ${paciente.nombreCompleto}`,
+    direccionIp: ip,
+  })
+
+  return { id: paciente.id }
 }
 
 export async function obtenerPaciente(
@@ -83,7 +112,7 @@ export async function actualizarPaciente(
 
   // Si se cambia el DNI, verificar que no esté en uso
   if (data.numeroDocumento && data.numeroDocumento !== existe.numeroDocumento) {
-    const conMismoDni = await repo.obtenerPacientePorDNI(data.numeroDocumento)
+    const conMismoDni = await repo.obtenerPacienteDuplicadoPorDNI(data.numeroDocumento)
     if (conMismoDni && conMismoDni.id !== id) {
       throw new Error(`Ya existe un paciente con DNI ${data.numeroDocumento}`)
     }
@@ -92,7 +121,7 @@ export async function actualizarPaciente(
   // Si se cambia el CUIL, verificar que no esté en uso
   const cuilActual = existe.cuil?.toString() ?? null
   if (data.cuil && data.cuil !== cuilActual) {
-    const conMismoCuil = await repo.obtenerPacientePorCUIL(data.cuil)
+    const conMismoCuil = await repo.obtenerPacienteDuplicadoPorCUIL(data.cuil)
     if (conMismoCuil && conMismoCuil.id !== id) {
       throw new Error(`Ya existe un paciente con CUIL ${data.cuil}`)
     }

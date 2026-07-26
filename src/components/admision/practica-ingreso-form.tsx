@@ -14,16 +14,42 @@ import {
     PracticasAdmisionCard,
     type PracticaAdmisionItem,
 } from './practicas-admision-card'
+import { generarOrdenesPendientesAdmision } from './ordenes-auto'
+import {
+    abrirVentanaImpresionPendiente,
+    cerrarVentanaImpresion,
+    navegarVentanaImpresion,
+} from '@/lib/utils/print-window'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 
 interface PracticaIngresoFormProps {
     ingreso: IngresoDetalle
+    practicasActuales: IngresoDetalle['practicas']
     onSuccess: () => void
     onCancel: () => void
 }
 
-export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIngresoFormProps) {
+type PracticaAdmisionApi = {
+    id: number
+    estado?: string | null
+    ordenPractica?: Array<unknown>
+}
+
+function estaPendienteDeOrden(practica: PracticaAdmisionApi): boolean {
+    const estado = (practica.estado ?? 'A').trim().toUpperCase()
+    if (estado === 'X') return false
+    return (practica.ordenPractica?.length ?? 0) === 0
+}
+
+async function obtenerPracticasIngreso(ingresoId: number): Promise<PracticaAdmisionApi[]> {
+    const res = await fetch(`/api/admision/${ingresoId}/practicas`, { cache: 'no-store' })
+    const json = await res.json().catch(() => null)
+    const practicas = Array.isArray(json?.data) ? json.data : []
+    return practicas as PracticaAdmisionApi[]
+}
+
+export function PracticaIngresoForm({ ingreso, practicasActuales, onSuccess, onCancel }: PracticaIngresoFormProps) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const [practicas, setPracticas] = useState<PracticaAdmisionItem[]>([])
@@ -59,8 +85,11 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
         }
 
         setError(null)
+        const ventanaImpresion = abrirVentanaImpresionPendiente()
         startTransition(async () => {
             try {
+                const idsPrevios = new Set(practicasActuales.map((p) => p.id))
+
                 const practicasExpandida = practicas.flatMap((p) => {
                     const subitems = obtenerSubitemsSeleccionados(
                         {
@@ -115,9 +144,41 @@ export function PracticaIngresoForm({ ingreso, onSuccess, onCancel }: PracticaIn
                 await updateIngresoAction(ingreso.id, {
                     practicasAgregar: practicasExpandida,
                 })
+
+                const practicasActualizadas = await obtenerPracticasIngreso(ingreso.id)
+                const idsNuevasPendientes = practicasActualizadas
+                    .filter((p) => !idsPrevios.has(p.id) && estaPendienteDeOrden(p))
+                    .map((p) => p.id)
+
+                if (idsNuevasPendientes.length > 0) {
+                    const ordenesResult = await generarOrdenesPendientesAdmision(ingreso.id, {
+                        idsPendientesConfirmados: idsNuevasPendientes,
+                    })
+
+                    if (!ordenesResult.ok) {
+                        throw new Error(ordenesResult.error)
+                    }
+
+                    if (ordenesResult.ordenes.length > 0) {
+                        const ordenesParam = ordenesResult.ordenes
+                            .map((o) => `${o.puestoNumero}-${o.numero}`)
+                            .join(',')
+
+                        navegarVentanaImpresion(
+                            ventanaImpresion,
+                            `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+                        )
+                    } else {
+                        cerrarVentanaImpresion(ventanaImpresion)
+                    }
+                } else {
+                    cerrarVentanaImpresion(ventanaImpresion)
+                }
+
                 setPracticas([])
                 onSuccess()
             } catch (err) {
+                cerrarVentanaImpresion(ventanaImpresion)
                 setError(err instanceof Error ? err.message : 'Error al guardar')
             }
         })

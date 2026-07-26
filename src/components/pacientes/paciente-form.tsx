@@ -36,7 +36,6 @@ interface PacienteFormProps {
   pacienteId?: number
   valoresIniciales?: PacienteFormDefaults
   obraSociales: ObraSocialOption[]
-  planes: PlanOption[]
   coseguros: CoseguroOption[]
 }
 
@@ -44,12 +43,6 @@ interface ObraSocialOption {
   id: number
   nombre: string
   requiereCoseguro: boolean
-}
-
-interface PlanOption {
-  id: number
-  descripcion: string
-  obraSocialId: number
 }
 
 interface CoseguroOption {
@@ -61,7 +54,6 @@ export function PacienteForm({
   pacienteId,
   valoresIniciales,
   obraSociales,
-  planes,
   coseguros,
 }: PacienteFormProps) {
   const esEdicion = Boolean(pacienteId)
@@ -85,9 +77,6 @@ export function PacienteForm({
   const obraSocialIdRaw = watch('obraSocialId') as number | string | undefined
   const obraSocialIdSeleccionada = obraSocialIdRaw ? Number(obraSocialIdRaw) : undefined
   const obraSocialSeleccionada = obraSociales.find((os) => os.id === obraSocialIdSeleccionada)
-  const planesDisponibles = obraSocialIdSeleccionada
-    ? planes.filter((plan) => plan.obraSocialId === obraSocialIdSeleccionada)
-    : []
 
   function normalizarNomOS(value: string): string {
     return value
@@ -105,9 +94,6 @@ export function PacienteForm({
   const cosegurosDisponibles = esIPSS ? coseguros : []
 
   const obraSocialRegister = register('obraSocialId', {
-    setValueAs: (value) => (value === '' ? undefined : Number(value)),
-  })
-  const planRegister = register('planId', {
     setValueAs: (value) => (value === '' ? undefined : Number(value)),
   })
   const obraSocialCoseguroRegister = register('obraSocialCoseguroId', {
@@ -148,7 +134,6 @@ export function PacienteForm({
 
       setExito(true)
       router.push(`/dashboard/pacientes/${json.data.id}`)
-      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado')
     } finally {

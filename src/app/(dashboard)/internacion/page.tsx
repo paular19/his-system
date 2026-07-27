@@ -92,6 +92,10 @@ export default async function InternacionPage({ searchParams }: PageProps) {
 
   const puedeCrear = tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
   const hayFiltros = Boolean(q || obraSocialIdFiltro)
+  const mostrarSoloOcupadas = Boolean(obraSocialIdFiltro)
+  const sectoresMapa = mostrarSoloOcupadas
+    ? mapa.sectores.filter((sector) => sector.camas.some((cama) => cama.estado === 'OCUPADA'))
+    : mapa.sectores
 
   return (
     <>
@@ -139,9 +143,15 @@ export default async function InternacionPage({ searchParams }: PageProps) {
 
         {/* Mapa visual por sector */}
         <div className="space-y-4 print:hidden">
-          {mapa.sectores.map((sector) => (
-            <SeccionSector key={sector.sector} sector={sector} />
-          ))}
+          {sectoresMapa.length === 0 ? (
+            <div className="his-card p-6 text-center text-sm text-gray-500">
+              No hay camas ocupadas para la obra social seleccionada.
+            </div>
+          ) : (
+            sectoresMapa.map((sector) => (
+              <SeccionSector key={sector.sector} sector={sector} soloOcupadas={mostrarSoloOcupadas} />
+            ))
+          )}
         </div>
 
         {/* Lista de internaciones activas */}

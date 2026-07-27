@@ -10,6 +10,7 @@ import { ChevronRight, Pencil, ClipboardList, BedDouble } from 'lucide-react'
 import type { Metadata } from 'next'
 import { PacienteHospitalizacionPrint } from '@/components/pacientes/paciente-hospitalizacion-print'
 import { AltaInternacionButton } from '@/components/internacion/alta-internacion-button'
+import { ConfirmarCamaReservadaButton } from '@/components/internacion/confirmar-cama-reservada-button'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -179,7 +180,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
   const camasRows = camaIds.length > 0
     ? await prisma.cama.findMany({
       where: { id: { in: camaIds } },
-      select: { id: true, identificador: true, sector: true, habitacion: true },
+      select: { id: true, identificador: true, sector: true, habitacion: true, estado: true },
     })
     : []
 
@@ -254,6 +255,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
       identificador: row.identificador,
       sector: row.sector,
       habitacion: row.habitacion,
+      estado: row.estado,
     }])
   )
 
@@ -403,6 +405,13 @@ export default async function FichaPacientePage({ params }: PageProps) {
                 >
                   Ver ficha
                 </Link>
+                {internacionActiva.cama?.estado === 'RESERVADA' && (
+                  <ConfirmarCamaReservadaButton
+                    camaId={internacionActiva.camaId as number}
+                    label="Confirmar cama reservada"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+                  />
+                )}
                 <AltaInternacionButton
                   ingresoId={internacionActiva.id}
                   label="Marcar alta"

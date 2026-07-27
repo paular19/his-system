@@ -8,14 +8,23 @@ import type { DisponibilidadSector, CamaConOcupante } from '@/modules/internacio
 
 interface SeccionSectorProps {
   sector: DisponibilidadSector
+  soloOcupadas?: boolean
 }
 
-export function SeccionSector({ sector }: SeccionSectorProps) {
+export function SeccionSector({ sector, soloOcupadas = false }: SeccionSectorProps) {
   const [expandido, setExpandido] = useState(true)
   const [camaEditando, setCamaEditando] = useState<CamaConOcupante | null>(null)
 
+  const camasVisibles = soloOcupadas
+    ? sector.camas.filter((cama) => cama.estado === 'OCUPADA')
+    : sector.camas
+
+  const totalVisible = soloOcupadas ? camasVisibles.length : sector.total
+  const ocupadasVisibles = soloOcupadas ? camasVisibles.length : sector.ocupadas
+  const disponiblesVisibles = soloOcupadas ? 0 : sector.disponibles
+
   const porcentajeOcupacion =
-    sector.total > 0 ? Math.round((sector.ocupadas / sector.total) * 100) : 0
+    totalVisible > 0 ? Math.round((ocupadasVisibles / totalVisible) * 100) : 0
 
   return (
     <div className="his-card overflow-hidden">
@@ -29,13 +38,15 @@ export function SeccionSector({ sector }: SeccionSectorProps) {
           <div className="text-left">
             <h3 className="font-semibold text-gray-900">{sector.label}</h3>
             <p className="text-xs text-gray-500">
-              {sector.disponibles} disponibles · {sector.ocupadas} ocupadas · {sector.total} total
+              {soloOcupadas
+                ? `${ocupadasVisibles} ocupadas`
+                : `${disponiblesVisibles} disponibles · ${ocupadasVisibles} ocupadas · ${totalVisible} total`}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           {/* Barra de ocupación */}
-          <div className="hidden sm:flex items-center gap-2">
+          <div className={`hidden sm:flex items-center gap-2 ${soloOcupadas ? 'opacity-60' : ''}`}>
             <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full bg-blue-500 transition-all"
@@ -55,18 +66,20 @@ export function SeccionSector({ sector }: SeccionSectorProps) {
       {/* Grid de camas */}
       {expandido && (
         <div className="px-4 pb-3 border-t border-gray-100">
-          {sector.camas.length === 0 ? (
+          {camasVisibles.length === 0 ? (
             <p className="text-sm text-gray-400 py-4 text-center">
-              Sin camas registradas en este sector
+              {soloOcupadas
+                ? 'Sin camas ocupadas para la obra social seleccionada'
+                : 'Sin camas registradas en este sector'}
             </p>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 pt-3">
-              {sector.camas.map((cama) => (
+              {camasVisibles.map((cama) => (
                 <div
                   key={cama.id}
                   onContextMenu={(e) => {
                     // Click derecho para cambiar estado (no en camas ocupadas)
-                    if (cama.estado !== 'OCUPADA') {
+                    if (!soloOcupadas && cama.estado !== 'OCUPADA') {
                       e.preventDefault()
                       setCamaEditando(cama)
                     }
@@ -80,18 +93,21 @@ export function SeccionSector({ sector }: SeccionSectorProps) {
 
           {/* Leyenda */}
           <div className="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-gray-100">
-            {[
-              { color: 'bg-green-500', label: 'Disponible' },
-              { color: 'bg-red-500', label: 'Ocupada' },
-              { color: 'bg-yellow-500', label: 'Reservada' },
-              { color: 'bg-gray-400', label: 'Mantenimiento' },
-            ].map(({ color, label }) => (
+            {(soloOcupadas
+              ? [{ color: 'bg-red-500', label: 'Ocupada' }]
+              : [
+                { color: 'bg-green-500', label: 'Disponible' },
+                { color: 'bg-red-500', label: 'Ocupada' },
+                { color: 'bg-yellow-500', label: 'Reservada' },
+                { color: 'bg-gray-400', label: 'Mantenimiento' },
+              ]
+            ).map(({ color, label }) => (
               <div key={label} className="flex items-center gap-1.5">
                 <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
                 <span className="text-xs text-gray-500">{label}</span>
               </div>
             ))}
-            <span className="text-xs text-gray-400 ml-auto hidden sm:block">
+            <span className={`text-xs text-gray-400 ml-auto hidden sm:block ${soloOcupadas ? 'hidden' : ''}`}>
               Click derecho en cama libre/reservada para cambiar estado
             </span>
           </div>

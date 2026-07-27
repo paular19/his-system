@@ -186,26 +186,33 @@ export async function crearIngreso(
       )
     }
 
-    // Calcular importeTotal para cada práctica
-    const regla = resolverReglaFacturacion(
-      obraSocialNombre,
-      Boolean(dataParaCrear.obraSocialCoseguroId)
+    const requiereCalculoImporte = dataParaCrear.practicas.some(
+      (p) => !(p.importeTotal != null && p.importeTotal > 0)
     )
 
-    const codigos = Array.from(
-      new Set(dataParaCrear.practicas.map((p) => p.codigo.trim().toUpperCase()))
-    )
+    const regla = requiereCalculoImporte
+      ? resolverReglaFacturacion(
+        obraSocialNombre,
+        Boolean(dataParaCrear.obraSocialCoseguroId)
+      )
+      : null
+
+    const codigos = requiereCalculoImporte
+      ? Array.from(new Set(dataParaCrear.practicas.map((p) => p.codigo.trim().toUpperCase())))
+      : []
+
     const prestaciones = codigos.length
       ? await prisma.nomencladorPrestacion.findMany({
         where: { codigo: { in: codigos } },
         select: { codigo: true, valor: true },
       })
       : []
+
     const valorNomenclador = new Map(
       prestaciones.map((pre) => [pre.codigo.trim().toUpperCase(), Number(pre.valor ?? 0)])
     )
 
-    // Fallback histórico para códigos sin precio en el nomenclador
+    // Fallback histórico solo si hay prácticas sin importe calculado.
     const sinPrecio = codigos.filter((c) => !valorNomenclador.has(c) || valorNomenclador.get(c) === 0)
     if (sinPrecio.length > 0) {
       const codigosConEspacio = sinPrecio.map((c) => c.padEnd(8, ' '))
@@ -231,9 +238,15 @@ export async function crearIngreso(
     const ahora = new Date()
     await prisma.practica.createMany({
       data: dataParaCrear.practicas.map((p) => {
-        const clave = p.codigo.trim().toUpperCase()
-        const precio = valorNomenclador.get(clave) ?? 0
-        const cobertura = calcularImporteFacturable(precio, p.cantidad, regla)
+        let importeTotal = p.importeTotal != null && p.importeTotal > 0 ? p.importeTotal : null
+
+        if (importeTotal == null && regla) {
+          const clave = p.codigo.trim().toUpperCase()
+          const precio = valorNomenclador.get(clave) ?? 0
+          const cobertura = calcularImporteFacturable(precio, p.cantidad, regla)
+          importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null
+        }
+
         return {
           ingresoId: ingreso.id,
           convenioId: (p.convenioId ?? dataParaCrear.obraSocialId) as number,
@@ -249,9 +262,7 @@ export async function crearIngreso(
           facturable: true,
           estado: 'A',
           ordenItem: p.grupoOrden ?? null,
-          importeTotal: p.importeTotal != null && p.importeTotal > 0
-            ? p.importeTotal
-            : (cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null),
+          importeTotal,
           usuarioRegistro: usuario.slice(0, 10),
           fechaUsuario: ahora,
         }
@@ -585,19 +596,26 @@ export async function actualizarIngreso(
       )
     }
 
-    // Calcular importeTotal para cada práctica
     const obraSocialCoseguroId = dataParaActualizar.obraSocialCoseguroId ?? null
-    const reglaEdit = resolverReglaFacturacion(obraSocialNombreFinal, Boolean(obraSocialCoseguroId))
-
-    const codigosEdit = Array.from(
-      new Set(dataParaActualizar.practicasAgregar.map((p) => p.codigo.trim().toUpperCase()))
+    const requiereCalculoImporteEdit = dataParaActualizar.practicasAgregar.some(
+      (p) => !(p.importeTotal != null && p.importeTotal > 0)
     )
+
+    const reglaEdit = requiereCalculoImporteEdit
+      ? resolverReglaFacturacion(obraSocialNombreFinal, Boolean(obraSocialCoseguroId))
+      : null
+
+    const codigosEdit = requiereCalculoImporteEdit
+      ? Array.from(new Set(dataParaActualizar.practicasAgregar.map((p) => p.codigo.trim().toUpperCase())))
+      : []
+
     const prestacionesEdit = codigosEdit.length
       ? await prisma.nomencladorPrestacion.findMany({
         where: { codigo: { in: codigosEdit } },
         select: { codigo: true, valor: true },
       })
       : []
+
     const valorNomencladorEdit = new Map(
       prestacionesEdit.map((pre) => [pre.codigo.trim().toUpperCase(), Number(pre.valor ?? 0)])
     )
@@ -627,9 +645,15 @@ export async function actualizarIngreso(
     const ahoraEdit = new Date()
     await prisma.practica.createMany({
       data: dataParaActualizar.practicasAgregar.map((p) => {
-        const clave = p.codigo.trim().toUpperCase()
-        const precio = valorNomencladorEdit.get(clave) ?? 0
-        const cobertura = calcularImporteFacturable(precio, p.cantidad, reglaEdit)
+        let importeTotal = p.importeTotal != null && p.importeTotal > 0 ? p.importeTotal : null
+
+        if (importeTotal == null && reglaEdit) {
+          const clave = p.codigo.trim().toUpperCase()
+          const precio = valorNomencladorEdit.get(clave) ?? 0
+          const cobertura = calcularImporteFacturable(precio, p.cantidad, reglaEdit)
+          importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null
+        }
+
         return {
           ingresoId: id,
           convenioId: (p.convenioId ?? obraSocialId) as number,
@@ -645,9 +669,7 @@ export async function actualizarIngreso(
           facturable: true,
           estado: 'A',
           ordenItem: p.grupoOrden ?? null,
-          importeTotal: p.importeTotal != null && p.importeTotal > 0
-            ? p.importeTotal
-            : (cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null),
+          importeTotal,
           usuarioRegistro: usuario.slice(0, 10),
           fechaUsuario: ahoraEdit,
         }

@@ -78,7 +78,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
     FROM "Ingreso"
     WHERE "PacID" = ${paciente.id}
     ORDER BY "IngFchIngreso" DESC NULLS LAST, "IngID" DESC
-    LIMIT 10
+    LIMIT 100
   `
 
   const ingresoIds = ingresosBaseOrdenados.map((ing) => ing.id)
@@ -300,6 +300,8 @@ export default async function FichaPacientePage({ params }: PageProps) {
   const internaciones = ingresos.filter((ing) => normalizarCodigo(ing.tipoIngresoCodigo) === 'INT')
   const internacionActiva =
     internaciones.find((ing) => normalizarCodigo(ing.estado) === 'A') ?? null
+  const internacionReservaPendiente =
+    internaciones.find((ing) => puedeConfirmarReserva(ing)) ?? null
   const puedeConfirmarReserva = (ingreso: {
     camaId: number | null
     cama: { estado: string; identificador: string; sector: string; habitacion: string | null } | null
@@ -426,6 +428,39 @@ export default async function FichaPacientePage({ params }: PageProps) {
                   label="Marcar alta"
                   className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
                 />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {internacionReservaPendiente && internacionReservaPendiente.id !== internacionActiva?.id && (
+          <div className="his-card border border-amber-200 bg-amber-50/60 p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Reserva de cama pendiente</p>
+                <h3 className="mt-1 text-lg font-semibold text-gray-900">
+                  {internacionReservaPendiente.cama
+                    ? `Cama ${internacionReservaPendiente.cama.identificador}`
+                    : `Ingreso #${internacionReservaPendiente.numeroIngreso}`}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {internacionReservaPendiente.fechaIngreso
+                    ? `Ingreso ${formatearFecha(internacionReservaPendiente.fechaIngreso)}`
+                    : 'Sin fecha de ingreso registrada'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <ConfirmarCamaReservadaButton
+                  camaId={internacionReservaPendiente.camaId as number}
+                  label="Confirmar cama reservada"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+                />
+                <Link
+                  href={`/dashboard/internacion/${internacionReservaPendiente.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Ver ficha
+                </Link>
               </div>
             </div>
           </div>

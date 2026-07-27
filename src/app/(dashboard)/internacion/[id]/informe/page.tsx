@@ -92,6 +92,10 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
 
   const informe = ingreso.informes[0] ?? null
   const observacionesParseadas = parseObservacionesInternacion(ingreso.observaciones)
+  const totalDepositos = observacionesParseadas.depositosRegistros.reduce(
+    (acc, item) => acc + item.importe,
+    0
+  )
   const checksMarcados = REQUISITOS_DOCUMENTALES.filter(
     (item) => observacionesParseadas.checklistDocumental[item.key]
   )
@@ -165,8 +169,26 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
 
   return (
     <>
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 7mm;
+          }
+
+          .informe-hospitalizacion-print {
+            font-size: 11px;
+            line-height: 1.2;
+          }
+
+          .informe-hospitalizacion-print .informe-observaciones {
+            max-height: 4.8em;
+            overflow: hidden;
+          }
+        }
+      `}</style>
       <Header titulo="Informe de Hospitalización" />
-      <div className="p-6 max-w-4xl space-y-6 print:space-y-4">
+      <div className="informe-hospitalizacion-print p-6 max-w-4xl space-y-6 print:space-y-3">
         {/* Breadcrumb (no-print) */}
         <nav className="flex items-center gap-1 text-xs text-gray-500 print:hidden">
           <Link href="/dashboard/internacion" className="hover:text-gray-700">Internación</Link>
@@ -281,7 +303,7 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
                 />
             </dl>
 
-              <div className="mt-3">
+              <div className="mt-3 print:hidden">
                 <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Historial médico tratante</p>
                 {historialTratante.length === 0 ? (
                   <p className="text-xs text-gray-500">Sin cambios registrados.</p>
@@ -304,7 +326,10 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
           {ingreso.ingresoPatologias.length > 0 && (
           <div className="border-t pt-4 print:pt-2">
               <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Diagnósticos registrados</h2>
-              <ul className="space-y-1 text-xs print:space-y-0.5">
+              <p className="hidden print:block text-xs text-gray-700">
+                Se registran {ingreso.ingresoPatologias.length} diagnóstico(s) en la ficha clínica.
+              </p>
+              <ul className="space-y-1 text-xs print:hidden">
                 {ingreso.ingresoPatologias.map((p) => (
                   <li key={p.id} className="text-gray-700">
                     • {p.descripcion ?? `Patología ${p.patologiaId}`}
@@ -317,7 +342,7 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
           {/* Observaciones + checklist */}
           <div className="border-t pt-4 print:pt-2">
             <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Observaciones</h2>
-            <p className="text-xs text-gray-700 whitespace-pre-wrap">
+            <p className="informe-observaciones text-xs text-gray-700 whitespace-pre-wrap">
               {observacionesParseadas.observaciones?.trim() || 'Sin observaciones.'}
             </p>
 
@@ -341,33 +366,38 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
             {observacionesParseadas.depositosRegistros.length === 0 ? (
               <p className="text-xs text-gray-500">Sin depósitos registrados.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-xs">
-                  <thead>
-                    <tr className="text-left uppercase tracking-wide text-gray-500">
-                      <th className="px-2 py-2">Fecha</th>
-                      <th className="px-2 py-2">Importe</th>
-                      <th className="px-2 py-2">Observaciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {observacionesParseadas.depositosRegistros.map((item) => (
-                      <tr key={item.id} className="text-gray-700">
-                        <td className="px-2 py-2">{fmtDate(new Date(item.fecha))}</td>
-                        <td className="px-2 py-2">
-                          {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(item.importe)}
-                        </td>
-                        <td className="px-2 py-2">{item.observaciones?.trim() || '—'}</td>
+              <>
+                <p className="hidden print:block text-xs text-gray-700">
+                  Registros: {observacionesParseadas.depositosRegistros.length} · Total: {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(totalDepositos)}
+                </p>
+                <div className="overflow-x-auto print:hidden">
+                  <table className="min-w-full divide-y divide-gray-200 text-xs">
+                    <thead>
+                      <tr className="text-left uppercase tracking-wide text-gray-500">
+                        <th className="px-2 py-2">Fecha</th>
+                        <th className="px-2 py-2">Importe</th>
+                        <th className="px-2 py-2">Observaciones</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {observacionesParseadas.depositosRegistros.map((item) => (
+                        <tr key={item.id} className="text-gray-700">
+                          <td className="px-2 py-2">{fmtDate(new Date(item.fecha))}</td>
+                          <td className="px-2 py-2">
+                            {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(item.importe)}
+                          </td>
+                          <td className="px-2 py-2">{item.observaciones?.trim() || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
 
           {informe && (
-          <div className="border-t pt-4 print:pt-2">
+          <div className="border-t pt-4 print:pt-2 print:hidden">
               <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Estado del informe</h2>
               <dl className="space-y-1.5 print:space-y-1">
                 <DataRow label="Fecha de emisión" value={fmtDate(informe.fecha)} />

@@ -149,10 +149,10 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
     '—'
 
   const medicoCabeceraODerivante =
-    ingreso.profesionalGuardia?.nombre
-      ? nombreProfesionalParaMostrar(ingreso.profesionalGuardia.nombre)
-      : ingreso.ingresoSubtipo?.profesionalDerivanteNombre
-        ? nombreProfesionalParaMostrar(ingreso.ingresoSubtipo.profesionalDerivanteNombre)
+    ingreso.ingresoSubtipo?.profesionalDerivanteNombre
+      ? nombreProfesionalParaMostrar(ingreso.ingresoSubtipo.profesionalDerivanteNombre)
+      : ingreso.profesionalGuardia?.nombre
+        ? nombreProfesionalParaMostrar(ingreso.profesionalGuardia.nombre)
         : '—'
 
   const estadoLabel = (e: string | null) => {

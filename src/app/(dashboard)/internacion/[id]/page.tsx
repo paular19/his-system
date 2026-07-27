@@ -197,6 +197,13 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             ? profesionales.find((p) => p.id === detalle.profesionalTratante?.id)?.matricula ?? null
             : null)
 
+    const medicoCabeceraODerivante =
+        detalle.ingresoSubtipo?.profesionalDerivanteNombre?.trim()
+            ? nombreProfesionalParaMostrar(detalle.ingresoSubtipo.profesionalDerivanteNombre)
+            : detalle.profesionalGuardia?.nombre
+                ? nombreProfesionalParaMostrar(detalle.profesionalGuardia.nombre)
+                : null
+
     logServerPerf('internacion.ficha', {
         ingresoId,
         msDetalle,
@@ -287,7 +294,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                 <DataItem label="Estancia" value={diasEstancia()} />
                                 {detalle.fechaEgreso && <DataItem label="Alta real" value={fmtDate(detalle.fechaEgreso)} />}
                                 <DataItem label="Médico tratante" value={detalle.profesionalTratante?.nombre ? nombreProfesionalParaMostrar(detalle.profesionalTratante.nombre) : null} />
-                                <DataItem label="Médico de cabecera" value={detalle.profesionalGuardia?.nombre ? nombreProfesionalParaMostrar(detalle.profesionalGuardia.nombre) : null} />
+                                <DataItem label="Médico de cabecera/derivante" value={medicoCabeceraODerivante} />
                             </dl>
                         </div>
 

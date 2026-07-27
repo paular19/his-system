@@ -219,13 +219,18 @@ async function mapearCamaConOcupante(
   const hayIngresoFuturo = cama.ingresos.some(
     (ing) => !!ing.fechaIngreso && claveDiaArgentina(ing.fechaIngreso) > claveDiaArgentina(fechaReferencia)
   )
+  const hayIngresoActivo = ingresoActivo !== null
 
   let estadoVisual = cama.estado
   if (cama.estado !== 'MANTENIMIENTO') {
-    if (cama.estado === 'OCUPADA') {
-      estadoVisual = 'OCUPADA'
-    } else if (hayIngresoDelDia) {
+    if (cama.estado === 'RESERVADA' && hayIngresoDelDia) {
       estadoVisual = 'RESERVADA'
+    } else if (hayIngresoActivo) {
+      // Si existe internación activa en esa cama para la fecha, debe verse ocupada
+      // aunque el estado físico haya quedado desfasado.
+      estadoVisual = 'OCUPADA'
+    } else if (cama.estado === 'OCUPADA') {
+      estadoVisual = 'OCUPADA'
     } else if (cama.estado === 'RESERVADA' && hayIngresoFuturo) {
       // No mostrar reservas antes de su día efectivo.
       estadoVisual = 'DISPONIBLE'
@@ -456,6 +461,11 @@ export async function obtenerInternacionDetalle(
       },
       profesionalGuardia: { select: { id: true, nombre: true } },
       profesionalTratante: { select: { id: true, nombre: true, matricula: true } },
+      ingresoSubtipo: {
+        select: {
+          profesionalDerivanteNombre: true,
+        },
+      },
       obraSocial: { select: { id: true, nombre: true } },
       plan: { select: { id: true, descripcion: true } },
       obraSocialCoseguroId: true,

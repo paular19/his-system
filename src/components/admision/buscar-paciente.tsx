@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Search, X, User } from 'lucide-react'
 import type { PacienteResumen } from '@/modules/admision/types'
 
@@ -35,28 +35,88 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
   const [buscando, setBuscando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [buscado, setBuscado] = useState(false)
+  const [indiceActivo, setIndiceActivo] = useState(-1)
 
-  const buscar = async () => {
-    if (!busqueda.trim()) return
+  const abortRef = useRef<AbortController | null>(null)
+  const cacheRef = useRef<Map<string, ApiPaciente[]>>(new Map())
+
+  const buscar = async (terminoRaw?: string, forzar = false) => {
+    const termino = (terminoRaw ?? busqueda).trim()
+    if (termino.length < 2) {
+      setResultados([])
+      setBuscado(false)
+      setIndiceActivo(-1)
+      return
+    }
+
+    const cacheKey = termino.toLowerCase()
+    if (!forzar) {
+      const cacheado = cacheRef.current.get(cacheKey)
+      if (cacheado) {
+        setResultados(cacheado)
+        setBuscado(true)
+        setIndiceActivo(cacheado.length > 0 ? 0 : -1)
+        return
+      }
+    }
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setBuscando(true)
     setError(null)
-    setBuscado(false)
-    setResultados([])
 
     try {
       const res = await fetch(
-        `/api/pacientes/busqueda-rapida?q=${encodeURIComponent(busqueda.trim())}&limit=10`
+        `/api/pacientes/busqueda-rapida?q=${encodeURIComponent(termino)}&limit=10`,
+        { signal: controller.signal, cache: 'no-store' }
       )
       const json = await res.json()
       if (!json.ok) throw new Error(json.error ?? 'Error en búsqueda')
-      setResultados(Array.isArray(json.data) ? (json.data as ApiPaciente[]) : [])
+
+      const items = Array.isArray(json.data) ? (json.data as ApiPaciente[]) : []
+      cacheRef.current.set(cacheKey, items)
+      setResultados(items)
       setBuscado(true)
+      setIndiceActivo(items.length > 0 ? 0 : -1)
     } catch (err) {
+      if (controller.signal.aborted) return
       setError(err instanceof Error ? err.message : 'Error al buscar')
+      setResultados([])
+      setBuscado(true)
+      setIndiceActivo(-1)
     } finally {
-      setBuscando(false)
+      if (!controller.signal.aborted) {
+        setBuscando(false)
+      }
     }
   }
+
+  useEffect(() => {
+    const termino = busqueda.trim()
+    if (termino.length < 2) {
+      setResultados([])
+      setBuscado(false)
+      setIndiceActivo(-1)
+      setBuscando(false)
+      setError(null)
+      abortRef.current?.abort()
+      return
+    }
+
+    const timer = setTimeout(() => {
+      void buscar(termino)
+    }, 180)
+
+    return () => clearTimeout(timer)
+  }, [busqueda])
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   const seleccionar = (paciente: ApiPaciente) => {
     onSeleccionar({
@@ -81,6 +141,7 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
     setResultados([])
     setBusqueda('')
     setBuscado(false)
+    setIndiceActivo(-1)
   }
 
   if (pacienteSeleccionado) {
@@ -125,9 +186,42 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') {
+                if (resultados.length === 0) return
+                e.preventDefault()
+                setIndiceActivo((prev) => {
+                  if (prev < 0) return 0
+                  return Math.min(prev + 1, resultados.length - 1)
+                })
+                return
+              }
+
+              if (e.key === 'ArrowUp') {
+                if (resultados.length === 0) return
+                e.preventDefault()
+                setIndiceActivo((prev) => {
+                  if (prev <= 0) return 0
+                  return prev - 1
+                })
+                return
+              }
+
               if (e.key === 'Enter') {
                 e.preventDefault()
-                void buscar()
+                if (resultados.length > 0) {
+                  const candidato = resultados[indiceActivo >= 0 ? indiceActivo : 0]
+                  if (candidato) {
+                    seleccionar(candidato)
+                    return
+                  }
+                }
+
+                void buscar(undefined, true)
+              }
+
+              if (e.key === 'Escape') {
+                setResultados([])
+                setIndiceActivo(-1)
               }
             }}
             placeholder="Nombre, apellido o número de documento..."
@@ -136,7 +230,7 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
         </div>
         <button
           type="button"
-          onClick={() => void buscar()}
+          onClick={() => void buscar(undefined, true)}
           disabled={buscando || !busqueda.trim()}
           className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors"
         >
@@ -148,12 +242,15 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
 
       {resultados.length > 0 && (
         <div className="rounded-md border bg-white shadow-sm max-h-56 overflow-y-auto divide-y">
-          {resultados.map((paciente) => (
+          {resultados.map((paciente, idx) => (
             <button
               key={paciente.id}
               type="button"
               onClick={() => seleccionar(paciente)}
-              className="w-full text-left px-3 py-2.5 hover:bg-blue-50 transition-colors"
+              onMouseEnter={() => setIndiceActivo(idx)}
+              className={`w-full text-left px-3 py-2.5 transition-colors ${
+                idx === indiceActivo ? 'bg-blue-50' : 'hover:bg-blue-50'
+              }`}
             >
               <p className="text-sm font-medium text-gray-900">{paciente.nombreCompleto}</p>
               <p className="text-xs text-gray-500">

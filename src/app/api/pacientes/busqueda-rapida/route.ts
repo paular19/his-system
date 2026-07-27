@@ -10,6 +10,13 @@ import {
   apiValidationError,
   manejarErrorApi,
 } from '@/lib/utils/response'
+import NodeCache from 'node-cache'
+
+const cache = new NodeCache({ stdTTL: 45 })
+
+function buildCacheKey(q: string, limit: number): string {
+  return `pacientes-busqueda-rapida:${q.toLowerCase()}:${limit}`
+}
 
 const BusquedaRapidaSchema = z.object({
   q: z.string().trim().min(1).max(200),
@@ -28,49 +35,89 @@ export async function GET(request: NextRequest) {
       limit: request.nextUrl.searchParams.get('limit') ?? 10,
     })
 
+    const termino = parsed.q.trim()
+    const cacheKey = buildCacheKey(termino, parsed.limit)
+    const cacheado = cache.get<unknown[]>(cacheKey)
+    if (cacheado) {
+      return apiOk(cacheado)
+    }
+
     const where: Prisma.PacienteWhereInput = {}
-    const esNumerico = /^\d+$/.test(parsed.q)
+    const esNumerico = /^\d+$/.test(termino)
+
+    const selectPaciente = {
+      id: true,
+      historiaClinica: true,
+      apellido: true,
+      nombre: true,
+      nombreCompleto: true,
+      tipoDocumento: true,
+      numeroDocumento: true,
+      sexo: true,
+      fechaNacimiento: true,
+      domicilio: true,
+      telefonoFijo: true,
+      celular1: true,
+      email: true,
+      obraSocialId: true,
+      planId: true,
+      obraSocialCoseguroId: true,
+      numeroAfiliado: true,
+    } as const
 
     if (esNumerico) {
-      const numero = Number.parseInt(parsed.q, 10)
+      const numero = Number.parseInt(termino, 10)
       where.OR = [
         { numeroDocumento: numero },
         { historiaClinica: numero },
       ]
-    } else {
-      where.OR = [
-        { apellido: { contains: parsed.q, mode: 'insensitive' } },
-        { nombre: { contains: parsed.q, mode: 'insensitive' } },
-      ]
+
+      const itemsNumericos = await prisma.paciente.findMany({
+        where,
+        take: parsed.limit,
+        select: selectPaciente,
+        orderBy: [{ numeroDocumento: 'asc' }, { apellido: 'asc' }, { nombre: 'asc' }],
+      })
+
+      cache.set(cacheKey, itemsNumericos)
+      return apiOk(itemsNumericos)
     }
 
-    const items = await prisma.paciente.findMany({
-      where,
-      take: parsed.limit,
-      select: {
-        id: true,
-        historiaClinica: true,
-        apellido: true,
-        nombre: true,
-        nombreCompleto: true,
-        tipoDocumento: true,
-        numeroDocumento: true,
-        sexo: true,
-        fechaNacimiento: true,
-        domicilio: true,
-        telefonoFijo: true,
-        celular1: true,
-        email: true,
-        obraSocialId: true,
-        planId: true,
-        obraSocialCoseguroId: true,
-        numeroAfiliado: true,
+    const prefijo = await prisma.paciente.findMany({
+      where: {
+        OR: [
+          { apellido: { startsWith: termino, mode: 'insensitive' } },
+          { nombre: { startsWith: termino, mode: 'insensitive' } },
+          { nombreCompleto: { startsWith: termino, mode: 'insensitive' } },
+        ],
       },
-      orderBy: esNumerico
-        ? [{ numeroDocumento: 'asc' }, { apellido: 'asc' }, { nombre: 'asc' }]
-        : [{ apellido: 'asc' }, { nombre: 'asc' }],
+      take: parsed.limit,
+      select: selectPaciente,
+      orderBy: [{ apellido: 'asc' }, { nombre: 'asc' }],
     })
 
+    if (prefijo.length >= parsed.limit) {
+      cache.set(cacheKey, prefijo)
+      return apiOk(prefijo)
+    }
+
+    const idsPrefijo = prefijo.map((p) => p.id)
+    const restantes = await prisma.paciente.findMany({
+      where: {
+        OR: [
+          { apellido: { contains: termino, mode: 'insensitive' } },
+          { nombre: { contains: termino, mode: 'insensitive' } },
+          { nombreCompleto: { contains: termino, mode: 'insensitive' } },
+        ],
+        ...(idsPrefijo.length > 0 ? { id: { notIn: idsPrefijo } } : {}),
+      },
+      take: parsed.limit - prefijo.length,
+      select: selectPaciente,
+      orderBy: [{ apellido: 'asc' }, { nombre: 'asc' }],
+    })
+
+    const items = [...prefijo, ...restantes]
+    cache.set(cacheKey, items)
     return apiOk(items)
   } catch (error) {
     if (error instanceof ZodError) {

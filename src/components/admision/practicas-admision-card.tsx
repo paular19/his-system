@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Trash2 } from 'lucide-react'
 import {
   ComponenteSelector,
@@ -76,6 +76,10 @@ export function PracticasAdmisionCard({
   const [terminoFiltroPracticas, setTerminoFiltroPracticas] = useState('')
   const [paginaPracticas, setPaginaPracticas] = useState(1)
   const [resultadosPractica, setResultadosPractica] = useState<PracticaAdmisionBusquedaItem[]>([])
+  const [indiceResultadoActivo, setIndiceResultadoActivo] = useState(-1)
+
+  const abortBusquedaRef = useRef<AbortController | null>(null)
+  const cacheBusquedaRef = useRef<Map<string, PracticaAdmisionBusquedaItem[]>>(new Map())
 
   const practicasFiltradas = useMemo(() => {
     const termino = normalizarBusqueda(terminoFiltroPracticas)
@@ -96,32 +100,97 @@ export function PracticasAdmisionCard({
     return practicasFiltradas.slice(desde, desde + PRACTICAS_POR_PAGINA)
   }, [paginaPracticasActual, practicasFiltradas])
 
-  const buscarPracticaNomenclador = async (termino: string) => {
-    if (termino.trim().length < 2) {
+  const buscarPracticaNomenclador = async (
+    terminoRaw: string,
+    forzar = false
+  ): Promise<PracticaAdmisionBusquedaItem[]> => {
+    const termino = terminoRaw.trim()
+    if (termino.length < 2) {
       setResultadosPractica([])
-      return
+      setIndiceResultadoActivo(-1)
+      return []
     }
 
     const convenioId = Number.parseInt(String(obraSocialId ?? ''), 10)
     if (!Number.isFinite(convenioId)) {
       setResultadosPractica([])
-      return
+      setIndiceResultadoActivo(-1)
+      return []
     }
 
+    const cacheKey = `${convenioId}:${termino.toUpperCase()}`
+    if (!forzar) {
+      const cacheados = cacheBusquedaRef.current.get(cacheKey)
+      if (cacheados) {
+        setResultadosPractica(cacheados)
+        setIndiceResultadoActivo(cacheados.length > 0 ? 0 : -1)
+        return cacheados
+      }
+    }
+
+    abortBusquedaRef.current?.abort()
+    const controller = new AbortController()
+    abortBusquedaRef.current = controller
+
     setBuscandoPractica(true)
-    setResultadosPractica([])
     try {
       const params = new URLSearchParams({ q: termino.trim(), convenioId: String(convenioId) })
-      const res = await fetch(`/api/practicas-nomenclador?${params.toString()}`)
+      params.set('lite', '1')
+
+      const res = await fetch(`/api/practicas-nomenclador?${params.toString()}`, {
+        signal: controller.signal,
+        cache: 'no-store',
+      })
       const json = await res.json()
       if (json.ok) {
         const raw = json.data
-        setResultadosPractica(Array.isArray(raw) ? raw : (raw?.items ?? []))
+        const items = Array.isArray(raw) ? raw : (raw?.items ?? [])
+        const resultados = items as PracticaAdmisionBusquedaItem[]
+        cacheBusquedaRef.current.set(cacheKey, resultados)
+        setResultadosPractica(resultados)
+        setIndiceResultadoActivo(resultados.length > 0 ? 0 : -1)
+        return resultados
       }
     } catch {
+      if (controller.signal.aborted) return []
       setResultadosPractica([])
+      setIndiceResultadoActivo(-1)
     } finally {
-      setBuscandoPractica(false)
+      if (!controller.signal.aborted) {
+        setBuscandoPractica(false)
+      }
+    }
+
+    return []
+  }
+
+  const seleccionarResultadoConEnter = async () => {
+    const termino = terminoBusquedaPractica.trim()
+    if (termino.length < 2) return
+
+    const resultadosActuales =
+      resultadosPractica.length > 0
+        ? resultadosPractica
+        : await buscarPracticaNomenclador(termino, true)
+
+    if (resultadosActuales.length === 0) return
+
+    const codigoIngresado = termino.toUpperCase()
+    const esCodigo = /^[A-Z0-9]{1,8}$/.test(codigoIngresado)
+
+    if (esCodigo) {
+      const exacta = resultadosActuales.find(
+        (r) => r.codigo.trim().toUpperCase() === codigoIngresado
+      )
+      if (exacta) {
+        agregarPractica(exacta)
+        return
+      }
+    }
+
+    const candidato = resultadosActuales[indiceResultadoActivo >= 0 ? indiceResultadoActivo : 0]
+    if (candidato) {
+      agregarPractica(candidato)
     }
   }
 
@@ -129,15 +198,29 @@ export function PracticasAdmisionCard({
     const termino = terminoBusquedaPractica.trim()
     if (termino.length < 2) {
       setResultadosPractica([])
+      setIndiceResultadoActivo(-1)
       return
     }
 
     const timer = setTimeout(() => {
       void buscarPracticaNomenclador(termino)
-    }, 350)
+    }, 180)
 
     return () => clearTimeout(timer)
   }, [terminoBusquedaPractica, obraSocialId])
+
+  useEffect(() => {
+    cacheBusquedaRef.current.clear()
+    setResultadosPractica([])
+    setIndiceResultadoActivo(-1)
+    abortBusquedaRef.current?.abort()
+  }, [obraSocialId])
+
+  useEffect(() => {
+    return () => {
+      abortBusquedaRef.current?.abort()
+    }
+  }, [])
 
   useEffect(() => {
     setPaginaPracticas(1)
@@ -183,6 +266,7 @@ export function PracticasAdmisionCard({
     ])
     setResultadosPractica([])
     setTerminoBusquedaPractica('')
+    setIndiceResultadoActivo(-1)
   }
 
   const quitarPractica = (tempId: string) => {
@@ -200,9 +284,34 @@ export function PracticasAdmisionCard({
             value={terminoBusquedaPractica}
             onChange={(e) => setTerminoBusquedaPractica(e.target.value)}
             onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') {
+                if (resultadosPractica.length === 0) return
+                e.preventDefault()
+                setIndiceResultadoActivo((prev) => {
+                  if (prev < 0) return 0
+                  return Math.min(prev + 1, resultadosPractica.length - 1)
+                })
+                return
+              }
+
+              if (e.key === 'ArrowUp') {
+                if (resultadosPractica.length === 0) return
+                e.preventDefault()
+                setIndiceResultadoActivo((prev) => {
+                  if (prev <= 0) return 0
+                  return prev - 1
+                })
+                return
+              }
+
               if (e.key === 'Enter') {
                 e.preventDefault()
-                void buscarPracticaNomenclador(terminoBusquedaPractica)
+                void seleccionarResultadoConEnter()
+              }
+
+              if (e.key === 'Escape') {
+                setResultadosPractica([])
+                setIndiceResultadoActivo(-1)
               }
             }}
             placeholder={etiquetaBusqueda}
@@ -212,7 +321,7 @@ export function PracticasAdmisionCard({
         </div>
         <button
           type="button"
-          onClick={() => void buscarPracticaNomenclador(terminoBusquedaPractica)}
+          onClick={() => void buscarPracticaNomenclador(terminoBusquedaPractica, true)}
           disabled={disabled || buscandoPractica || terminoBusquedaPractica.trim().length < 2}
           className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors"
         >
@@ -221,12 +330,15 @@ export function PracticasAdmisionCard({
       </div>
       {resultadosPractica.length > 0 && (
         <div className="mb-3 rounded-md border bg-white shadow-sm max-h-48 overflow-y-auto divide-y">
-          {resultadosPractica.map((p) => (
+          {resultadosPractica.map((p, idx) => (
             <button
               key={`${p.convenioId}-${p.codigo}`}
               type="button"
               onClick={() => agregarPractica(p)}
-              className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors text-sm"
+              onMouseEnter={() => setIndiceResultadoActivo(idx)}
+              className={`w-full text-left px-3 py-2 transition-colors text-sm ${
+                idx === indiceResultadoActivo ? 'bg-blue-50' : 'hover:bg-blue-50'
+              }`}
             >
               <span className="font-mono text-xs text-gray-500 mr-2">{p.codigo}</span>
               {p.descripcion}

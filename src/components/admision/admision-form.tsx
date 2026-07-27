@@ -22,6 +22,11 @@ import {
   type PracticaAdmisionItem,
 } from './practicas-admision-card'
 import { generarOrdenesPendientesAdmision } from './ordenes-auto'
+import {
+  abrirVentanaImpresionPendiente,
+  cerrarVentanaImpresion,
+  navegarVentanaImpresion,
+} from '@/lib/utils/print-window'
 
 interface ItemMedicacion {
   nombre: string
@@ -383,6 +388,9 @@ export function AdmisionForm({
     setGuardando(true)
     setError(null)
 
+    let ventanaImpresion: Window | null = null
+    let impresionDisparada = false
+
     try {
       const body: any = {
         pacienteId: paciente.id,
@@ -437,8 +445,12 @@ export function AdmisionForm({
         body.descripcionIndicacion = descripcionIndicacion || null
       }
 
+      const requiereOrdenAutomatica = practicasExpandida.length > 0
+      ventanaImpresion = requiereOrdenAutomatica ? abrirVentanaImpresionPendiente() : null
+
       const result = await createIngresoAction(body)
       if ('error' in result) {
+        cerrarVentanaImpresion(ventanaImpresion)
         setError(result.error)
         formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         submitEnCursoRef.current = false
@@ -446,16 +458,37 @@ export function AdmisionForm({
         return
       }
 
-      if (practicasExpandida.length > 0) {
-        void generarOrdenesPendientesAdmision(result.id).then((autoOrdenResult) => {
+      if (requiereOrdenAutomatica) {
+        const autoOrdenResult = await generarOrdenesPendientesAdmision(result.id)
+        if (autoOrdenResult.ok && autoOrdenResult.ordenes.length > 0) {
+          const ordenesParam = autoOrdenResult.ordenes
+            .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
+            .join(',')
+
+          navegarVentanaImpresion(
+            ventanaImpresion,
+            `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+          )
+          impresionDisparada = true
+        } else {
           if (!autoOrdenResult.ok) {
             console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
           }
-        })
+          cerrarVentanaImpresion(ventanaImpresion)
+        }
+      } else {
+        cerrarVentanaImpresion(ventanaImpresion)
+      }
+
+      if (!impresionDisparada) {
+        cerrarVentanaImpresion(ventanaImpresion)
       }
 
       router.push(`/dashboard/admision/${result.id}`)
     } catch (err) {
+      if (!impresionDisparada) {
+        cerrarVentanaImpresion(ventanaImpresion)
+      }
       setError(err instanceof Error ? err.message : 'Error inesperado')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       submitEnCursoRef.current = false

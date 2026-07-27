@@ -11,8 +11,8 @@ function sanitizeQuery(value: string): string {
   return value.trim().slice(0, 100)
 }
 
-function buildCacheKey(q: string, convenioId?: number): string {
-  return `practicas-nomenclador:${q.toLowerCase()}:${convenioId ?? 'all'}`
+function buildCacheKey(q: string, convenioId?: number, lite = false): string {
+  return `practicas-nomenclador:${q.toLowerCase()}:${convenioId ?? 'all'}:${lite ? 'lite' : 'full'}`
 }
 
 // GET /api/practicas-nomenclador?q=consulta&convenioId=1
@@ -30,14 +30,17 @@ export async function GET(request: NextRequest) {
     const convenioRaw = searchParams.get('convenioId')
     const convenioNumber = convenioRaw ? parseInt(convenioRaw, 10) : undefined
     const convenioId = Number.isFinite(convenioNumber) ? convenioNumber : undefined
+    const lite = searchParams.get('lite') === '1'
 
     if (q.length < 2) return apiOk([])
 
-    const cacheKey = buildCacheKey(q, convenioId)
+    const cacheKey = buildCacheKey(q, convenioId, lite)
     const cached = cache.get<Awaited<ReturnType<typeof buscarPracticas>>>(cacheKey)
     if (cached) return apiOk(cached)
 
-    const practicas = await buscarPracticas(q, convenioId)
+    const practicas = await buscarPracticas(q, convenioId, {
+      sinEnriquecer: lite,
+    })
     cache.set(cacheKey, practicas)
     return apiOk(practicas)
   } catch (err) {

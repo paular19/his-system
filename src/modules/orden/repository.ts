@@ -1059,21 +1059,24 @@ export async function obtenerContextoAdmisionParaOrden(
 
 export async function buscarPracticas(
   query: string,
-  convenioId?: number
+  convenioId?: number,
+  options?: { sinEnriquecer?: boolean }
 ): Promise<NomencladorPracticaItem[]> {
+  type NomencladorPracticaRow = {
+    convenioId: number
+    codigo: string
+    descripcion: string
+    valorEspecialista: import('@prisma/client').Prisma.Decimal | null
+    valorAyudante: import('@prisma/client').Prisma.Decimal | null
+    valorAnestesista: import('@prisma/client').Prisma.Decimal | null
+    valorGastos: import('@prisma/client').Prisma.Decimal | null
+  }
+
   const queryNormalizada = query.trim().toUpperCase()
   const buscarCodigoExacto = /^[A-Z0-9]{1,8}$/.test(queryNormalizada)
 
   const obtenerExactas = async (convenioFiltrado?: number) => {
-    if (!buscarCodigoExacto) return [] as Array<{
-      convenioId: number
-      codigo: string
-      descripcion: string
-      valorEspecialista: import('@prisma/client').Prisma.Decimal | null
-      valorAyudante: import('@prisma/client').Prisma.Decimal | null
-      valorAnestesista: import('@prisma/client').Prisma.Decimal | null
-      valorGastos: import('@prisma/client').Prisma.Decimal | null
-    }>
+    if (!buscarCodigoExacto) return [] as NomencladorPracticaRow[]
 
     return prisma.nomencladorPractica.findMany({
       where: {
@@ -1112,6 +1115,21 @@ export async function buscarPracticas(
     return combinadas.slice(0, 20)
   }
 
+  const serializarSinEnriquecer = (practicas: NomencladorPracticaRow[]): NomencladorPracticaItem[] => {
+    return practicas.map((practica) => ({
+      convenioId: practica.convenioId,
+      codigo: practica.codigo,
+      descripcion: practica.descripcion,
+      valor: null,
+      valorEspecialista:
+        practica.valorEspecialista != null ? Number(practica.valorEspecialista) : null,
+      valorAyudante: practica.valorAyudante != null ? Number(practica.valorAyudante) : null,
+      valorAnestesista:
+        practica.valorAnestesista != null ? Number(practica.valorAnestesista) : null,
+      valorGastos: practica.valorGastos != null ? Number(practica.valorGastos) : null,
+    }))
+  }
+
   const whereBase: Prisma.NomencladorPracticaWhereInput = {
     OR: [
       { descripcion: { contains: query, mode: 'insensitive' as const } },
@@ -1141,6 +1159,9 @@ export async function buscarPracticas(
   const resultadosPorConvenio = combinarPriorizandoExactas(exactasPorConvenio, porConvenio)
 
   if (!convenioId || resultadosPorConvenio.length > 0) {
+    if (options?.sinEnriquecer) {
+      return serializarSinEnriquecer(resultadosPorConvenio)
+    }
     return enriquecerPracticasConValor(resultadosPorConvenio)
   }
 
@@ -1161,7 +1182,12 @@ export async function buscarPracticas(
     },
   })
 
-  return enriquecerPracticasConValor(combinarPriorizandoExactas(exactasGlobales, fallback))
+  const resultadosFallback = combinarPriorizandoExactas(exactasGlobales, fallback)
+  if (options?.sinEnriquecer) {
+    return serializarSinEnriquecer(resultadosFallback)
+  }
+
+  return enriquecerPracticasConValor(resultadosFallback)
 }
 
 async function enriquecerPracticasConValor(

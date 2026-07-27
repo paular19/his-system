@@ -2227,6 +2227,7 @@ export async function actualizarObservacionesInternacion(
       ORDEN_DE_CONSULTA?: boolean
       KIT_DE_CIRUGIA?: boolean
       CONSENTIMIENTO_QUIRURGICO?: boolean
+      OBSERVACIONES?: boolean
       DEPOSITO_DE_INGRESO?: boolean
       AVISO_DE_INTERNACION?: boolean
     }
@@ -2243,6 +2244,12 @@ export async function actualizarObservacionesInternacion(
       litros?: number | null
       profesionalId?: number | null
     }>
+    depositosRegistros?: Array<{
+      id?: string | null
+      fecha: Date
+      importe: number
+      observaciones?: string | null
+    }>
   },
   usuario: string
 ): Promise<{ ingresoId: number; observaciones: string | null }> {
@@ -2258,7 +2265,8 @@ export async function actualizarObservacionesInternacion(
   const metadataFueEnviada =
     data.checklistDocumental !== undefined ||
     data.armRegistros !== undefined ||
-    data.oxigenoterapiaRegistros !== undefined
+    data.oxigenoterapiaRegistros !== undefined ||
+    data.depositosRegistros !== undefined
 
   let observacionesFinal: string | null
 
@@ -2282,6 +2290,13 @@ export async function actualizarObservacionesInternacion(
           litros: item.litros ?? null,
           profesionalId: item.profesionalId ?? null,
         })) ?? actual.oxigenoterapiaRegistros,
+      depositosRegistros:
+        data.depositosRegistros?.map((item) => ({
+          id: item.id ?? null,
+          fecha: item.fecha,
+          importe: item.importe,
+          observaciones: item.observaciones ?? null,
+        })) ?? actual.depositosRegistros,
     })
   } else {
     observacionesFinal = data.observaciones ?? null

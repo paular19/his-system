@@ -1,14 +1,31 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BedDouble } from 'lucide-react'
+import { BedDouble, Loader2 } from 'lucide-react'
 import { BuscarPaciente } from '@/components/admision/buscar-paciente'
-import { Skeleton } from '@/components/ui/skeleton'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
+import { calcularTotalSeleccionado } from '@/components/ui/componente-selector'
 import type { PacienteResumen } from '@/modules/admision/types'
 import type { CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
+import {
+  esSubitemAnestesista,
+  esSubitemEspecialista,
+  obtenerSubitemsSeleccionados,
+  valorUnitarioPorSubitem,
+} from '@/lib/practicas-subitems'
+import {
+  PracticasAdmisionCard,
+  type PracticaAdmisionItem,
+} from '@/components/admision/practicas-admision-card'
+import { generarOrdenesPendientesAdmision } from '@/components/admision/ordenes-auto'
+import {
+  abrirVentanaImpresionPendiente,
+  cerrarVentanaImpresion,
+  navegarVentanaImpresion,
+} from '@/lib/utils/print-window'
+import { serializarObservacionesInternacion } from '@/modules/internacion/observaciones-meta'
 
 interface ProfesionalOption {
   id: number
@@ -37,6 +54,8 @@ interface InternacionFormProps {
   camaInicial?: number | null
 }
 
+const MATRICULA_AMBULATORIO_DEFAULT = 9110
+
 function ahoraLocalDateTimeInput(): string {
   const now = new Date()
   const y = now.getFullYear()
@@ -56,13 +75,13 @@ export function InternacionForm({
   camaInicial,
 }: InternacionFormProps) {
   const router = useRouter()
+  const formRef = useRef<HTMLFormElement>(null)
   const submitEnCursoRef = useRef(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
 
   const [fechaIngreso, setFechaIngreso] = useState(ahoraLocalDateTimeInput())
-  const [fechaEgresoPrevista, setFechaEgresoPrevista] = useState('')
   const [camaId, setCamaId] = useState(camaInicial?.toString() ?? '')
   const [profesionalGuardiaId, setProfesionalGuardiaId] = useState('')
   const [profesionalTratanteId, setProfesionalTratanteId] = useState('')
@@ -73,8 +92,15 @@ export function InternacionForm({
   const [numeroAfiliado, setNumeroAfiliado] = useState(pacienteInicial?.numeroAfiliado ?? '')
   const [descripcionPatologia, setDescripcionPatologia] = useState('')
   const [observaciones, setObservaciones] = useState('')
+  const [checkObservaciones, setCheckObservaciones] = useState(false)
+  const [practicas, setPracticas] = useState<PracticaAdmisionItem[]>([])
+  const [generarOrdenesSeparadasPorPractica, setGenerarOrdenesSeparadasPorPractica] = useState(false)
+  const [busquedaPracticaPendiente, setBusquedaPracticaPendiente] = useState({
+    termino: '',
+    hayResultados: false,
+  })
 
-  const planesDisponibles = (() => {
+  const planesDisponibles = useMemo(() => {
     const filtered = obraSocialId
       ? planes.filter((p) => String(p.obraSocialId ?? '') === obraSocialId)
       : planes
@@ -84,9 +110,28 @@ export function InternacionForm({
       seen.add(p.id)
       return true
     })
-  })()
+  }, [obraSocialId, planes])
 
-  const camaSeleccionada = camasDisponibles.find((c) => c.id.toString() === camaId)
+  const camaSeleccionada = useMemo(
+    () => camasDisponibles.find((c) => c.id.toString() === camaId),
+    [camasDisponibles, camaId]
+  )
+
+  const obtenerMatriculaDefault = () => {
+    const profesionalTratante = Number.parseInt(profesionalTratanteId, 10)
+    if (Number.isFinite(profesionalTratante)) {
+      const match = profesionales.find((p) => p.id === profesionalTratante)
+      if (match?.matricula) return match.matricula
+    }
+
+    const profesionalGuardia = Number.parseInt(profesionalGuardiaId, 10)
+    if (Number.isFinite(profesionalGuardia)) {
+      const match = profesionales.find((p) => p.id === profesionalGuardia)
+      if (match?.matricula) return match.matricula
+    }
+
+    return MATRICULA_AMBULATORIO_DEFAULT
+  }
 
   const handleSeleccionarPaciente = (p: PacienteResumen | null) => {
     setPaciente(p)
@@ -108,27 +153,110 @@ export function InternacionForm({
 
     if (!paciente) {
       setError('Seleccione un paciente')
-      return
-    }
-
-    if (!profesionalTratanteId) {
-      setError('Debe asignar un medico de cabecera')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
 
     if (esCirugiaProgramada && !camaId) {
       setError('Para cirugia programada debe seleccionar una cama')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
 
     if (esCirugiaProgramada && !fechaCirugiaProgramada) {
       setError('Debe completar fecha y hora de la cirugia programada')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
+
+    if (busquedaPracticaPendiente.termino.trim().length >= 2 && busquedaPracticaPendiente.hayResultados) {
+      setError('Seleccione una practica del listado o limpie la busqueda antes de guardar')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
+    const matriculaDefault = obtenerMatriculaDefault()
+    const practicasNormalizadas = practicas.map((p) => ({
+      ...p,
+      matriculaEspecialista:
+        p.requiereMatriculaEspecialista &&
+          (!p.matriculaEspecialista || p.matriculaEspecialista === MATRICULA_AMBULATORIO_DEFAULT)
+          ? matriculaDefault
+          : p.matriculaEspecialista,
+      matriculaAnestesista:
+        p.requiereMatriculaAnestesista &&
+          (!p.matriculaAnestesista || p.matriculaAnestesista === MATRICULA_AMBULATORIO_DEFAULT)
+          ? matriculaDefault
+          : p.matriculaAnestesista,
+    }))
+
+    const practicasExpandida = practicasNormalizadas.flatMap((p) => {
+      const subitems = obtenerSubitemsSeleccionados(
+        {
+          valorEspecialista: p.desglose.valorEspecialista,
+          valorAyudante: p.desglose.valorAyudante,
+          valorAnestesista: p.desglose.valorAnestesista,
+          valorGastos: p.desglose.valorGastos,
+        },
+        p.seleccionComponentes
+      )
+
+      if (subitems.length === 0) {
+        return [{
+          convenioId: p.convenioId,
+          codigo: p.codigo,
+          descripcion: p.descripcion,
+          numeroAutorizacion: p.numeroAutorizacion?.trim() || null,
+          cantidad: 1,
+          grupoOrden: null,
+          importeTotal: Number((
+            calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
+          ).toFixed(2)),
+          matriculaEspecialista: p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
+          matriculaAnestesista: p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
+        }]
+      }
+
+      return subitems.map((subitem) => {
+        const valorUnitario = valorUnitarioPorSubitem(subitem, {
+          valorEspecialista: p.desglose.valorEspecialista,
+          valorAyudante: p.desglose.valorAyudante,
+          valorAnestesista: p.desglose.valorAnestesista,
+          valorGastos: p.desglose.valorGastos,
+        })
+
+        return {
+          convenioId: p.convenioId,
+          codigo: p.codigo,
+          descripcion: p.descripcion,
+          numeroAutorizacion: p.numeroAutorizacion?.trim() || null,
+          cantidad: 1,
+          grupoOrden: null,
+          importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
+          matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
+          matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
+        }
+      })
+    })
+
+    setPracticas(practicasNormalizadas)
 
     submitEnCursoRef.current = true
     setGuardando(true)
     setError(null)
+
+    const observacionesSerializadas = serializarObservacionesInternacion({
+      observaciones: observaciones || null,
+      checklistDocumental: {
+        OBSERVACIONES: checkObservaciones,
+      },
+    })
+
+    const requiereOrdenAutomatica = practicasExpandida.length > 0
+    let ventanaImpresion: Window | null = requiereOrdenAutomatica
+      ? abrirVentanaImpresionPendiente()
+      : null
+    let impresionDisparada = false
 
     try {
       const body = {
@@ -136,16 +264,17 @@ export function InternacionForm({
         subtipoAdmisionCodigo: esCirugiaProgramada ? 'PRG' : null,
         pacienteId: paciente.id,
         fechaIngreso: fechaIngreso || undefined,
-        fechaEgresoPrevista: fechaEgresoPrevista || undefined,
         fechaTurno: esCirugiaProgramada ? fechaCirugiaProgramada : undefined,
-        camaId: camaId ? parseInt(camaId, 10) : undefined,
-        profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : undefined,
-        profesionalTratanteId: parseInt(profesionalTratanteId, 10),
-        obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : undefined,
-        planId: planId ? parseInt(planId, 10) : undefined,
-        numeroAfiliado: numeroAfiliado || undefined,
-        descripcionPatologia: descripcionPatologia || undefined,
-        observaciones: observaciones || undefined,
+        camaId: camaId ? parseInt(camaId, 10) : null,
+        profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null,
+        profesionalTratanteId: profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null,
+        obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
+        planId: planId ? parseInt(planId, 10) : null,
+        numeroAfiliado: numeroAfiliado || null,
+        descripcionPatologia: descripcionPatologia || null,
+        observaciones: observacionesSerializadas ?? null,
+        generarOrdenesSeparadasPorPractica,
+        practicas: practicasExpandida.length > 0 ? practicasExpandida : undefined,
       }
 
       const res = await fetch('/api/admision', {
@@ -154,35 +283,67 @@ export function InternacionForm({
         body: JSON.stringify(body),
       })
 
+      const json = await res.json().catch(() => null)
+
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error ?? 'Error al crear la internacion')
+        throw new Error(json?.error ?? 'Error al crear la internacion')
       }
 
-      const { data: ingreso } = await res.json()
-      router.push(`/dashboard/internacion/${ingreso.id}`)
+      const ingreso = json?.data
+      if (!ingreso?.id) {
+        throw new Error('No se recibio el ID de internacion creada')
+      }
+
+      const rutaFicha = `/dashboard/internacion/${ingreso.id}`
+      void router.prefetch(rutaFicha)
+
+      if (requiereOrdenAutomatica) {
+        const autoOrdenResult = await generarOrdenesPendientesAdmision(ingreso.id, {
+          separarPorPractica: generarOrdenesSeparadasPorPractica,
+        })
+
+        if (autoOrdenResult.ok && autoOrdenResult.ordenes.length > 0) {
+          const ordenesParam = autoOrdenResult.ordenes
+            .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
+            .join(',')
+
+          navegarVentanaImpresion(
+            ventanaImpresion,
+            `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+          )
+          impresionDisparada = true
+        } else {
+          cerrarVentanaImpresion(ventanaImpresion)
+          ventanaImpresion = null
+        }
+      }
+
+      if (!impresionDisparada) {
+        cerrarVentanaImpresion(ventanaImpresion)
+      }
+
+      router.push(rutaFicha)
     } catch (err) {
+      if (!impresionDisparada) {
+        cerrarVentanaImpresion(ventanaImpresion)
+      }
       setError(err instanceof Error ? err.message : 'Error desconocido')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       submitEnCursoRef.current = false
       setGuardando(false)
     }
   }
 
-  if (guardando) {
-    return (
-      <div className="p-8">
-        <div className="max-w-2xl mx-auto space-y-6">
-          <Skeleton className="h-8 w-1/2 mb-4" />
-          <Skeleton className="h-6 w-full mb-2" />
-          <Skeleton className="h-6 w-full mb-2" />
-          <Skeleton className="h-6 w-2/3" />
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="relative space-y-6" aria-busy={guardando}>
+      {guardando && (
+        <div className="absolute inset-0 z-20 bg-white/70 backdrop-blur-[1px] flex items-center justify-center px-4">
+          <div className="rounded-lg border border-blue-200 bg-white shadow-sm px-4 py-3 text-sm text-blue-700 flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Registrando internacion... por favor espere.
+          </div>
+        </div>
+      )}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
           {error}
@@ -214,17 +375,6 @@ export function InternacionForm({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Alta prevista
-            </label>
-            <input
-              type="date"
-              value={fechaEgresoPrevista}
-              onChange={(e) => setFechaEgresoPrevista(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
               Medico de guardia
             </label>
             <ProfesionalSelect
@@ -237,13 +387,13 @@ export function InternacionForm({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Medico de cabecera <span className="text-red-500">*</span>
+              Medico de cabecera
             </label>
             <ProfesionalSelect
               profesionales={profesionales}
               value={profesionalTratanteId}
               onChange={setProfesionalTratanteId}
-              placeholderOption="— Seleccionar medico de cabecera —"
+              placeholderOption="— Opcional —"
               selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
             />
           </div>
@@ -385,12 +535,54 @@ export function InternacionForm({
 
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Observaciones</h3>
+        <label className="mb-3 inline-flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={checkObservaciones}
+            onChange={(e) => setCheckObservaciones(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          Check Observaciones
+        </label>
         <textarea
           value={observaciones}
           onChange={(e) => setObservaciones(e.target.value)}
           className="w-full border rounded-lg px-3 py-2 text-sm resize-none h-20"
           placeholder="Observaciones adicionales..."
         />
+      </div>
+
+      <div className="his-card p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Practicas</h3>
+        {!obraSocialId && (
+          <p className="text-xs text-amber-700 mb-3">
+            Asignar obra social para buscar practicas en nomenclador.
+          </p>
+        )}
+
+        <PracticasAdmisionCard
+          obraSocialId={obraSocialId}
+          etiquetaBusqueda="Buscar practica en nomenclador..."
+          practicas={practicas}
+          setPracticas={setPracticas}
+          obtenerMatriculaDefault={obtenerMatriculaDefault}
+          disabled={guardando || !obraSocialId}
+          onPendingSearchChange={setBusquedaPracticaPendiente}
+        />
+
+        {practicas.length > 1 && (
+          <div className="mt-3 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
+            <label className="inline-flex items-center gap-2 text-sm text-blue-900">
+              <input
+                type="checkbox"
+                checked={generarOrdenesSeparadasPorPractica}
+                onChange={(e) => setGenerarOrdenesSeparadasPorPractica(e.target.checked)}
+                className="h-4 w-4 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+              />
+              Generar una orden separada por cada practica agregada
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-end gap-3">

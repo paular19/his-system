@@ -156,6 +156,7 @@ export async function actualizarObservacionesInternacion(
       checklistDocumental: data.checklistDocumental,
       armRegistros: data.armRegistros,
       oxigenoterapiaRegistros: data.oxigenoterapiaRegistros,
+      depositosRegistros: data.depositosRegistros,
     },
     usuario
   )

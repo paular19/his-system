@@ -5,6 +5,7 @@ export const REQUISITOS_DOCUMENTALES = [
   { key: 'ORDEN_DE_CONSULTA', label: 'Orden de consulta' },
   { key: 'KIT_DE_CIRUGIA', label: 'Kit de cirugia' },
   { key: 'CONSENTIMIENTO_QUIRURGICO', label: 'Consentimiento quirurgico' },
+  { key: 'OBSERVACIONES', label: 'Observaciones' },
   { key: 'DEPOSITO_DE_INGRESO', label: 'Deposito de ingreso' },
   { key: 'AVISO_DE_INTERNACION', label: 'Aviso de internacion' },
 ] as const
@@ -28,10 +29,18 @@ export interface OxigenoterapiaRegistroMeta {
   profesionalId: number | null
 }
 
+export interface DepositoRegistroMeta {
+  id: string
+  fecha: string
+  importe: number
+  observaciones: string | null
+}
+
 export interface ObservacionesInternacionMeta {
   checklistDocumental: ChecklistDocumental
   armRegistros: ArmRegistroMeta[]
   oxigenoterapiaRegistros: OxigenoterapiaRegistroMeta[]
+  depositosRegistros: DepositoRegistroMeta[]
 }
 
 export interface ObservacionesInternacionParseResult extends ObservacionesInternacionMeta {
@@ -48,6 +57,7 @@ function crearChecklistVacio(): ChecklistDocumental {
     ORDEN_DE_CONSULTA: false,
     KIT_DE_CIRUGIA: false,
     CONSENTIMIENTO_QUIRURGICO: false,
+    OBSERVACIONES: false,
     DEPOSITO_DE_INGRESO: false,
     AVISO_DE_INTERNACION: false,
   }
@@ -118,6 +128,40 @@ function normalizarRegistroOxigenoterapia(
   }
 }
 
+function normalizarRegistroDeposito(
+  value: unknown,
+  index: number
+): DepositoRegistroMeta | null {
+  if (!value || typeof value !== 'object') return null
+  const row = value as Record<string, unknown>
+  const fecha = normalizarFechaIso(row.fecha)
+  if (!fecha) return null
+
+  const importeRaw =
+    typeof row.importe === 'number'
+      ? row.importe
+      : typeof row.importe === 'string'
+        ? Number(row.importe)
+        : NaN
+
+  if (!Number.isFinite(importeRaw) || importeRaw < 0) return null
+
+  const observaciones =
+    typeof row.observaciones === 'string' && row.observaciones.trim().length > 0
+      ? row.observaciones.trim()
+      : null
+
+  return {
+    id:
+      typeof row.id === 'string' && row.id.trim().length > 0
+        ? row.id.trim()
+        : `dep-${index + 1}`,
+    fecha,
+    importe: Number(importeRaw),
+    observaciones,
+  }
+}
+
 function normalizarChecklist(value: unknown): ChecklistDocumental {
   const base = crearChecklistVacio()
   if (!value || typeof value !== 'object') return base
@@ -136,6 +180,7 @@ function normalizarMeta(value: unknown): ObservacionesInternacionMeta {
       checklistDocumental: crearChecklistVacio(),
       armRegistros: [],
       oxigenoterapiaRegistros: [],
+      depositosRegistros: [],
     }
   }
 
@@ -143,6 +188,9 @@ function normalizarMeta(value: unknown): ObservacionesInternacionMeta {
   const armRegistrosRaw = Array.isArray(row.armRegistros) ? row.armRegistros : []
   const oxigenoterapiaRegistrosRaw = Array.isArray(row.oxigenoterapiaRegistros)
     ? row.oxigenoterapiaRegistros
+    : []
+  const depositosRegistrosRaw = Array.isArray(row.depositosRegistros)
+    ? row.depositosRegistros
     : []
 
   return {
@@ -153,6 +201,9 @@ function normalizarMeta(value: unknown): ObservacionesInternacionMeta {
     oxigenoterapiaRegistros: oxigenoterapiaRegistrosRaw
       .map((item, index) => normalizarRegistroOxigenoterapia(item, index))
       .filter((item): item is OxigenoterapiaRegistroMeta => item !== null),
+    depositosRegistros: depositosRegistrosRaw
+      .map((item, index) => normalizarRegistroDeposito(item, index))
+      .filter((item): item is DepositoRegistroMeta => item !== null),
   }
 }
 
@@ -171,6 +222,7 @@ export function parseObservacionesInternacion(
       checklistDocumental: crearChecklistVacio(),
       armRegistros: [],
       oxigenoterapiaRegistros: [],
+      depositosRegistros: [],
     }
   }
 
@@ -181,6 +233,7 @@ export function parseObservacionesInternacion(
       checklistDocumental: crearChecklistVacio(),
       armRegistros: [],
       oxigenoterapiaRegistros: [],
+      depositosRegistros: [],
     }
   }
 
@@ -201,6 +254,7 @@ export function parseObservacionesInternacion(
       checklistDocumental: crearChecklistVacio(),
       armRegistros: [],
       oxigenoterapiaRegistros: [],
+      depositosRegistros: [],
     }
   }
 }
@@ -211,7 +265,12 @@ export function tieneChecklistCompleto(checklist: ChecklistDocumental): boolean 
 
 function tieneMetaNoVacia(meta: ObservacionesInternacionMeta): boolean {
   const checklistTieneAlgo = REQUISITOS_DOCUMENTALES.some((item) => meta.checklistDocumental[item.key])
-  return checklistTieneAlgo || meta.armRegistros.length > 0 || meta.oxigenoterapiaRegistros.length > 0
+  return (
+    checklistTieneAlgo ||
+    meta.armRegistros.length > 0 ||
+    meta.oxigenoterapiaRegistros.length > 0 ||
+    meta.depositosRegistros.length > 0
+  )
 }
 
 export function serializarObservacionesInternacion(data: {
@@ -229,6 +288,12 @@ export function serializarObservacionesInternacion(data: {
     fechaEgreso?: Date | string | null
     litros?: number | null
     profesionalId?: number | null
+  }> | null
+  depositosRegistros?: Array<{
+    id?: string | null
+    fecha: Date | string
+    importe: number
+    observaciones?: string | null
   }> | null
 }): string | null {
   const observaciones = recortarTexto(data.observaciones)
@@ -267,10 +332,25 @@ export function serializarObservacionesInternacion(data: {
     )
     .filter((item): item is OxigenoterapiaRegistroMeta => item !== null)
 
+  const depositosRegistros = (data.depositosRegistros ?? [])
+    .map((item, index) =>
+      normalizarRegistroDeposito(
+        {
+          id: item.id,
+          fecha: item.fecha,
+          importe: item.importe,
+          observaciones: item.observaciones,
+        },
+        index
+      )
+    )
+    .filter((item): item is DepositoRegistroMeta => item !== null)
+
   const meta: ObservacionesInternacionMeta = {
     checklistDocumental: checklistNormalizado,
     armRegistros,
     oxigenoterapiaRegistros,
+    depositosRegistros,
   }
 
   if (!tieneMetaNoVacia(meta)) {

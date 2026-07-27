@@ -69,6 +69,7 @@ const ChecklistDocumentalSchema = z.object({
   ORDEN_DE_CONSULTA: z.boolean().optional(),
   KIT_DE_CIRUGIA: z.boolean().optional(),
   CONSENTIMIENTO_QUIRURGICO: z.boolean().optional(),
+  OBSERVACIONES: z.boolean().optional(),
   DEPOSITO_DE_INGRESO: z.boolean().optional(),
   AVISO_DE_INTERNACION: z.boolean().optional(),
 })
@@ -88,12 +89,20 @@ const RegistroOxigenoterapiaSchema = z.object({
   profesionalId: z.number().int().positive().optional().nullable(),
 })
 
+const RegistroDepositoSchema = z.object({
+  id: z.string().max(80).trim().optional().nullable(),
+  fecha: z.preprocess(parseFechaArgentina, z.date()),
+  importe: z.coerce.number().min(0),
+  observaciones: z.string().max(500).trim().optional().nullable(),
+})
+
 export const ActualizarObservacionesInternacionSchema = z.object({
   ingresoId: z.number().int().positive(),
   observaciones: z.string().max(5000).trim().optional().nullable(),
   checklistDocumental: ChecklistDocumentalSchema.optional(),
   armRegistros: z.array(RegistroArmSchema).max(500).optional(),
   oxigenoterapiaRegistros: z.array(RegistroOxigenoterapiaSchema).max(500).optional(),
+  depositosRegistros: z.array(RegistroDepositoSchema).max(500).optional(),
 })
 
 export type ActualizarObservacionesInternacionInput = z.infer<typeof ActualizarObservacionesInternacionSchema>

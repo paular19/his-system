@@ -24,7 +24,7 @@ const GUIA_MODULOS_ADMISION = [
 const GUIA_VIDEOS_CENTRALES_ADMISION: GuiaVideoItem[] = [
   {
     titulo: 'Sistema HIS - Video central del sistema',
-    url: 'https://www.youtube.com/watch?v=M64Xsj_b838',
+    url: 'https://www.youtube.com/watch?v=1daXFaGUYY8',
   },
   {
     titulo: 'Uso de multiples pestanas',

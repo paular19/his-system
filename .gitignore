@@ -10,3 +10,6 @@ prisma/*.db
 prisma/*.db-journal
 .env*
 .demo-pg-data/
+tsconfig.tsbuildinfo
+FORMATO FICHA.docx
+escaner.pdf

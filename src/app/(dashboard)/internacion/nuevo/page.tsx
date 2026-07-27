@@ -27,22 +27,12 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
   }
 
   const params = await searchParams
+  const pacienteId = params.pacienteId ? parseInt(params.pacienteId, 10) : null
+  const camaInicial = params.camaId ? parseInt(params.camaId, 10) : null
 
-  // Datos necesarios para el formulario
-  const [profesionales, camasDisponibles, catalogoCobertura] = await Promise.all([
-    getProfesionalesActivosCatalogo(),
-    obtenerCamasDisponibles(),
-    getCatalogoCoberturaAtencion(),
-  ])
-
-  const { obraSociales, planes } = catalogoCobertura
-
-  // Paciente inicial si viene por query param
-  let pacienteInicial: PacienteResumen | null = null
-  if (params.pacienteId) {
-    const pacienteId = parseInt(params.pacienteId, 10)
-    if (!isNaN(pacienteId)) {
-      const p = await prisma.paciente.findUnique({
+  const pacienteInicialPromise =
+    pacienteId != null && Number.isFinite(pacienteId)
+      ? prisma.paciente.findUnique({
         where: { id: pacienteId },
         select: {
           id: true,
@@ -56,23 +46,31 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
           numeroAfiliado: true,
         },
       })
-      if (p) {
-        pacienteInicial = {
-          id: p.id,
-          historiaClinica: p.historiaClinica,
-          nombreCompleto: p.nombreCompleto,
-          tipoDocumento: p.tipoDocumento,
-          numeroDocumento: p.numeroDocumento,
-          obraSocialId: p.obraSocialId,
-          planId: p.planId,
-          obraSocialCoseguroId: p.obraSocialCoseguroId,
-          numeroAfiliado: p.numeroAfiliado,
-        }
-      }
-    }
-  }
+      : Promise.resolve(null)
 
-  const camaInicial = params.camaId ? parseInt(params.camaId, 10) : null
+  // Datos necesarios para el formulario
+  const [profesionales, camasDisponibles, catalogoCobertura, pacienteRaw] = await Promise.all([
+    getProfesionalesActivosCatalogo(),
+    obtenerCamasDisponibles(),
+    getCatalogoCoberturaAtencion(),
+    pacienteInicialPromise,
+  ])
+
+  const { obraSociales, planes } = catalogoCobertura
+
+  const pacienteInicial: PacienteResumen | null = pacienteRaw
+    ? {
+      id: pacienteRaw.id,
+      historiaClinica: pacienteRaw.historiaClinica,
+      nombreCompleto: pacienteRaw.nombreCompleto,
+      tipoDocumento: pacienteRaw.tipoDocumento,
+      numeroDocumento: pacienteRaw.numeroDocumento,
+      obraSocialId: pacienteRaw.obraSocialId,
+      planId: pacienteRaw.planId,
+      obraSocialCoseguroId: pacienteRaw.obraSocialCoseguroId,
+      numeroAfiliado: pacienteRaw.numeroAfiliado,
+    }
+    : null
 
   return (
     <>

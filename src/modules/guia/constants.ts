@@ -141,7 +141,7 @@ export const GUIA_VIDEOS_POR_MODULO: Partial<Record<GuiaModuloId, GuiaVideoItem[
 
 export const GUIA_VIDEO_USABILIDAD: GuiaVideoItem = {
   titulo: 'Usabilidad general del sistema',
-  url: 'https://www.youtube.com/watch?v=pR9SrL2Mwyg',
+  url: 'https://www.youtube.com/watch?v=1daXFaGUYY8',
 }
 
 export const GUIA_TIPOS_FEEDBACK = [

@@ -8,13 +8,15 @@ import type {
   MovimientoIngresoInput,
 } from './schemas'
 import type { IngresoConRelaciones, IngresoDetalle, IngresoListItem } from './types'
-import type { Paciente, IngresoPatologia, MovimientoIngreso } from '@prisma/client'
+import type { Paciente, IngresoPatologia, MovimientoIngreso, Prisma } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
 
 // ============================================
 // REPOSITORIO ADMISIÓN
 // Única capa de acceso a datos. Sin SQL directo.
 // ============================================
+
+const MAX_IDS_BUSQUEDA_INGRESO = 250
 
 type ComponentesPractica = {
   valorEspecialista: number | null
@@ -702,7 +704,7 @@ export async function buscarIngresos(
   const { pagina, porPagina, q, tipoIngresoCodigo, estado, fechaDesde, fechaHasta } = params
   const skip = (pagina - 1) * porPagina
 
-  const where: any = {}
+  const where: Prisma.IngresoWhereInput = {}
 
   if (tipoIngresoCodigo) where.tipoIngresoCodigo = tipoIngresoCodigo
   if (estado) where.estado = estado
@@ -713,23 +715,77 @@ export async function buscarIngresos(
   }
 
   if (q) {
-    const esNumerico = /^\d+$/.test(q)
+    const termino = q.trim()
+    const esNumerico = /^\d+$/.test(termino)
+
     if (esNumerico) {
-      const num = parseInt(q, 10)
-      where.OR = [
+      const num = parseInt(termino, 10)
+      const pacientesPorDocumento = await prisma.paciente.findMany({
+        where: {
+          OR: [
+            { numeroDocumento: num },
+            { historiaClinica: num },
+          ],
+        },
+        select: { id: true },
+        take: 25,
+      })
+
+      const orFilters: Prisma.IngresoWhereInput[] = [
         { numeroIngreso: num },
-        { nombre: { contains: q, mode: 'insensitive' } },
-        { obraSocial: { nombre: { contains: q, mode: 'insensitive' } } },
-        { paciente: { numeroDocumento: num } },
-        { paciente: { historiaClinica: num } },
       ]
+
+      if (pacientesPorDocumento.length > 0) {
+        orFilters.push({
+          pacienteId: {
+            in: pacientesPorDocumento.map((p) => p.id),
+          },
+        })
+      }
+
+      where.OR = orFilters
     } else {
-      where.OR = [
-        { nombre: { contains: q, mode: 'insensitive' } },
-        { obraSocial: { nombre: { contains: q, mode: 'insensitive' } } },
-        { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' } } },
-        { paciente: { apellido: { contains: q, mode: 'insensitive' } } },
+      const [pacientesPorTexto, obrasSocialesPorTexto] = await Promise.all([
+        prisma.paciente.findMany({
+          where: {
+            OR: [
+              { nombreCompleto: { contains: termino, mode: 'insensitive' } },
+              { apellido: { contains: termino, mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true },
+          take: MAX_IDS_BUSQUEDA_INGRESO,
+        }),
+        prisma.obraSocial.findMany({
+          where: {
+            nombre: { contains: termino, mode: 'insensitive' },
+          },
+          select: { id: true },
+          take: MAX_IDS_BUSQUEDA_INGRESO,
+        }),
+      ])
+
+      const orFilters: Prisma.IngresoWhereInput[] = [
+        { nombre: { contains: termino, mode: 'insensitive' } },
       ]
+
+      if (pacientesPorTexto.length > 0) {
+        orFilters.push({
+          pacienteId: {
+            in: pacientesPorTexto.map((p) => p.id),
+          },
+        })
+      }
+
+      if (obrasSocialesPorTexto.length > 0) {
+        orFilters.push({
+          obraSocialId: {
+            in: obrasSocialesPorTexto.map((o) => o.id),
+          },
+        })
+      }
+
+      where.OR = orFilters
     }
   }
 

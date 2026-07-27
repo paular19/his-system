@@ -9,6 +9,7 @@ import { Plus, Search, ClipboardList } from 'lucide-react'
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { PaginationControls } from '@/components/ui/pagination-controls'
+import { logServerPerf } from '@/lib/perf/server-perf'
 
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20
@@ -83,6 +84,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
 }
 
 export default async function AdmisionPage({ searchParams }: PageProps) {
+  const tInicio = Date.now()
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'LEER')) redirect('/dashboard')
 
@@ -109,6 +111,7 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
   }
 
   let resultado
+  const tBusquedaInicio = Date.now()
   try {
     // cache() evita trabajo duplicado en el mismo request para los mismos filtros.
     resultado = await buscarIngresosCached({
@@ -122,6 +125,17 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
       `No fue posible cargar los ingresos: ${error instanceof Error ? error.message : 'error desconocido'}`
     )
   }
+  const msBusqueda = Date.now() - tBusquedaInicio
+
+  logServerPerf('admision.listado', {
+    msBusqueda,
+    page: params.page,
+    limit: params.limit,
+    items: resultado.items.length,
+    total: resultado.paginacion.total,
+    conBusqueda: params.q ? 'si' : 'no',
+    totalMs: Date.now() - tInicio,
+  })
 
   if (resultado.paginacion.totalPaginas > 0 && params.page > resultado.paginacion.totalPaginas) {
     const qs = buildQueryString({

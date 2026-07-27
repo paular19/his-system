@@ -50,19 +50,19 @@ const ROLES_POR_EMAIL = {
   // ADMISION
   'ficacode@gmail.com': 'ADMISION',
   'barrionuevodamarisbelen@gmail.com': 'ADMISION',
+  'ivictoria123@hotmail.com': 'ADMISION',
+  'eduardogutierrez0770@gmail.com': 'ADMISION',
+  'altamirano97.leandro@gmail.com': 'ADMISION',
+  'enahirtni@gmail.com': 'ADMISION',
+  'lucianolozanoj2@gmail.com': 'ADMISION',
+  'ivanagtarcaya78@gmail.com': 'ADMISION',
+  'emilio_xeneize_22@hotmail.com.ar': 'ADMISION',
 
   // OPERADOR: todos los módulos excepto facturación
-  'emilio_xeneize_22@hotmail.com.ar': 'OPERADOR',
-  'ivanagtarcaya78@gmail.com': 'OPERADOR',
-  'lucianolozanoj2@gmail.com': 'OPERADOR',
-  'enahirtni@gmail.com': 'OPERADOR',
-  'eduardogutierrez0770@gmail.com': 'OPERADOR',
   'tarosaicha1812@gmail.com': 'OPERADOR',
-  'altamirano97.leandro@gmail.com': 'OPERADOR',
   'zeballosmonika@gmail.com': 'OPERADOR',
 
   // ADMIN: todos los módulos + facturación (aparecen en ambas listas)
-  'ivictoria123@hotmail.com': 'ADMIN',
   'marcelalejandra2015@gmail.com': 'ADMIN',
   'ramospaula1996@gmail.com': 'ADMIN',
 

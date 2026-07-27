@@ -25,9 +25,15 @@ const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
   // ADMISION
   'ficacode@gmail.com': ROLES.ADMISION,
   'barrionuevodamarisbelen@gmail.com': ROLES.ADMISION,
+  'ivictoria123@hotmail.com': ROLES.ADMISION,
+  'eduardogutierrez0770@gmail.com': ROLES.ADMISION,
+  'altamirano97.leandro@gmail.com': ROLES.ADMISION,
+  'enahirtni@gmail.com': ROLES.ADMISION,
+  'lucianolozanoj2@gmail.com': ROLES.ADMISION,
+  'ivanagtarcaya78@gmail.com': ROLES.ADMISION,
+  'emilio_xeneize_22@hotmail.com.ar': ROLES.ADMISION,
 
   // ADMIN
-  'ivictoria123@hotmail.com': ROLES.ADMIN,
   'marcelalejandra2015@gmail.com': ROLES.ADMIN,
   'ramospaula1996@gmail.com': ROLES.ADMIN,
 
@@ -37,13 +43,7 @@ const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
   'serapiogabriela40@gmail.com': ROLES.FACTURACION,
 
   // OPERADOR
-  'emilio_xeneize_22@hotmail.com.ar': ROLES.OPERADOR,
-  'ivanagtarcaya78@gmail.com': ROLES.OPERADOR,
-  'lucianolozanoj2@gmail.com': ROLES.OPERADOR,
-  'enahirtni@gmail.com': ROLES.OPERADOR,
-  'eduardogutierrez0770@gmail.com': ROLES.OPERADOR,
   'tarosaicha1812@gmail.com': ROLES.OPERADOR,
-  'altamirano97.leandro@gmail.com': ROLES.OPERADOR,
   'zeballosmonika@gmail.com': ROLES.OPERADOR,
 }
 

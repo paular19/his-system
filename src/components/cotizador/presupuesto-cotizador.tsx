@@ -18,7 +18,7 @@ type ApiRespuestaNomenclador = {
   error?: string
 }
 
-const PORCENTAJE_PACIENTE = 0.2
+const PORCENTAJE_PACIENTE_DEFAULT = 20
 
 interface PresupuestoCotizadorProps {
   usuario: string
@@ -48,6 +48,7 @@ export function PresupuestoCotizador({ usuario }: PresupuestoCotizadorProps) {
   const [resultadoBusqueda, setResultadoBusqueda] = useState<NomencladorPracticaItem[]>([])
   const [items, setItems] = useState<ItemPresupuesto[]>([])
   const [numeroPresupuesto] = useState(() => generarNumeroPresupuesto())
+  const [porcentajePaciente, setPorcentajePaciente] = useState(PORCENTAJE_PACIENTE_DEFAULT)
 
   const totalPrestaciones = useMemo(
     () => items.reduce((acc, item) => acc + (item.valor ?? 0) * item.cantidad, 0),
@@ -55,9 +56,14 @@ export function PresupuestoCotizador({ usuario }: PresupuestoCotizadorProps) {
   )
 
   const montoPaciente = useMemo(
-    () => Number((totalPrestaciones * PORCENTAJE_PACIENTE).toFixed(2)),
-    [totalPrestaciones]
+    () => Number((totalPrestaciones * (porcentajePaciente / 100)).toFixed(2)),
+    [porcentajePaciente, totalPrestaciones]
   )
+
+  const porcentajePacienteLabel = useMemo(() => {
+    if (Number.isInteger(porcentajePaciente)) return String(porcentajePaciente)
+    return porcentajePaciente.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
+  }, [porcentajePaciente])
 
   const nombrePaciente = paciente?.nombreCompleto?.trim() || pacienteManual.trim() || 'No especificado'
 
@@ -147,6 +153,7 @@ export function PresupuestoCotizador({ usuario }: PresupuestoCotizadorProps) {
     setObservaciones('')
     setPaciente(null)
     setPacienteManual('')
+    setPorcentajePaciente(PORCENTAJE_PACIENTE_DEFAULT)
   }
 
   return (
@@ -338,13 +345,35 @@ export function PresupuestoCotizador({ usuario }: PresupuestoCotizadorProps) {
                 </div>
               )}
 
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Porcentaje aplicable al paciente
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  value={porcentajePaciente}
+                  onChange={(event) => {
+                    const next = Number.parseFloat(event.target.value)
+                    if (!Number.isFinite(next)) {
+                      setPorcentajePaciente(0)
+                      return
+                    }
+                    setPorcentajePaciente(Math.min(100, Math.max(0, next)))
+                  }}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
               <div className="rounded-md border-t pt-3 space-y-1.5 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Total practicas</span>
                   <span className="font-semibold text-gray-900">{formatearMoneda(totalPrestaciones)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600">20% a abonar</span>
+                  <span className="text-gray-600">{porcentajePacienteLabel}% a abonar</span>
                   <span className="font-semibold text-blue-700">{formatearMoneda(montoPaciente)}</span>
                 </div>
               </div>
@@ -451,7 +480,7 @@ export function PresupuestoCotizador({ usuario }: PresupuestoCotizadorProps) {
                 <td className="text-right">{formatearMoneda(totalPrestaciones)}</td>
               </tr>
               <tr>
-                <td colSpan={4} className="text-right">20% a abonar por paciente</td>
+                <td colSpan={4} className="text-right">{porcentajePacienteLabel}% a abonar por paciente</td>
                 <td className="text-right">{formatearMoneda(montoPaciente)}</td>
               </tr>
             </tfoot>

@@ -2,19 +2,62 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { Header } from '@/components/layout/header'
-import { prisma } from '@/lib/db'
+import { getUsuarioSesion } from '@/lib/auth'
+import { ROLES } from '@/lib/auth/rbac'
 import {
   GUIA_MODULOS,
-  GUIA_VIDEO_USABILIDAD,
-  GUIA_VIDEOS_POR_MODULO,
-  esGuiaModuloId,
-  esGuiaPrioridadFeedback,
-  esGuiaTipoFeedback,
+  type GuiaVideoItem,
 } from '@/modules/guia/constants'
-import {
-  GuiaFeedbackBoard,
-  type GuiaFeedbackItem,
-} from '@/modules/guia/components/guia-feedback-board'
+
+const MODULOS_EXCLUIDOS_ADMISION = new Set(['CIRUGIA', 'TURNOS', 'FACTURACION'])
+
+const GUIA_MODULOS_ADMISION = [
+  ...GUIA_MODULOS.filter((modulo) => !MODULOS_EXCLUIDOS_ADMISION.has(modulo.id)),
+  {
+    id: 'PRESUPUESTO',
+    nombre: 'Presupuesto',
+    descripcion: 'Cotizacion y simulacion de practicas para orientar al paciente.',
+    ruta: '/dashboard/cotizador',
+  },
+]
+
+const GUIA_VIDEOS_CENTRALES_ADMISION: GuiaVideoItem[] = [
+  {
+    titulo: 'Sistema HIS - Video central del sistema',
+    url: 'https://www.youtube.com/watch?v=M64Xsj_b838',
+  },
+  {
+    titulo: 'Uso de multiples pestanas',
+    url: 'https://www.youtube.com/watch?v=U5hMlxJjCF0',
+  },
+]
+
+const GUIA_VIDEOS_PASO_A_PASO_ADMISION: Array<{
+  id: string
+  nombre: string
+  videos: GuiaVideoItem[]
+}> = [
+  {
+    id: 'PACIENTES_ADMISION',
+    nombre: 'Registro de paciente y admision',
+    videos: [
+      {
+        titulo: 'Registro de paciente y admision',
+        url: 'https://www.youtube.com/watch?v=XMh5exNwx9w',
+      },
+    ],
+  },
+  {
+    id: 'PRESUPUESTO',
+    nombre: 'Uso del modulo de presupuesto',
+    videos: [
+      {
+        titulo: 'Uso del modulo de presupuesto',
+        url: 'https://youtu.be/xllLmDDun4E',
+      },
+    ],
+  },
+]
 
 function extraerYoutubeId(url: string): string | null {
   try {
@@ -54,68 +97,16 @@ function construirMiniaturaYoutube(url: string): string | null {
 }
 
 export default async function GuiaPage() {
-  const miniaturaUsabilidad = construirMiniaturaYoutube(GUIA_VIDEO_USABILIDAD.url)
-
-  let dbDisponible = true
-  let feedbacks: Awaited<ReturnType<typeof prisma.guiaFeedback.findMany>> = []
-
-  try {
-    feedbacks = await prisma.guiaFeedback.findMany({
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 300,
-    })
-  } catch {
-    dbDisponible = false
-  }
-
-  const feedbacksIniciales: GuiaFeedbackItem[] = []
-
-  for (const item of feedbacks) {
-    if (!esGuiaModuloId(item.modulo)) continue
-    if (!esGuiaTipoFeedback(item.tipo)) continue
-    if (!esGuiaPrioridadFeedback(item.prioridad)) continue
-
-    feedbacksIniciales.push({
-      id: item.id,
-      modulo: item.modulo,
-      tipo: item.tipo,
-      prioridad: item.prioridad,
-      titulo: item.titulo,
-      comentario: item.comentario,
-      respuesta: item.respuesta,
-      respuestaAt: item.respuestaAt ? item.respuestaAt.toISOString() : null,
-      respuestaUsuarioCodigo: item.respuestaUsuarioCodigo,
-      respuestaUsuarioNombre: item.respuestaUsuarioNombre,
-      respuestaUsuarioEmail: item.respuestaUsuarioEmail,
-      pantalla: item.pantalla,
-      pasos: item.pasos,
-      resultadoEsperado: item.resultadoEsperado,
-      usuarioNombre: item.usuarioNombre,
-      usuarioEmail: item.usuarioEmail,
-      usuarioCodigo: item.usuarioCodigo,
-      createdAt: item.createdAt.toISOString(),
-    })
-  }
+  const usuario = await getUsuarioSesion()
+  const esVersionAdmision = usuario.rol === ROLES.ADMISION
+  const modulosGuia = esVersionAdmision ? GUIA_MODULOS_ADMISION : GUIA_MODULOS
+  const bloquesVideos = GUIA_VIDEOS_PASO_A_PASO_ADMISION
 
   return (
     <>
       <Header titulo="Guia del sistema" />
 
       <div className="p-6 space-y-6">
-        {!dbDisponible && (
-          <section className="his-card border-orange-200 bg-orange-50 p-4">
-            <h2 className="text-sm font-semibold text-orange-800">
-              Conexion a base de datos no disponible
-            </h2>
-            <p className="mt-1 text-sm text-orange-700">
-              La guia sigue visible, pero los comentarios no pueden cargarse por ahora.
-              Si estas con Starlink, proba con VPN activa y recarga esta pantalla.
-            </p>
-          </section>
-        )}
-
         <section className="his-card p-5 space-y-3">
           <h2 className="text-lg font-semibold text-gray-900">Como funciona el sistema</h2>
           <p className="text-sm text-gray-600">
@@ -125,20 +116,29 @@ export default async function GuiaPage() {
 
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
             <p className="text-sm font-semibold text-blue-900">Estructura base del circuito operativo</p>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-blue-900">
-              <li>Primero se registra el paciente en el modulo Pacientes.</li>
-              <li>Con el paciente validado, se genera la admision segun el tipo de atencion.</li>
-              <li>Las admisiones ambulatorias se gestionan desde Autorizaciones/Ambulatorio.</li>
-              <li>Las internaciones se gestionan desde Internacion, con cama, movimientos y seguimiento.</li>
-              <li>Las practicas de cirugia programada se cargan desde Cirugia como admision tipo INT: la cama queda reservada y luego se confirma al concretar el ingreso.</li>
-              <li>Las cirugias de emergencia se registran desde Internacion, en el modulo de Cirugia de Emergencia.</li>
-              <li>Luego se consolidan prestaciones en Facturacion para el cierre administrativo.</li>
-              <li>Cada etapa debe cerrar correctamente antes de pasar a la siguiente para evitar reprocesos.</li>
-            </ol>
+            {esVersionAdmision ? (
+              <div className="mt-2 space-y-2 text-sm text-blue-900">
+                <p>En caso de que el paciente no este registrado y sea su primera vez en la clinica hacemos el registro desde el modulo Pacientes (como muestra el video).</p>
+                <p>Con el paciente validado, se genera la admision segun el tipo de atencion.</p>
+                <p>Genero una nueva admision desde el modulo Pacientes o desde el Dashboard (tal como se muestra en el video).</p>
+                <p>Las internaciones se gestionan desde Internacion, con cama, movimientos y seguimiento.</p>
+              </div>
+            ) : (
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-blue-900">
+                <li>Primero se registra el paciente en el modulo Pacientes.</li>
+                <li>Con el paciente validado, se genera la admision segun el tipo de atencion.</li>
+                <li>Las admisiones ambulatorias se gestionan desde Autorizaciones/Ambulatorio.</li>
+                <li>Las internaciones se gestionan desde Internacion, con cama, movimientos y seguimiento.</li>
+                <li>Las practicas de cirugia programada se cargan desde Cirugia como admision tipo INT: la cama queda reservada y luego se confirma al concretar el ingreso.</li>
+                <li>Las cirugias de emergencia se registran desde Internacion, en el modulo de Cirugia de Emergencia.</li>
+                <li>Luego se consolidan prestaciones en Facturacion para el cierre administrativo.</li>
+                <li>Cada etapa debe cerrar correctamente antes de pasar a la siguiente para evitar reprocesos.</li>
+              </ol>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {GUIA_MODULOS.map((modulo) => (
+            {modulosGuia.map((modulo) => (
               <article key={modulo.id} className="rounded-lg border border-gray-200 bg-white p-4">
                 <p className="text-sm font-semibold text-gray-900">{modulo.nombre}</p>
                 <p className="text-xs text-gray-600 mt-1">{modulo.descripcion}</p>
@@ -155,68 +155,87 @@ export default async function GuiaPage() {
 
         <section className="his-card p-5 space-y-3">
           <h2 className="text-lg font-semibold text-gray-900">Advertencias de uso</h2>
-          <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
-            <li>No recargues la pagina varias veces mientras una accion este procesando.</li>
-            <li>Espera la confirmacion visual antes de pasar al siguiente paso.</li>
-            <li>Si una grilla tarda en cargar, evita hacer multiples clics seguidos.</li>
-            <li>Usa un solo navegador/pestana por tarea para evitar datos cruzados.</li>
-            <li>Antes de cerrar, valida que el registro aparezca en el listado.</li>
-          </ul>
+          {esVersionAdmision ? (
+            <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
+              <li>No hace falta que uses una pestana a la vez. Se recomienda el uso de multiples pestanas para evitar tener que recargar muchas veces la misma pagina (click derecho y luego abrir vinculo en una nueva pestana).</li>
+              <li>No recargues la pagina varias veces mientras una accion este procesando.</li>
+              <li>Espera la confirmacion visual antes de pasar al siguiente paso.</li>
+              <li>Si una grilla tarda en cargar, evita hacer multiples clics seguidos.</li>
+              <li>Antes de cerrar, valida que el registro aparezca en el listado.</li>
+            </ul>
+          ) : (
+            <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
+              <li>No recargues la pagina varias veces mientras una accion este procesando.</li>
+              <li>Espera la confirmacion visual antes de pasar al siguiente paso.</li>
+              <li>Si una grilla tarda en cargar, evita hacer multiples clics seguidos.</li>
+              <li>Usa un solo navegador/pestana por tarea para evitar datos cruzados.</li>
+              <li>Antes de cerrar, valida que el registro aparezca en el listado.</li>
+            </ul>
+          )}
         </section>
 
         <section className="his-card p-5 space-y-3">
           <h2 className="text-lg font-semibold text-gray-900">Videos paso a paso</h2>
           <p className="text-sm text-gray-600">
-            Cada modulo incluye sus tutoriales oficiales. Si no hay material publicado todavia, el espacio queda marcado como pendiente.
+            Estos videos cubren el flujo principal de admision, el uso de multiples pestanas y la carga de presupuesto.
           </p>
 
           <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Video recomendado</p>
-            <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-              {miniaturaUsabilidad ? (
-                <img
-                  src={miniaturaUsabilidad}
-                  alt={GUIA_VIDEO_USABILIDAD.titulo}
-                  className="h-28 w-full max-w-55 rounded-md border border-emerald-200 object-cover"
-                  loading="lazy"
-                />
-              ) : null}
-              <div>
-                <p className="text-sm font-semibold text-emerald-900">{GUIA_VIDEO_USABILIDAD.titulo}</p>
-                <a
-                  href={GUIA_VIDEO_USABILIDAD.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 inline-flex text-xs font-medium text-emerald-700 hover:text-emerald-800"
-                >
-                  Ver video de usabilidad
-                </a>
-              </div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Videos centrales del sistema</p>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {GUIA_VIDEOS_CENTRALES_ADMISION.map((video) => {
+                const miniatura = construirMiniaturaYoutube(video.url)
+
+                return (
+                  <a
+                    key={video.url}
+                    href={video.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group block rounded-md border border-emerald-200 bg-white p-2 hover:border-emerald-300"
+                  >
+                    {miniatura ? (
+                      <img
+                        src={miniatura}
+                        alt={video.titulo}
+                        className="h-24 w-full rounded object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-24 w-full items-center justify-center rounded bg-emerald-100 text-xs text-emerald-700">
+                        Vista previa no disponible
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs font-medium text-emerald-900 group-hover:text-emerald-700">
+                      {video.titulo}
+                    </p>
+                    <p className="text-[11px] text-emerald-700">Abrir en YouTube</p>
+                  </a>
+                )
+              })}
             </div>
           </article>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            {GUIA_MODULOS.map((modulo) => {
-              const videos = GUIA_VIDEOS_POR_MODULO[modulo.id] ?? []
-
-              if (videos.length === 0) {
+            {bloquesVideos.map((bloque) => {
+              if (bloque.videos.length === 0) {
                 return (
-                  <div key={modulo.id} className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
-                    <p className="text-sm font-semibold text-gray-800">{modulo.nombre}</p>
+                  <div key={bloque.id} className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
+                    <p className="text-sm font-semibold text-gray-800">{bloque.nombre}</p>
                     <p className="text-xs text-gray-600 mt-1">Video pendiente de carga</p>
                   </div>
                 )
               }
 
               return (
-                <article key={modulo.id} className="rounded-lg border border-gray-200 bg-white p-4">
-                  <p className="text-sm font-semibold text-gray-900">{modulo.nombre}</p>
+                <article key={bloque.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                  <p className="text-sm font-semibold text-gray-900">{bloque.nombre}</p>
                   <ul className="mt-3 space-y-3">
-                    {videos.map((video) => {
+                    {bloque.videos.map((video) => {
                       const miniatura = construirMiniaturaYoutube(video.url)
 
                       return (
-                        <li key={`${modulo.id}-${video.url}`}>
+                        <li key={`${bloque.id}-${video.url}`}>
                           <a
                             href={video.url}
                             target="_blank"
@@ -250,21 +269,6 @@ export default async function GuiaPage() {
           </div>
         </section>
 
-        <section className="his-card p-5 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">Como dejar buen feedback</h2>
-          <p className="text-sm text-gray-600">
-            Para que podamos resolver rapido, el comentario tiene que ser concreto y reproducible.
-          </p>
-          <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
-            <li>Defini el tipo: bug, mejora, duda o usabilidad.</li>
-            <li>Escribi un titulo corto que describa el problema real.</li>
-            <li>Indica pantalla o funcion donde ocurre.</li>
-            <li>Detalla que hiciste (pasos) y que esperabas que sucediera.</li>
-            <li>Marca prioridad alta solo si bloquea el trabajo o afecta datos criticos.</li>
-          </ul>
-        </section>
-
-        <GuiaFeedbackBoard feedbacksIniciales={feedbacksIniciales} />
       </div>
     </>
   )

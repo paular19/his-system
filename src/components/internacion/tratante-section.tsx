@@ -14,8 +14,10 @@ interface ProfesionalOption {
 
 interface HistorialTratanteItem {
     id: number
-    profesionalId: number
-    profesionalNombre: string
+    profesionalIdAnterior: number | null
+    profesionalNombreAnterior: string | null
+    profesionalIdNuevo: number | null
+    profesionalNombreNuevo: string
     usuario: string
     fecha: Date | string
 }
@@ -47,12 +49,8 @@ export function TratanteSection({
         [tratanteActualId, tratanteSeleccionado]
     )
 
-    const historialTratantesSinRepetidos = useMemo(
-        () => historialTratantes.filter((item, index, arr) => {
-            if (index === 0) return true
-            const anterior = arr[index - 1]
-            return anterior ? anterior.profesionalId !== item.profesionalId : true
-        }),
+    const historialTratantesOrdenado = useMemo(
+        () => [...historialTratantes],
         [historialTratantes]
     )
 
@@ -132,13 +130,21 @@ export function TratanteSection({
 
             <div className="mt-4 border-t pt-3">
                 <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Historico de medicos tratantes</p>
-                {historialTratantesSinRepetidos.length === 0 ? (
+                {historialTratantesOrdenado.length === 0 ? (
                     <p className="text-xs text-gray-500">No hay cambios de medico tratante registrados.</p>
                 ) : (
                     <ul className="space-y-1.5">
-                        {historialTratantesSinRepetidos.map((item) => (
+                        {historialTratantesOrdenado.map((item) => (
                             <li key={item.id} className="text-xs text-gray-700">
-                                <span className="font-medium">{nombreProfesionalParaMostrar(item.profesionalNombre)}</span>
+                                {item.profesionalNombreAnterior ? (
+                                    <>
+                                        <span className="font-medium">{nombreProfesionalParaMostrar(item.profesionalNombreAnterior)}</span>
+                                        <span className="text-gray-500"> → </span>
+                                    </>
+                                ) : (
+                                    <span className="text-gray-500">Sin tratante → </span>
+                                )}
+                                <span className="font-medium">{nombreProfesionalParaMostrar(item.profesionalNombreNuevo)}</span>
                                 <span className="text-gray-500"> · {fmtFecha(item.fecha)} · usuario {item.usuario}</span>
                             </li>
                         ))}

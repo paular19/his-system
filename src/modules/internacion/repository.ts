@@ -636,13 +636,36 @@ export async function obtenerInternacionDetalle(
 
   const mapHistorial = historialTratantes
     .map((h) => {
-      const matchId = h.detalle?.match(/ID\s+(\d+)/)
-      const matchNombre = h.detalle?.match(/→\s+(.+)\s+\(ID\s+\d+\)$/)
-      if (!matchId || !matchNombre) return null
+      const detalle = h.detalle ?? ''
+      const parts = detalle.split('→')
+      if (parts.length < 2) return null
+
+      const origen = parts[0]?.replace('Médico tratante actualizado:', '').trim() ?? ''
+      const destino = parts[1]?.trim() ?? ''
+
+      const matchAnterior = origen.match(/^(.*)\s+\((?:ID\s+)?(\d+|N\/A)\)$/i)
+      const matchNuevo = destino.match(/^(.*)\s+\((?:ID\s+)?(\d+)\)$/i)
+
+      const nombreAnterior = matchAnterior?.[1]?.trim() ?? null
+      const idAnteriorRaw = matchAnterior?.[2]?.trim() ?? null
+      const nombreNuevo = matchNuevo?.[1]?.trim() ?? destino.trim()
+      const idNuevoRaw = matchNuevo?.[2]?.trim() ?? null
+
+      const profesionalIdAnterior =
+        idAnteriorRaw && idAnteriorRaw !== 'N/A' ? Number.parseInt(idAnteriorRaw, 10) : null
+      const profesionalIdNuevo = idNuevoRaw ? Number.parseInt(idNuevoRaw, 10) : null
+
+      if (!nombreNuevo) return null
+
       return {
         id: h.id,
-        profesionalId: Number.parseInt(matchId[1] ?? "", 10),
-        profesionalNombre: matchNombre[1]?.trim() ?? "",
+        profesionalIdAnterior,
+        profesionalNombreAnterior:
+          nombreAnterior && nombreAnterior.length > 0 && nombreAnterior !== 'Sin tratante'
+            ? nombreAnterior
+            : null,
+        profesionalIdNuevo: Number.isFinite(profesionalIdNuevo ?? NaN) ? profesionalIdNuevo : null,
+        profesionalNombreNuevo: nombreNuevo,
         usuario: h.usuario,
         fecha: h.fecha,
       }

@@ -125,6 +125,8 @@ export function InternacionForm({
   const [obraSocialId, setObraSocialId] = useState(pacienteInicial?.obraSocialId?.toString() ?? '')
   const [planId, setPlanId] = useState(pacienteInicial?.planId?.toString() ?? '')
   const [numeroAfiliado, setNumeroAfiliado] = useState(pacienteInicial?.numeroAfiliado ?? '')
+  const [nombreTutor, setNombreTutor] = useState('')
+  const [telefonoTutor, setTelefonoTutor] = useState('')
   const [descripcionPatologia, setDescripcionPatologia] = useState('')
   const [observaciones, setObservaciones] = useState('')
   const [checklistDocumental, setChecklistDocumental] = useState<ChecklistDocumental>(
@@ -376,6 +378,8 @@ export function InternacionForm({
         obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
         planId: planId ? parseInt(planId, 10) : null,
         numeroAfiliado: numeroAfiliado || null,
+        nombreTutor: nombreTutor.trim() || null,
+        telefonoTutor: telefonoTutor.trim() || null,
         descripcionPatologia: descripcionPatologia || null,
         observaciones: observacionesSerializadas ?? null,
         generarOrdenesSeparadasPorPractica,
@@ -470,7 +474,7 @@ export function InternacionForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Medico tratante <span className="text-red-500">*</span>
+              Medico tratante/derivante <span className="text-red-500">*</span>
             </label>
             <p className="mb-1 text-[11px] text-gray-500">
               Medico asignado para la internacion.
@@ -516,6 +520,32 @@ export function InternacionForm({
               onChange={(e) => setDescripcionPatologia(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm resize-none h-20"
               placeholder="Describe el motivo de la internacion..."
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Familiar responsable
+            </label>
+            <input
+              type="text"
+              value={nombreTutor}
+              onChange={(e) => setNombreTutor(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              placeholder="Opcional"
+              maxLength={100}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Telefono del familiar responsable
+            </label>
+            <input
+              type="text"
+              value={telefonoTutor}
+              onChange={(e) => setTelefonoTutor(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              placeholder="Opcional"
+              maxLength={50}
             />
           </div>
         </div>

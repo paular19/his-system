@@ -9,7 +9,10 @@ import type { Metadata } from 'next'
 import { PrintButton } from '@/components/ui/print-button'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 import {
-  diferenciaDiasCalendarioArgentina,
+  parseObservacionesInternacion,
+  REQUISITOS_DOCUMENTALES,
+} from '@/modules/internacion/observaciones-meta'
+import {
   formatearFechaArgentina,
   formatearFechaHoraArgentina,
 } from '@/lib/utils/argentina-date'
@@ -41,31 +44,14 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
       cama: true,
       obraSocial: true,
       plan: true,
+      ingresoSubtipo: {
+        select: {
+          profesionalDerivanteNombre: true,
+        },
+      },
       ingresoPatologias: {
         orderBy: { fecha: 'desc' },
         take: 10,
-      },
-      evoluciones: {
-        orderBy: { fecha: 'desc' },
-        take: 20,
-        include: { profesional: true },
-      },
-      medicaciones: {
-        where: { estado: { in: ['A', 'S'] } },
-        orderBy: { fechaInicio: 'desc' },
-        include: { profesional: true },
-      },
-      practicas: {
-        orderBy: { fecha: 'desc' },
-        take: 20,
-      },
-      cirugiasProgramadas: {
-        orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
-        include: {
-          practicas: {
-            orderBy: { id: 'asc' },
-          },
-        },
       },
       informes: {
         orderBy: { fecha: 'desc' },
@@ -80,8 +66,64 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
 
   if (!ingreso || ingreso.tipoIngresoCodigo !== 'INT') notFound()
 
+  const [obraSocialCoseguro, historialTratanteAudits] = await Promise.all([
+    ingreso.obraSocialCoseguroId
+      ? prisma.obraSocial.findUnique({
+        where: { id: ingreso.obraSocialCoseguroId },
+        select: { nombre: true },
+      })
+      : Promise.resolve(null),
+    prisma.auditLog.findMany({
+      where: {
+        entidad: 'Ingreso',
+        registroId: String(ingresoId),
+        accion: 'MODIFICAR',
+        detalle: { startsWith: 'Médico tratante actualizado:' },
+      },
+      orderBy: { fecha: 'desc' },
+      select: {
+        id: true,
+        detalle: true,
+        usuario: true,
+        fecha: true,
+      },
+    }),
+  ])
+
   const informe = ingreso.informes[0] ?? null
-  const cirugia = ingreso.cirugiasProgramadas[0] ?? null
+  const observacionesParseadas = parseObservacionesInternacion(ingreso.observaciones)
+  const checksMarcados = REQUISITOS_DOCUMENTALES.filter(
+    (item) => observacionesParseadas.checklistDocumental[item.key]
+  )
+
+  const historialTratante = historialTratanteAudits
+    .map((item) => {
+      const detalle = item.detalle ?? ''
+      const partes = detalle.split('→')
+      if (partes.length < 2) return null
+
+      const origen = partes[0]?.replace('Médico tratante actualizado:', '').trim() ?? ''
+      const destino = partes[1]?.trim() ?? ''
+
+      const matchAnterior = origen.match(/^(.*)\s+\((?:ID\s+)?(\d+|N\/A)\)$/i)
+      const matchNuevo = destino.match(/^(.*)\s+\((?:ID\s+)?(\d+)\)$/i)
+
+      const anterior = matchAnterior?.[1]?.trim() ?? null
+      const nuevo = matchNuevo?.[1]?.trim() ?? destino.trim()
+      if (!nuevo) return null
+
+      return {
+        id: item.id,
+        anterior:
+          anterior && anterior.length > 0 && anterior !== 'Sin tratante'
+            ? nombreProfesionalParaMostrar(anterior)
+            : null,
+        nuevo: nombreProfesionalParaMostrar(nuevo),
+        usuario: item.usuario,
+        fecha: item.fecha,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
 
   const fmt = (d: Date | null | undefined) =>
     formatearFechaHoraArgentina(d, {
@@ -93,14 +135,6 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
     })
   const fmtDate = (d: Date | null | undefined) =>
     formatearFechaArgentina(d, { day: 'numeric', month: 'numeric', year: 'numeric' })
-  const fmtHora = (h: string | null | undefined) => (h && h.trim() ? h : '—')
-
-  const diasEstancia = () => {
-    if (!ingreso.fechaIngreso) return '—'
-    const dias = diferenciaDiasCalendarioArgentina(ingreso.fechaIngreso, ingreso.fechaEgreso ?? new Date())
-    if (dias === null) return '—'
-    return `${Math.max(0, dias)} días`
-  }
 
   const edad = () => {
     const fn = ingreso.paciente?.fechaNacimiento
@@ -108,6 +142,18 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
     const a = calcularEdad(fn)
     return a === null ? '—' : `${a} años`
   }
+
+  const telefonoPaciente =
+    ingreso.paciente?.celular1?.trim() ||
+    ingreso.paciente?.telefonoFijo?.trim() ||
+    '—'
+
+  const medicoCabeceraODerivante =
+    ingreso.profesionalGuardia?.nombre
+      ? nombreProfesionalParaMostrar(ingreso.profesionalGuardia.nombre)
+      : ingreso.ingresoSubtipo?.profesionalDerivanteNombre
+        ? nombreProfesionalParaMostrar(ingreso.ingresoSubtipo.profesionalDerivanteNombre)
+        : '—'
 
   const estadoLabel = (e: string | null) => {
     switch (e) {
@@ -171,37 +217,56 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 print:gap-4 print:text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:gap-4 print:text-sm">
           {/* Datos del Paciente */}
           <div>
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Información del Paciente</h2>
             <dl className="space-y-1.5 print:space-y-1">
-              <DataRow label="Historia Clínica" value={ingreso.paciente?.historiaClinica?.toString() ?? '—'} />
-              <DataRow label="Nombre" value={ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? '—'} />
-              <DataRow label="Documento" value={`${ingreso.paciente?.tipoDocumento ?? '—'} ${ingreso.paciente?.numeroDocumento ?? '—'}`} />
+                <DataRow label="Apellidos y nombres" value={ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? '—'} />
+                <DataRow label="Historia Clínica" value={ingreso.paciente?.historiaClinica?.toString() ?? '—'} />
+                <DataRow label="Tipo y número de documento" value={`${ingreso.paciente?.tipoDocumento ?? '—'} ${ingreso.paciente?.numeroDocumento ?? '—'}`} />
+                <DataRow label="Fecha de nacimiento" value={fmtDate(ingreso.paciente?.fechaNacimiento)} />
               <DataRow label="Edad" value={edad()} />
-              <DataRow label="Género" value={ingreso.paciente?.sexo === 'M' ? 'Masculino' : ingreso.paciente?.sexo === 'F' ? 'Femenino' : '—'} />
+                <DataRow label="Sexo" value={ingreso.paciente?.sexo === 'M' ? 'Masculino' : ingreso.paciente?.sexo === 'F' ? 'Femenino' : '—'} />
+                <DataRow label="Domicilio" value={ingreso.paciente?.domicilio ?? '—'} />
+                <DataRow label="Teléfono" value={telefonoPaciente} />
+                <DataRow label="Familiar responsable" value={ingreso.nombreTutor ?? '—'} />
+                <DataRow label="Teléfono familiar" value={ingreso.telefonoTutor ?? '—'} />
             </dl>
           </div>
 
-          {/* Datos de Hospitalización */}
+            {/* Datos de Internación */}
           <div>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Hospitalización</h2>
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Internación</h2>
             <dl className="space-y-1.5 print:space-y-1">
-              <DataRow label="Tipo" value={ingreso.tipoInternacion?.descripcion ?? '—'} />
-              <DataRow label="Cama" value={ingreso.cama ? `${ingreso.cama.identificador} (${ingreso.cama.sector})` : '—'} />
-              <DataRow label="Ingreso" value={fmt(ingreso.fechaIngreso)} />
-              {ingreso.fechaEgreso && <DataRow label="Alta real" value={fmtDate(ingreso.fechaEgreso)} />}
-              <DataRow label="Estancia" value={diasEstancia()} />
+                <DataRow label="Número de ingreso" value={`INT-${ingreso.numeroIngreso}`} />
+                <DataRow label="Fecha y hora de ingreso" value={fmt(ingreso.fechaIngreso)} />
+                <DataRow
+                  label="Habitación"
+                  value={
+                    ingreso.cama
+                      ? `${ingreso.cama.habitacion ? `Hab. ${ingreso.cama.habitacion} · ` : ''}${ingreso.cama.identificador}`
+                      : '—'
+                  }
+                />
+                <DataRow label="Diagnóstico" value={ingreso.descripcionPatologia ?? '—'} />
             </dl>
           </div>
 
-          {/* Obra Social */}
+            {/* Cobertura */}
           <div>
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Cobertura</h2>
             <dl className="space-y-1.5 print:space-y-1">
-              <DataRow label="Obra Social" value={ingreso.obraSocial?.nombre ?? '—'} />
-              <DataRow label="Afiliado" value={ingreso.numeroAfiliado ?? '—'} />
+                <DataRow
+                  label="Obra social"
+                  value={
+                    ingreso.plan?.descripcion
+                      ? `${ingreso.obraSocial?.nombre ?? '—'} (${ingreso.plan.descripcion})`
+                      : (ingreso.obraSocial?.nombre ?? '—')
+                  }
+                />
+                <DataRow label="Coseguro" value={obraSocialCoseguro?.nombre ?? 'No corresponde'} />
+                <DataRow label="Nro. afiliado OS" value={ingreso.numeroAfiliado ?? '—'} />
             </dl>
           </div>
 
@@ -209,74 +274,36 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
           <div>
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Médicos</h2>
             <dl className="space-y-1.5 print:space-y-1">
-              <DataRow label="Guardia" value={ingreso.profesionalGuardia?.nombre ? nombreProfesionalParaMostrar(ingreso.profesionalGuardia.nombre) : '—'} />
-              <DataRow label="Tratante" value={ingreso.profesionalTratante?.nombre ? nombreProfesionalParaMostrar(ingreso.profesionalTratante.nombre) : '—'} />
-              {informe?.profesionalEfector && <DataRow label="Efector" value={nombreProfesionalParaMostrar(informe.profesionalEfector.nombre)} />}
-              {informe?.profesionalPrescriptor && <DataRow label="Prescriptor" value={nombreProfesionalParaMostrar(informe.profesionalPrescriptor.nombre)} />}
+                <DataRow label="Médico de cabecera/derivante" value={medicoCabeceraODerivante} />
+                <DataRow
+                  label="Médico tratante"
+                  value={ingreso.profesionalTratante?.nombre ? nombreProfesionalParaMostrar(ingreso.profesionalTratante.nombre) : '—'}
+                />
             </dl>
-          </div>
-        </div>
-
-        {/* Cirugía programada (resumen) */}
-        {cirugia && (
-          <div className="border-t pt-4 print:pt-2">
-            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Cirugía</h2>
-            <div className="his-card p-4 print:p-2">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <DataRow label="Fecha" value={fmtDate(cirugia.fechaCirugia)} />
-                <DataRow label="Hora" value={fmtHora(cirugia.horaCirugia)} />
-                <DataRow
-                  label="Especialista a cargo"
-                  value={
-                    ingreso.profesionalTratante?.nombre
-                      ? nombreProfesionalParaMostrar(ingreso.profesionalTratante.nombre)
-                      : informe?.profesionalEfector?.nombre
-                        ? nombreProfesionalParaMostrar(informe.profesionalEfector.nombre)
-                        : '—'
-                  }
-                />
-                <DataRow
-                  label="N° autorización"
-                  value={cirugia.numeroAutorizacion ?? '—'}
-                />
-              </div>
 
               <div className="mt-3">
-                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Prácticas</p>
-                {cirugia.practicas.length > 0 ? (
-                  <ul className="space-y-1 print:space-y-0.5 text-xs">
-                    {cirugia.practicas.map((p) => (
-                      <li key={p.id} className="text-gray-700">
-                        • Cód. {p.codigo} - {p.descripcion} · Cant. {String(p.cantidad)}
-                        {p.numeroAutorizacion && (
-                          <span className="text-gray-500"> (Auth: {p.numeroAutorizacion})</span>
-                        )}
+                <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Historial médico tratante</p>
+                {historialTratante.length === 0 ? (
+                  <p className="text-xs text-gray-500">Sin cambios registrados.</p>
+                ) : (
+                  <ul className="space-y-1 text-xs text-gray-700">
+                    {historialTratante.map((item) => (
+                      <li key={item.id}>
+                        {item.anterior ? `${item.anterior} → ` : 'Sin tratante → '}
+                        <span className="font-medium">{item.nuevo}</span>
+                        <span className="text-gray-500"> · {fmt(item.fecha)} · usuario {item.usuario}</span>
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="text-xs text-gray-500">Sin prácticas registradas.</p>
                 )}
               </div>
-
-              <div className="mt-3">
-                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Observaciones</p>
-                <p className="text-xs text-gray-700 whitespace-pre-wrap">
-                  {cirugia.observaciones?.trim() || 'Sin observaciones.'}
-                </p>
-              </div>
-            </div>
           </div>
-        )}
+        </div>
 
-        {/* Diagnósticos */}
-        {(ingreso.descripcionPatologia || ingreso.ingresoPatologias.length > 0) && (
+          {/* Diagnósticos adicionales */}
+          {ingreso.ingresoPatologias.length > 0 && (
           <div className="border-t pt-4 print:pt-2">
-            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Diagnósticos</h2>
-            {ingreso.descripcionPatologia && (
-              <p className="text-xs text-gray-700 mb-2 print:mb-1 italic">Patología: {ingreso.descripcionPatologia}</p>
-            )}
-            {ingreso.ingresoPatologias.length > 0 && (
+              <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Diagnósticos registrados</h2>
               <ul className="space-y-1 text-xs print:space-y-0.5">
                 {ingreso.ingresoPatologias.map((p) => (
                   <li key={p.id} className="text-gray-700">
@@ -284,69 +311,68 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
                   </li>
                 ))}
               </ul>
-            )}
           </div>
         )}
 
-        {/* Medicaciones activas */}
-        {ingreso.medicaciones.length > 0 && (
+          {/* Observaciones + checklist */}
           <div className="border-t pt-4 print:pt-2">
-            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Medicaciones</h2>
-            <div className="space-y-2 print:space-y-1 text-xs">
-              {ingreso.medicaciones.map((med) => (
-                <div key={med.id} className="flex justify-between gap-2">
-                  <div className="flex-1">
-                    <span className="font-medium text-gray-900">{med.nombre}</span>
-                    {med.dosis && <span className="text-gray-600"> - {med.dosis}</span>}
-                    {med.viaAdministracion && <span className="text-gray-500 print:hidden"> ({med.viaAdministracion})</span>}
-                  </div>
-                  <span className="text-gray-500 text-right shrink-0">{med.frecuencia ?? 'S/F'}</span>
-                </div>
-              ))}
+            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Observaciones</h2>
+            <p className="text-xs text-gray-700 whitespace-pre-wrap">
+              {observacionesParseadas.observaciones?.trim() || 'Sin observaciones.'}
+            </p>
+
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Checks documentales marcados</p>
+              {checksMarcados.length === 0 ? (
+                <p className="text-xs text-gray-500">Sin checks marcados.</p>
+              ) : (
+                <ul className="space-y-1 text-xs text-gray-700">
+                  {checksMarcados.map((item) => (
+                    <li key={item.key}>• {item.label}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
-        )}
 
-        {/* Prácticas realizadas */}
-        {ingreso.practicas.length > 0 && (
+          {/* Depósitos */}
           <div className="border-t pt-4 print:pt-2">
-            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Procedimientos Realizados</h2>
-            <ul className="space-y-1 print:space-y-0.5 text-xs">
-              {ingreso.practicas.map((p) => (
-                <li key={p.id} className="text-gray-700">
-                  • {fmtDate(p.fecha)} - Cód. {p.codigoPractica} · Cant. {String(p.cantidad)}
-                  {p.numeroAutorizacion && <span className="text-gray-500"> (Auth: {p.numeroAutorizacion})</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Evolución clínica (resumen últimas notas) */}
-        {ingreso.evoluciones.length > 0 && (
-          <div className="border-t pt-4 print:pt-2">
-            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Evolución Clínica (últimas 5 notas)</h2>
-            <div className="space-y-3 print:space-y-2 text-xs">
-              {ingreso.evoluciones.slice(0, 5).map((ev) => (
-                <div key={ev.id} className="border-l-2 border-blue-300 pl-2 print:pl-1 py-1">
-                  <div className="flex justify-between items-start">
-                    <span className="font-medium text-gray-900">{fmtDate(ev.fecha)}</span>
-                    <span className="text-yellow-700 bg-yellow-50 print:bg-transparent px-1.5 py-0.5 rounded text-[10px] print:text-[9px]">
-                      {ev.tipo}
-                    </span>
-                  </div>
-                  <p className="text-gray-700 mt-0.5 whitespace-pre-wrap text-[11px] print:text-[10px]">{ev.descripcion}</p>
-                  {ev.profesional && (
-                    <p className="text-gray-500 text-[10px] print:text-[9px] mt-0.5">{nombreProfesionalParaMostrar(ev.profesional.nombre)}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-            {ingreso.evoluciones.length > 5 && (
-              <p className="text-xs text-gray-500 mt-2 print:mt-1">
-                ... y {ingreso.evoluciones.length - 5} notas adicionales en el sistema
-              </p>
+            <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Depósitos</h2>
+            {observacionesParseadas.depositosRegistros.length === 0 ? (
+              <p className="text-xs text-gray-500">Sin depósitos registrados.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-xs">
+                  <thead>
+                    <tr className="text-left uppercase tracking-wide text-gray-500">
+                      <th className="px-2 py-2">Fecha</th>
+                      <th className="px-2 py-2">Importe</th>
+                      <th className="px-2 py-2">Observaciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {observacionesParseadas.depositosRegistros.map((item) => (
+                      <tr key={item.id} className="text-gray-700">
+                        <td className="px-2 py-2">{fmtDate(new Date(item.fecha))}</td>
+                        <td className="px-2 py-2">
+                          {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(item.importe)}
+                        </td>
+                        <td className="px-2 py-2">{item.observaciones?.trim() || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
+          </div>
+
+          {informe && (
+          <div className="border-t pt-4 print:pt-2">
+              <h2 className="text-sm font-semibold text-gray-900 mb-2 print:mb-1 print:text-xs">Estado del informe</h2>
+              <dl className="space-y-1.5 print:space-y-1">
+                <DataRow label="Fecha de emisión" value={fmtDate(informe.fecha)} />
+                <DataRow label="Estado" value={estadoLabel(informe.estado)} />
+              </dl>
           </div>
         )}
 

@@ -267,6 +267,8 @@ export async function crearIngreso(
         obraSocialId,
         planId,
         numeroAfiliado: data.numeroAfiliado ?? null,
+        nombreTutor: data.nombreTutor ?? null,
+        telefonoTutor: data.telefonoTutor ?? null,
         obraSocialCoseguroId: data.obraSocialCoseguroId ?? null,
         planCoseguroId: data.planCoseguroId ?? null,
         numeroAfiliadoCoseguro: data.numeroAfiliadoCoseguro ?? null,
@@ -680,7 +682,7 @@ export async function actualizarIngreso(
     'fechaIngreso', 'fechaEgresoPrevista', 'fechaEgreso',
     'tipoInternacionCodigo', 'descripcionPatologia', 'descripcionPatologiaDefinitiva',
     'profesionalGuardiaId', 'profesionalTratanteId', 'camaId', 'sedeId',
-    'obraSocialId', 'planId', 'numeroAfiliado',
+    'obraSocialId', 'planId', 'numeroAfiliado', 'nombreTutor', 'telefonoTutor',
     'obraSocialCoseguroId', 'planCoseguroId', 'numeroAfiliadoCoseguro',
     'motivoEgresoCodigo', 'observaciones', 'estado',
   ] as const

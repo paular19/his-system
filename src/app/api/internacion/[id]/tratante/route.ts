@@ -11,7 +11,13 @@ interface RouteParams {
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
     const usuario = await getUsuarioSesion()
-    if (!tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')) {
+    const puedeModificar =
+        tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+
+    if (!puedeModificar) {
         return NextResponse.json({ ok: false, error: 'Sin permisos para modificar médico tratante' }, { status: 403 })
     }
 

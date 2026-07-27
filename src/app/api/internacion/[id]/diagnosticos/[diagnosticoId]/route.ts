@@ -10,7 +10,13 @@ export async function PUT(
     { params }: { params: Promise<{ id: string; diagnosticoId: string }> }
 ) {
     const usuario = await getUsuarioSesion()
-    if (!tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')) {
+    const puedeModificar =
+        tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+
+    if (!puedeModificar) {
         return NextResponse.json({ ok: false, error: 'Sin permisos para modificar diagnósticos' }, { status: 403 })
     }
 

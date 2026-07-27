@@ -88,9 +88,17 @@ export default async function InternacionDetallePage({ params }: PageProps) {
     const ingresoId = parseInt(id, 10)
     if (isNaN(ingresoId)) notFound()
 
-    const puedeModificar = tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')
-    const puedeCrear = puedeModificar || tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
-    const puedeCambiarCama = puedeModificar || tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+    const puedeModificar =
+        tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+    const puedeCrear =
+        tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+    const puedeCambiarCama = puedeModificar
     const puedeEditarPracticas =
         puedeCrear ||
         tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||

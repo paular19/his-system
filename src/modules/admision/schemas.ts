@@ -50,6 +50,8 @@ const CrearIngresoBaseSchema = z.object({
   obraSocialId: z.number().int().positive().optional().nullable(),
   planId: z.number().int().positive().optional().nullable(),
   numeroAfiliado: z.string().max(50).trim().optional().nullable(),
+  nombreTutor: z.string().max(100).trim().optional().nullable(),
+  telefonoTutor: z.string().max(50).trim().optional().nullable(),
   obraSocialCoseguroId: z.number().int().positive().optional().nullable(),
   planCoseguroId: z.number().int().positive().optional().nullable(),
   numeroAfiliadoCoseguro: z.string().max(50).trim().optional().nullable(),

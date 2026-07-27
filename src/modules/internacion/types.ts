@@ -144,8 +144,10 @@ export interface InternacionDetalle {
   profesionalTratante: { id: number; nombre: string; matricula: number | null } | null
   historialTratantes: Array<{
     id: number
-    profesionalId: number
-    profesionalNombre: string
+    profesionalIdAnterior: number | null
+    profesionalNombreAnterior: string | null
+    profesionalIdNuevo: number | null
+    profesionalNombreNuevo: string
     usuario: string
     fecha: Date
   }>

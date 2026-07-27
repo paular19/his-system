@@ -14,7 +14,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         const usuario = await getUsuarioSesion()
         const puedeCambiarCama =
             tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||
-            tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')
+            tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+            tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+            tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
         if (!puedeCambiarCama) {
             return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
         }

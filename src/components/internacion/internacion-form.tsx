@@ -21,11 +21,16 @@ import {
 } from '@/components/admision/practicas-admision-card'
 import { generarOrdenesPendientesAdmision } from '@/components/admision/ordenes-auto'
 import {
+  REQUISITOS_DOCUMENTALES,
+  serializarObservacionesInternacion,
+  tieneChecklistCompleto,
+  type ChecklistDocumental,
+} from '@/modules/internacion/observaciones-meta'
+import {
   abrirVentanaImpresionPendiente,
   cerrarVentanaImpresion,
   navegarVentanaImpresion,
 } from '@/lib/utils/print-window'
-import { serializarObservacionesInternacion } from '@/modules/internacion/observaciones-meta'
 
 interface ProfesionalOption {
   id: number
@@ -55,6 +60,20 @@ interface InternacionFormProps {
 }
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
+
+function crearChecklistInicial(): ChecklistDocumental {
+  return {
+    DOCUMENTO: false,
+    CARNET: false,
+    RECIBO_DE_SUELDO: false,
+    ORDEN_DE_CONSULTA: false,
+    KIT_DE_CIRUGIA: false,
+    CONSENTIMIENTO_QUIRURGICO: false,
+    OBSERVACIONES: false,
+    DEPOSITO_DE_INGRESO: false,
+    AVISO_DE_INTERNACION: false,
+  }
+}
 
 function ahoraLocalDateTimeInput(): string {
   const now = new Date()
@@ -92,13 +111,19 @@ export function InternacionForm({
   const [numeroAfiliado, setNumeroAfiliado] = useState(pacienteInicial?.numeroAfiliado ?? '')
   const [descripcionPatologia, setDescripcionPatologia] = useState('')
   const [observaciones, setObservaciones] = useState('')
-  const [checkObservaciones, setCheckObservaciones] = useState(false)
+  const [checklistDocumental, setChecklistDocumental] = useState<ChecklistDocumental>(
+    crearChecklistInicial()
+  )
   const [practicas, setPracticas] = useState<PracticaAdmisionItem[]>([])
   const [generarOrdenesSeparadasPorPractica, setGenerarOrdenesSeparadasPorPractica] = useState(false)
   const [busquedaPracticaPendiente, setBusquedaPracticaPendiente] = useState({
     termino: '',
     hayResultados: false,
   })
+  const checklistCompleto = useMemo(
+    () => tieneChecklistCompleto(checklistDocumental),
+    [checklistDocumental]
+  )
 
   const planesDisponibles = useMemo(() => {
     const filtered = obraSocialId
@@ -144,6 +169,10 @@ export function InternacionForm({
       setPlanId('')
       setNumeroAfiliado('')
     }
+  }
+
+  const toggleChecklist = (key: keyof ChecklistDocumental) => {
+    setChecklistDocumental((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -247,9 +276,7 @@ export function InternacionForm({
 
     const observacionesSerializadas = serializarObservacionesInternacion({
       observaciones: observaciones || null,
-      checklistDocumental: {
-        OBSERVACIONES: checkObservaciones,
-      },
+      checklistDocumental,
     })
 
     const requiereOrdenAutomatica = practicasExpandida.length > 0
@@ -535,15 +562,36 @@ export function InternacionForm({
 
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Observaciones</h3>
-        <label className="mb-3 inline-flex items-center gap-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={checkObservaciones}
-            onChange={(e) => setCheckObservaciones(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          Check Observaciones
-        </label>
+        <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-700">
+              Checklist documental
+            </h4>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                checklistCompleto
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-amber-100 text-amber-700'
+              }`}
+            >
+              {checklistCompleto ? 'Completo' : 'Pendiente'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {REQUISITOS_DOCUMENTALES.map((item) => (
+              <label key={item.key} className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={checklistDocumental[item.key]}
+                  onChange={() => toggleChecklist(item.key)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>{item.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
         <textarea
           value={observaciones}
           onChange={(e) => setObservaciones(e.target.value)}

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
-import { Header } from '@/components/layout/header'
+    url: 'https://www.youtube.com/watch?v=c3FHHSiQTsg',
 import { getUsuarioSesion } from '@/lib/auth'
 import { ROLES } from '@/lib/auth/rbac'
 import {

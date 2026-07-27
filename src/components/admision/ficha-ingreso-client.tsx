@@ -18,6 +18,7 @@ import type { IngresoDetalle } from '@/modules/admision/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 import { agruparPracticasAutorizadasPorOrden, obtenerDestinoGrupoPracticasAutorizadas } from '@/lib/practicas-autorizadas'
+import { ObservacionesSection } from '@/components/internacion/observaciones-section'
 import {
     abrirVentanaImpresionPendiente,
     cerrarVentanaImpresion,
@@ -1457,57 +1458,65 @@ export function FichaIngresoClient({
                 </div>
 
                 {/* Observaciones */}
-                {observacionesLimpias && (
-                    <div className="his-card p-5">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-sm font-semibold text-gray-700">Observaciones</h3>
-                            {puedeModificar && editingCard !== 'observaciones' && (
-                                <button
-                                    onClick={() => {
-                                        setEditingCard('observaciones');
-                                        setCardValues({ observaciones: observacionesLimpias });
+                {ingreso.tipoIngresoCodigo === 'INT' ? (
+                    <ObservacionesSection
+                        ingresoId={ingreso.id}
+                        observacionesIniciales={ingreso.observaciones ?? null}
+                        puedeModificar={puedeModificar}
+                    />
+                ) : (
+                    observacionesLimpias && (
+                        <div className="his-card p-5">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-sm font-semibold text-gray-700">Observaciones</h3>
+                                {puedeModificar && editingCard !== 'observaciones' && (
+                                    <button
+                                        onClick={() => {
+                                            setEditingCard('observaciones');
+                                            setCardValues({ observaciones: observacionesLimpias });
+                                        }}
+                                        className="ml-1 text-gray-400 hover:text-blue-600" title="Editar sección"
+                                    >
+                                        <Pencil className="h-4 w-4" />
+                                    </button>
+                                )}
+                            </div>
+                            {editingCard === 'observaciones' ? (
+                                <form
+                                    onSubmit={async (e) => {
+                                        e.preventDefault();
+                                        setCardLoading(true);
+                                        setCardError(null);
+                                        try {
+                                            await updateIngresoAction(ingreso.id, { observaciones: cardValues.observaciones });
+                                            setEditingCard(null);
+                                        } catch (err) {
+                                            setCardError('Error al guardar');
+                                        } finally {
+                                            setCardLoading(false);
+                                        }
                                     }}
-                                    className="ml-1 text-gray-400 hover:text-blue-600" title="Editar sección"
                                 >
-                                    <Pencil className="h-4 w-4" />
-                                </button>
+                                    <textarea
+                                        className="border rounded px-2 py-1 w-full text-sm"
+                                        rows={4}
+                                        value={cardValues.observaciones}
+                                        onChange={e => setCardValues((v: any) => ({ ...v, observaciones: e.target.value }))}
+                                        disabled={cardLoading}
+                                    />
+                                    <div className="flex gap-2 mt-2">
+                                        <button type="submit" className="text-green-600 border px-3 py-1 rounded" disabled={cardLoading}>Guardar</button>
+                                        <button type="button" className="text-gray-400 border px-3 py-1 rounded" onClick={() => setEditingCard(null)} disabled={cardLoading}>Cancelar</button>
+                                        {cardError && <span className="text-red-500 ml-2">{cardError}</span>}
+                                    </div>
+                                </form>
+                            ) : (
+                                <p className="text-sm text-gray-600 whitespace-pre-line">
+                                    {observacionesLimpias}
+                                </p>
                             )}
                         </div>
-                        {editingCard === 'observaciones' ? (
-                            <form
-                                onSubmit={async (e) => {
-                                    e.preventDefault();
-                                    setCardLoading(true);
-                                    setCardError(null);
-                                    try {
-                                        await updateIngresoAction(ingreso.id, { observaciones: cardValues.observaciones });
-                                        setEditingCard(null);
-                                    } catch (err) {
-                                        setCardError('Error al guardar');
-                                    } finally {
-                                        setCardLoading(false);
-                                    }
-                                }}
-                            >
-                                <textarea
-                                    className="border rounded px-2 py-1 w-full text-sm"
-                                    rows={4}
-                                    value={cardValues.observaciones}
-                                    onChange={e => setCardValues((v: any) => ({ ...v, observaciones: e.target.value }))}
-                                    disabled={cardLoading}
-                                />
-                                <div className="flex gap-2 mt-2">
-                                    <button type="submit" className="text-green-600 border px-3 py-1 rounded" disabled={cardLoading}>Guardar</button>
-                                    <button type="button" className="text-gray-400 border px-3 py-1 rounded" onClick={() => setEditingCard(null)} disabled={cardLoading}>Cancelar</button>
-                                    {cardError && <span className="text-red-500 ml-2">{cardError}</span>}
-                                </div>
-                            </form>
-                        ) : (
-                            <p className="text-sm text-gray-600 whitespace-pre-line">
-                                {observacionesLimpias}
-                            </p>
-                        )}
-                    </div>
+                    )
                 )}
             </div>
 

@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
-    url: 'https://www.youtube.com/watch?v=c3FHHSiQTsg',
 import { getUsuarioSesion } from '@/lib/auth'
 import { ROLES } from '@/lib/auth/rbac'
 import {
@@ -24,7 +23,7 @@ const GUIA_MODULOS_ADMISION = [
 const GUIA_VIDEOS_CENTRALES_ADMISION: GuiaVideoItem[] = [
   {
     titulo: 'Sistema HIS - Video central del sistema',
-    url: 'https://www.youtube.com/watch?v=1daXFaGUYY8',
+    url: 'https://www.youtube.com/watch?v=c3FHHSiQTsg',
   },
   {
     titulo: 'Uso de multiples pestanas',

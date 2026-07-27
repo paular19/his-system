@@ -458,10 +458,41 @@ export function AdmisionForm({
         return
       }
 
+      const prefetchParams = new URLSearchParams()
+      if (paciente?.nombreCompleto) {
+        prefetchParams.set('prefetchNombre', paciente.nombreCompleto)
+      }
+      if (paciente?.numeroDocumento != null) {
+        prefetchParams.set('prefetchDocumento', String(paciente.numeroDocumento))
+      }
+      if (obraSocialSeleccionada?.nombre) {
+        prefetchParams.set('prefetchObraSocial', obraSocialSeleccionada.nombre)
+      }
+
+      const fichaPathBase = `/dashboard/admision/${result.id}`
+      const fichaPath = prefetchParams.toString().length > 0
+        ? `${fichaPathBase}?${prefetchParams.toString()}`
+        : fichaPathBase
+
+      void router.prefetch(fichaPath)
+
       if (requiereOrdenAutomatica) {
-        const autoOrdenResult = await generarOrdenesPendientesAdmision(result.id)
-        if (autoOrdenResult.ok && autoOrdenResult.ordenes.length > 0) {
-          const ordenesParam = autoOrdenResult.ordenes
+        const ordenesGeneradas = Array.isArray(result.ordenesGeneradas)
+          ? result.ordenesGeneradas
+          : []
+
+        let ordenesFinales = ordenesGeneradas
+        if (ordenesFinales.length === 0) {
+          const autoOrdenResult = await generarOrdenesPendientesAdmision(result.id)
+          if (autoOrdenResult.ok) {
+            ordenesFinales = autoOrdenResult.ordenes
+          } else {
+            console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
+          }
+        }
+
+        if (ordenesFinales.length > 0) {
+          const ordenesParam = ordenesFinales
             .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
             .join(',')
 
@@ -471,9 +502,6 @@ export function AdmisionForm({
           )
           impresionDisparada = true
         } else {
-          if (!autoOrdenResult.ok) {
-            console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
-          }
           cerrarVentanaImpresion(ventanaImpresion)
         }
       } else {
@@ -484,7 +512,7 @@ export function AdmisionForm({
         cerrarVentanaImpresion(ventanaImpresion)
       }
 
-      router.push(`/dashboard/admision/${result.id}`)
+      router.push(fichaPath)
     } catch (err) {
       if (!impresionDisparada) {
         cerrarVentanaImpresion(ventanaImpresion)

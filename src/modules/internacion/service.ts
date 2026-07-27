@@ -39,8 +39,8 @@ import type { ResultadoPaginado } from '@/types'
 // Lógica de negocio + auditoría
 // ============================================
 
-export async function obtenerMapaCamas(fechaReferencia?: Date): Promise<MapaCamas> {
-  return repo.obtenerMapaCamas(fechaReferencia)
+export async function obtenerMapaCamas(fechaReferencia?: Date, obraSocialIdFiltro?: number): Promise<MapaCamas> {
+  return repo.obtenerMapaCamas(fechaReferencia, obraSocialIdFiltro)
 }
 
 export async function obtenerCamasDisponibles(sector?: string): Promise<CamaConOcupante[]> {

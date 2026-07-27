@@ -9,10 +9,6 @@ import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import {
   BedDouble,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Wrench,
   Plus,
   User,
   Calendar,
@@ -76,7 +72,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
     formatearFechaArgentina(fechaReferencia)
 
   const [mapa, internaciones, obrasSocialesRaw] = await Promise.all([
-    obtenerMapaCamas(fechaReferencia),
+    obtenerMapaCamas(fechaReferencia, obraSocialIdFiltro),
     obtenerInternacionesActivas(
       {
         pagina: 1,
@@ -100,7 +96,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   return (
     <>
       <Header titulo="Internación" />
-      <div className="p-6 space-y-6">
+      <div className="p-4 space-y-4">
 
         {/* Acciones */}
         <div className="flex items-center justify-between print:hidden">
@@ -131,84 +127,15 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           q={q}
           obraSocialIdFiltro={obraSocialIdFiltro}
         />
-        <p className="-mt-4 text-xs text-gray-500 print:hidden">Fecha seleccionada: {fechaLabel}</p>
+        <p className="-mt-3 text-xs text-gray-500 print:hidden">Fecha seleccionada: {fechaLabel}</p>
 
-        {/* Tarjetas resumen totales */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 print:hidden">
-          <div className="his-card p-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle className="h-8 w-8 text-green-500" />
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{mapa.totales.disponibles}</p>
-                <p className="text-xs text-gray-500">Disponibles</p>
-              </div>
-            </div>
-          </div>
-          <div className="his-card p-4">
-            <div className="flex items-center gap-3">
-              <XCircle className="h-8 w-8 text-red-500" />
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{mapa.totales.ocupadas}</p>
-                <p className="text-xs text-gray-500">Ocupadas</p>
-              </div>
-            </div>
-          </div>
-          <div className="his-card p-4">
-            <div className="flex items-center gap-3">
-              <Clock className="h-8 w-8 text-yellow-500" />
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{mapa.totales.reservadas}</p>
-                <p className="text-xs text-gray-500">Reservadas</p>
-              </div>
-            </div>
-          </div>
-          <div className="his-card p-4">
-            <div className="flex items-center gap-3">
-              <Wrench className="h-8 w-8 text-gray-400" />
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{mapa.totales.mantenimiento}</p>
-                <p className="text-xs text-gray-500">Mantenimiento</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Resumen por sector */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
-          {mapa.sectores.map((sector) => (
-            <div key={sector.sector} className="his-card p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <BedDouble className="h-4 w-4 text-blue-600" />
-                <span className="text-sm font-semibold text-gray-900">{sector.label}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-xl font-bold text-green-600">{sector.disponibles}</p>
-                  <p className="text-xs text-gray-500">Libres</p>
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-red-600">{sector.ocupadas}</p>
-                  <p className="text-xs text-gray-500">Ocupadas</p>
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-gray-600">{sector.total}</p>
-                  <p className="text-xs text-gray-500">Total</p>
-                </div>
-              </div>
-              <div className="mt-3 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-blue-500 transition-all"
-                  style={{
-                    width:
-                      sector.total > 0
-                        ? `${Math.round((sector.ocupadas / sector.total) * 100)}%`
-                        : '0%',
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+        <InternacionFiltros
+          q={q}
+          obraSocialIdFiltro={obraSocialIdFiltro}
+          obrasSociales={obrasSociales}
+          hayFiltros={hayFiltros}
+          fechaReferencia={fechaSeleccionada}
+        />
 
         {/* Mapa visual por sector */}
         <div className="space-y-4 print:hidden">
@@ -231,14 +158,6 @@ export default async function InternacionPage({ searchParams }: PageProps) {
               className="print:hidden flex items-center gap-2 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2"
             />
           </div>
-
-          <InternacionFiltros
-            q={q}
-            obraSocialIdFiltro={obraSocialIdFiltro}
-            obrasSociales={obrasSociales}
-            hayFiltros={hayFiltros}
-            fechaReferencia={fechaSeleccionada}
-          />
 
           {hayFiltros && (
             <p className="hidden print:block text-xs text-gray-700 mb-2">

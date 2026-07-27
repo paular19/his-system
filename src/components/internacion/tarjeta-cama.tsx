@@ -44,8 +44,8 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
   const contenido = (
     <div
       className={`
-        relative border rounded-lg p-3 cursor-pointer transition-colors min-h-25
-        flex flex-col gap-1 ${estiloCard}
+        relative border rounded-lg p-2.5 cursor-pointer transition-colors min-h-20
+        flex flex-col gap-0.5 ${estiloCard}
       `}
     >
       {/* Header: ID + estado */}
@@ -75,6 +75,11 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
               {cama.ocupante.nombre}
             </span>
           </div>
+          {cama.ocupante.obraSocialNombre && (
+            <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
+              {cama.ocupante.obraSocialNombre}
+            </p>
+          )}
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3 text-gray-400" />
             <span className="text-xs text-gray-500">
@@ -95,6 +100,11 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
               {cama.ocupante.nombre}
             </span>
           </div>
+          {cama.ocupante.obraSocialNombre && (
+            <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
+              {cama.ocupante.obraSocialNombre}
+            </p>
+          )}
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3 text-gray-400" />
             <span className="text-xs text-gray-500">Reserva</span>

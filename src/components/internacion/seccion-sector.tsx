@@ -22,7 +22,7 @@ export function SeccionSector({ sector }: SeccionSectorProps) {
       {/* Header del sector */}
       <button
         onClick={() => setExpandido(!expandido)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-3">
           <BedDouble className="h-5 w-5 text-blue-600" />
@@ -54,13 +54,13 @@ export function SeccionSector({ sector }: SeccionSectorProps) {
 
       {/* Grid de camas */}
       {expandido && (
-        <div className="px-5 pb-5 border-t border-gray-100">
+        <div className="px-4 pb-3 border-t border-gray-100">
           {sector.camas.length === 0 ? (
             <p className="text-sm text-gray-400 py-4 text-center">
               Sin camas registradas en este sector
             </p>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 pt-4">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 pt-3">
               {sector.camas.map((cama) => (
                 <div
                   key={cama.id}
@@ -79,7 +79,7 @@ export function SeccionSector({ sector }: SeccionSectorProps) {
           )}
 
           {/* Leyenda */}
-          <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+          <div className="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-gray-100">
             {[
               { color: 'bg-green-500', label: 'Disponible' },
               { color: 'bg-red-500', label: 'Ocupada' },

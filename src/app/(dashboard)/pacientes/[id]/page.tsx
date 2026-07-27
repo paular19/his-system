@@ -6,7 +6,7 @@ import { obtenerPaciente } from '@/modules/pacientes/service'
 import { prisma } from '@/lib/db'
 import { formatearFecha, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import Link from 'next/link'
-import { ChevronRight, Pencil, ClipboardList } from 'lucide-react'
+import { ChevronRight, Pencil, ClipboardList, BedDouble } from 'lucide-react'
 import type { Metadata } from 'next'
 import { PacienteHospitalizacionPrint } from '@/components/pacientes/paciente-hospitalizacion-print'
 import { AltaInternacionButton } from '@/components/internacion/alta-internacion-button'
@@ -40,6 +40,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
 
   const edad = calcularEdad(paciente.fechaNacimiento)
   const puedeModificar = tienePermiso(usuario.rol, 'PACIENTES', 'MODIFICAR')
+  const puedeCrearInternacion = tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
 
   // Workaround: evitar prisma.ingreso.findMany por panic de Query Engine en prod con casos puntuales.
   type IngresoBaseRow = {
@@ -335,6 +336,15 @@ export default async function FichaPacientePage({ params }: PageProps) {
               <ClipboardList className="h-4 w-4" />
               Nueva Admisión
             </Link>
+            {puedeCrearInternacion && (
+              <Link
+                href={`/dashboard/internacion/nuevo?pacienteId=${paciente.id}`}
+                className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              >
+                <BedDouble className="h-4 w-4" />
+                Nueva Internación
+              </Link>
+            )}
             {puedeModificar && (
               <Link
                 href={`/dashboard/pacientes/${paciente.id}/editar`}

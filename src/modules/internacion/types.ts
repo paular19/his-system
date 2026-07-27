@@ -44,6 +44,8 @@ export interface OcupanteCama {
   numeroIngreso: number
   nombre: string
   fechaIngreso: Date | null
+  obraSocialId: number | null
+  obraSocialNombre: string | null
 }
 
 export interface CamaConOcupante extends Cama {

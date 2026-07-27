@@ -23,7 +23,6 @@ import { generarOrdenesPendientesAdmision } from '@/components/admision/ordenes-
 import {
   REQUISITOS_DOCUMENTALES,
   serializarObservacionesInternacion,
-  tieneChecklistCompleto,
   type ChecklistDocumental,
 } from '@/modules/internacion/observaciones-meta'
 import {
@@ -139,11 +138,6 @@ export function InternacionForm({
     termino: '',
     hayResultados: false,
   })
-  const checklistCompleto = useMemo(
-    () => tieneChecklistCompleto(checklistDocumental),
-    [checklistDocumental]
-  )
-
   const planesDisponibles = useMemo(() => {
     const filtered = obraSocialId
       ? planes.filter((p) => String(p.obraSocialId ?? '') === obraSocialId)
@@ -474,7 +468,7 @@ export function InternacionForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Medico tratante/derivante <span className="text-red-500">*</span>
+              Medico de cabecera/derivante <span className="text-red-500">*</span>
             </label>
             <p className="mb-1 text-[11px] text-gray-500">
               Medico asignado para la internacion.
@@ -680,15 +674,6 @@ export function InternacionForm({
             <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-700">
               Checklist documental
             </h4>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                checklistCompleto
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-amber-100 text-amber-700'
-              }`}
-            >
-              {checklistCompleto ? 'Completo' : 'Incompleto'}
-            </span>
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

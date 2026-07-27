@@ -202,11 +202,18 @@ async function mapearCamaConOcupante(
       numeroIngreso: number
       nombre: string | null
       fechaIngreso: Date | null
+      obraSocialId: number | null
+      obraSocial: { nombre: string } | null
     }>
   },
-  fechaReferencia: Date
+  fechaReferencia: Date,
+  obraSocialIdFiltro?: number
 ): Promise<CamaConOcupante> {
-  const ingresosActivos = cama.ingresos
+  const ingresosRelevantes = obraSocialIdFiltro
+    ? cama.ingresos.filter((ing) => ing.obraSocialId === obraSocialIdFiltro)
+    : cama.ingresos
+
+  const ingresosActivos = ingresosRelevantes
     .filter((ing) => ingresoActivoParaMapa(ing.fechaIngreso, fechaReferencia))
     .sort((a, b) => {
       const af = a.fechaIngreso?.getTime() ?? 0
@@ -215,8 +222,8 @@ async function mapearCamaConOcupante(
     })
 
   const ingresoActivo = ingresosActivos[0] ?? null
-  const hayIngresoDelDia = cama.ingresos.some((ing) => ingresoDelDiaParaMapa(ing.fechaIngreso, fechaReferencia))
-  const hayIngresoFuturo = cama.ingresos.some(
+  const hayIngresoDelDia = ingresosRelevantes.some((ing) => ingresoDelDiaParaMapa(ing.fechaIngreso, fechaReferencia))
+  const hayIngresoFuturo = ingresosRelevantes.some(
     (ing) => !!ing.fechaIngreso && claveDiaArgentina(ing.fechaIngreso) > claveDiaArgentina(fechaReferencia)
   )
   const hayIngresoActivo = ingresoActivo !== null
@@ -229,6 +236,10 @@ async function mapearCamaConOcupante(
       // Si existe internación activa en esa cama para la fecha, debe verse ocupada
       // aunque el estado físico haya quedado desfasado.
       estadoVisual = 'OCUPADA'
+    } else if (obraSocialIdFiltro) {
+      // Con filtro de obra social, solo marcar ocupadas/reservadas para ingresos
+      // de esa cobertura. El resto debe verse como disponible.
+      estadoVisual = 'DISPONIBLE'
     } else if (cama.estado === 'OCUPADA') {
       estadoVisual = 'OCUPADA'
     } else if (cama.estado === 'RESERVADA' && hayIngresoFuturo) {
@@ -246,12 +257,14 @@ async function mapearCamaConOcupante(
         numeroIngreso: ingresoActivo.numeroIngreso,
         nombre: ingresoActivo.nombre ?? 'Sin nombre',
         fechaIngreso: ingresoActivo.fechaIngreso,
+        obraSocialId: ingresoActivo.obraSocialId ?? null,
+        obraSocialNombre: ingresoActivo.obraSocial?.nombre ?? null,
       }
       : null,
   }
 }
 
-export async function obtenerTodasLasCamas(fechaReferencia?: Date): Promise<CamaConOcupante[]> {
+export async function obtenerTodasLasCamas(fechaReferencia?: Date, obraSocialIdFiltro?: number): Promise<CamaConOcupante[]> {
   const fecha = resolverFechaReferencia(fechaReferencia)
   const camas = await prisma.cama.findMany({
     include: {
@@ -262,6 +275,8 @@ export async function obtenerTodasLasCamas(fechaReferencia?: Date): Promise<Cama
           numeroIngreso: true,
           nombre: true,
           fechaIngreso: true,
+          obraSocialId: true,
+          obraSocial: { select: { nombre: true } },
         },
         orderBy: [{ fechaIngreso: 'asc' }, { id: 'asc' }],
       },
@@ -269,11 +284,11 @@ export async function obtenerTodasLasCamas(fechaReferencia?: Date): Promise<Cama
     orderBy: [{ sector: 'asc' }, { identificador: 'asc' }],
   })
 
-  return Promise.all(camas.map((c) => mapearCamaConOcupante(c, fecha)))
+  return Promise.all(camas.map((c) => mapearCamaConOcupante(c, fecha, obraSocialIdFiltro)))
 }
 
-export async function obtenerMapaCamas(fechaReferencia?: Date): Promise<MapaCamas> {
-  const todasLasCamas = await obtenerTodasLasCamas(fechaReferencia)
+export async function obtenerMapaCamas(fechaReferencia?: Date, obraSocialIdFiltro?: number): Promise<MapaCamas> {
+  const todasLasCamas = await obtenerTodasLasCamas(fechaReferencia, obraSocialIdFiltro)
 
   const sectores: DisponibilidadSector[] = Object.values(SECTOR_CAMA).map((sectorValue) => {
     const camasDelSector = todasLasCamas.filter((c) => c.sector === sectorValue)
@@ -312,6 +327,8 @@ export async function obtenerCamaPorId(id: number): Promise<CamaConOcupante | nu
           numeroIngreso: true,
           nombre: true,
           fechaIngreso: true,
+          obraSocialId: true,
+          obraSocial: { select: { nombre: true } },
         },
         orderBy: [{ fechaIngreso: 'asc' }, { id: 'asc' }],
       },

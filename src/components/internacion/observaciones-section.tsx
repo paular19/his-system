@@ -214,15 +214,11 @@ export function ObservacionesSection({
               <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-700">
                 Checklist documental
               </h4>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                  checklistCompleto
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-amber-100 text-amber-700'
-                }`}
-              >
-                {checklistCompleto ? 'Completo' : 'Incompleto'}
-              </span>
+              {checklistCompleto && (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  Completo
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

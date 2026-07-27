@@ -88,7 +88,10 @@ export function Sidebar({ rol }: SidebarProps) {
       return
     }
 
-    if (estaActivo(href)) {
+    // Si ya estamos exactamente en el destino, no hacer nada.
+    // Si estamos en una subruta del modulo (ej: /dashboard/admision/91),
+    // este click debe llevar al listado base del modulo.
+    if (pathname === href) {
       event.preventDefault()
       return
     }

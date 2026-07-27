@@ -468,7 +468,7 @@ export function InternacionForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Medico de cabecera/derivante <span className="text-red-500">*</span>
+              Medico tratante <span className="text-red-500">*</span>
             </label>
             <p className="mb-1 text-[11px] text-gray-500">
               Medico asignado para la internacion.
@@ -483,7 +483,7 @@ export function InternacionForm({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Medico de cabecera
+              Medico de cabecera/derivante
             </label>
             <ProfesionalSelect
               profesionales={profesionales}

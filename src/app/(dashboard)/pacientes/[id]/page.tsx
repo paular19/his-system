@@ -300,6 +300,15 @@ export default async function FichaPacientePage({ params }: PageProps) {
   const internaciones = ingresos.filter((ing) => normalizarCodigo(ing.tipoIngresoCodigo) === 'INT')
   const internacionActiva =
     internaciones.find((ing) => normalizarCodigo(ing.estado) === 'A') ?? null
+  const puedeConfirmarReserva = (ingreso: {
+    camaId: number | null
+    cama: { estado: string; identificador: string; sector: string; habitacion: string | null } | null
+    estado: string | null
+  }) => (
+    ingreso.camaId != null
+    && ingreso.cama?.estado === 'RESERVADA'
+    && normalizarCodigo(ingreso.estado) !== 'E'
+  )
 
   return (
     <>
@@ -405,7 +414,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
                 >
                   Ver ficha
                 </Link>
-                {internacionActiva.cama?.estado === 'RESERVADA' && (
+                {puedeConfirmarReserva(internacionActiva) && (
                   <ConfirmarCamaReservadaButton
                     camaId={internacionActiva.camaId as number}
                     label="Confirmar cama reservada"
@@ -501,12 +510,21 @@ export default async function FichaPacientePage({ params }: PageProps) {
                         {ing.fechaEgreso ? ` · Alta ${formatearFecha(ing.fechaEgreso)}` : ''}
                       </p>
                     </div>
-                    <Link
-                      href={`/dashboard/internacion/${ing.id}`}
-                      className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Ver ficha
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      {puedeConfirmarReserva(ing) && (
+                        <ConfirmarCamaReservadaButton
+                          camaId={ing.camaId as number}
+                          label="Confirmar cama"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+                        />
+                      )}
+                      <Link
+                        href={`/dashboard/internacion/${ing.id}`}
+                        className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Ver ficha
+                      </Link>
+                    </div>
                   </div>
                 ))
             )}

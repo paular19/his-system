@@ -93,7 +93,13 @@ export function Sidebar({ rol }: SidebarProps) {
       return
     }
 
+    event.preventDefault()
+
     setHrefEnCurso(href)
+
+    if (typeof window !== 'undefined') {
+      window.location.assign(href)
+    }
 
     if (desbloqueoTimeoutRef.current) {
       clearTimeout(desbloqueoTimeoutRef.current)

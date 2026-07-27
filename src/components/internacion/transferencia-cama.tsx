@@ -16,6 +16,16 @@ const MOTIVOS_EGRESO = [
     { codigo: 'FU', descripcion: 'Fuga' },
 ]
 
+function normalizarEstadoCama(estado: string | null | undefined): 'DISPONIBLE' | 'OCUPADA' | 'RESERVADA' | 'MANTENIMIENTO' | null {
+    const valor = (estado ?? '').trim().toUpperCase()
+    if (!valor) return null
+    if (valor === 'DISPONIBLE' || valor === 'D') return 'DISPONIBLE'
+    if (valor === 'OCUPADA' || valor === 'O') return 'OCUPADA'
+    if (valor === 'RESERVADA' || valor === 'R') return 'RESERVADA'
+    if (valor === 'MANTENIMIENTO' || valor === 'M') return 'MANTENIMIENTO'
+    return null
+}
+
 function ahoraLocalDateTimeInput(): string {
     const now = new Date()
     const y = now.getFullYear()
@@ -68,6 +78,8 @@ export function TransferenciaCama({
     const [altaError, setAltaError] = useState<string | null>(null)
     const [altaExito, setAltaExito] = useState<string | null>(null)
     const [confirmacionAlta, setConfirmacionAlta] = useState(false)
+
+    const estadoCamaActual = normalizarEstadoCama(cama?.estado)
 
     // Refresh camas disponibles (excluir la cama actual del listado)
     const camasParaTransferir = camasDisponibles.filter((c) => c.id !== cama?.id)
@@ -160,7 +172,7 @@ export function TransferenciaCama({
     }
 
     const concretarReserva = async () => {
-        if (!cama || cama.estado === 'OCUPADA') return
+        if (!cama || estadoCamaActual === 'OCUPADA') return
 
         setConcretandoReserva(true)
         setError(null)
@@ -219,11 +231,11 @@ export function TransferenciaCama({
                             <div>
                                 <p className="text-sm font-medium text-gray-900">Cama {cama.identificador}</p>
                                 <p className="text-xs text-gray-500">{SECTOR_LABEL[cama.sector] ?? cama.sector}</p>
-                                <p className="text-xs text-gray-500">Estado: {cama.estado}</p>
+                                <p className="text-xs text-gray-500">Estado: {estadoCamaActual ?? '—'}</p>
                             </div>
                         </div>
 
-                        {puedeModificar && estadoInternacion === 'A' && cama.estado !== 'OCUPADA' && (
+                        {puedeModificar && estadoInternacion === 'A' && estadoCamaActual !== 'OCUPADA' && (
                             <button
                                 type="button"
                                 onClick={() => void concretarReserva()}
@@ -232,8 +244,8 @@ export function TransferenciaCama({
                             >
                                 {concretandoReserva
                                     ? 'Concretando...'
-                                    : cama.estado === 'RESERVADA'
-                                        ? 'Marcar reserva concretada'
+                                    : estadoCamaActual === 'RESERVADA'
+                                        ? 'Confirmar cama reservada'
                                         : 'Marcar cama ocupada'}
                             </button>
                         )}

@@ -474,7 +474,7 @@ export async function obtenerInternacionDetalle(
         },
       },
       cama: {
-        select: { id: true, identificador: true, sector: true, habitacion: true },
+        select: { id: true, identificador: true, sector: true, habitacion: true, estado: true },
       },
       profesionalGuardia: { select: { id: true, nombre: true } },
       profesionalTratante: { select: { id: true, nombre: true, matricula: true } },

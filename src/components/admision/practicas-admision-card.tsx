@@ -102,8 +102,11 @@ export function PracticasAdmisionCard({
 
   const buscarPracticaNomenclador = async (
     terminoRaw: string,
-    forzar = false
+    opciones?: { forzar?: boolean; exactoCodigo?: boolean; limit?: number }
   ): Promise<PracticaAdmisionBusquedaItem[]> => {
+    const forzar = opciones?.forzar ?? false
+    const exactoCodigo = opciones?.exactoCodigo ?? false
+    const limit = opciones?.limit ?? 20
     const termino = terminoRaw.trim()
     if (termino.length < 2) {
       setResultadosPractica([])
@@ -118,7 +121,7 @@ export function PracticasAdmisionCard({
       return []
     }
 
-    const cacheKey = `${convenioId}:${termino.toUpperCase()}`
+    const cacheKey = `${convenioId}:${termino.toUpperCase()}:${exactoCodigo ? 'exact' : 'mixed'}:${limit}`
     if (!forzar) {
       const cacheados = cacheBusquedaRef.current.get(cacheKey)
       if (cacheados) {
@@ -136,6 +139,10 @@ export function PracticasAdmisionCard({
     try {
       const params = new URLSearchParams({ q: termino.trim(), convenioId: String(convenioId) })
       params.set('lite', '1')
+      params.set('limit', String(limit))
+      if (exactoCodigo) {
+        params.set('exact', '1')
+      }
 
       const res = await fetch(`/api/practicas-nomenclador?${params.toString()}`, {
         signal: controller.signal,
@@ -168,10 +175,13 @@ export function PracticasAdmisionCard({
     const termino = terminoBusquedaPractica.trim()
     if (termino.length < 2) return
 
+    abortBusquedaRef.current?.abort()
+    setBuscandoPractica(false)
+
     const resultadosActuales =
       resultadosPractica.length > 0
         ? resultadosPractica
-        : await buscarPracticaNomenclador(termino, true)
+        : await buscarPracticaNomenclador(termino, { forzar: true, limit: 20 })
 
     if (resultadosActuales.length === 0) return
 
@@ -179,13 +189,30 @@ export function PracticasAdmisionCard({
     const esCodigo = /^[A-Z0-9]{1,8}$/.test(codigoIngresado)
 
     if (esCodigo) {
-      const exacta = resultadosActuales.find(
+      let exacta = resultadosActuales.find(
         (r) => r.codigo.trim().toUpperCase() === codigoIngresado
       )
+
+      if (!exacta) {
+        const exactas = await buscarPracticaNomenclador(termino, {
+          forzar: true,
+          exactoCodigo: true,
+          limit: 10,
+        })
+        exacta = exactas.find(
+          (r) => r.codigo.trim().toUpperCase() === codigoIngresado
+        )
+      }
+
       if (exacta) {
         agregarPractica(exacta)
         return
       }
+
+      setBuscandoPractica(false)
+      setResultadosPractica([])
+      setIndiceResultadoActivo(-1)
+      return
     }
 
     const candidato = resultadosActuales[indiceResultadoActivo >= 0 ? indiceResultadoActivo : 0]
@@ -203,7 +230,7 @@ export function PracticasAdmisionCard({
     }
 
     const timer = setTimeout(() => {
-      void buscarPracticaNomenclador(termino)
+      void buscarPracticaNomenclador(termino, { limit: 20 })
     }, 180)
 
     return () => clearTimeout(timer)
@@ -267,6 +294,7 @@ export function PracticasAdmisionCard({
     setResultadosPractica([])
     setTerminoBusquedaPractica('')
     setIndiceResultadoActivo(-1)
+    setBuscandoPractica(false)
   }
 
   const quitarPractica = (tempId: string) => {
@@ -321,7 +349,7 @@ export function PracticasAdmisionCard({
         </div>
         <button
           type="button"
-          onClick={() => void buscarPracticaNomenclador(terminoBusquedaPractica, true)}
+          onClick={() => void buscarPracticaNomenclador(terminoBusquedaPractica, { forzar: true, limit: 20 })}
           disabled={disabled || buscandoPractica || terminoBusquedaPractica.trim().length < 2}
           className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors"
         >

@@ -1060,7 +1060,7 @@ export async function obtenerContextoAdmisionParaOrden(
 export async function buscarPracticas(
   query: string,
   convenioId?: number,
-  options?: { sinEnriquecer?: boolean }
+  options?: { sinEnriquecer?: boolean; exactoCodigo?: boolean; limite?: number }
 ): Promise<NomencladorPracticaItem[]> {
   type NomencladorPracticaRow = {
     convenioId: number
@@ -1073,7 +1073,9 @@ export async function buscarPracticas(
   }
 
   const queryNormalizada = query.trim().toUpperCase()
-  const buscarCodigoExacto = /^[A-Z0-9]{1,8}$/.test(queryNormalizada)
+  const buscarCodigoExacto = options?.exactoCodigo || /^[A-Z0-9]{1,8}$/.test(queryNormalizada)
+  const limite = Math.max(1, Math.min(options?.limite ?? 20, 50))
+  const limiteExactas = Math.min(limite, 10)
 
   const obtenerExactas = async (convenioFiltrado?: number) => {
     if (!buscarCodigoExacto) return [] as NomencladorPracticaRow[]
@@ -1083,7 +1085,7 @@ export async function buscarPracticas(
         ...(convenioFiltrado ? { convenioId: convenioFiltrado } : {}),
         codigo: queryNormalizada,
       },
-      take: 5,
+      take: limiteExactas,
       orderBy: [{ convenioId: 'asc' }],
       select: {
         convenioId: true,
@@ -1109,10 +1111,10 @@ export async function buscarPracticas(
       if (vistos.has(key)) continue
       combinadas.push(item)
       vistos.add(key)
-      if (combinadas.length >= 20) break
+      if (combinadas.length >= limite) break
     }
 
-    return combinadas.slice(0, 20)
+    return combinadas.slice(0, limite)
   }
 
   const serializarSinEnriquecer = (practicas: NomencladorPracticaRow[]): NomencladorPracticaItem[] => {
@@ -1143,7 +1145,7 @@ export async function buscarPracticas(
       ...(convenioId ? { convenioId } : {}),
       ...whereBase,
     },
-    take: 20,
+    take: limite,
     orderBy: { descripcion: 'asc' },
     select: {
       convenioId: true,
@@ -1169,7 +1171,7 @@ export async function buscarPracticas(
   const exactasGlobales = await obtenerExactas()
   const fallback = await prisma.nomencladorPractica.findMany({
     where: whereBase,
-    take: 20,
+    take: limite,
     orderBy: { descripcion: 'asc' },
     select: {
       convenioId: true,

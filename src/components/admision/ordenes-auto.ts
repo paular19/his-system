@@ -1,23 +1,14 @@
 import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 
-type PracticaAdmisionApi = {
-  id: number
-  estado?: string | null
-  numeroAutorizacion?: string | null
-  ordenPractica?: Array<unknown>
-}
-
-function estaPendienteDeOrden(practica: PracticaAdmisionApi): boolean {
-  const estado = (practica.estado ?? 'A').trim().toUpperCase()
-  if (estado === 'X') return false
-  return (practica.ordenPractica?.length ?? 0) === 0
-}
-
-async function obtenerPracticasIngreso(ingresoId: number): Promise<PracticaAdmisionApi[]> {
-  const res = await fetch(`/api/admision/${ingresoId}/practicas`, { cache: 'no-store' })
+async function obtenerIdsPendientesIngreso(ingresoId: number): Promise<number[]> {
+  const res = await fetch(`/api/admision/${ingresoId}/practicas?soloPendientesIds=1`, { cache: 'no-store' })
   const json = await res.json().catch(() => null)
-  const practicas = Array.isArray(json?.data) ? json.data : []
-  return practicas as PracticaAdmisionApi[]
+  const ids = Array.isArray(json?.data)
+    ? (json.data as unknown[])
+      .filter((id): id is number => Number.isFinite(Number(id)))
+      .map((id) => Number(id))
+    : []
+  return ids
 }
 
 export async function generarOrdenesPendientesAdmision(
@@ -30,14 +21,10 @@ export async function generarOrdenesPendientesAdmision(
     if (Array.isArray(opciones?.idsPendientesConfirmados)) {
       idsPendientesResueltos = Array.from(new Set(opciones.idsPendientesConfirmados))
     } else {
-      const practicas = await obtenerPracticasIngreso(ingresoId)
-      idsPendientesResueltos = practicas
-        .filter((p) => {
-          if (!estaPendienteDeOrden(p)) return false
-          if (!opciones?.soloIds) return true
-          return opciones.soloIds.has(p.id)
-        })
-        .map((p) => p.id)
+      const idsPendientes = await obtenerIdsPendientesIngreso(ingresoId)
+      idsPendientesResueltos = opciones?.soloIds
+        ? idsPendientes.filter((id) => opciones.soloIds?.has(id))
+        : idsPendientes
     }
 
     if (idsPendientesResueltos.length === 0) {

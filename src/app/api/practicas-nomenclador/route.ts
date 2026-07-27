@@ -31,15 +31,21 @@ export async function GET(request: NextRequest) {
     const convenioNumber = convenioRaw ? parseInt(convenioRaw, 10) : undefined
     const convenioId = Number.isFinite(convenioNumber) ? convenioNumber : undefined
     const lite = searchParams.get('lite') === '1'
+    const exactoCodigo = searchParams.get('exact') === '1'
+    const limitRaw = searchParams.get('limit')
+    const limitNumber = limitRaw ? parseInt(limitRaw, 10) : NaN
+    const limit = Number.isFinite(limitNumber) ? Math.max(1, Math.min(limitNumber, 50)) : 20
 
     if (q.length < 2) return apiOk([])
 
-    const cacheKey = buildCacheKey(q, convenioId, lite)
+    const cacheKey = `${buildCacheKey(q, convenioId, lite)}:${exactoCodigo ? 'exact' : 'mixed'}:${limit}`
     const cached = cache.get<Awaited<ReturnType<typeof buscarPracticas>>>(cacheKey)
     if (cached) return apiOk(cached)
 
     const practicas = await buscarPracticas(q, convenioId, {
       sinEnriquecer: lite,
+      exactoCodigo,
+      limite: limit,
     })
     cache.set(cacheKey, practicas)
     return apiOk(practicas)

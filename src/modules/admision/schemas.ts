@@ -94,7 +94,9 @@ const CrearIngresoBaseSchema = z.object({
   })).optional(),
 })
 
-export const CrearIngresoSchema = CrearIngresoBaseSchema.refine(
+export const CrearIngresoSchema = CrearIngresoBaseSchema.extend({
+  generarOrdenesSeparadasPorPractica: z.boolean().optional(),
+}).refine(
   (data) => {
     // Si hay planId, debe haber obraSocialId
     if (data.planId && !data.obraSocialId) {

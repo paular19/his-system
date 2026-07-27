@@ -36,6 +36,7 @@ const GenerarOrdenesInternacionSchema = z.object({
   practicaIds: z.array(z.number().int().positive()).min(1, 'Seleccioná al menos una práctica'),
   clasificacionPorPracticaId: z.record(z.string()).optional().default({}),
   agruparEnUnaOrden: z.boolean().optional().default(false),
+  separarPorPractica: z.boolean().optional().default(false),
   titularOrdenAgrupada: z.string().trim().max(120).optional().nullable(),
   cirujanoFirmanteMatricula: z.number().int().positive().optional().nullable(),
 })
@@ -247,6 +248,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
   practicaIds: number[]
   clasificacionPorPracticaId?: Record<string, string>
   agruparEnUnaOrden?: boolean
+  separarPorPractica?: boolean
   titularOrdenAgrupada?: string | null
   cirujanoFirmanteMatricula?: number | null
 }) {
@@ -417,9 +419,12 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         matriculaAnestesista: practica.matriculaAnestesista,
       })
       const clasificacion = clasificacionDesdeInput ?? clasificacionInferida
+      const esProtocoloBioquimico = practica.codigoPractica.trim() === '66'
       const key = parsed.data.agruparEnUnaOrden
         ? '__AGRUPAR_EN_UNA_ORDEN__'
-        : (practica.codigoPractica.trim() === '66' ? '__PROTOCOLO_BIOQUIMICO__' : clasificacion)
+        : parsed.data.separarPorPractica
+        ? `__PRACTICA_${practica.id}__`
+        : (esProtocoloBioquimico ? '__PROTOCOLO_BIOQUIMICO__' : clasificacion)
       const esClasificacionSoloGastos =
         contieneClasificacion(clasificacion, 'GA') &&
         !contieneClasificacion(clasificacion, 'HE') &&
@@ -445,7 +450,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         cantidad: Number(practica.cantidad ?? 1),
         fecha: practica.fecha,
         tipoFacturacion: 'H',
-        clasificacionAgrupacion: key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : clasificacion,
+        clasificacionAgrupacion: esProtocoloBioquimico ? 'HE' : clasificacion,
         efectorMatricula:
           esClasificacionSoloGastos
             ? ((practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0)
@@ -478,7 +483,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       ''
     ).slice(0, 30)
 
-    const gruposOrdenados = parsed.data.agruparEnUnaOrden
+    const gruposOrdenados = parsed.data.agruparEnUnaOrden || parsed.data.separarPorPractica
       ? Array.from(grupos.entries())
       : Array.from(grupos.entries()).sort((a, b) => {
           if (a[0] === '__PROTOCOLO_BIOQUIMICO__') return -1
@@ -501,14 +506,21 @@ export async function generarOrdenesDesdeInternacionAction(input: {
 
     for (const [key, itemsGrupo] of gruposOrdenados) {
       const esGrupoAgrupado = key === '__AGRUPAR_EN_UNA_ORDEN__'
-      const clasificacion = esGrupoAgrupado ? 'AGRUPADA' : (key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : key)
+      const esGrupoPorPractica = key.startsWith('__PRACTICA_')
+      const clasificacionItemBase =
+        normalizarClasificacionAgrupacion(itemsGrupo[0]?.item?.clasificacionAgrupacion) ?? 'HE'
+      const clasificacion = esGrupoAgrupado
+        ? 'AGRUPADA'
+        : esGrupoPorPractica
+        ? clasificacionItemBase
+        : (key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : key)
       const esGrupoConDerechos = esGrupoAgrupado
         ? itemsGrupo.some(({ item }) => contieneClasificacion(item.clasificacionAgrupacion, 'GA'))
-        : (key !== '__PROTOCOLO_BIOQUIMICO__' && contieneClasificacion(clasificacion, 'GA'))
+        : ((key !== '__PROTOCOLO_BIOQUIMICO__' || esGrupoPorPractica) && contieneClasificacion(clasificacion, 'GA'))
       const titularElegidoAgrupado = parsed.data.titularOrdenAgrupada?.trim() || null
       const titularModular = esGrupoAgrupado
         ? (titularElegidoAgrupado ?? titularSugeridoParaOrdenAgrupada(itemsGrupo.map(({ item }) => item)))
-        : key === '__PROTOCOLO_BIOQUIMICO__'
+        : (key === '__PROTOCOLO_BIOQUIMICO__' || (esGrupoPorPractica && itemsGrupo[0]?.item?.codigoPractica?.trim() === '66'))
         ? 'PROTOCOLO BIOQUIMICO'
         : tituloDesdeClasificacion(clasificacion)
 
@@ -551,7 +563,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           items: itemsGrupo.map(({ item }) => ({
             ...item,
             clasificacionAgrupacion:
-              key === '__PROTOCOLO_BIOQUIMICO__'
+              key === '__PROTOCOLO_BIOQUIMICO__' || (esGrupoPorPractica && item.codigoPractica.trim() === '66')
                 ? null
                 : normalizarClasificacionAgrupacion(item.clasificacionAgrupacion) ?? (esGrupoAgrupado ? 'HE' : clasificacion),
             titularModular,

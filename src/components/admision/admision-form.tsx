@@ -144,6 +144,7 @@ export function AdmisionForm({
 
   // Prácticas y medicamentos (para GUA/DER/IND)
   const [practicas, setPracticas] = useState<PracticaAdmisionItem[]>([])
+  const [generarOrdenesSeparadasPorPractica, setGenerarOrdenesSeparadasPorPractica] = useState(false)
   const [medicaciones, setMedicaciones] = useState<ItemMedicacion[]>([])
   const [descartables, setDescartables] = useState<ItemDescartable[]>([])
   const [busquedaPracticaPendiente, setBusquedaPracticaPendiente] = useState({
@@ -245,6 +246,12 @@ export function AdmisionForm({
       setFechaEgresoPrevista('')
     }
   }, [ocultarEgresoPrevisto])
+
+  useEffect(() => {
+    if (practicas.length < 2 && generarOrdenesSeparadasPorPractica) {
+      setGenerarOrdenesSeparadasPorPractica(false)
+    }
+  }, [practicas.length, generarOrdenesSeparadasPorPractica])
 
   const agregarMedicacion = () => {
     if (!nuevaMedNombre.trim()) return
@@ -411,6 +418,7 @@ export function AdmisionForm({
         numeroAfiliado: numeroAfiliado || null,
         descripcionPatologia: descripcionPatologia || null,
         observaciones: observaciones || null,
+        generarOrdenesSeparadasPorPractica,
         practicas: practicasExpandida.length > 0 ? practicasExpandida : undefined,
         medicaciones: mostrarMedicacion && medicaciones.length > 0
           ? medicaciones.map((m) => ({
@@ -483,7 +491,9 @@ export function AdmisionForm({
 
         let ordenesFinales = ordenesGeneradas
         if (ordenesFinales.length === 0) {
-          const autoOrdenResult = await generarOrdenesPendientesAdmision(result.id)
+          const autoOrdenResult = await generarOrdenesPendientesAdmision(result.id, {
+            separarPorPractica: generarOrdenesSeparadasPorPractica,
+          })
           if (autoOrdenResult.ok) {
             ordenesFinales = autoOrdenResult.ordenes
           } else {
@@ -898,6 +908,20 @@ export function AdmisionForm({
             disabled={guardando}
             onPendingSearchChange={setBusquedaPracticaPendiente}
           />
+
+          {practicas.length > 1 && (
+            <div className="his-card p-4 border border-blue-100 bg-blue-50/60">
+              <label className="inline-flex items-center gap-2 text-sm text-blue-900">
+                <input
+                  type="checkbox"
+                  checked={generarOrdenesSeparadasPorPractica}
+                  onChange={(e) => setGenerarOrdenesSeparadasPorPractica(e.target.checked)}
+                  className="h-4 w-4 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                />
+                Generar una orden separada por cada práctica agregada
+              </label>
+            </div>
+          )}
 
           {mostrarMedicacion && (
             <div className="his-card p-5">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { updateIngresoAction } from '@/modules/admision/actions'
 import type { IngresoDetalle } from '@/modules/admision/types'
 import { calcularTotalSeleccionado } from '@/components/ui/componente-selector'
@@ -53,6 +53,7 @@ export function PracticaIngresoForm({ ingreso, practicasActuales, onSuccess, onC
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const [practicas, setPracticas] = useState<PracticaAdmisionItem[]>([])
+    const [generarOrdenesSeparadasPorPractica, setGenerarOrdenesSeparadasPorPractica] = useState(false)
     const [busquedaPracticaPendiente, setBusquedaPracticaPendiente] = useState({
         termino: '',
         hayResultados: false,
@@ -63,6 +64,12 @@ export function PracticaIngresoForm({ ingreso, practicasActuales, onSuccess, onC
     const etiquetaBusquedaPractica = subtipoAdmisionCodigo === 'CUR' || subtipoAdmisionCodigo === 'SUT'
         ? 'Buscar codigo de practica...'
         : 'Buscar practica en nomenclador...'
+
+    useEffect(() => {
+        if (practicas.length < 2 && generarOrdenesSeparadasPorPractica) {
+            setGenerarOrdenesSeparadasPorPractica(false)
+        }
+    }, [practicas.length, generarOrdenesSeparadasPorPractica])
 
     const obtenerMatriculaDefault = () => {
         const matriculaTratante = ingreso.profesionalTratante?.matricula
@@ -153,6 +160,7 @@ export function PracticaIngresoForm({ ingreso, practicasActuales, onSuccess, onC
                 if (idsNuevasPendientes.length > 0) {
                     const ordenesResult = await generarOrdenesPendientesAdmision(ingreso.id, {
                         idsPendientesConfirmados: idsNuevasPendientes,
+                        separarPorPractica: practicas.length > 1 && generarOrdenesSeparadasPorPractica,
                     })
 
                     if (!ordenesResult.ok) {
@@ -176,6 +184,7 @@ export function PracticaIngresoForm({ ingreso, practicasActuales, onSuccess, onC
                 }
 
                 setPracticas([])
+                setGenerarOrdenesSeparadasPorPractica(false)
                 onSuccess()
             } catch (err) {
                 cerrarVentanaImpresion(ventanaImpresion)
@@ -202,6 +211,20 @@ export function PracticaIngresoForm({ ingreso, practicasActuales, onSuccess, onC
                     disabled={isPending || !ingreso.obraSocialId}
                     onPendingSearchChange={setBusquedaPracticaPendiente}
                 />
+
+                {practicas.length > 1 && (
+                    <div className="rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
+                        <label className="inline-flex items-center gap-2 text-sm text-blue-900">
+                            <input
+                                type="checkbox"
+                                checked={generarOrdenesSeparadasPorPractica}
+                                onChange={(e) => setGenerarOrdenesSeparadasPorPractica(e.target.checked)}
+                                className="h-4 w-4 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Generar una orden separada por cada práctica agregada
+                        </label>
+                    </div>
+                )}
 
                 {error && (
                     <div className="text-xs text-red-600">{error}</div>

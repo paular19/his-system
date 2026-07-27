@@ -78,6 +78,7 @@ export async function createIngresoAction(
         const ordenesResult = await generarOrdenesDesdeInternacionAction({
           ingresoId: ingreso.id,
           practicaIds,
+          separarPorPractica: Boolean(validado.data.generarOrdenesSeparadasPorPractica),
         })
 
         if ('ok' in ordenesResult && ordenesResult.ok) {

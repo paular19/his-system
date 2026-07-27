@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { ROLES, type RolHIS } from '@/lib/auth/rbac'
 import {
@@ -13,6 +14,7 @@ import {
   LayoutDashboard,
   CalendarClock,
   FilePlus,
+  Loader2,
 } from 'lucide-react'
 
 interface NavItem {
@@ -48,7 +50,67 @@ interface SidebarProps {
 
 export function Sidebar({ rol }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const navItems = rol === ROLES.ADMISION ? NAV_ITEMS_ADMISION : NAV_ITEMS_DEFAULT
+  const [hrefEnCurso, setHrefEnCurso] = useState<string | null>(null)
+  const desbloqueoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const estaActivo = (href: string) => {
+    return href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href)
+  }
+
+  useEffect(() => {
+    // Prefetch temprano para reducir latencia al navegar desde el menú.
+    navItems.forEach((item) => {
+      router.prefetch(item.href)
+    })
+  }, [navItems, router])
+
+  useEffect(() => {
+    if (!hrefEnCurso) return
+    if (!estaActivo(hrefEnCurso)) return
+
+    setHrefEnCurso(null)
+    if (desbloqueoTimeoutRef.current) {
+      clearTimeout(desbloqueoTimeoutRef.current)
+      desbloqueoTimeoutRef.current = null
+    }
+  }, [pathname, hrefEnCurso])
+
+  useEffect(() => {
+    return () => {
+      if (desbloqueoTimeoutRef.current) {
+        clearTimeout(desbloqueoTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const onClickNav = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return
+    }
+
+    if (estaActivo(href)) {
+      event.preventDefault()
+      return
+    }
+
+    if (hrefEnCurso && hrefEnCurso !== href) {
+      event.preventDefault()
+      return
+    }
+
+    setHrefEnCurso(href)
+
+    if (desbloqueoTimeoutRef.current) {
+      clearTimeout(desbloqueoTimeoutRef.current)
+    }
+
+    desbloqueoTimeoutRef.current = setTimeout(() => {
+      setHrefEnCurso((actual) => (actual === href ? null : actual))
+      desbloqueoTimeoutRef.current = null
+    }, 7000)
+  }
 
   return (
     <aside className="fixed left-0 top-0 h-full w-60 bg-gray-900 text-white flex flex-col z-30 print:hidden">
@@ -67,24 +129,34 @@ export function Sidebar({ rol }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive =
-            item.href === '/dashboard'
-              ? pathname === '/dashboard'
-              : pathname.startsWith(item.href)
+          const isActive = estaActivo(item.href)
+          const estaCargandoItem = hrefEnCurso === item.href
+          const bloqueoTemporal = Boolean(hrefEnCurso && hrefEnCurso !== item.href)
 
           return (
             <Link
               key={item.href}
               href={item.href}
+              onMouseEnter={() => router.prefetch(item.href)}
+              onClick={(event) => onClickNav(event, item.href)}
+              aria-disabled={bloqueoTemporal}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 isActive
                   ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  : 'text-gray-300 hover:bg-gray-800 hover:text-white',
+                bloqueoTemporal && 'opacity-60 pointer-events-none'
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              {estaCargandoItem ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+              ) : (
+                <Icon className="h-4 w-4 shrink-0" />
+              )}
               <span className="flex-1 truncate">{item.label}</span>
+              {estaCargandoItem && (
+                <span className="text-[10px] uppercase tracking-wide text-blue-100">Cargando</span>
+              )}
               {item.badge && (
                 <span className="ml-auto text-xs bg-blue-500 rounded-full px-1.5 py-0.5">
                   {item.badge}
@@ -97,6 +169,9 @@ export function Sidebar({ rol }: SidebarProps) {
 
       {/* Pie del sidebar */}
       <div className="border-t border-gray-700 p-3">
+        {hrefEnCurso && (
+          <p className="text-[11px] text-blue-200 text-center mb-1">Navegando a nuevo módulo...</p>
+        )}
         <p className="text-xs text-gray-500 text-center">v0.1.0 - Etapa 1</p>
       </div>
     </aside>

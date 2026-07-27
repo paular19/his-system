@@ -13,7 +13,11 @@ async function obtenerIdsPendientesIngreso(ingresoId: number): Promise<number[]>
 
 export async function generarOrdenesPendientesAdmision(
   ingresoId: number,
-  opciones?: { soloIds?: Set<number>; idsPendientesConfirmados?: number[] }
+  opciones?: {
+    soloIds?: Set<number>
+    idsPendientesConfirmados?: number[]
+    separarPorPractica?: boolean
+  }
 ): Promise<{ ok: true; cantidad: number; ordenes: Array<{ puestoNumero: number; numero: number }> } | { ok: false; error: string }> {
   try {
     let idsPendientesResueltos: number[]
@@ -34,6 +38,7 @@ export async function generarOrdenesPendientesAdmision(
     const result = await generarOrdenesDesdeInternacionAction({
       ingresoId,
       practicaIds: idsPendientesResueltos,
+      separarPorPractica: Boolean(opciones?.separarPorPractica),
     })
 
     if ('error' in result && result.error) {

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import { Header } from '@/components/layout/header'
 import { getUsuarioSesion } from '@/lib/auth'
 import { ROLES } from '@/lib/auth/rbac'
 import {

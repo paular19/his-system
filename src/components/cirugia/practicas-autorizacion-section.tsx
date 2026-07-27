@@ -590,6 +590,15 @@ export function PracticasAutorizacionSection({
                             const expandida = autorizadasExpandidas[grupo.key] ?? false
                             const itemsVisibles = expandida ? grupo.items : grupo.items.slice(0, limiteItems)
                             const restantes = Math.max(0, grupo.items.length - itemsVisibles.length)
+                            const codigosGrupo = Array.from(
+                                new Set(
+                                    grupo.items
+                                        .map((item) => item.codigo.trim())
+                                        .filter((codigo) => codigo.length > 0)
+                                )
+                            )
+                            const codigosResumen = codigosGrupo.slice(0, 4).join(', ')
+                            const codigosRestantes = Math.max(0, codigosGrupo.length - 4)
                             const destino =
                                 grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                     ? `/dashboard/ambulatorio/${grupo.puestoNumero}/${grupo.ordenNumero}`
@@ -598,28 +607,31 @@ export function PracticasAutorizacionSection({
                                         : null
 
                             return (
-                                <div key={grupo.key} className="rounded-lg border border-green-200 bg-green-50/40 p-2.5 text-xs">
+                                <div key={grupo.key} className="rounded-lg border border-green-200 bg-green-50/40 p-2 text-xs">
                                     <button
                                         type="button"
                                         onClick={() => setGruposAutorizadosAbiertos((prev) => ({
                                             ...prev,
                                             [grupo.key]: !(prev[grupo.key] ?? false),
                                         }))}
-                                        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left hover:bg-green-100/40"
+                                        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0 text-left hover:bg-green-100/40"
                                     >
-                                        <span className="flex items-center gap-2 text-green-900">
+                                        <span className="flex min-w-0 items-center gap-2 text-green-900">
                                             <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-                                            <span className="font-semibold">
+                                            <span className="shrink-0 font-semibold">
                                                 {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                                     ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                                     : 'Autorización manual'}
+                                            </span>
+                                            <span className="min-w-0 truncate text-[10px] text-green-700">
+                                                Cod: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
                                             </span>
                                         </span>
                                         <span className="text-[11px] text-green-700">{grupo.items.length} práctica(s)</span>
                                     </button>
 
                                     {abierta && (
-                                        <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+                                        <div className="mt-1.5 grid grid-cols-1 gap-2 md:grid-cols-2">
                                             <div className="space-y-1.5 text-green-900">
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     {destino && (
@@ -640,7 +652,7 @@ export function PracticasAutorizacionSection({
                                                 </p>
                                             </div>
 
-                                            <div className="rounded-md border border-green-200 bg-white/70 p-2">
+                                            <div className="rounded-md border border-green-200 bg-white/70 p-1.5">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">
                                                         Prácticas de la orden ({grupo.items.length})
@@ -659,9 +671,9 @@ export function PracticasAutorizacionSection({
                                                     )}
                                                 </div>
 
-                                                <div className="mt-2 space-y-1.5">
+                                                <div className="mt-1.5 space-y-1">
                                                     {itemsVisibles.map((item) => (
-                                                        <div key={item.uid} className="rounded border border-green-100 bg-white px-2 py-1.5">
+                                                        <div key={item.uid} className="rounded border border-green-100 bg-white px-2 py-1">
                                                             <div className="flex items-center justify-between gap-2 text-green-900">
                                                                 <span className="font-mono text-[11px]">{item.codigo}</span>
                                                                 <span className="font-medium">Cant. {item.cantidad}</span>

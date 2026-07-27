@@ -98,6 +98,8 @@ type PopupSubitemsSesionState = {
     seleccionadas: string[]
 }
 
+type OrigenGeneracionOrden = 'default' | 'sesion' | 'protocolo'
+
 type ProtocoloCargaEditable = {
     codigo: string
     descripcion: string
@@ -811,28 +813,32 @@ export function PracticaCargaRapidaPage({
         agruparEnUnaOrden = false,
         opciones?: {
             titularOrdenAgrupada?: string | null
-            origen?: 'default' | 'sesion'
+            origen?: OrigenGeneracionOrden
             firmanteProfesionalId?: string
             separarPorPractica?: boolean
             clasificacionPorPracticaId?: Record<number, string>
+            ventanaImpresionPrefijada?: Window | null
         }
-    ) => {
+    ): Promise<boolean> => {
         const practicaIds = practicaIdsObjetivo ?? idsPendientesSeleccionadas
+        const origen = opciones?.origen ?? 'default'
 
         if (practicaIds.length === 0) {
             setMensajeError('Selecciona al menos una practica pendiente para generar ordenes')
-            return
+            return false
         }
 
         // Modo editor: generar e imprimir por separado debe crear una orden por práctica.
         if (opciones?.separarPorPractica && practicaIds.length > 1) {
+            let todasGeneradas = true
             for (const practicaId of practicaIds) {
-                await ejecutarGeneracionOrdenes(imprimirDespues, [practicaId], false, {
+                const resultado = await ejecutarGeneracionOrdenes(imprimirDespues, [practicaId], false, {
                     ...opciones,
                     separarPorPractica: false,
                 })
+                if (!resultado) todasGeneradas = false
             }
-            return
+            return todasGeneradas
         }
 
         const firmanteProfesionalId = opciones?.firmanteProfesionalId ?? medicoFirmanteId
@@ -856,10 +862,11 @@ export function PracticaCargaRapidaPage({
         setMensajeError(null)
         setGenerandoOrdenes(true)
         const requierePopupSeleccionImpresionSesion =
-            Boolean(imprimirDespues) && (opciones?.origen ?? 'default') === 'sesion'
+            Boolean(imprimirDespues) && origen === 'sesion'
         const ventanaImpresion =
-            imprimirDespues && !requierePopupSeleccionImpresionSesion
-                ? abrirVentanaImpresionPendiente()
+            imprimirDespues
+                ? (opciones?.ventanaImpresionPrefijada ??
+                    (!requierePopupSeleccionImpresionSesion ? abrirVentanaImpresionPendiente() : null))
                 : null
         let impresionDisparada = false
 
@@ -875,7 +882,7 @@ export function PracticaCargaRapidaPage({
 
             if ('error' in result && result.error) {
                 setMensajeError(result.error)
-                return
+                return false
             }
 
             const asignaciones = Array.isArray((result as { asignaciones?: unknown }).asignaciones)
@@ -935,7 +942,7 @@ export function PracticaCargaRapidaPage({
             setPracticasSeleccionadas((prev) => prev.filter((id) => !practicaIds.includes(id)))
 
             if (grupos.length > 0) {
-                if ((opciones?.origen ?? 'default') === 'sesion') {
+                if (origen === 'sesion' || origen === 'protocolo') {
                     const nuevasOrdenesSesion = Array.from(
                         new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
                     )
@@ -970,8 +977,10 @@ export function PracticaCargaRapidaPage({
                     impresionDisparada = true
                 }
             }
+            return true
         } catch {
             setMensajeError('Error al generar ordenes desde internacion')
+            return false
         } finally {
             if (!impresionDisparada) {
                 cerrarVentanaImpresion(ventanaImpresion)
@@ -1321,10 +1330,12 @@ export function PracticaCargaRapidaPage({
     const ejecutarProtocolo = async (imprimirDespues: boolean) => {
         setMensajeError(null)
         setErrorProtocolo(null)
+        const ventanaImpresionProtocolo = imprimirDespues ? abrirVentanaImpresionPendiente() : null
 
         const { entradas, error } = construirEntradasProtocolo()
         if (error) {
             setErrorProtocolo(error)
+            cerrarVentanaImpresion(ventanaImpresionProtocolo)
             return
         }
 
@@ -1333,12 +1344,14 @@ export function PracticaCargaRapidaPage({
             const resultadoGuardado = await handleGuardarPracticas(entradas)
             if (!resultadoGuardado.ok) {
                 setErrorProtocolo(resultadoGuardado.error ?? 'No se pudo guardar el protocolo')
+                cerrarVentanaImpresion(ventanaImpresionProtocolo)
                 return
             }
 
             const practicaIds = resultadoGuardado.practicaIds ?? []
             if (practicaIds.length === 0) {
                 setErrorProtocolo('El protocolo se guardo, pero no se pudieron identificar practicas para generar ordenes')
+                cerrarVentanaImpresion(ventanaImpresionProtocolo)
                 return
             }
 
@@ -1349,10 +1362,15 @@ export function PracticaCargaRapidaPage({
                 ])
             )
 
-            await ejecutarGeneracionOrdenes(imprimirDespues, practicaIds, false, {
-                origen: 'default',
+            const okGeneracion = await ejecutarGeneracionOrdenes(imprimirDespues, practicaIds, false, {
+                origen: 'protocolo',
                 clasificacionPorPracticaId,
+                ventanaImpresionPrefijada: ventanaImpresionProtocolo,
             })
+
+            if (okGeneracion) {
+                setProtocoloItems([])
+            }
         } finally {
             setProcesandoProtocolo(false)
         }
@@ -1424,8 +1442,8 @@ export function PracticaCargaRapidaPage({
                     .filter((codigo) => codigo.length > 0)
             )
         )
-        const codigosResumen = codigosGrupo.slice(0, 6).join(', ')
-        const codigosRestantes = Math.max(0, codigosGrupo.length - 6)
+        const codigosResumen = codigosGrupo.slice(0, 4).join(', ')
+        const codigosRestantes = Math.max(0, codigosGrupo.length - 4)
         const claveOrdenSesion =
             grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null
                 ? `${grupo.puestoNumero}-${grupo.ordenNumero}`
@@ -1463,8 +1481,8 @@ export function PracticaCargaRapidaPage({
                 : 'text-amber-900 font-semibold'
 
         const bloqueDetalleClase = generadaEnSesion
-            ? 'rounded-md border border-blue-200 bg-white/80 p-2'
-            : 'rounded-md border border-emerald-200 bg-white/70 p-2'
+            ? 'rounded-md border border-blue-200 bg-white/80 p-1.5'
+            : 'rounded-md border border-emerald-200 bg-white/70 p-1.5'
 
         const tituloDetalleClase = generadaEnSesion
             ? 'text-[11px] font-semibold uppercase tracking-wide text-blue-700'
@@ -1475,8 +1493,8 @@ export function PracticaCargaRapidaPage({
             : 'rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50'
 
         const itemClase = generadaEnSesion
-            ? 'rounded border border-blue-100 bg-white px-2 py-1.5'
-            : 'rounded border border-emerald-100 bg-white px-2 py-1.5'
+            ? 'rounded border border-blue-100 bg-white px-2 py-1'
+            : 'rounded border border-emerald-100 bg-white px-2 py-1'
 
         const itemTextoClase = generadaEnSesion ? 'text-blue-900' : 'text-emerald-900'
         const itemFechaClase = generadaEnSesion ? 'text-[11px] text-blue-700' : 'text-[11px] text-emerald-700'
@@ -1486,7 +1504,7 @@ export function PracticaCargaRapidaPage({
         return (
             <div
                 key={grupo.key}
-                className={`rounded-lg p-2.5 text-xs ${contenedorClase}`}
+                className={`rounded-lg p-2 text-xs ${contenedorClase}`}
             >
                 <button
                     type="button"
@@ -1494,23 +1512,23 @@ export function PracticaCargaRapidaPage({
                         ...prev,
                         [grupo.key]: !(prev[grupo.key] ?? false),
                     }))}
-                    className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${hoverClase}`}
+                    className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0 text-left ${hoverClase}`}
                 >
                     <span className={`flex min-w-0 items-center gap-2 ${tituloClase}`}>
                         <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-                        <span className="font-semibold">
+                        <span className="shrink-0 font-semibold">
                             {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                 ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                 : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
+                        </span>
+                        <span className={`min-w-0 truncate text-[10px] ${contadorClase}`}>
+                            Cod: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
                         </span>
                         {estadoSesionEtiqueta && (
                             <span className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
                                 {estadoSesionEtiqueta}
                             </span>
                         )}
-                        <span className={`min-w-0 truncate text-[10px] ${contadorClase}`}>
-                            Codigos: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
-                        </span>
                     </span>
                     <span className={`text-[11px] ${contadorClase}`}>
                         {grupo.practicas.length} practica(s)
@@ -1518,7 +1536,7 @@ export function PracticaCargaRapidaPage({
                 </button>
 
                 {abierta && (
-                    <div className="mt-2 space-y-2">
+                    <div className="mt-1.5 space-y-1.5">
                         <div className="flex items-center gap-2 flex-wrap">
                             {destinoAbrir && (
                                 <Link
@@ -1556,7 +1574,7 @@ export function PracticaCargaRapidaPage({
                                 )}
                             </div>
 
-                            <div className="mt-2 space-y-1.5">
+                            <div className="mt-1.5 space-y-1">
                                 {practicasVisibles.map((practica) => (
                                     <div key={`${grupo.key}-${practica.id}`} className={itemClase}>
                                         <div className={`flex items-center justify-between gap-2 ${itemTextoClase}`}>

@@ -1271,11 +1271,20 @@ export function CirugiaUrgenciaSection({
                                                         grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                                             ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                                             : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`
+                                                    const codigosGrupo = Array.from(
+                                                        new Set(
+                                                            grupo.practicas
+                                                                .map((practica) => practica.codigo.trim())
+                                                                .filter((codigo) => codigo.length > 0)
+                                                        )
+                                                    )
+                                                    const codigosResumen = codigosGrupo.slice(0, 4).join(', ')
+                                                    const codigosRestantes = Math.max(0, codigosGrupo.length - 4)
 
                                                     return (
                                                         <div
                                                             key={grupoKey}
-                                                            className={`rounded-lg p-2.5 text-xs ${
+                                                            className={`rounded-lg p-2 text-xs ${
                                                                 grupoYaAutorizado
                                                                     ? 'border border-emerald-200 bg-emerald-50/40'
                                                                     : 'border border-amber-300 bg-amber-100/60'
@@ -1287,13 +1296,16 @@ export function CirugiaUrgenciaSection({
                                                                     ...prev,
                                                                     [grupoKey]: !(prev[grupoKey] ?? false),
                                                                 }))}
-                                                                className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${
+                                                                className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0 text-left ${
                                                                     grupoYaAutorizado ? 'hover:bg-emerald-100/40' : 'hover:bg-amber-200/50'
                                                                 }`}
                                                             >
-                                                                <span className={`flex items-center gap-2 ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
+                                                                <span className={`flex min-w-0 items-center gap-2 ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
                                                                     <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-                                                                    <span className="font-semibold">{tituloGrupo}</span>
+                                                                    <span className="shrink-0 font-semibold">{tituloGrupo}</span>
+                                                                    <span className={`min-w-0 truncate text-[10px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
+                                                                        Cod: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                                                                    </span>
                                                                 </span>
                                                                 <span className={`text-[11px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
                                                                     {grupo.practicas.length} practica(s)
@@ -1301,7 +1313,7 @@ export function CirugiaUrgenciaSection({
                                                             </button>
 
                                                             {abierta && (
-                                                                <div className="mt-2 grid gap-3 md:grid-cols-2">
+                                                                <div className="mt-1.5 grid gap-2 md:grid-cols-2">
                                                                     <div className="space-y-1.5 text-emerald-900">
                                                                         <div className="flex items-center gap-2 flex-wrap">
                                                                             {destinoAbrir && (
@@ -1344,7 +1356,7 @@ export function CirugiaUrgenciaSection({
                                                                         <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>Cantidad total: {grupo.totalCantidad}</p>
                                                                     </div>
 
-                                                                    <div className={`rounded-md bg-white/70 p-2 ${
+                                                                    <div className={`rounded-md bg-white/70 p-1.5 ${
                                                                         grupoYaAutorizado ? 'border border-emerald-200' : 'border border-amber-300'
                                                                     }`}>
                                                                         <div className="flex items-center justify-between gap-2">
@@ -1367,7 +1379,7 @@ export function CirugiaUrgenciaSection({
                                                                             )}
                                                                         </div>
 
-                                                                        <div className="mt-2 space-y-1.5">
+                                                                        <div className="mt-1.5 space-y-1">
                                                                             {practicasVisibles.map((practica) => {
                                                                                 const estadoPractica = estadoPracticaCirugiaPorId.get(practica.id)
                                                                                 const practicaInternacion = estadoPractica
@@ -1379,7 +1391,7 @@ export function CirugiaUrgenciaSection({
                                                                                 return (
                                                                                     <div
                                                                                         key={`${grupoKey}-${practica.id}`}
-                                                                                        className={`rounded bg-white px-2 py-1.5 ${
+                                                                                        className={`rounded bg-white px-2 py-1 ${
                                                                                             grupoYaAutorizado ? 'border border-emerald-100' : 'border border-amber-200'
                                                                                         }`}
                                                                                     >

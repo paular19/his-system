@@ -1313,6 +1313,15 @@ export function FichaIngresoClient({
                                                 ? grupo.practicas
                                                 : grupo.practicas.slice(0, limitePracticas)
                                             const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
+                                            const codigosGrupo = Array.from(
+                                                new Set(
+                                                    grupo.practicas
+                                                        .map((practica) => practica.codigoPractica.trim())
+                                                        .filter((codigo) => codigo.length > 0)
+                                                )
+                                            )
+                                            const codigosResumen = codigosGrupo.slice(0, 4).join(', ')
+                                            const codigosRestantes = Math.max(0, codigosGrupo.length - 4)
                                             const tituloGrupo = grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                                 ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                                 : `Autorización ${grupo.numeroAutorizacion ?? '-'}`
@@ -1320,7 +1329,7 @@ export function FichaIngresoClient({
                                             return (
                                                 <div
                                                     key={grupo.key}
-                                                    className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5"
+                                                    className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2"
                                                 >
                                                     <button
                                                         type="button"
@@ -1328,17 +1337,20 @@ export function FichaIngresoClient({
                                                             ...prev,
                                                             [grupo.key]: !(prev[grupo.key] ?? false),
                                                         }))}
-                                                        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left hover:bg-emerald-100/40"
+                                                        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0 text-left hover:bg-emerald-100/40"
                                                     >
-                                                        <span className="flex items-center gap-2 text-emerald-900">
+                                                        <span className="flex min-w-0 items-center gap-2 text-emerald-900">
                                                             <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-                                                            <span className="text-xs font-semibold">{tituloGrupo}</span>
+                                                            <span className="shrink-0 text-xs font-semibold">{tituloGrupo}</span>
+                                                            <span className="min-w-0 truncate text-[10px] text-emerald-700">
+                                                                Cod: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                                                            </span>
                                                         </span>
                                                         <span className="text-[11px] text-emerald-700">{grupo.practicas.length} práctica(s)</span>
                                                     </button>
 
                                                     {abierta && (
-                                                        <div className="mt-2 grid gap-3 md:grid-cols-2">
+                                                        <div className="mt-1.5 grid gap-2 md:grid-cols-2">
                                                             <div className="space-y-1.5 text-xs text-emerald-900">
                                                                 <div className="flex items-center gap-2 flex-wrap">
                                                                     {destinoAbrir && (
@@ -1379,7 +1391,7 @@ export function FichaIngresoClient({
                                                                 </p>
                                                             </div>
 
-                                                            <div className="rounded-md border border-emerald-200 bg-white/70 p-2">
+                                                            <div className="rounded-md border border-emerald-200 bg-white/70 p-1.5">
                                                                 <div className="flex items-center justify-between gap-2">
                                                                     <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
                                                                         Prácticas de la orden ({grupo.practicas.length})
@@ -1398,11 +1410,11 @@ export function FichaIngresoClient({
                                                                     )}
                                                                 </div>
 
-                                                                <div className="mt-2 space-y-1.5 text-xs">
+                                                                <div className="mt-1.5 space-y-1 text-xs">
                                                                     {practicasVisibles.map((practica) => (
                                                                         <div
                                                                             key={`${grupo.key}-${practica.id}`}
-                                                                            className="rounded border border-emerald-100 bg-white px-2 py-1.5"
+                                                                            className="rounded border border-emerald-100 bg-white px-2 py-1"
                                                                         >
                                                                             <div className="flex items-center justify-between gap-2 text-emerald-900">
                                                                                 <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>

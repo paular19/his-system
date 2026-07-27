@@ -1222,6 +1222,15 @@ export function PracticaSection({
                                             ? grupo.practicas
                                             : grupo.practicas.slice(0, limitePracticas)
                                         const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
+                                        const codigosGrupo = Array.from(
+                                            new Set(
+                                                grupo.practicas
+                                                    .map((practica) => practica.codigoPractica.trim())
+                                                    .filter((codigo) => codigo.length > 0)
+                                            )
+                                        )
+                                        const codigosResumen = codigosGrupo.slice(0, 4).join(', ')
+                                        const codigosRestantes = Math.max(0, codigosGrupo.length - 4)
                                         const grupoYaAutorizado = grupoTieneNumeroAutorizacion(grupo)
                                         const tituloGrupo = grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                             ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
@@ -1230,7 +1239,7 @@ export function PracticaSection({
                                         return (
                                             <div
                                                 key={grupo.key}
-                                                className={`rounded-lg p-2.5 text-xs ${
+                                                className={`rounded-lg p-2 text-xs ${
                                                     grupoYaAutorizado
                                                         ? 'border border-emerald-200 bg-emerald-50/40'
                                                         : 'border border-amber-300 bg-amber-100/60'
@@ -1242,13 +1251,16 @@ export function PracticaSection({
                                                         ...prev,
                                                         [grupo.key]: !(prev[grupo.key] ?? false),
                                                     }))}
-                                                    className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left ${
+                                                    className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0 text-left ${
                                                         grupoYaAutorizado ? 'hover:bg-emerald-100/40' : 'hover:bg-amber-200/50'
                                                     }`}
                                                 >
-                                                    <span className={`flex items-center gap-2 ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
+                                                    <span className={`flex min-w-0 items-center gap-2 ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
                                                         <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-                                                        <span className="font-semibold">{tituloGrupo}</span>
+                                                        <span className="shrink-0 font-semibold">{tituloGrupo}</span>
+                                                        <span className={`min-w-0 truncate text-[10px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
+                                                            Cod: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                                                        </span>
                                                     </span>
                                                     <span className={`text-[11px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
                                                         {grupo.practicas.length} práctica(s)
@@ -1256,7 +1268,7 @@ export function PracticaSection({
                                                 </button>
 
                                                 {abierta && (
-                                                    <div className="mt-2 grid gap-3 md:grid-cols-2">
+                                                    <div className="mt-1.5 grid gap-2 md:grid-cols-2">
                                                         <div className={`space-y-1.5 ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
                                                             <div className="flex items-center gap-2 flex-wrap">
                                                                 {destinoAbrir && (
@@ -1301,7 +1313,7 @@ export function PracticaSection({
                                                             </p>
                                                         </div>
 
-                                                        <div className={`rounded-md bg-white/70 p-2 ${
+                                                        <div className={`rounded-md bg-white/70 p-1.5 ${
                                                             grupoYaAutorizado ? 'border border-emerald-200' : 'border border-amber-300'
                                                         }`}>
                                                             <div className="flex items-center justify-between gap-2">
@@ -1324,11 +1336,11 @@ export function PracticaSection({
                                                                 )}
                                                             </div>
 
-                                                            <div className="mt-2 space-y-1.5">
+                                                            <div className="mt-1.5 space-y-1">
                                                                 {practicasVisibles.map((practica) => (
                                                                     <div
                                                                         key={`${grupo.key}-${practica.id}`}
-                                                                        className={`rounded bg-white px-2 py-1.5 ${
+                                                                        className={`rounded bg-white px-2 py-1 ${
                                                                             grupoYaAutorizado ? 'border border-emerald-100' : 'border border-amber-200'
                                                                         }`}
                                                                     >

@@ -48,6 +48,20 @@ const GUIA_VIDEOS_PASO_A_PASO_ADMISION: Array<{
     ],
   },
   {
+    id: 'INTERNACION_ADMISION',
+    nombre: 'Internacion (admision y modulo general)',
+    videos: [
+      {
+        titulo: 'Admision por internacion',
+        url: 'https://www.youtube.com/watch?v=PAoQoO66KAE',
+      },
+      {
+        titulo: 'Modulo general de internacion',
+        url: 'https://www.youtube.com/watch?v=jKsp8N3xBH8',
+      },
+    ],
+  },
+  {
     id: 'PRESUPUESTO',
     nombre: 'Uso del modulo de presupuesto',
     videos: [
@@ -177,7 +191,7 @@ export default async function GuiaPage() {
         <section className="his-card p-5 space-y-3">
           <h2 className="text-lg font-semibold text-gray-900">Videos paso a paso</h2>
           <p className="text-sm text-gray-600">
-            Estos videos cubren el flujo principal de admision, el uso de multiples pestanas y la carga de presupuesto.
+            Estos videos cubren el flujo principal de admision, internacion, el uso de multiples pestanas y la carga de presupuesto.
           </p>
 
           <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">

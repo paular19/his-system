@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Printer } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
@@ -47,11 +47,19 @@ export function InternacionPracticasFichaTable({
     pacienteNombre,
     pacienteDni,
 }: InternacionPracticasFichaTableProps) {
+    const [tablaExpandida, setTablaExpandida] = useState(false)
     const [desde, setDesde] = useState('')
     const [hasta, setHasta] = useState('')
     const [usuarioFiltro, setUsuarioFiltro] = useState('')
     const [seleccionPorOrden, setSeleccionPorOrden] = useState<Record<string, boolean>>({})
     const [error, setError] = useState<string | null>(null)
+    const hayFiltrosActivos = Boolean(desde || hasta || usuarioFiltro)
+
+    useEffect(() => {
+        if (hayFiltrosActivos) {
+            setTablaExpandida(true)
+        }
+    }, [hayFiltrosActivos])
 
     const filas = useMemo<OrdenFila[]>(() => {
         const mapa = new Map<string, {
@@ -269,8 +277,23 @@ export function InternacionPracticasFichaTable({
         ventana.document.open()
         ventana.document.write(html)
         ventana.document.close()
-        ventana.focus()
-        ventana.print()
+
+        const ejecutarImpresion = () => {
+            try {
+                ventana.focus()
+                ventana.print()
+            } catch {
+                setError('No se pudo iniciar la impresión automáticamente. Verifica el bloqueador de ventanas emergentes.')
+            }
+        }
+
+        if (ventana.document.readyState === 'complete') {
+            window.setTimeout(ejecutarImpresion, 80)
+        } else {
+            ventana.addEventListener('load', ejecutarImpresion, { once: true })
+            // Fallback para navegadores que no disparan load tras document.write.
+            window.setTimeout(ejecutarImpresion, 800)
+        }
 
         setError(null)
     }
@@ -280,18 +303,25 @@ export function InternacionPracticasFichaTable({
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h3 className="text-sm font-semibold text-gray-900">Ficha de practicas</h3>
-                    <p className="text-xs text-gray-600">
-                        Ordenes cronologicas (de la mas nueva a la mas vieja), con filtros por fecha y usuario.
-                    </p>
                 </div>
-                <button
-                    type="button"
-                    onClick={imprimirSeleccionadas}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-blue-300 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                >
-                    <Printer className="h-3.5 w-3.5" />
-                    Imprimir seleccionadas ({cantidadSeleccionadas})
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setTablaExpandida((prev) => !prev)}
+                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                        {tablaExpandida ? 'Ocultar tabla' : 'Mostrar tabla'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={imprimirSeleccionadas}
+                        disabled={cantidadSeleccionadas === 0}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-blue-300 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        <Printer className="h-3.5 w-3.5" />
+                        Imprimir seleccionadas ({cantidadSeleccionadas})
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-2 rounded-md border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700 md:grid-cols-3">
@@ -360,57 +390,63 @@ export function InternacionPracticasFichaTable({
                 </label>
             </div>
 
-            <div className="overflow-x-auto rounded-md border border-gray-200">
-                <table className="min-w-full text-xs">
-                    <thead className="bg-gray-100 text-gray-700">
-                        <tr>
-                            <th className="px-2 py-1 text-left">
-                                <span className="sr-only">Seleccion</span>
-                            </th>
-                            <th className="px-2 py-1 text-left">Fecha</th>
-                            <th className="px-2 py-1 text-left">N° orden (autorizacion)</th>
-                            <th className="px-2 py-1 text-left">Codigos autorizados</th>
-                            <th className="px-2 py-1 text-left">Reg. sistema</th>
-                            <th className="px-2 py-1 text-left">Reg. orden</th>
-                            <th className="px-2 py-1 text-left">Usuario</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filasFiltradas.length === 0 ? (
+            {tablaExpandida ? (
+                <div className="overflow-x-auto rounded-md border border-gray-200">
+                    <table className="min-w-full text-xs">
+                        <thead className="bg-gray-100 text-gray-700">
                             <tr>
-                                <td colSpan={7} className="px-3 py-3 text-center text-gray-500">
-                                    No hay ordenes para los filtros seleccionados.
-                                </td>
+                                <th className="px-2 py-1 text-left">
+                                    <span className="sr-only">Seleccion</span>
+                                </th>
+                                <th className="px-2 py-1 text-left">Fecha</th>
+                                <th className="px-2 py-1 text-left">N° orden (autorizacion)</th>
+                                <th className="px-2 py-1 text-left">Codigos autorizados</th>
+                                <th className="px-2 py-1 text-left">Reg. sistema</th>
+                                <th className="px-2 py-1 text-left">Reg. orden</th>
+                                <th className="px-2 py-1 text-left">Usuario</th>
                             </tr>
-                        ) : (
-                            filasFiltradas.map((fila) => (
-                                <tr key={fila.key} className="border-t border-gray-200 text-gray-800">
-                                    <td className="px-2 py-1.5">
-                                        <input
-                                            type="checkbox"
-                                            checked={Boolean(seleccionPorOrden[fila.key])}
-                                            onChange={(e) => toggleSeleccionFila(fila.key, e.target.checked)}
-                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                        />
+                        </thead>
+                        <tbody>
+                            {filasFiltradas.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="px-3 py-3 text-center text-gray-500">
+                                        No hay ordenes para los filtros seleccionados.
                                     </td>
-                                    <td className="px-2 py-1.5">
-                                        {formatearFechaArgentina(fila.fechaCarga, {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            year: 'numeric',
-                                        })}
-                                    </td>
-                                    <td className="px-2 py-1.5">{fila.numeroAutorizacion?.trim() || '-'}</td>
-                                    <td className="px-2 py-1.5">{fila.codigos.join(', ') || '-'}</td>
-                                    <td className="px-2 py-1.5">{formatearNumeroOrden(fila.puestoNumero, fila.numeroOrden)}</td>
-                                    <td className="px-2 py-1.5">{fila.regOrden}</td>
-                                    <td className="px-2 py-1.5">{fila.usuarios.join(', ') || '-'}</td>
                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                            ) : (
+                                filasFiltradas.map((fila) => (
+                                    <tr key={fila.key} className="border-t border-gray-200 text-gray-800">
+                                        <td className="px-2 py-1.5">
+                                            <input
+                                                type="checkbox"
+                                                checked={Boolean(seleccionPorOrden[fila.key])}
+                                                onChange={(e) => toggleSeleccionFila(fila.key, e.target.checked)}
+                                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                        </td>
+                                        <td className="px-2 py-1.5">
+                                            {formatearFechaArgentina(fila.fechaCarga, {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric',
+                                            })}
+                                        </td>
+                                        <td className="px-2 py-1.5">{fila.numeroAutorizacion?.trim() || '-'}</td>
+                                        <td className="px-2 py-1.5">{fila.codigos.join(', ') || '-'}</td>
+                                        <td className="px-2 py-1.5">{formatearNumeroOrden(fila.puestoNumero, fila.numeroOrden)}</td>
+                                        <td className="px-2 py-1.5">{fila.regOrden}</td>
+                                        <td className="px-2 py-1.5">{fila.usuarios.join(', ') || '-'}</td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                    Tabla plegada. Se abre automáticamente al aplicar filtros o con “Mostrar tabla”.
+                </p>
+            )}
 
             {error && (
                 <p className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">

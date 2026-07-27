@@ -119,11 +119,6 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                                 ? `Practicas para cirugia #${contextoCirugia.cirugiaId}`
                                 : 'Practicas de internacion'}
                         </h2>
-                        <p className="text-sm text-gray-600">
-                            {contextoCirugia
-                                ? 'Gestion y carga continua por codigo para esta cirugia, con confirmacion visual inmediata de cada practica.'
-                                : 'Gestion de ordenes y carga continua por codigo, con confirmacion visual inmediata de cada practica.'}
-                        </p>
                     </div>
 
                     <Link

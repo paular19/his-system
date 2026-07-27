@@ -1,7 +1,6 @@
 'use client'
 
 import { UserButton } from '@clerk/nextjs'
-import Link from 'next/link'
 import { Bell, BookOpenText } from 'lucide-react'
 
 interface HeaderProps {
@@ -14,14 +13,14 @@ export function Header({ titulo }: HeaderProps) {
       <h1 className="text-base font-semibold text-gray-900 truncate">{titulo}</h1>
 
       <div className="flex items-center gap-3">
-        <Link
+        <a
           href="/dashboard/guia"
           className="relative rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
           aria-label="Guia del sistema"
           title="Guia del sistema"
         >
           <BookOpenText className="h-5 w-5" />
-        </Link>
+        </a>
         <button
           type="button"
           className="relative rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"

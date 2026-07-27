@@ -535,9 +535,9 @@ export function AdmisionForm({
   }
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="relative space-y-6" aria-busy={guardando}>
       {guardando && (
-        <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-[1px] flex items-center justify-center px-4">
+        <div className="absolute inset-0 z-20 bg-white/70 backdrop-blur-[1px] flex items-center justify-center px-4">
           <div className="rounded-lg border border-blue-200 bg-white shadow-sm px-4 py-3 text-sm text-blue-700 flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" />
             Registrando admision... por favor espere.

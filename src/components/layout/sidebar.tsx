@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { cn } from '@/lib/utils'
@@ -68,7 +67,6 @@ export function Sidebar({ rol }: SidebarProps) {
 
   useEffect(() => {
     if (!hrefEnCurso) return
-    if (!estaActivo(hrefEnCurso)) return
 
     setHrefEnCurso(null)
     if (desbloqueoTimeoutRef.current) {
@@ -91,11 +89,6 @@ export function Sidebar({ rol }: SidebarProps) {
     }
 
     if (estaActivo(href)) {
-      event.preventDefault()
-      return
-    }
-
-    if (hrefEnCurso && hrefEnCurso !== href) {
       event.preventDefault()
       return
     }
@@ -131,21 +124,18 @@ export function Sidebar({ rol }: SidebarProps) {
           const Icon = item.icon
           const isActive = estaActivo(item.href)
           const estaCargandoItem = hrefEnCurso === item.href
-          const bloqueoTemporal = Boolean(hrefEnCurso && hrefEnCurso !== item.href)
 
           return (
-            <Link
+            <a
               key={item.href}
               href={item.href}
               onMouseEnter={() => router.prefetch(item.href)}
               onClick={(event) => onClickNav(event, item.href)}
-              aria-disabled={bloqueoTemporal}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 isActive
                   ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-800 hover:text-white',
-                bloqueoTemporal && 'opacity-60 pointer-events-none'
+                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
               )}
             >
               {estaCargandoItem ? (
@@ -162,7 +152,7 @@ export function Sidebar({ rol }: SidebarProps) {
                   {item.badge}
                 </span>
               )}
-            </Link>
+            </a>
           )
         })}
       </nav>

@@ -30,6 +30,7 @@ import {
     cerrarVentanaImpresion,
     navegarVentanaImpresion,
 } from '@/lib/utils/print-window'
+import { calcularTotalSeleccionado, seleccionPorDefecto } from '@/components/ui/componente-selector'
 
 type GuardadaSesionItem = {
     id: string
@@ -45,6 +46,23 @@ type ProfesionalConMatricula = {
     id: number
     nombre: string
     matricula: number
+}
+
+type NomencladorItemProtocolo = {
+    convenioId: number
+    codigo: string
+    descripcion: string
+    valor: number | null
+    valorEspecialista: number | null
+    valorAyudante: number | null
+    valorAnestesista: number | null
+    valorGastos: number | null
+}
+
+type ProtocoloPredefinido = {
+    id: string
+    nombre: string
+    codigos: string[]
 }
 
 type ComponenteOrden = 'HE' | 'HA' | 'GA' | 'HP' | 'A1' | 'A2' | 'A3'
@@ -80,6 +98,24 @@ type PopupSubitemsSesionState = {
     seleccionadas: string[]
 }
 
+type ProtocoloCargaEditable = {
+    codigo: string
+    descripcion: string
+    clasificacion: string
+    cantidad: string
+    requiereMatriculaTratante: boolean
+    matriculaTratante: string
+    matriculaAnestesista: number | null
+    importeBaseUnitario: number | null
+    valorReferencial: number | null
+}
+
+type GuardarPracticasResult = {
+    ok: boolean
+    error?: string
+    practicaIds?: number[]
+}
+
 interface PracticaCargaRapidaPageProps {
     ingresoId: number
     convenioId: number | null
@@ -100,6 +136,7 @@ interface PracticaCargaRapidaPageProps {
 }
 
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
+const MATRICULA_ANESTESISTA_DEFAULT = 6
 const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
     HE: 1,
     HA: 2,
@@ -111,6 +148,29 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
 }
 
 const ORDENES_HISTORICO_POR_PAGINA = 8
+const PROTOCOLOS_PREDEFINIDOS: ProtocoloPredefinido[] = [
+    {
+        id: 'SALA_COMUN_COMPARTIDA',
+        nombre: 'SALA O HABITACION COMUN COMPARTIDA',
+        codigos: ['431001', '430101', '420301'],
+    },
+    {
+        id: 'SALA_COMUN_BLOQUEADA',
+        nombre: 'SALA O HABITACION COMUN BLOQUEADA',
+        codigos: ['431001', '430101', '430106', '420301'],
+    },
+    {
+        id: 'SALA_USADA_8_HORAS',
+        nombre: 'SALA O HABITACION USADA POR 8 HORAS',
+        codigos: ['431001', '430130', '420301'],
+    },
+    {
+        id: 'CODIGOS_UTI_TERAPIA_INTENSIVA',
+        nombre: 'CODIGOS UTI - TERAPIA INTENSIVA',
+        codigos: ['400101', '431002'],
+    },
+]
+
 function claveOrden(ref: OrdenRef): string {
     return `${ref.puestoNumero}-${ref.numero}`
 }
@@ -176,6 +236,50 @@ function fechaAInputLocalSimple(value: string | Date): string {
     return `${year}-${month}-${day}`
 }
 
+function fechaSoloPracticaAISOString(value: string): string {
+    return new Date(`${value}T12:00:00-03:00`).toISOString()
+}
+
+function clasificacionDefaultDesdeNomenclador(item: NomencladorItemProtocolo): string {
+    const soloAnestesia =
+        item.valorAnestesista != null &&
+        item.valorEspecialista == null &&
+        item.valorGastos == null
+    if (soloAnestesia) return 'HA'
+
+    const soloGastos =
+        item.valorGastos != null &&
+        item.valorEspecialista == null &&
+        item.valorAnestesista == null
+    if (soloGastos) return 'GA'
+
+    return 'HE'
+}
+
+function importeBaseDesdeNomenclador(item: NomencladorItemProtocolo): number | null {
+    const seleccion = seleccionPorDefecto({
+        valorEspecialista: item.valorEspecialista,
+        valorAyudante: item.valorAyudante,
+        valorAnestesista: item.valorAnestesista,
+        valorGastos: item.valorGastos,
+        valorTotal: item.valor,
+    })
+
+    const totalSeleccionado = calcularTotalSeleccionado(
+        {
+            valorEspecialista: item.valorEspecialista,
+            valorAyudante: item.valorAyudante,
+            valorAnestesista: item.valorAnestesista,
+            valorGastos: item.valorGastos,
+            valorTotal: item.valor,
+        },
+        seleccion
+    )
+
+    if (totalSeleccionado > 0) return totalSeleccionado
+    return item.valor != null && item.valor > 0 ? item.valor : null
+}
+
 export function PracticaCargaRapidaPage({
     ingresoId,
     convenioId,
@@ -213,6 +317,19 @@ export function PracticaCargaRapidaPage({
     const [popupImpresionSesion, setPopupImpresionSesion] = useState<PopupImpresionSesionState | null>(null)
     const [popupSubitemsSesion, setPopupSubitemsSesion] = useState<PopupSubitemsSesionState | null>(null)
     const [generarImprimirPorSeparadoEditor, setGenerarImprimirPorSeparadoEditor] = useState(false)
+    const [protocoloSeleccionadoId, setProtocoloSeleccionadoId] = useState(
+        PROTOCOLOS_PREDEFINIDOS[0]?.id ?? ''
+    )
+    const [protocoloItems, setProtocoloItems] = useState<ProtocoloCargaEditable[]>([])
+    const [fechaProtocolo, setFechaProtocolo] = useState(() => fechaAInputLocalSimple(new Date()))
+    const [cargandoProtocolo, setCargandoProtocolo] = useState(false)
+    const [procesandoProtocolo, setProcesandoProtocolo] = useState(false)
+    const [errorProtocolo, setErrorProtocolo] = useState<string | null>(null)
+
+    const protocoloSeleccionado = useMemo(
+        () => PROTOCOLOS_PREDEFINIDOS.find((protocolo) => protocolo.id === protocoloSeleccionadoId) ?? null,
+        [protocoloSeleccionadoId]
+    )
 
     useEffect(() => {
         setPracticas(
@@ -546,7 +663,7 @@ export function PracticaCargaRapidaPage({
         setGuardadasSesion((prev) => [...nuevas, ...prev])
     }
 
-    const handleGuardarPracticas = async (entradasCrear: PracticaCargaEntrada[]) => {
+    const handleGuardarPracticas = async (entradasCrear: PracticaCargaEntrada[]): Promise<GuardarPracticasResult> => {
         setMensajeError(null)
 
         if (contextoCirugia) {
@@ -642,7 +759,7 @@ export function PracticaCargaRapidaPage({
                 ...clasificacionesCreadas,
             }))
             registrarGuardadasSesion(practicasCreadas, entradasCrear)
-            return { ok: true }
+            return { ok: true, practicaIds: practicasCreadas.map((practica) => practica.id) }
         } catch {
             const mensaje = 'Error de conexion al guardar practicas'
             setMensajeError(mensaje)
@@ -697,6 +814,7 @@ export function PracticaCargaRapidaPage({
             origen?: 'default' | 'sesion'
             firmanteProfesionalId?: string
             separarPorPractica?: boolean
+            clasificacionPorPracticaId?: Record<number, string>
         }
     ) => {
         const practicaIds = practicaIdsObjetivo ?? idsPendientesSeleccionadas
@@ -725,6 +843,10 @@ export function PracticaCargaRapidaPage({
 
         const clasificacionPayload = Object.fromEntries(
             practicaIds.map((id) => {
+                const clasificacionForzada = opciones?.clasificacionPorPracticaId?.[id]
+                if (clasificacionForzada) {
+                    return [String(id), normalizarClasificacionAgrupacion(clasificacionForzada) ?? clasificacionForzada]
+                }
                 const practica = practicas.find((item) => item.id === id)
                 const clasificacion = practica ? obtenerClasificacionPractica(practica) : 'HE'
                 return [String(id), clasificacion]
@@ -1041,6 +1163,201 @@ export function PracticaCargaRapidaPage({
         setPopupImpresionSesion(null)
     }
 
+    const resolverNomencladorExactoPorCodigo = async (
+        codigo: string
+    ): Promise<NomencladorItemProtocolo | null> => {
+        const codigoNormalizado = codigo.trim().toUpperCase()
+        if (codigoNormalizado.length < 2) return null
+
+        const qs = new URLSearchParams({
+            q: codigoNormalizado,
+            exact: '1',
+            limit: '20',
+        })
+        if (convenioId != null) qs.set('convenioId', String(convenioId))
+
+        const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`, {
+            cache: 'no-store',
+        })
+        const json = await res.json().catch(() => null)
+        const items: NomencladorItemProtocolo[] = Array.isArray(json?.data) ? json.data : []
+        return items.find((item) => item.codigo.trim().toUpperCase() === codigoNormalizado) ?? null
+    }
+
+    const cargarProtocoloSeleccionado = async () => {
+        if (!protocoloSeleccionado) {
+            setErrorProtocolo('Selecciona un protocolo antes de precargar codigos')
+            return
+        }
+
+        setErrorProtocolo(null)
+        setCargandoProtocolo(true)
+
+        try {
+            const resultados = await Promise.all(
+                protocoloSeleccionado.codigos.map(async (codigo) => ({
+                    codigo,
+                    nomenclador: await resolverNomencladorExactoPorCodigo(codigo),
+                }))
+            )
+
+            const faltantes = resultados
+                .filter((item) => !item.nomenclador)
+                .map((item) => item.codigo)
+
+            const matriculaDefault =
+                matriculaTratanteDefault != null && matriculaTratanteDefault > 0
+                    ? String(matriculaTratanteDefault)
+                    : ''
+
+            const editables: ProtocoloCargaEditable[] = resultados
+                .filter((item): item is { codigo: string; nomenclador: NomencladorItemProtocolo } => Boolean(item.nomenclador))
+                .map(({ nomenclador }) => {
+                    const requiereMatriculaTratante = nomenclador.valorEspecialista != null
+                    return {
+                        codigo: nomenclador.codigo.trim(),
+                        descripcion: nomenclador.descripcion,
+                        clasificacion: clasificacionDefaultDesdeNomenclador(nomenclador),
+                        cantidad: '1',
+                        requiereMatriculaTratante,
+                        matriculaTratante: requiereMatriculaTratante ? matriculaDefault : '',
+                        matriculaAnestesista:
+                            nomenclador.valorAnestesista != null ? MATRICULA_ANESTESISTA_DEFAULT : null,
+                        importeBaseUnitario: importeBaseDesdeNomenclador(nomenclador),
+                        valorReferencial: nomenclador.valor,
+                    }
+                })
+
+            setProtocoloItems(editables)
+
+            if (editables.length === 0) {
+                setErrorProtocolo('No se encontraron codigos del protocolo en el nomenclador')
+                return
+            }
+
+            if (faltantes.length > 0) {
+                setErrorProtocolo(
+                    `Se cargaron codigos parciales. No encontrados: ${faltantes.join(', ')}`
+                )
+            }
+        } catch {
+            setErrorProtocolo('No se pudieron precargar los codigos del protocolo')
+        } finally {
+            setCargandoProtocolo(false)
+        }
+    }
+
+    const actualizarProtocoloItem = (
+        codigo: string,
+        patch: Partial<Pick<ProtocoloCargaEditable, 'cantidad' | 'matriculaTratante'>>
+    ) => {
+        setProtocoloItems((prev) =>
+            prev.map((item) => (item.codigo === codigo ? { ...item, ...patch } : item))
+        )
+    }
+
+    const construirEntradasProtocolo = (): {
+        entradas: PracticaCargaEntrada[]
+        error?: string
+    } => {
+        if (protocoloItems.length === 0) {
+            return {
+                entradas: [],
+                error: 'Primero precarga un protocolo',
+            }
+        }
+
+        if (!fechaProtocolo) {
+            return {
+                entradas: [],
+                error: 'Selecciona una fecha valida para el protocolo',
+            }
+        }
+
+        const fecha = fechaSoloPracticaAISOString(fechaProtocolo)
+        const entradas: PracticaCargaEntrada[] = []
+
+        for (const item of protocoloItems) {
+            const cantidad = Number.parseInt(item.cantidad, 10)
+            if (!Number.isFinite(cantidad) || cantidad <= 0 || cantidad > 999) {
+                return {
+                    entradas: [],
+                    error: `Cantidad invalida para el codigo ${item.codigo}`,
+                }
+            }
+
+            let matriculaEspecialista: number | null = null
+            if (item.requiereMatriculaTratante) {
+                const parsed = Number.parseInt(item.matriculaTratante.trim(), 10)
+                if (!Number.isFinite(parsed) || parsed <= 0) {
+                    return {
+                        entradas: [],
+                        error: `Ingresa matricula del medico tratante para el codigo ${item.codigo}`,
+                    }
+                }
+                matriculaEspecialista = parsed
+            }
+
+            entradas.push({
+                payload: {
+                    convenioId: convenioId ?? 0,
+                    codigoPractica: item.codigo,
+                    descripcionPractica: item.descripcion,
+                    fecha,
+                    cantidad,
+                    numeroAutorizacion: null,
+                    matriculaEspecialista,
+                    matriculaAnestesista: item.matriculaAnestesista,
+                    facturable: true,
+                    importeBaseUnitario: item.importeBaseUnitario,
+                },
+                clasificacion: item.clasificacion,
+            })
+        }
+
+        return { entradas }
+    }
+
+    const ejecutarProtocolo = async (imprimirDespues: boolean) => {
+        setMensajeError(null)
+        setErrorProtocolo(null)
+
+        const { entradas, error } = construirEntradasProtocolo()
+        if (error) {
+            setErrorProtocolo(error)
+            return
+        }
+
+        setProcesandoProtocolo(true)
+        try {
+            const resultadoGuardado = await handleGuardarPracticas(entradas)
+            if (!resultadoGuardado.ok) {
+                setErrorProtocolo(resultadoGuardado.error ?? 'No se pudo guardar el protocolo')
+                return
+            }
+
+            const practicaIds = resultadoGuardado.practicaIds ?? []
+            if (practicaIds.length === 0) {
+                setErrorProtocolo('El protocolo se guardo, pero no se pudieron identificar practicas para generar ordenes')
+                return
+            }
+
+            const clasificacionPorPracticaId = Object.fromEntries(
+                practicaIds.map((practicaId, idx) => [
+                    practicaId,
+                    entradas[idx]?.clasificacion ?? 'HE',
+                ])
+            )
+
+            await ejecutarGeneracionOrdenes(imprimirDespues, practicaIds, false, {
+                origen: 'default',
+                clasificacionPorPracticaId,
+            })
+        } finally {
+            setProcesandoProtocolo(false)
+        }
+    }
+
     const todasPendientesSeleccionadas =
         idsPendientesEditor.length > 0 && idsPendientesEditor.every((id) => practicasSeleccionadas.includes(id))
 
@@ -1292,6 +1609,169 @@ export function PracticaCargaRapidaPage({
                     ) : (
                         <div className="his-card p-4 text-sm text-gray-700">
                             No tenes permisos para cargar practicas en esta internacion.
+                        </div>
+                    )}
+
+                    {puedeCrear && !modoCirugia && (
+                        <div className="his-card p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <h3 className="text-sm font-semibold text-gray-900">Protocolos de practicas</h3>
+                                {protocoloItems.length > 0 && (
+                                    <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                        {protocoloItems.length} codigo(s) cargado(s)
+                                    </span>
+                                )}
+                            </div>
+
+                            <p className="text-xs text-gray-600">
+                                Selecciona un protocolo, precarga los codigos y ajusta solamente matricula tratante y cantidad por item.
+                            </p>
+
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                <label className="text-xs text-gray-700">
+                                    Protocolo
+                                    <select
+                                        value={protocoloSeleccionadoId}
+                                        onChange={(e) => {
+                                            setProtocoloSeleccionadoId(e.target.value)
+                                            setProtocoloItems([])
+                                            setErrorProtocolo(null)
+                                        }}
+                                        className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
+                                    >
+                                        {PROTOCOLOS_PREDEFINIDOS.map((protocolo) => (
+                                            <option key={protocolo.id} value={protocolo.id}>
+                                                {protocolo.nombre}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+
+                                <label className="text-xs text-gray-700">
+                                    Fecha del protocolo
+                                    <input
+                                        type="date"
+                                        value={fechaProtocolo}
+                                        onChange={(e) => setFechaProtocolo(e.target.value)}
+                                        className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => void cargarProtocoloSeleccionado()}
+                                    disabled={cargandoProtocolo || procesandoProtocolo}
+                                    className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    {cargandoProtocolo && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                                    Precargar codigos del protocolo
+                                </button>
+                            </div>
+
+                            {protocoloItems.length > 0 && (
+                                <div className="max-h-[40vh] space-y-2 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2">
+                                    {protocoloItems.map((item) => (
+                                        <div key={item.codigo} className="rounded border border-gray-200 bg-white p-2">
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <span className="font-mono text-xs text-gray-700">{item.codigo}</span>
+                                                <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                                                    {item.clasificacion}
+                                                </span>
+                                            </div>
+                                            <p className="mt-1 text-xs text-gray-700">{item.descripcion}</p>
+                                            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+                                                <label className="text-[11px] text-gray-600">
+                                                    Cantidad
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        max={999}
+                                                        step={1}
+                                                        value={item.cantidad}
+                                                        onChange={(e) =>
+                                                            actualizarProtocoloItem(item.codigo, {
+                                                                cantidad: e.target.value,
+                                                            })
+                                                        }
+                                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-800"
+                                                    />
+                                                </label>
+
+                                                <label className="text-[11px] text-gray-600">
+                                                    Matricula tratante
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        step={1}
+                                                        value={item.matriculaTratante}
+                                                        onChange={(e) =>
+                                                            actualizarProtocoloItem(item.codigo, {
+                                                                matriculaTratante: e.target.value,
+                                                            })
+                                                        }
+                                                        disabled={!item.requiereMatriculaTratante}
+                                                        placeholder={item.requiereMatriculaTratante ? 'Ej: 12345' : 'No aplica'}
+                                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-800 disabled:bg-gray-100 disabled:text-gray-500"
+                                                    />
+                                                </label>
+
+                                                <div className="text-[11px] text-gray-600">
+                                                    Valor referencia
+                                                    <p className="mt-1 rounded border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700">
+                                                        {item.valorReferencial != null ? item.valorReferencial.toFixed(2) : '-'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {errorProtocolo && (
+                                <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+                                    {errorProtocolo}
+                                </p>
+                            )}
+
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => void ejecutarProtocolo(false)}
+                                    disabled={
+                                        procesandoProtocolo ||
+                                        cargandoProtocolo ||
+                                        generandoOrdenes ||
+                                        protocoloItems.length === 0
+                                    }
+                                    className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                    {(procesandoProtocolo || generandoOrdenes) && (
+                                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                    )}
+                                    Generar protocolo
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => void ejecutarProtocolo(true)}
+                                    disabled={
+                                        procesandoProtocolo ||
+                                        cargandoProtocolo ||
+                                        generandoOrdenes ||
+                                        protocoloItems.length === 0
+                                    }
+                                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                >
+                                    {(procesandoProtocolo || generandoOrdenes) ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Printer className="h-3.5 w-3.5" />
+                                    )}
+                                    Generar e imprimir protocolo
+                                </button>
+                            </div>
                         </div>
                     )}
 

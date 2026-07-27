@@ -221,7 +221,7 @@ export function ObservacionesSection({
                     : 'bg-amber-100 text-amber-700'
                 }`}
               >
-                {checklistCompleto ? 'Completo' : 'Pendiente'}
+                {checklistCompleto ? 'Completo' : 'Incompleto'}
               </span>
             </div>
 

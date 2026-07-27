@@ -118,6 +118,10 @@ export async function crearIngreso(
       ? { ...dataNormalizada, fechaEgresoPrevista: null }
       : dataNormalizada
 
+  if (dataParaCrear.tipoIngresoCodigo === 'INT' && !dataParaCrear.profesionalTratanteId) {
+    throw new Error('Para internacion debe indicar un medico tratante')
+  }
+
   const ingreso = await repo.crearIngreso(dataParaCrear, paciente, usuario)
 
   // Auto-generar informe de hospitalización para internaciones

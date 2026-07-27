@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BedDouble, Loader2 } from 'lucide-react'
+import { BedDouble, Loader2, Plus, Trash2, Wallet } from 'lucide-react'
 import { BuscarPaciente } from '@/components/admision/buscar-paciente'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { calcularTotalSeleccionado } from '@/components/ui/componente-selector'
@@ -59,6 +59,13 @@ interface InternacionFormProps {
   camaInicial?: number | null
 }
 
+interface DepositoRegistroEditable {
+  id: string
+  fecha: string
+  importe: string
+  observaciones: string
+}
+
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 
 function crearChecklistInicial(): ChecklistDocumental {
@@ -85,6 +92,14 @@ function ahoraLocalDateTimeInput(): string {
   return `${y}-${m}-${d}T${hh}:${mm}`
 }
 
+function crearIdTemporalDeposito(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `dep-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+}
+
 export function InternacionForm({
   profesionales,
   obraSociales,
@@ -97,6 +112,7 @@ export function InternacionForm({
   const formRef = useRef<HTMLFormElement>(null)
   const submitEnCursoRef = useRef(false)
   const [guardando, setGuardando] = useState(false)
+  const [mensajeGuardado, setMensajeGuardado] = useState('Creando internacion...')
   const [error, setError] = useState<string | null>(null)
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
 
@@ -114,6 +130,7 @@ export function InternacionForm({
   const [checklistDocumental, setChecklistDocumental] = useState<ChecklistDocumental>(
     crearChecklistInicial()
   )
+  const [depositosRegistros, setDepositosRegistros] = useState<DepositoRegistroEditable[]>([])
   const [practicas, setPracticas] = useState<PracticaAdmisionItem[]>([])
   const [generarOrdenesSeparadasPorPractica, setGenerarOrdenesSeparadasPorPractica] = useState(false)
   const [busquedaPracticaPendiente, setBusquedaPracticaPendiente] = useState({
@@ -175,6 +192,46 @@ export function InternacionForm({
     setChecklistDocumental((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
+  const agregarDeposito = () => {
+    setDepositosRegistros((prev) => [
+      ...prev,
+      {
+        id: crearIdTemporalDeposito(),
+        fecha: '',
+        importe: '',
+        observaciones: '',
+      },
+    ])
+  }
+
+  const actualizarDeposito = (
+    id: string,
+    field: keyof DepositoRegistroEditable,
+    value: string
+  ) => {
+    setDepositosRegistros((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    )
+  }
+
+  const eliminarDeposito = (id: string) => {
+    setDepositosRegistros((prev) => prev.filter((item) => item.id !== id))
+  }
+
+  const validarDepositos = (): string | null => {
+    for (const item of depositosRegistros) {
+      if (!item.fecha) return 'Todos los depositos deben tener fecha.'
+      if (!item.importe.trim()) return 'Todos los depositos deben tener importe.'
+
+      const importe = Number(item.importe)
+      if (!Number.isFinite(importe) || importe < 0) {
+        return 'Todos los importes de depositos deben ser validos.'
+      }
+    }
+
+    return null
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
@@ -200,6 +257,19 @@ export function InternacionForm({
 
     if (busquedaPracticaPendiente.termino.trim().length >= 2 && busquedaPracticaPendiente.hayResultados) {
       setError('Seleccione una practica del listado o limpie la busqueda antes de guardar')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
+    if (!profesionalTratanteId) {
+      setError('Seleccione un medico tratante para la internacion')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
+    const errorDepositos = validarDepositos()
+    if (errorDepositos) {
+      setError(errorDepositos)
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
@@ -268,22 +338,30 @@ export function InternacionForm({
       })
     })
 
-    setPracticas(practicasNormalizadas)
-
     submitEnCursoRef.current = true
     setGuardando(true)
+    setMensajeGuardado(
+      practicasExpandida.length > 0
+        ? 'Creando internacion y preparando ordenes...'
+        : 'Creando internacion...'
+    )
     setError(null)
 
     const observacionesSerializadas = serializarObservacionesInternacion({
       observaciones: observaciones || null,
       checklistDocumental,
+      depositosRegistros: depositosRegistros.map((item) => ({
+        id: item.id,
+        fecha: item.fecha,
+        importe: Number(item.importe),
+        observaciones: item.observaciones.trim() || null,
+      })),
     })
 
     const requiereOrdenAutomatica = practicasExpandida.length > 0
     let ventanaImpresion: Window | null = requiereOrdenAutomatica
       ? abrirVentanaImpresionPendiente()
       : null
-    let impresionDisparada = false
 
     try {
       const body = {
@@ -322,38 +400,40 @@ export function InternacionForm({
       }
 
       const rutaFicha = `/dashboard/internacion/${ingreso.id}`
-      void router.prefetch(rutaFicha)
 
       if (requiereOrdenAutomatica) {
-        const autoOrdenResult = await generarOrdenesPendientesAdmision(ingreso.id, {
+        void generarOrdenesPendientesAdmision(ingreso.id, {
           separarPorPractica: generarOrdenesSeparadasPorPractica,
         })
+          .then((autoOrdenResult) => {
+            if (autoOrdenResult.ok && autoOrdenResult.ordenes.length > 0) {
+              const ordenesParam = autoOrdenResult.ordenes
+                .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
+                .join(',')
 
-        if (autoOrdenResult.ok && autoOrdenResult.ordenes.length > 0) {
-          const ordenesParam = autoOrdenResult.ordenes
-            .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
-            .join(',')
+              navegarVentanaImpresion(
+                ventanaImpresion,
+                `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+              )
+              return
+            }
 
-          navegarVentanaImpresion(
-            ventanaImpresion,
-            `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
-          )
-          impresionDisparada = true
-        } else {
-          cerrarVentanaImpresion(ventanaImpresion)
-          ventanaImpresion = null
-        }
-      }
-
-      if (!impresionDisparada) {
+            cerrarVentanaImpresion(ventanaImpresion)
+            ventanaImpresion = null
+          })
+          .catch(() => {
+            cerrarVentanaImpresion(ventanaImpresion)
+            ventanaImpresion = null
+          })
+      } else {
         cerrarVentanaImpresion(ventanaImpresion)
+        ventanaImpresion = null
       }
 
       router.push(rutaFicha)
     } catch (err) {
-      if (!impresionDisparada) {
-        cerrarVentanaImpresion(ventanaImpresion)
-      }
+      cerrarVentanaImpresion(ventanaImpresion)
+      ventanaImpresion = null
       setError(err instanceof Error ? err.message : 'Error desconocido')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       submitEnCursoRef.current = false
@@ -364,10 +444,10 @@ export function InternacionForm({
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="relative space-y-6" aria-busy={guardando}>
       {guardando && (
-        <div className="absolute inset-0 z-20 bg-white/70 backdrop-blur-[1px] flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-80 bg-white/70 backdrop-blur-[1px] flex items-center justify-center px-4">
           <div className="rounded-lg border border-blue-200 bg-white shadow-sm px-4 py-3 text-sm text-blue-700 flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Registrando internacion... por favor espere.
+            {mensajeGuardado}
           </div>
         </div>
       )}
@@ -390,24 +470,15 @@ export function InternacionForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Fecha y hora de ingreso <span className="text-red-500">*</span>
+              Medico tratante <span className="text-red-500">*</span>
             </label>
-            <input
-              type="datetime-local"
-              required
-              value={fechaIngreso}
-              onChange={(e) => setFechaIngreso(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Medico de guardia
-            </label>
+            <p className="mb-1 text-[11px] text-gray-500">
+              Medico asignado para la internacion.
+            </p>
             <ProfesionalSelect
               profesionales={profesionales}
-              value={profesionalGuardiaId}
-              onChange={setProfesionalGuardiaId}
+              value={profesionalTratanteId}
+              onChange={setProfesionalTratanteId}
               placeholderOption="— Seleccionar —"
               selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
             />
@@ -418,10 +489,22 @@ export function InternacionForm({
             </label>
             <ProfesionalSelect
               profesionales={profesionales}
-              value={profesionalTratanteId}
-              onChange={setProfesionalTratanteId}
+              value={profesionalGuardiaId}
+              onChange={setProfesionalGuardiaId}
               placeholderOption="— Opcional —"
               selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Fecha y hora de ingreso <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="datetime-local"
+              required
+              value={fechaIngreso}
+              onChange={(e) => setFechaIngreso(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
             />
           </div>
           <div className="sm:col-span-2">
@@ -574,7 +657,7 @@ export function InternacionForm({
                   : 'bg-amber-100 text-amber-700'
               }`}
             >
-              {checklistCompleto ? 'Completo' : 'Pendiente'}
+              {checklistCompleto ? 'Completo' : 'Incompleto'}
             </span>
           </div>
 
@@ -592,6 +675,96 @@ export function InternacionForm({
             ))}
           </div>
         </div>
+
+        <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-gray-500" />
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-700">
+                Depositos
+              </h4>
+            </div>
+            <button
+              type="button"
+              onClick={agregarDeposito}
+              disabled={guardando}
+              className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Agregar deposito
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+                  <th className="px-2 py-2">Fecha</th>
+                  <th className="px-2 py-2">Importe</th>
+                  <th className="px-2 py-2">Observaciones</th>
+                  <th className="px-2 py-2 w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {depositosRegistros.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-2 py-3 text-xs text-gray-500">
+                      Sin depositos registrados.
+                    </td>
+                  </tr>
+                ) : (
+                  depositosRegistros.map((item) => (
+                    <tr key={item.id} className="text-gray-700">
+                      <td className="px-2 py-2">
+                        <input
+                          type="date"
+                          value={item.fecha}
+                          onChange={(e) => actualizarDeposito(item.id, 'fecha', e.target.value)}
+                          className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+                          disabled={guardando}
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.importe}
+                          onChange={(e) => actualizarDeposito(item.id, 'importe', e.target.value)}
+                          className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+                          disabled={guardando}
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="text"
+                          value={item.observaciones}
+                          onChange={(e) => actualizarDeposito(item.id, 'observaciones', e.target.value)}
+                          maxLength={500}
+                          className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+                          placeholder="Opcional"
+                          disabled={guardando}
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => eliminarDeposito(item.id)}
+                          className="inline-flex items-center justify-center text-red-600 hover:text-red-700"
+                          disabled={guardando}
+                          aria-label="Eliminar deposito"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <textarea
           value={observaciones}
           onChange={(e) => setObservaciones(e.target.value)}

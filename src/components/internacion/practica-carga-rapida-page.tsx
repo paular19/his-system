@@ -59,13 +59,15 @@ type NomencladorItemProtocolo = {
     valorGastos: number | null
 }
 
+type ComponenteOrden = 'HE' | 'HA' | 'GA' | 'HP' | 'A1' | 'A2' | 'A3'
+
 type ProtocoloPredefinido = {
     id: string
     nombre: string
     codigos: string[]
+    clasificacionPorCodigo: Record<string, ComponenteOrden>
+    notaFormato?: string
 }
-
-type ComponenteOrden = 'HE' | 'HA' | 'GA' | 'HP' | 'A1' | 'A2' | 'A3'
 
 type OrdenRef = {
     puestoNumero: number
@@ -155,21 +157,45 @@ const PROTOCOLOS_PREDEFINIDOS: ProtocoloPredefinido[] = [
         id: 'SALA_COMUN_COMPARTIDA',
         nombre: 'SALA O HABITACION COMUN COMPARTIDA',
         codigos: ['431001', '430101', '420301'],
+        clasificacionPorCodigo: {
+            '431001': 'GA',
+            '430101': 'GA',
+            '420301': 'HE',
+        },
+        notaFormato: 'Gastos por duplicado en una orden y honorario especialista en otra orden.',
     },
     {
         id: 'SALA_COMUN_BLOQUEADA',
         nombre: 'SALA O HABITACION COMUN BLOQUEADA',
         codigos: ['431001', '430101', '430106', '420301'],
+        clasificacionPorCodigo: {
+            '431001': 'GA',
+            '430101': 'GA',
+            '430106': 'GA',
+            '420301': 'HE',
+        },
+        notaFormato: 'Gastos por duplicado en una orden y honorario especialista en otra orden.',
     },
     {
         id: 'SALA_USADA_8_HORAS',
         nombre: 'SALA O HABITACION USADA POR 8 HORAS',
         codigos: ['431001', '430130', '420301'],
+        clasificacionPorCodigo: {
+            '431001': 'GA',
+            '430130': 'GA',
+            '420301': 'HE',
+        },
+        notaFormato: 'Gastos por duplicado en una orden y honorario especialista en otra orden.',
     },
     {
         id: 'CODIGOS_UTI_TERAPIA_INTENSIVA',
         nombre: 'CODIGOS UTI - TERAPIA INTENSIVA',
         codigos: ['400101', '431002'],
+        clasificacionPorCodigo: {
+            '400101': 'GA',
+            '431002': 'GA',
+        },
+        notaFormato: 'Solo por duplicado.',
     },
 ]
 
@@ -242,6 +268,10 @@ function fechaSoloPracticaAISOString(value: string): string {
     return new Date(`${value}T12:00:00-03:00`).toISOString()
 }
 
+function normalizarCodigoProtocolo(codigo: string): string {
+    return codigo.trim().toUpperCase()
+}
+
 function clasificacionDefaultDesdeNomenclador(item: NomencladorItemProtocolo): string {
     const soloAnestesia =
         item.valorAnestesista != null &&
@@ -256,6 +286,19 @@ function clasificacionDefaultDesdeNomenclador(item: NomencladorItemProtocolo): s
     if (soloGastos) return 'GA'
 
     return 'HE'
+}
+
+function clasificacionProtocoloPorCodigo(
+    protocolo: ProtocoloPredefinido | null,
+    codigo: string,
+    nomenclador: NomencladorItemProtocolo
+): string {
+    const codigoNormalizado = normalizarCodigoProtocolo(codigo)
+    const clasificacionForzada = normalizarClasificacionAgrupacion(
+        protocolo?.clasificacionPorCodigo[codigoNormalizado]
+    )
+    if (clasificacionForzada) return clasificacionForzada
+    return clasificacionDefaultDesdeNomenclador(nomenclador)
 }
 
 function importeBaseDesdeNomenclador(item: NomencladorItemProtocolo): number | null {
@@ -322,6 +365,7 @@ export function PracticaCargaRapidaPage({
     const [protocoloSeleccionadoId, setProtocoloSeleccionadoId] = useState(
         PROTOCOLOS_PREDEFINIDOS[0]?.id ?? ''
     )
+    const [cantidadComunProtocolo, setCantidadComunProtocolo] = useState('1')
     const [protocoloItems, setProtocoloItems] = useState<ProtocoloCargaEditable[]>([])
     const [fechaProtocolo, setFechaProtocolo] = useState(() => fechaAInputLocalSimple(new Date()))
     const [cargandoProtocolo, setCargandoProtocolo] = useState(false)
@@ -1221,13 +1265,13 @@ export function PracticaCargaRapidaPage({
 
             const editables: ProtocoloCargaEditable[] = resultados
                 .filter((item): item is { codigo: string; nomenclador: NomencladorItemProtocolo } => Boolean(item.nomenclador))
-                .map(({ nomenclador }) => {
+                .map(({ codigo, nomenclador }) => {
                     const requiereMatriculaTratante = nomenclador.valorEspecialista != null
                     return {
                         codigo: nomenclador.codigo.trim(),
                         descripcion: nomenclador.descripcion,
-                        clasificacion: clasificacionDefaultDesdeNomenclador(nomenclador),
-                        cantidad: '1',
+                        clasificacion: clasificacionProtocoloPorCodigo(protocoloSeleccionado, codigo, nomenclador),
+                        cantidad: cantidadComunProtocolo,
                         requiereMatriculaTratante,
                         matriculaTratante: requiereMatriculaTratante ? matriculaDefault : '',
                         matriculaAnestesista:
@@ -1256,9 +1300,14 @@ export function PracticaCargaRapidaPage({
         }
     }
 
+    const actualizarCantidadComunProtocolo = (cantidad: string) => {
+        setCantidadComunProtocolo(cantidad)
+        setProtocoloItems((prev) => prev.map((item) => ({ ...item, cantidad })))
+    }
+
     const actualizarProtocoloItem = (
         codigo: string,
-        patch: Partial<Pick<ProtocoloCargaEditable, 'cantidad' | 'matriculaTratante'>>
+        patch: Partial<Pick<ProtocoloCargaEditable, 'matriculaTratante'>>
     ) => {
         setProtocoloItems((prev) =>
             prev.map((item) => (item.codigo === codigo ? { ...item, ...patch } : item))
@@ -1284,17 +1333,17 @@ export function PracticaCargaRapidaPage({
         }
 
         const fecha = fechaSoloPracticaAISOString(fechaProtocolo)
+        const cantidadComun = Number.parseInt(cantidadComunProtocolo, 10)
+        if (!Number.isFinite(cantidadComun) || cantidadComun <= 0 || cantidadComun > 999) {
+            return {
+                entradas: [],
+                error: 'Ingresa una cantidad comun valida (1-999) para el protocolo',
+            }
+        }
+
         const entradas: PracticaCargaEntrada[] = []
 
         for (const item of protocoloItems) {
-            const cantidad = Number.parseInt(item.cantidad, 10)
-            if (!Number.isFinite(cantidad) || cantidad <= 0 || cantidad > 999) {
-                return {
-                    entradas: [],
-                    error: `Cantidad invalida para el codigo ${item.codigo}`,
-                }
-            }
-
             let matriculaEspecialista: number | null = null
             if (item.requiereMatriculaTratante) {
                 const parsed = Number.parseInt(item.matriculaTratante.trim(), 10)
@@ -1313,7 +1362,7 @@ export function PracticaCargaRapidaPage({
                     codigoPractica: item.codigo,
                     descripcionPractica: item.descripcion,
                     fecha,
-                    cantidad,
+                    cantidad: cantidadComun,
                     numeroAutorizacion: null,
                     matriculaEspecialista,
                     matriculaAnestesista: item.matriculaAnestesista,
@@ -1642,16 +1691,23 @@ export function PracticaCargaRapidaPage({
                             </div>
 
                             <p className="text-xs text-gray-600">
-                                Selecciona un protocolo, precarga los codigos y ajusta solamente matricula tratante y cantidad por item.
+                                Selecciona un protocolo, precarga los codigos y ajusta matricula tratante. La cantidad se aplica igual para todos los codigos del protocolo.
                             </p>
 
-                            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                            {protocoloSeleccionado?.notaFormato && (
+                                <p className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] text-blue-800">
+                                    Formato: {protocoloSeleccionado.notaFormato}
+                                </p>
+                            )}
+
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                                 <label className="text-xs text-gray-700">
                                     Protocolo
                                     <select
                                         value={protocoloSeleccionadoId}
                                         onChange={(e) => {
                                             setProtocoloSeleccionadoId(e.target.value)
+                                            setCantidadComunProtocolo('1')
                                             setProtocoloItems([])
                                             setErrorProtocolo(null)
                                         }}
@@ -1671,6 +1727,19 @@ export function PracticaCargaRapidaPage({
                                         type="date"
                                         value={fechaProtocolo}
                                         onChange={(e) => setFechaProtocolo(e.target.value)}
+                                        className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
+                                    />
+                                </label>
+
+                                <label className="text-xs text-gray-700">
+                                    Cantidad comun
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={999}
+                                        step={1}
+                                        value={cantidadComunProtocolo}
+                                        onChange={(e) => actualizarCantidadComunProtocolo(e.target.value)}
                                         className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
                                     />
                                 </label>
@@ -1701,19 +1770,15 @@ export function PracticaCargaRapidaPage({
                                             <p className="mt-1 text-xs text-gray-700">{item.descripcion}</p>
                                             <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
                                                 <label className="text-[11px] text-gray-600">
-                                                    Cantidad
+                                                    Cantidad comun
                                                     <input
                                                         type="number"
                                                         min={1}
                                                         max={999}
                                                         step={1}
                                                         value={item.cantidad}
-                                                        onChange={(e) =>
-                                                            actualizarProtocoloItem(item.codigo, {
-                                                                cantidad: e.target.value,
-                                                            })
-                                                        }
-                                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-800"
+                                                        readOnly
+                                                        className="mt-1 w-full rounded border border-gray-300 bg-gray-100 px-2 py-1 text-xs text-gray-700"
                                                     />
                                                 </label>
 

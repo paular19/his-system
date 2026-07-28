@@ -36,6 +36,18 @@ function ahoraLocalDateTimeInput(): string {
     return `${y}-${m}-${d}T${hh}:${mm}`
 }
 
+function toDateTimeLocalInput(value: Date | string | null | undefined): string {
+    if (!value) return ''
+    const d = value instanceof Date ? value : new Date(value)
+    if (Number.isNaN(d.getTime())) return ''
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    return `${y}-${m}-${day}T${hh}:${mm}`
+}
+
 interface TransferenciaCamaProps {
     ingresoId: number
     camaActual: { id: number; identificador: string; sector: string; estado: string } | null
@@ -44,6 +56,7 @@ interface TransferenciaCamaProps {
     profesionales: Array<{ id: number; nombre: string; matricula?: number | null }>
     puedeModificar: boolean
     estadoInternacion: string | null
+    fechaEgresoActual?: Date | string | null
 }
 
 export function TransferenciaCama({
@@ -54,6 +67,7 @@ export function TransferenciaCama({
     profesionales,
     puedeModificar,
     estadoInternacion,
+    fechaEgresoActual,
 }: TransferenciaCamaProps) {
     const router = useRouter()
     const [transferencias, setTransferencias] = useState(transferenciasIniciales)
@@ -64,6 +78,7 @@ export function TransferenciaCama({
     const [guardando, setGuardando] = useState(false)
     const [concretandoReserva, setConcretandoReserva] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [reservaError, setReservaError] = useState<string | null>(null)
     const [reservaMsg, setReservaMsg] = useState<string | null>(null)
 
     const [camaDestinoId, setCamaDestinoId] = useState('')
@@ -78,6 +93,14 @@ export function TransferenciaCama({
     const [altaError, setAltaError] = useState<string | null>(null)
     const [altaExito, setAltaExito] = useState<string | null>(null)
     const [confirmacionAlta, setConfirmacionAlta] = useState(false)
+    const [mostrarCorreccionAlta, setMostrarCorreccionAlta] = useState(false)
+    const [fechaEgresoCorreccion, setFechaEgresoCorreccion] = useState(
+        () => toDateTimeLocalInput(fechaEgresoActual) || ahoraLocalDateTimeInput()
+    )
+    const [correccionGuardando, setCorreccionGuardando] = useState(false)
+    const [correccionError, setCorreccionError] = useState<string | null>(null)
+    const [correccionExito, setCorreccionExito] = useState<string | null>(null)
+    const [confirmacionCorreccionAlta, setConfirmacionCorreccionAlta] = useState(false)
 
     const estadoCamaActual = normalizarEstadoCama(cama?.estado)
 
@@ -98,6 +121,7 @@ export function TransferenciaCama({
                     fecha: fechaTransferencia || undefined,
                     motivo: motivo || null,
                     profesionalId: profesionalId ? parseInt(profesionalId) : null,
+                    reservarCama: estadoCamaActual === 'RESERVADA',
                 }),
             })
             if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Error') }
@@ -171,11 +195,55 @@ export function TransferenciaCama({
         }
     }
 
+    const corregirFechaAlta = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault()
+        setCorreccionGuardando(true)
+        setCorreccionError(null)
+        setCorreccionExito(null)
+
+        if (!fechaEgresoCorreccion) {
+            setCorreccionError('Debe completar la fecha y hora de alta corregida.')
+            setCorreccionGuardando(false)
+            return
+        }
+
+        if (!confirmacionCorreccionAlta) {
+            setCorreccionError('Debe confirmar la corrección de fecha de alta para continuar.')
+            setCorreccionGuardando(false)
+            return
+        }
+
+        try {
+            const res = await fetch(`/api/internacion/${ingresoId}/alta`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ingresoId,
+                    fechaEgreso: new Date(fechaEgresoCorreccion).toISOString(),
+                }),
+            })
+
+            const json = await res.json()
+            if (!res.ok || !json.ok) {
+                throw new Error(json.error ?? 'Error al corregir la fecha de alta')
+            }
+
+            setCorreccionExito('Fecha de alta corregida correctamente. Se registró auditoría del cambio.')
+            setMostrarCorreccionAlta(false)
+            setConfirmacionCorreccionAlta(false)
+            router.refresh()
+        } catch (err) {
+            setCorreccionError(err instanceof Error ? err.message : 'Error inesperado')
+        } finally {
+            setCorreccionGuardando(false)
+        }
+    }
+
     const concretarReserva = async () => {
         if (!cama || estadoCamaActual === 'OCUPADA') return
 
         setConcretandoReserva(true)
-        setError(null)
+        setReservaError(null)
         setReservaMsg(null)
 
         try {
@@ -194,7 +262,7 @@ export function TransferenciaCama({
             setReservaMsg('Reserva concretada: la cama quedó ocupada.')
             router.refresh()
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'No se pudo concretar la reserva')
+            setReservaError(err instanceof Error ? err.message : 'No se pudo concretar la reserva')
         } finally {
             setConcretandoReserva(false)
         }
@@ -235,26 +303,6 @@ export function TransferenciaCama({
                             </div>
                         </div>
 
-                        {puedeModificar && estadoInternacion === 'A' && estadoCamaActual !== 'OCUPADA' && (
-                            <button
-                                type="button"
-                                onClick={() => void concretarReserva()}
-                                disabled={concretandoReserva}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
-                            >
-                                {concretandoReserva
-                                    ? 'Concretando...'
-                                    : estadoCamaActual === 'RESERVADA'
-                                        ? 'Confirmar cama reservada'
-                                        : 'Marcar cama ocupada'}
-                            </button>
-                        )}
-
-                        {reservaMsg && (
-                            <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">
-                                {reservaMsg}
-                            </p>
-                        )}
                     </div>
                 ) : (
                     <p className="text-sm text-gray-500">Sin cama asignada</p>
@@ -388,11 +436,59 @@ export function TransferenciaCama({
                                 {mostrarAlta ? 'Ocultar alta' : 'Dar alta'}
                             </button>
                         )}
+                        {estadoInternacion === 'E' && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setCorreccionError(null)
+                                    setCorreccionExito(null)
+                                    setMostrarCorreccionAlta((v) => !v)
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 transition-colors"
+                            >
+                                {mostrarCorreccionAlta ? 'Ocultar corrección' : 'Corregir fecha de alta'}
+                            </button>
+                        )}
                     </div>
+
+                    {puedeModificar && estadoInternacion === 'A' && cama && estadoCamaActual !== 'OCUPADA' && (
+                        <div className="mb-3 space-y-2">
+                            <button
+                                type="button"
+                                onClick={() => void concretarReserva()}
+                                disabled={concretandoReserva}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                                {concretandoReserva
+                                    ? 'Concretando...'
+                                    : estadoCamaActual === 'RESERVADA'
+                                        ? 'Confirmar cama reservada'
+                                        : 'Marcar cama ocupada'}
+                            </button>
+
+                            {reservaMsg && (
+                                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">
+                                    {reservaMsg}
+                                </p>
+                            )}
+
+                            {reservaError && (
+                                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
+                                    {reservaError}
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {altaExito && (
                         <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
                             {altaExito}
+                        </p>
+                    )}
+
+                    {correccionExito && (
+                        <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
+                            {correccionExito}
                         </p>
                     )}
 
@@ -465,6 +561,53 @@ export function TransferenciaCama({
                                     className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-60"
                                 >
                                     {altaGuardando ? 'Registrando alta...' : 'Confirmar alta'}
+                                </button>
+                            </div>
+                        </form>
+                    )}
+
+                    {estadoInternacion === 'E' && mostrarCorreccionAlta && (
+                        <form onSubmit={corregirFechaAlta} className="space-y-3 rounded-xl border border-amber-200 bg-white p-4">
+                            <div className="rounded-lg border border-amber-100 bg-amber-50 p-2 text-xs text-amber-700">
+                                Esta corrección actualiza la fecha de alta registrada y deja trazabilidad en auditoría con usuario y timestamp.
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Nueva fecha de alta</label>
+                                <input
+                                    type="datetime-local"
+                                    value={fechaEgresoCorreccion}
+                                    onChange={(e) => setFechaEgresoCorreccion(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                                />
+                            </div>
+
+                            <label className="inline-flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={confirmacionCorreccionAlta}
+                                    onChange={(e) => setConfirmacionCorreccionAlta(e.target.checked)}
+                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                />
+                                <span>Confirmo corregir la fecha de alta de esta internación.</span>
+                            </label>
+
+                            {correccionError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">{correccionError}</p>}
+
+                            <div className="flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setMostrarCorreccionAlta(false)}
+                                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={correccionGuardando || !confirmacionCorreccionAlta || !fechaEgresoCorreccion}
+                                    className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                                >
+                                    {correccionGuardando ? 'Guardando corrección...' : 'Guardar corrección'}
                                 </button>
                             </div>
                         </form>

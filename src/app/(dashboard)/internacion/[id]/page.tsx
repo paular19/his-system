@@ -3,7 +3,7 @@ import { getUsuarioSesion } from '@/lib/auth'
 import { ROLES, tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
-import { obtenerInternacionDetalle } from '@/modules/internacion/service'
+import { obtenerCamasDisponibles, obtenerInternacionDetalle } from '@/modules/internacion/service'
 import { TransferenciaCama } from '@/components/internacion/transferencia-cama'
 import { DiagnosticosSection } from '@/components/internacion/diagnosticos-section'
 import { TratanteSection } from '@/components/internacion/tratante-section'
@@ -110,11 +110,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         const [profesionales, camasDisponibles, catalogoCobertura] = await Promise.all([
             getProfesionalesActivosCatalogo(),
             puedeCambiarCama
-                ? prisma.cama.findMany({
-                    where: { estado: 'DISPONIBLE' },
-                    select: { id: true, identificador: true, habitacion: true, sector: true, estado: true, observaciones: true, sedeId: true, usuario: true, fechaEstado: true },
-                    orderBy: [{ sector: 'asc' }, { identificador: 'asc' }],
-                })
+                ? obtenerCamasDisponibles()
                 : Promise.resolve([]),
             getCatalogoCoberturaAtencion(),
         ])
@@ -186,10 +182,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         return a === null ? '—' : `${a} años`
     }
 
-    const camasDisponiblesConOcupante = camasDisponibles.map((c) => ({
-        ...c,
-        ocupante: null as null,
-    }))
+    const camasDisponiblesConOcupante = camasDisponibles
 
     const matriculaTratanteDefault =
         detalle.profesionalTratante?.matricula ??
@@ -197,12 +190,15 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             ? profesionales.find((p) => p.id === detalle.profesionalTratante?.id)?.matricula ?? null
             : null)
 
-    const medicoCabeceraODerivante =
-        detalle.ingresoSubtipo?.profesionalDerivanteNombre?.trim()
+    const medicoCabecera = detalle.profesionalGuardia?.nombre
+        ? nombreProfesionalParaMostrar(detalle.profesionalGuardia.nombre)
+        : null
+
+    const medicoDerivante = detalle.profesionalDerivante?.nombre
+        ? nombreProfesionalParaMostrar(detalle.profesionalDerivante.nombre)
+        : detalle.ingresoSubtipo?.profesionalDerivanteNombre?.trim()
             ? nombreProfesionalParaMostrar(detalle.ingresoSubtipo.profesionalDerivanteNombre)
-            : detalle.profesionalGuardia?.nombre
-                ? nombreProfesionalParaMostrar(detalle.profesionalGuardia.nombre)
-                : null
+            : null
 
     logServerPerf('internacion.ficha', {
         ingresoId,
@@ -294,7 +290,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                 <DataItem label="Estancia" value={diasEstancia()} />
                                 {detalle.fechaEgreso && <DataItem label="Alta real" value={fmtDate(detalle.fechaEgreso)} />}
                                 <DataItem label="Médico tratante" value={detalle.profesionalTratante?.nombre ? nombreProfesionalParaMostrar(detalle.profesionalTratante.nombre) : null} />
-                                <DataItem label="Médico de cabecera/derivante" value={medicoCabeceraODerivante} />
+                                <DataItem label="Médico de cabecera" value={medicoCabecera} />
+                                <DataItem label="Médico derivante" value={medicoDerivante} />
                             </dl>
                         </div>
 
@@ -352,6 +349,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             profesionales={profesionales}
                             puedeModificar={puedeCambiarCama}
                             estadoInternacion={detalle.estado}
+                            fechaEgresoActual={detalle.fechaEgreso}
                         />
                     </div>
 

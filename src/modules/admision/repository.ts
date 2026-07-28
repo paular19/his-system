@@ -216,6 +216,21 @@ export async function crearIngreso(
         throw new Error('La cama seleccionada está en mantenimiento')
       }
 
+      const internacionActivaEnCama = await tx.ingreso.findFirst({
+        where: {
+          camaId: data.camaId,
+          estado: 'A',
+          tipoIngresoCodigo: 'INT',
+        },
+        select: { id: true, numeroIngreso: true },
+      })
+
+      if (internacionActivaEnCama) {
+        throw new Error(
+          `La cama seleccionada ya está asignada a una internación activa (INT-${internacionActivaEnCama.numeroIngreso}).`
+        )
+      }
+
       const estadoDestino = data.subtipoAdmisionCodigo === 'PRG' ? 'RESERVADA' : 'OCUPADA'
 
       await tx.cama.update({
@@ -260,6 +275,7 @@ export async function crearIngreso(
         tipoInternacionCodigo: data.tipoInternacionCodigo ?? null,
         descripcionPatologia: data.descripcionPatologia ?? null,
         profesionalGuardiaId: data.profesionalGuardiaId ?? null,
+        profesionalDerivanteId: data.profesionalDerivanteId ?? null,
         profesionalTratanteId: data.profesionalTratanteId ?? null,
         camaId: data.camaId ?? null,
         sedeId: data.sedeId ?? null,
@@ -681,7 +697,7 @@ export async function actualizarIngreso(
   const camposDirectos = [
     'fechaIngreso', 'fechaEgresoPrevista', 'fechaEgreso',
     'tipoInternacionCodigo', 'descripcionPatologia', 'descripcionPatologiaDefinitiva',
-    'profesionalGuardiaId', 'profesionalTratanteId', 'camaId', 'sedeId',
+    'profesionalGuardiaId', 'profesionalDerivanteId', 'profesionalTratanteId', 'camaId', 'sedeId',
     'obraSocialId', 'planId', 'numeroAfiliado', 'nombreTutor', 'telefonoTutor',
     'obraSocialCoseguroId', 'planCoseguroId', 'numeroAfiliadoCoseguro',
     'motivoEgresoCodigo', 'observaciones', 'estado',

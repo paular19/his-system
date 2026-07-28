@@ -32,15 +32,22 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
 
   const where = {
     tipoIngresoCodigo: 'INT',
-    estado: 'E',
-    ...(q
-      ? {
+    AND: [
+      {
         OR: [
-          { nombre: { contains: q, mode: 'insensitive' as const } },
-          { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' as const } } },
+          { estado: 'E' },
+          { fechaEgreso: { not: null } },
         ],
-      }
-      : {}),
+      },
+      ...(q
+        ? [{
+          OR: [
+            { nombre: { contains: q, mode: 'insensitive' as const } },
+            { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' as const } } },
+          ],
+        }]
+        : []),
+    ],
   }
 
   const [ingresos, total] = await Promise.all([
@@ -52,7 +59,8 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
         cama: { select: { identificador: true, habitacion: true, sector: true } },
         motivoEgreso: { select: { descripcion: true } },
       },
-      orderBy: { fechaIngreso: 'desc' },
+      // En histórico interesa priorizar el momento del alta, no la fecha de ingreso.
+      orderBy: [{ fechaEgreso: 'desc' }, { id: 'desc' }],
       skip,
       take: porPagina,
     }),

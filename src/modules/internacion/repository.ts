@@ -32,6 +32,7 @@ import type {
   CrearPracticaInput,
   ActualizarPracticaInput,
   RegistrarAltaInternacionInput,
+  ActualizarFechaAltaInternacionInput,
   ActualizarDiagnosticoInternacionInput,
   CrearCirugiaUrgenciaInput,
   CrearCirugiaSimpleInput,
@@ -213,6 +214,12 @@ async function mapearCamaConOcupante(
     ? cama.ingresos.filter((ing) => ing.obraSocialId === obraSocialIdFiltro)
     : cama.ingresos
 
+  const ingresosOrdenadosPorFechaDesc = [...ingresosRelevantes].sort((a, b) => {
+    const af = a.fechaIngreso?.getTime() ?? 0
+    const bf = b.fechaIngreso?.getTime() ?? 0
+    return bf - af
+  })
+
   const ingresosActivos = ingresosRelevantes
     .filter((ing) => ingresoActivoParaMapa(ing.fechaIngreso, fechaReferencia))
     .sort((a, b) => {
@@ -223,9 +230,6 @@ async function mapearCamaConOcupante(
 
   const ingresoActivo = ingresosActivos[0] ?? null
   const hayIngresoDelDia = ingresosRelevantes.some((ing) => ingresoDelDiaParaMapa(ing.fechaIngreso, fechaReferencia))
-  const hayIngresoFuturo = ingresosRelevantes.some(
-    (ing) => !!ing.fechaIngreso && claveDiaArgentina(ing.fechaIngreso) > claveDiaArgentina(fechaReferencia)
-  )
   const hayIngresoActivo = ingresoActivo !== null
 
   let estadoVisual = cama.estado
@@ -242,23 +246,25 @@ async function mapearCamaConOcupante(
       estadoVisual = 'DISPONIBLE'
     } else if (cama.estado === 'OCUPADA') {
       estadoVisual = 'OCUPADA'
-    } else if (cama.estado === 'RESERVADA' && hayIngresoFuturo) {
-      // No mostrar reservas antes de su día efectivo.
-      estadoVisual = 'DISPONIBLE'
     }
   }
+
+  const ingresoParaMostrar = ingresoActivo
+    ?? ((estadoVisual === 'OCUPADA' || estadoVisual === 'RESERVADA')
+      ? (ingresosOrdenadosPorFechaDesc[0] ?? null)
+      : null)
 
   return {
     ...cama,
     estado: estadoVisual,
-    ocupante: ingresoActivo
+    ocupante: ingresoParaMostrar
       ? {
-        ingresoId: ingresoActivo.id,
-        numeroIngreso: ingresoActivo.numeroIngreso,
-        nombre: ingresoActivo.nombre ?? 'Sin nombre',
-        fechaIngreso: ingresoActivo.fechaIngreso,
-        obraSocialId: ingresoActivo.obraSocialId ?? null,
-        obraSocialNombre: ingresoActivo.obraSocial?.nombre ?? null,
+        ingresoId: ingresoParaMostrar.id,
+        numeroIngreso: ingresoParaMostrar.numeroIngreso,
+        nombre: ingresoParaMostrar.nombre ?? 'Sin nombre',
+        fechaIngreso: ingresoParaMostrar.fechaIngreso,
+        obraSocialId: ingresoParaMostrar.obraSocialId ?? null,
+        obraSocialNombre: ingresoParaMostrar.obraSocial?.nombre ?? null,
       }
       : null,
   }
@@ -340,8 +346,31 @@ export async function obtenerCamaPorId(id: number): Promise<CamaConOcupante | nu
 }
 
 export async function obtenerCamasDisponibles(sector?: string): Promise<CamaConOcupante[]> {
-  const todas = await obtenerTodasLasCamas()
-  return todas.filter((c) => c.estado === 'DISPONIBLE' && (!sector || c.sector === sector))
+  const fecha = resolverFechaReferencia()
+  const camas = await prisma.cama.findMany({
+    where: {
+      estado: 'DISPONIBLE',
+      ...(sector ? { sector } : {}),
+    },
+    include: {
+      ingresos: {
+        where: { estado: 'A', tipoIngresoCodigo: 'INT' },
+        select: {
+          id: true,
+          numeroIngreso: true,
+          nombre: true,
+          fechaIngreso: true,
+          obraSocialId: true,
+          obraSocial: { select: { nombre: true } },
+        },
+        orderBy: [{ fechaIngreso: 'asc' }, { id: 'asc' }],
+      },
+    },
+    orderBy: [{ sector: 'asc' }, { identificador: 'asc' }],
+  })
+
+  const mapeadas = await Promise.all(camas.map((c) => mapearCamaConOcupante(c, fecha)))
+  return mapeadas.filter((c) => c.estado === 'DISPONIBLE')
 }
 
 export async function actualizarEstadoCama(
@@ -477,6 +506,7 @@ export async function obtenerInternacionDetalle(
         select: { id: true, identificador: true, sector: true, habitacion: true, estado: true },
       },
       profesionalGuardia: { select: { id: true, nombre: true } },
+      profesionalDerivanteId: true,
       profesionalTratante: { select: { id: true, nombre: true, matricula: true } },
       ingresoSubtipo: {
         select: {
@@ -492,12 +522,19 @@ export async function obtenerInternacionDetalle(
   if (!ingresoBase) return null
 
   const [
+    profesionalDerivante,
     ingresoPatologias,
     transferencias,
     practicasBase,
     cirugiasProgramadas,
     historialTratantes,
   ] = await Promise.all([
+    ingresoBase.profesionalDerivanteId
+      ? prisma.profesional.findUnique({
+        where: { id: ingresoBase.profesionalDerivanteId },
+        select: { id: true, nombre: true },
+      })
+      : Promise.resolve(null),
     prisma.ingresoPatologia.findMany({
       where: { ingresoId: id },
       select: { id: true, patologiaId: true, descripcion: true, estado: true, fecha: true, observaciones: true, fechaEstado: true, usuario: true },
@@ -722,6 +759,7 @@ export async function obtenerInternacionDetalle(
 
   return {
     ...ingresoBase,
+    profesionalDerivante,
     ingresoPatologias,
     historialTratantes: mapHistorial,
     evoluciones: [] as EvolucionItem[],
@@ -2203,7 +2241,11 @@ export async function transferirCama(
 ): Promise<TransferenciaItem> {
   const ingreso = await prisma.ingreso.findUnique({
     where: { id: data.ingresoId },
-    select: { id: true, camaId: true },
+    select: {
+      id: true,
+      camaId: true,
+      cama: { select: { estado: true } },
+    },
   })
   if (!ingreso) throw new Error('Internación no encontrada')
 
@@ -2214,6 +2256,34 @@ export async function transferirCama(
   const transferencia = await prisma.$transaction(async (tx) => {
     const ahora = new Date()
 
+    const camaDestinoActual = await tx.cama.findUnique({
+      where: { id: data.camaDestinoId },
+      select: { id: true, estado: true },
+    })
+
+    if (!camaDestinoActual) {
+      throw new Error('Cama destino no encontrada')
+    }
+
+    if (camaDestinoActual.estado !== 'DISPONIBLE') {
+      throw new Error('La cama destino no está disponible')
+    }
+
+    const internacionActivaEnDestino = await tx.ingreso.findFirst({
+      where: {
+        camaId: data.camaDestinoId,
+        estado: 'A',
+        tipoIngresoCodigo: 'INT',
+      },
+      select: { id: true, numeroIngreso: true },
+    })
+
+    if (internacionActivaEnDestino && internacionActivaEnDestino.id !== data.ingresoId) {
+      throw new Error(
+        `La cama destino ya está asignada a una internación activa (INT-${internacionActivaEnDestino.numeroIngreso}).`
+      )
+    }
+
     // Liberar cama origen
     if (ingreso.camaId) {
       await tx.cama.update({
@@ -2222,7 +2292,8 @@ export async function transferirCama(
       })
     }
 
-    const estadoDestino = data.reservarCama ? 'RESERVADA' : 'OCUPADA'
+    const mantenerReserva = data.reservarCama || ingreso.cama?.estado === 'RESERVADA'
+    const estadoDestino = mantenerReserva ? 'RESERVADA' : 'OCUPADA'
     await tx.cama.update({
       where: { id: data.camaDestinoId },
       data: { estado: estadoDestino, usuario: usuario.slice(0, 10), fechaEstado: ahora },
@@ -2467,4 +2538,54 @@ export async function registrarAltaInternacion(
 
     return alta
   })
+}
+
+export async function actualizarFechaAltaInternacion(
+  data: ActualizarFechaAltaInternacionInput,
+  usuario: string
+) {
+  const ingreso = await prisma.ingreso.findUnique({
+    where: { id: data.ingresoId },
+    select: {
+      id: true,
+      tipoIngresoCodigo: true,
+      estado: true,
+      fechaIngreso: true,
+      fechaEgreso: true,
+      numeroIngreso: true,
+    },
+  })
+
+  if (!ingreso || ingreso.tipoIngresoCodigo !== 'INT') {
+    throw new Error('Internacion no encontrada')
+  }
+
+  if (ingreso.estado !== 'E') {
+    throw new Error(`La internacion INT-${ingreso.numeroIngreso} no está egresada`) 
+  }
+
+  if (ingreso.fechaIngreso && data.fechaEgreso < ingreso.fechaIngreso) {
+    throw new Error('La fecha de alta no puede ser anterior a la fecha de ingreso')
+  }
+
+  const actualizado = await prisma.ingreso.update({
+    where: { id: data.ingresoId },
+    data: {
+      fechaEgreso: data.fechaEgreso,
+      fechaEstado: new Date(),
+      usuario: usuario.slice(0, 10),
+    },
+    select: {
+      id: true,
+      numeroIngreso: true,
+      fechaEgreso: true,
+    },
+  })
+
+  return {
+    id: actualizado.id,
+    numeroIngreso: actualizado.numeroIngreso,
+    fechaEgresoAnterior: ingreso.fechaEgreso,
+    fechaEgresoNueva: actualizado.fechaEgreso,
+  }
 }

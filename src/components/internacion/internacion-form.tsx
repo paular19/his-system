@@ -118,6 +118,7 @@ export function InternacionForm({
   const [fechaIngreso, setFechaIngreso] = useState(ahoraLocalDateTimeInput())
   const [camaId, setCamaId] = useState(camaInicial?.toString() ?? '')
   const [profesionalGuardiaId, setProfesionalGuardiaId] = useState('')
+  const [profesionalDerivanteId, setProfesionalDerivanteId] = useState('')
   const [profesionalTratanteId, setProfesionalTratanteId] = useState('')
   const [esCirugiaProgramada, setEsCirugiaProgramada] = useState(false)
   const [fechaCirugiaProgramada, setFechaCirugiaProgramada] = useState(ahoraLocalDateTimeInput())
@@ -263,6 +264,16 @@ export function InternacionForm({
       return
     }
 
+    if (
+      profesionalGuardiaId
+      && profesionalDerivanteId
+      && profesionalGuardiaId === profesionalDerivanteId
+    ) {
+      setError('El medico derivante debe ser distinto al medico de cabecera')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
     const errorDepositos = validarDepositos()
     if (errorDepositos) {
       setError(errorDepositos)
@@ -368,6 +379,7 @@ export function InternacionForm({
         fechaTurno: esCirugiaProgramada ? fechaCirugiaProgramada : undefined,
         camaId: camaId ? parseInt(camaId, 10) : null,
         profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null,
+        profesionalDerivanteId: profesionalDerivanteId ? parseInt(profesionalDerivanteId, 10) : null,
         profesionalTratanteId: profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null,
         obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
         planId: planId ? parseInt(planId, 10) : null,
@@ -483,12 +495,24 @@ export function InternacionForm({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Medico de cabecera/derivante
+              Medico de cabecera
             </label>
             <ProfesionalSelect
               profesionales={profesionales}
               value={profesionalGuardiaId}
               onChange={setProfesionalGuardiaId}
+              placeholderOption="— Opcional —"
+              selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Medico derivante
+            </label>
+            <ProfesionalSelect
+              profesionales={profesionales}
+              value={profesionalDerivanteId}
+              onChange={setProfesionalDerivanteId}
               placeholderOption="— Opcional —"
               selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
             />

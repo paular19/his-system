@@ -310,6 +310,13 @@ export const RegistrarAltaInternacionSchema = z.object({
 
 export type RegistrarAltaInternacionInput = z.infer<typeof RegistrarAltaInternacionSchema>
 
+export const ActualizarFechaAltaInternacionSchema = z.object({
+  ingresoId: z.number().int().positive(),
+  fechaEgreso: z.coerce.date(),
+})
+
+export type ActualizarFechaAltaInternacionInput = z.infer<typeof ActualizarFechaAltaInternacionSchema>
+
 export const ActualizarDiagnosticoInternacionSchema = z.object({
   id: z.number().int().positive(),
   ingresoId: z.number().int().positive(),

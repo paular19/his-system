@@ -14,6 +14,7 @@ import type {
   CrearPracticaInput,
   ActualizarPracticaInput,
   RegistrarAltaInternacionInput,
+  ActualizarFechaAltaInternacionInput,
   ActualizarDiagnosticoInternacionInput,
   CrearCirugiaUrgenciaInput,
   CrearCirugiaSimpleInput,
@@ -489,5 +490,24 @@ export async function registrarAltaInternacion(
   })
 
   return alta
+}
+
+export async function actualizarFechaAltaInternacion(
+  data: ActualizarFechaAltaInternacionInput,
+  usuario: string,
+  ip?: string
+) {
+  const actualizacion = await repo.actualizarFechaAltaInternacion(data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'Ingreso',
+    registroId: data.ingresoId,
+    detalle: `Corrección de fecha de alta INT-${actualizacion.numeroIngreso}: ${actualizacion.fechaEgresoAnterior?.toISOString() ?? 'sin fecha previa'} → ${actualizacion.fechaEgresoNueva?.toISOString() ?? 'sin fecha'}`,
+    direccionIp: ip,
+  })
+
+  return actualizacion
 }
 

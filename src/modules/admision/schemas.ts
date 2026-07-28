@@ -44,6 +44,7 @@ const CrearIngresoBaseSchema = z.object({
   fechaEgresoPrevista: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
   tipoInternacionCodigo: z.string().max(3).optional().nullable(),
   profesionalGuardiaId: z.number().int().positive().optional().nullable(),
+  profesionalDerivanteId: z.number().int().positive().optional().nullable(),
   profesionalTratanteId: z.number().int().positive().optional().nullable(),
   camaId: z.number().int().positive().optional().nullable(),
   sedeId: z.number().int().positive().optional().nullable(),

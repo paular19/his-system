@@ -416,18 +416,20 @@ export default async function FichaPacientePage({ params }: PageProps) {
                 >
                   Ver ficha
                 </Link>
-                {puedeConfirmarReserva(internacionActiva) && (
-                  <ConfirmarCamaReservadaButton
-                    camaId={internacionActiva.camaId as number}
-                    label="Confirmar cama reservada"
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+                <div className="flex flex-col gap-2">
+                  <AltaInternacionButton
+                    ingresoId={internacionActiva.id}
+                    label="Marcar alta"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
                   />
-                )}
-                <AltaInternacionButton
-                  ingresoId={internacionActiva.id}
-                  label="Marcar alta"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
-                />
+                  {puedeConfirmarReserva(internacionActiva) && (
+                    <ConfirmarCamaReservadaButton
+                      camaId={internacionActiva.camaId as number}
+                      label="Confirmar cama reservada"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </div>

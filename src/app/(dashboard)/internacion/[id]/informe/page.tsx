@@ -66,10 +66,16 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
 
   if (!ingreso || ingreso.tipoIngresoCodigo !== 'INT') notFound()
 
-  const [obraSocialCoseguro, historialTratanteAudits] = await Promise.all([
+  const [obraSocialCoseguro, profesionalDerivante, historialTratanteAudits] = await Promise.all([
     ingreso.obraSocialCoseguroId
       ? prisma.obraSocial.findUnique({
         where: { id: ingreso.obraSocialCoseguroId },
+        select: { nombre: true },
+      })
+      : Promise.resolve(null),
+    ingreso.profesionalDerivanteId
+      ? prisma.profesional.findUnique({
+        where: { id: ingreso.profesionalDerivanteId },
         select: { nombre: true },
       })
       : Promise.resolve(null),
@@ -152,12 +158,15 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
     ingreso.paciente?.telefonoFijo?.trim() ||
     '—'
 
-  const medicoCabeceraODerivante =
-    ingreso.ingresoSubtipo?.profesionalDerivanteNombre
+  const medicoCabecera = ingreso.profesionalGuardia?.nombre
+    ? nombreProfesionalParaMostrar(ingreso.profesionalGuardia.nombre)
+    : '—'
+
+  const medicoDerivante = profesionalDerivante?.nombre
+    ? nombreProfesionalParaMostrar(profesionalDerivante.nombre)
+    : ingreso.ingresoSubtipo?.profesionalDerivanteNombre
       ? nombreProfesionalParaMostrar(ingreso.ingresoSubtipo.profesionalDerivanteNombre)
-      : ingreso.profesionalGuardia?.nombre
-        ? nombreProfesionalParaMostrar(ingreso.profesionalGuardia.nombre)
-        : '—'
+      : '—'
 
   const estadoLabel = (e: string | null) => {
     switch (e) {
@@ -296,7 +305,8 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
           <div>
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">Médicos</h2>
             <dl className="space-y-1.5 print:space-y-1">
-                <DataRow label="Médico de cabecera/derivante" value={medicoCabeceraODerivante} />
+                <DataRow label="Médico de cabecera" value={medicoCabecera} />
+                <DataRow label="Médico derivante" value={medicoDerivante} />
                 <DataRow
                   label="Médico tratante"
                   value={ingreso.profesionalTratante?.nombre ? nombreProfesionalParaMostrar(ingreso.profesionalTratante.nombre) : '—'}

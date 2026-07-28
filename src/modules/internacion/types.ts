@@ -143,6 +143,7 @@ export interface InternacionDetalle {
   } | null
 
   profesionalGuardia: { id: number; nombre: string } | null
+  profesionalDerivante: { id: number; nombre: string } | null
   profesionalTratante: { id: number; nombre: string; matricula: number | null } | null
   ingresoSubtipo: {
     profesionalDerivanteNombre: string | null

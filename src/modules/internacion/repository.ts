@@ -949,6 +949,20 @@ export async function crearPractica(
     throw new Error('Convenio no encontrado para la internación')
   }
 
+  // Evita error FK al crear la práctica cuando el código no existe en el convenio resuelto.
+  const codigoTrim = codigo.trim()
+  const nomencladorConvenio = await prisma.nomencladorPractica.findFirst({
+    where: {
+      convenioId: convenioResuelto,
+      OR: [{ codigo }, { codigo: codigoTrim }],
+    },
+    select: { codigo: true },
+  })
+
+  if (!nomencladorConvenio) {
+    throw new Error(`El código ${codigoTrim} no está disponible para el convenio de la internación`)
+  }
+
   await asegurarNomencladorPedidoLaboratorio({
     convenioId: convenioResuelto,
     codigoPractica: codigo,

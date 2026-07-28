@@ -66,7 +66,6 @@ type ProtocoloPredefinido = {
     nombre: string
     codigos: string[]
     clasificacionPorCodigo: Record<string, ComponenteOrden>
-    notaFormato?: string
 }
 
 type OrdenRef = {
@@ -162,7 +161,6 @@ const PROTOCOLOS_PREDEFINIDOS: ProtocoloPredefinido[] = [
             '430101': 'GA',
             '420301': 'HE',
         },
-        notaFormato: 'Gastos por duplicado en una orden y honorario especialista en otra orden.',
     },
     {
         id: 'SALA_COMUN_BLOQUEADA',
@@ -174,7 +172,6 @@ const PROTOCOLOS_PREDEFINIDOS: ProtocoloPredefinido[] = [
             '430106': 'GA',
             '420301': 'HE',
         },
-        notaFormato: 'Gastos por duplicado en una orden y honorario especialista en otra orden.',
     },
     {
         id: 'SALA_USADA_8_HORAS',
@@ -185,7 +182,6 @@ const PROTOCOLOS_PREDEFINIDOS: ProtocoloPredefinido[] = [
             '430130': 'GA',
             '420301': 'HE',
         },
-        notaFormato: 'Gastos por duplicado en una orden y honorario especialista en otra orden.',
     },
     {
         id: 'CODIGOS_UTI_TERAPIA_INTENSIVA',
@@ -195,7 +191,6 @@ const PROTOCOLOS_PREDEFINIDOS: ProtocoloPredefinido[] = [
             '400101': 'GA',
             '431002': 'GA',
         },
-        notaFormato: 'Solo por duplicado.',
     },
 ]
 
@@ -1693,12 +1688,6 @@ export function PracticaCargaRapidaPage({
                             <p className="text-xs text-gray-600">
                                 Selecciona un protocolo, precarga los codigos y ajusta matricula tratante. La cantidad se aplica igual para todos los codigos del protocolo.
                             </p>
-
-                            {protocoloSeleccionado?.notaFormato && (
-                                <p className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] text-blue-800">
-                                    Formato: {protocoloSeleccionado.notaFormato}
-                                </p>
-                            )}
 
                             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                                 <label className="text-xs text-gray-700">

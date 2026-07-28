@@ -38,6 +38,25 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
         return NextResponse.json({ data: practica }, { status: 201 })
     } catch (err) {
+        if (err instanceof Error && err.message.includes('no está disponible para el convenio de la internación')) {
+            return NextResponse.json({ error: err.message }, { status: 422 })
+        }
+
+        if (
+            typeof err === 'object' &&
+            err !== null &&
+            'code' in err &&
+            (err as { code?: string }).code === 'P2003'
+        ) {
+            return NextResponse.json(
+                {
+                    error:
+                        'El código de práctica no está disponible para el convenio de la internación. Verificá obra social y nomenclador.',
+                },
+                { status: 422 }
+            )
+        }
+
         return manejarErrorApi(err)
     }
 }

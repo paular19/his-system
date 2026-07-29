@@ -365,6 +365,7 @@ export function PracticaCargaRapidaPage({
     const [popupImpresionSesion, setPopupImpresionSesion] = useState<PopupImpresionSesionState | null>(null)
     const [popupSubitemsSesion, setPopupSubitemsSesion] = useState<PopupSubitemsSesionState | null>(null)
     const [generarImprimirPorSeparadoEditor, setGenerarImprimirPorSeparadoEditor] = useState(false)
+    const [practicaIdsCirugiaLocales, setPracticaIdsCirugiaLocales] = useState<number[]>([])
     const [protocoloSeleccionadoId, setProtocoloSeleccionadoId] = useState(
         PROTOCOLOS_PREDEFINIDOS[0]?.id ?? ''
     )
@@ -455,21 +456,36 @@ export function PracticaCargaRapidaPage({
         return new Set(contextoCirugia?.practicaIdsInternacion ?? [])
     }, [modoCirugia, contextoCirugia])
 
+    const idsCirugiaObjetivoExtendidos = useMemo(() => {
+        if (!modoCirugia) return new Set<number>()
+        return new Set([...(contextoCirugia?.practicaIdsInternacion ?? []), ...practicaIdsCirugiaLocales])
+    }, [modoCirugia, contextoCirugia, practicaIdsCirugiaLocales])
+
     const idsPendientesCirugiaObjetivo = useMemo(() => {
         if (!modoCirugia) return [] as number[]
 
         const idsPendientes = practicasPendientes
-            .filter((practica) => {
-                const esPracticaCirugia = (practica.usuario ?? '').trim().toUpperCase() === 'CIRUGIA'
-                if (idsInternacionCirugiaObjetivo.size > 0) {
-                    return idsInternacionCirugiaObjetivo.has(practica.id) || esPracticaCirugia
-                }
-                return esPracticaCirugia
-            })
+            .filter((practica) => idsCirugiaObjetivoExtendidos.has(practica.id))
             .map((practica) => practica.id)
 
         return idsPendientes
-    }, [modoCirugia, practicasPendientes, idsInternacionCirugiaObjetivo])
+    }, [modoCirugia, practicasPendientes, idsCirugiaObjetivoExtendidos])
+
+    useEffect(() => {
+        if (!modoCirugia) {
+            if (practicaIdsCirugiaLocales.length > 0) {
+                setPracticaIdsCirugiaLocales([])
+            }
+            return
+        }
+
+        const activos = new Set(practicas.filter((practica) => practicaActiva(practica.estado)).map((practica) => practica.id))
+        setPracticaIdsCirugiaLocales((prev) => {
+            const filtrados = prev.filter((id) => activos.has(id))
+            if (filtrados.length === prev.length) return prev
+            return filtrados
+        })
+    }, [modoCirugia, practicas, practicaIdsCirugiaLocales.length])
 
     const idsPendientesCirugiaObjetivoSet = useMemo(
         () => new Set(idsPendientesCirugiaObjetivo),
@@ -885,6 +901,10 @@ export function PracticaCargaRapidaPage({
 
                 const practicasNuevas = practicasActualizadas.filter((practica) => !idsPrevios.has(practica.id))
                 if (practicasNuevas.length > 0) {
+                    setPracticaIdsCirugiaLocales((prev) =>
+                        Array.from(new Set([...prev, ...practicasNuevas.map((practica) => practica.id)]))
+                    )
+
                     const colaClasificacionPorCodigo = new Map<string, string[]>()
                     for (const entrada of entradasCrear) {
                         const codigo = entrada.payload.codigoPractica.trim().toUpperCase()

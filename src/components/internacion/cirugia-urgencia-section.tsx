@@ -788,7 +788,6 @@ export function CirugiaUrgenciaSection({
 
             const nuevaCirugia = json.data as CirugiaUrgenciaItem
             setCirugias((prev) => [nuevaCirugia, ...prev])
-            refreshInBackground()
         } catch (err) {
             setError(err instanceof Error ? err.message : 'No se pudo crear la cirugia')
         } finally {

@@ -102,6 +102,7 @@ type PopupSubitemsSesionState = {
 type OrigenGeneracionOrden = 'default' | 'sesion' | 'protocolo'
 
 type ProtocoloCargaEditable = {
+    convenioId: number
     codigo: string
     descripcion: string
     clasificacion: string
@@ -1212,7 +1213,8 @@ export function PracticaCargaRapidaPage({
     }
 
     const resolverNomencladorExactoPorCodigo = async (
-        codigo: string
+        codigo: string,
+        opciones?: { ignorarConvenio?: boolean }
     ): Promise<NomencladorItemProtocolo | null> => {
         const codigoNormalizado = codigo.trim().toUpperCase()
         if (codigoNormalizado.length < 2) return null
@@ -1222,7 +1224,9 @@ export function PracticaCargaRapidaPage({
             exact: '1',
             limit: '20',
         })
-        if (convenioId != null) qs.set('convenioId', String(convenioId))
+        if (!opciones?.ignorarConvenio && convenioId != null) {
+            qs.set('convenioId', String(convenioId))
+        }
 
         const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`, {
             cache: 'no-store',
@@ -1245,7 +1249,9 @@ export function PracticaCargaRapidaPage({
             const resultados = await Promise.all(
                 protocoloSeleccionado.codigos.map(async (codigo) => ({
                     codigo,
-                    nomenclador: await resolverNomencladorExactoPorCodigo(codigo),
+                    nomenclador: await resolverNomencladorExactoPorCodigo(codigo, {
+                        ignorarConvenio: true,
+                    }),
                 }))
             )
 
@@ -1263,6 +1269,7 @@ export function PracticaCargaRapidaPage({
                 .map(({ codigo, nomenclador }) => {
                     const requiereMatriculaTratante = nomenclador.valorEspecialista != null
                     return {
+                        convenioId: nomenclador.convenioId,
                         codigo: nomenclador.codigo.trim(),
                         descripcion: nomenclador.descripcion,
                         clasificacion: clasificacionProtocoloPorCodigo(protocoloSeleccionado, codigo, nomenclador),
@@ -1353,7 +1360,7 @@ export function PracticaCargaRapidaPage({
 
             entradas.push({
                 payload: {
-                    convenioId: convenioId ?? 0,
+                    convenioId: item.convenioId,
                     codigoPractica: item.codigo,
                     descripcionPractica: item.descripcion,
                     fecha,

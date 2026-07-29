@@ -460,10 +460,11 @@ export function PracticaCargaRapidaPage({
 
         const idsPendientes = practicasPendientes
             .filter((practica) => {
+                const esPracticaCirugia = (practica.usuario ?? '').trim().toUpperCase() === 'CIRUGIA'
                 if (idsInternacionCirugiaObjetivo.size > 0) {
-                    return idsInternacionCirugiaObjetivo.has(practica.id)
+                    return idsInternacionCirugiaObjetivo.has(practica.id) || esPracticaCirugia
                 }
-                return (practica.usuario ?? '').trim().toUpperCase() === 'CIRUGIA'
+                return esPracticaCirugia
             })
             .map((practica) => practica.id)
 
@@ -673,6 +674,16 @@ export function PracticaCargaRapidaPage({
         return 'Sin firmante seleccionado. Se usara el profesional de la internacion.'
     }, [medicoFirmanteId, profesionalesConMatricula, matriculaFirmanteSugerida])
 
+    const firmanteCirugiaValido = useMemo(() => {
+        if (!modoCirugia) return true
+
+        const profesionalSeleccionadoId = Number.parseInt(medicoFirmanteId, 10)
+        if (!Number.isFinite(profesionalSeleccionadoId)) return false
+
+        const matricula = matriculaPorProfesionalId.get(profesionalSeleccionadoId)
+        return typeof matricula === 'number' && matricula > 0
+    }, [modoCirugia, medicoFirmanteId, matriculaPorProfesionalId])
+
     const registrarGuardadasSesion = (creadas: PracticaItem[], entradasCrear: PracticaCargaEntrada[]) => {
         if (creadas.length === 0) return
 
@@ -696,17 +707,17 @@ export function PracticaCargaRapidaPage({
         setGuardadasSesion((prev) => [...nuevas, ...prev])
     }
 
-    const registrarGuardadasSesionDesdeEntradas = (entradasCrear: PracticaCargaEntrada[]) => {
-        if (entradasCrear.length === 0) return
+    const registrarGuardadasSesionDesdePracticas = (creadas: PracticaItem[]) => {
+        if (creadas.length === 0) return
 
-        const nuevas = entradasCrear.map((entrada, idx) => ({
-            id: `cirugia-${Date.now()}-${idx}`,
-            practicaId: -1 * (Date.now() + idx),
-            codigo: entrada.payload.codigoPractica.trim(),
-            descripcion: (entrada.payload.descripcionPractica ?? '').trim() || entrada.payload.codigoPractica.trim(),
-            cantidad: Number(entrada.payload.cantidad ?? 1),
-            clasificacion: entrada.clasificacion ?? 'HE',
-            fecha: formatearFechaArgentina(entrada.payload.fecha, {
+        const nuevas = creadas.map((practicaCreada, idx) => ({
+            id: `cirugia-${practicaCreada.id}-${Date.now()}-${idx}`,
+            practicaId: practicaCreada.id,
+            codigo: practicaCreada.codigoPractica.trim(),
+            descripcion: descripcionParaMostrar(practicaCreada),
+            cantidad: Number(practicaCreada.cantidad),
+            clasificacion: clasificacionInferidaPractica(practicaCreada),
+            fecha: formatearFechaArgentina(practicaCreada.fecha, {
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric',
@@ -727,6 +738,7 @@ export function PracticaCargaRapidaPage({
             }
 
             try {
+                const idsPrevios = new Set(practicas.map((practica) => practica.id))
                 const practicasExpandida = entradasCrear.map((entrada) => ({
                     convenioId: entrada.payload.convenioId,
                     codigo: entrada.payload.codigoPractica,
@@ -770,8 +782,27 @@ export function PracticaCargaRapidaPage({
                     return { ok: false, error: mensaje }
                 }
 
-                registrarGuardadasSesionDesdeEntradas(entradasCrear)
-                router.refresh()
+                const resPanel = await fetch(`/api/internacion/${ingresoId}/panel-clinico`, {
+                    cache: 'no-store',
+                })
+                const jsonPanel = await resPanel.json().catch(() => null)
+
+                if (!resPanel.ok || !Array.isArray(jsonPanel?.data?.practicas)) {
+                    setMensajeError('Las practicas se guardaron, pero no se pudo actualizar la lista sin recargar')
+                    return { ok: true }
+                }
+
+                const practicasActualizadas = (jsonPanel.data.practicas as PracticaItem[])
+                    .filter((practica) => practicaActiva(practica.estado))
+                    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+
+                setPracticas(practicasActualizadas)
+
+                const practicasNuevas = practicasActualizadas.filter((practica) => !idsPrevios.has(practica.id))
+                if (practicasNuevas.length > 0) {
+                    registrarGuardadasSesionDesdePracticas(practicasNuevas)
+                }
+
                 return { ok: true }
             } catch {
                 const mensaje = 'Error de conexion al guardar practicas de cirugia'
@@ -894,9 +925,20 @@ export function PracticaCargaRapidaPage({
 
         const firmanteProfesionalId = opciones?.firmanteProfesionalId ?? medicoFirmanteId
         const profesionalIdFirmante = Number.parseInt(firmanteProfesionalId, 10)
+
+        if (modoCirugia && !Number.isFinite(profesionalIdFirmante)) {
+            setMensajeError('Selecciona medico firmante antes de generar o imprimir ordenes')
+            return false
+        }
+
         const medicoFirmanteMatricula = Number.isFinite(profesionalIdFirmante)
             ? (matriculaPorProfesionalId.get(profesionalIdFirmante) ?? null)
             : matriculaFirmanteSugerida
+
+        if (modoCirugia && (medicoFirmanteMatricula == null || medicoFirmanteMatricula <= 0)) {
+            setMensajeError('Selecciona un medico firmante valido antes de generar o imprimir ordenes')
+            return false
+        }
 
         const clasificacionPayload = Object.fromEntries(
             practicaIds.map((id) => {
@@ -1041,6 +1083,11 @@ export function PracticaCargaRapidaPage({
     }
 
     const solicitarConfirmacionOrdenUnica = (imprimirDespues: boolean) => {
+        if (modoCirugia && !firmanteCirugiaValido) {
+            setMensajeError('Selecciona medico firmante (cirujano) antes de generar o imprimir')
+            return
+        }
+
         if (idsPendientesSeleccionadasEditor.length === 0) {
             setMensajeError('Selecciona al menos una practica pendiente para generar ordenes')
             return
@@ -1125,6 +1172,11 @@ export function PracticaCargaRapidaPage({
     }
 
     const solicitarGeneracionDesdeSesion = () => {
+        if (modoCirugia && !firmanteCirugiaValido) {
+            setMensajeError('Selecciona medico firmante (cirujano) antes de generar o imprimir')
+            return
+        }
+
         const idsSesion = idsPendientesSesion
         if (idsSesion.length === 0) {
             setMensajeError('No hay practicas guardadas en esta sesion para generar ordenes')
@@ -2056,7 +2108,7 @@ export function PracticaCargaRapidaPage({
                                 <button
                                     type="button"
                                     onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesCirugiaObjetivo, false)}
-                                    disabled={generandoOrdenes || idsPendientesCirugiaObjetivo.length === 0}
+                                    disabled={generandoOrdenes || idsPendientesCirugiaObjetivo.length === 0 || !firmanteCirugiaValido}
                                     className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                 >
                                     {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
@@ -2065,7 +2117,7 @@ export function PracticaCargaRapidaPage({
                                 <button
                                     type="button"
                                     onClick={() => void ejecutarGeneracionOrdenes(true, idsPendientesCirugiaObjetivo, false)}
-                                    disabled={generandoOrdenes || idsPendientesCirugiaObjetivo.length === 0}
+                                    disabled={generandoOrdenes || idsPendientesCirugiaObjetivo.length === 0 || !firmanteCirugiaValido}
                                     className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                 >
                                     <Printer className="h-3.5 w-3.5" />
@@ -2227,7 +2279,7 @@ export function PracticaCargaRapidaPage({
                                             <button
                                                 type="button"
                                                 onClick={() => solicitarConfirmacionOrdenUnica(false)}
-                                                disabled={generandoOrdenes}
+                                                disabled={generandoOrdenes || (modoCirugia && !firmanteCirugiaValido)}
                                                 className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                             >
                                                 {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
@@ -2236,7 +2288,7 @@ export function PracticaCargaRapidaPage({
                                             <button
                                                 type="button"
                                                 onClick={() => solicitarConfirmacionOrdenUnica(true)}
-                                                disabled={generandoOrdenes}
+                                                disabled={generandoOrdenes || (modoCirugia && !firmanteCirugiaValido)}
                                                 className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                             >
                                                 <Printer className="h-3.5 w-3.5" />
@@ -2438,34 +2490,38 @@ export function PracticaCargaRapidaPage({
                                 : 'Este panel confirma al instante cada codigo guardado para validar la carga sin perder ritmo.'}
                         </p>
 
-                        {!modoCirugia && (
-                            <>
-                                <div className="rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5 text-[11px] text-blue-800">
-                                    Pendientes de esta sesion: {idsPendientesSesion.length}
-                                </div>
+                        <>
+                            <div className="rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5 text-[11px] text-blue-800">
+                                Pendientes de esta sesion: {idsPendientesSesion.length}
+                            </div>
 
-                                <div className="flex flex-wrap gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesSesion, false, { origen: 'sesion' })}
-                                        disabled={generandoOrdenes || idsPendientesSesion.length === 0}
-                                        className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                    >
-                                        {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                                        Generar orden (sesion)
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={solicitarGeneracionDesdeSesion}
-                                        disabled={generandoOrdenes || idsPendientesSesion.length === 0}
-                                        className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                    >
-                                        <Printer className="h-3.5 w-3.5" />
-                                        Generar orden e imprimir (sesion)
-                                    </button>
-                                </div>
-                            </>
-                        )}
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesSesion, false, { origen: 'sesion' })}
+                                    disabled={generandoOrdenes || idsPendientesSesion.length === 0 || (modoCirugia && !firmanteCirugiaValido)}
+                                    className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                    {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                                    Generar orden (sesion)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={solicitarGeneracionDesdeSesion}
+                                    disabled={generandoOrdenes || idsPendientesSesion.length === 0 || (modoCirugia && !firmanteCirugiaValido)}
+                                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                >
+                                    <Printer className="h-3.5 w-3.5" />
+                                    Generar orden e imprimir (sesion)
+                                </button>
+                            </div>
+
+                            {modoCirugia && !firmanteCirugiaValido && (
+                                <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                                    Selecciona un medico firmante para generar o imprimir ordenes de la sesion.
+                                </p>
+                            )}
+                        </>
 
                         {guardadasSesion.length === 0 ? (
                             <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">

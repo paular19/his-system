@@ -17,7 +17,11 @@ import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/inter
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
-import { actualizarNumeroAutorizacionAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
+import {
+    actualizarNumeroAutorizacionAction,
+    crearPedidoLaboratorioAction,
+    generarOrdenesDesdeInternacionAction,
+} from '@/modules/orden/actions'
 import {
     agruparPracticasAutorizadasPorOrden,
     obtenerDestinoGrupoPracticasAutorizadas,
@@ -1227,88 +1231,36 @@ export function PracticaCargaRapidaPage({
     const crearPedidoLaboratorio = async () => {
         const numeroProtocolo = numeroProtocoloLaboratorio.trim()
         const diagnostico = diagnosticoLaboratorio.trim()
-        const convenioPedidoLaboratorio =
-            convenioId ??
-            practicas.find((practica) => Number(practica.convenioId) > 0)?.convenioId ??
-            0
 
         if (!numeroProtocolo) {
             setMensajeError('Ingresa el numero de protocolo')
             return
         }
 
-        if (!convenioPedidoLaboratorio || convenioPedidoLaboratorio <= 0) {
-            setMensajeError('La internacion no tiene obra social/convenio para generar el pedido de laboratorio')
-            return
-        }
-
-        const fechaPedido = new Date().toISOString()
-
         setMensajeError(null)
         setGuardandoPedidoLaboratorio(true)
         try {
-            const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    convenioId: convenioPedidoLaboratorio,
-                    codigoPractica: '66',
-                    descripcionPractica: 'PROTOCOLO BIOQUIMICO',
-                    numeroProtocoloLaboratorio: numeroProtocolo,
-                    diagnosticoLaboratorio: diagnostico || null,
-                    fecha: fechaPedido,
-                    cantidad: 1,
-                    numeroAutorizacion: null,
-                    matriculaEspecialista: null,
-                    matriculaAnestesista: null,
-                    facturable: true,
-                    importeBaseUnitario: null,
-                }),
-                cache: 'no-store',
+            const result = await crearPedidoLaboratorioAction({
+                ingresoId,
+                numeroProtocolo,
+                diagnostico,
             })
 
-            const json = await res.json().catch(() => null)
-            if (!res.ok) {
-                setMensajeError(json?.error ?? 'No se pudo registrar el pedido de laboratorio')
+            if ('error' in result && result.error) {
+                setMensajeError(result.error)
                 return
             }
 
-            const creada = json?.data as PracticaItem
-            if (!creada || typeof creada.id !== 'number') {
-                setMensajeError('Pedido de laboratorio creado, pero no se pudo refrescar la lista')
-                return
+            if ('puestoNumero' in result && 'numero' in result) {
+                const keyOrden = `${result.puestoNumero}-${result.numero}`
+                setOrdenesGeneradasSesion((prev) => Array.from(new Set([keyOrden, ...prev])))
             }
-
-            setPracticas((prev) => [creada, ...prev])
-            setClasificacionPorPracticaId((prev) => ({
-                ...prev,
-                [creada.id]: 'HE',
-            }))
-            registrarGuardadasSesion(
-                [creada],
-                [
-                    {
-                        payload: {
-                            convenioId: convenioPedidoLaboratorio,
-                            codigoPractica: '66',
-                            descripcionPractica: 'PROTOCOLO BIOQUIMICO',
-                            fecha: fechaPedido,
-                            cantidad: 1,
-                            numeroAutorizacion: null,
-                            matriculaEspecialista: null,
-                            matriculaAnestesista: null,
-                            facturable: true,
-                            importeBaseUnitario: null,
-                        },
-                        clasificacion: 'HE',
-                    },
-                ]
-            )
 
             limpiarPedidoLaboratorio()
             setMostrarPedidoLaboratorio(false)
+            router.refresh()
         } catch {
-            setMensajeError('Error de conexion al registrar el pedido de laboratorio')
+            setMensajeError('Error de conexion al generar el pedido de laboratorio')
         } finally {
             setGuardandoPedidoLaboratorio(false)
         }
@@ -1912,77 +1864,6 @@ export function PracticaCargaRapidaPage({
                     )}
 
                     {puedeCrear && !modoCirugia && (
-                        <>
-                        <div className="his-card p-4 space-y-3">
-                            <div className="flex items-center justify-between gap-2">
-                                <h3 className="text-sm font-semibold text-gray-900">Pedido de laboratorio</h3>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setMostrarPedidoLaboratorio((prev) => !prev)
-                                        if (mostrarPedidoLaboratorio) {
-                                            limpiarPedidoLaboratorio()
-                                        }
-                                    }}
-                                    className="inline-flex items-center rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
-                                >
-                                    {mostrarPedidoLaboratorio ? 'Ocultar' : 'Nuevo pedido'}
-                                </button>
-                            </div>
-
-                            <p className="text-xs text-gray-600">
-                                Crea la practica de laboratorio (codigo 66) con numero de protocolo y diagnostico.
-                            </p>
-
-                            {mostrarPedidoLaboratorio && (
-                                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                                    <label className="text-xs text-gray-700">
-                                        Numero de protocolo
-                                        <input
-                                            type="text"
-                                            value={numeroProtocoloLaboratorio}
-                                            onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)}
-                                            placeholder="Ej: 123456"
-                                            className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
-                                        />
-                                    </label>
-
-                                    <label className="text-xs text-gray-700">
-                                        Diagnostico
-                                        <input
-                                            type="text"
-                                            value={diagnosticoLaboratorio}
-                                            onChange={(e) => setDiagnosticoLaboratorio(e.target.value)}
-                                            placeholder="Opcional"
-                                            className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
-                                        />
-                                    </label>
-
-                                    <div className="md:col-span-2 flex flex-wrap gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => void crearPedidoLaboratorio()}
-                                            disabled={guardandoPedidoLaboratorio}
-                                            className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                                        >
-                                            {guardandoPedidoLaboratorio ? 'Generando...' : 'Generar pedido'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setMostrarPedidoLaboratorio(false)
-                                                limpiarPedidoLaboratorio()
-                                            }}
-                                            disabled={guardandoPedidoLaboratorio}
-                                            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                        >
-                                            Cancelar
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
                         <div className="his-card p-4 space-y-3">
                             <div className="flex items-center justify-between gap-2">
                                 <h3 className="text-sm font-semibold text-gray-900">Protocolos de practicas</h3>
@@ -2118,23 +1999,6 @@ export function PracticaCargaRapidaPage({
                             <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => void ejecutarProtocolo(false)}
-                                    disabled={
-                                        procesandoProtocolo ||
-                                        cargandoProtocolo ||
-                                        generandoOrdenes ||
-                                        protocoloItems.length === 0
-                                    }
-                                    className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                >
-                                    {(procesandoProtocolo || generandoOrdenes) && (
-                                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                    )}
-                                    Generar protocolo
-                                </button>
-
-                                <button
-                                    type="button"
                                     onClick={() => void ejecutarProtocolo(true)}
                                     disabled={
                                         procesandoProtocolo ||
@@ -2142,18 +2006,17 @@ export function PracticaCargaRapidaPage({
                                         generandoOrdenes ||
                                         protocoloItems.length === 0
                                     }
-                                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                                 >
                                     {(procesandoProtocolo || generandoOrdenes) ? (
                                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                     ) : (
                                         <Printer className="h-3.5 w-3.5" />
                                     )}
-                                    Generar e imprimir protocolo
+                                    Generar protocolo e imprimir
                                 </button>
                             </div>
                         </div>
-                        </>
                     )}
 
                     {mensajeError && (
@@ -2488,6 +2351,78 @@ export function PracticaCargaRapidaPage({
                             </div>
                         )}
                     </div>
+                    )}
+
+                    {puedeCrear && !modoCirugia && (
+                        <div className="his-card p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <h3 className="text-sm font-semibold text-gray-900">Pedido de laboratorio</h3>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setMostrarPedidoLaboratorio((prev) => !prev)
+                                        if (mostrarPedidoLaboratorio) {
+                                            limpiarPedidoLaboratorio()
+                                        }
+                                    }}
+                                    className="inline-flex items-center rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                                >
+                                    {mostrarPedidoLaboratorio ? 'Ocultar' : 'Nuevo pedido'}
+                                </button>
+                            </div>
+
+                            <p className="text-xs text-gray-600">
+                                Crea la practica de laboratorio (codigo 66) con numero de protocolo y diagnostico.
+                            </p>
+
+                            {mostrarPedidoLaboratorio && (
+                                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                    <label className="text-xs text-gray-700">
+                                        Numero de protocolo
+                                        <input
+                                            type="text"
+                                            value={numeroProtocoloLaboratorio}
+                                            onChange={(e) => setNumeroProtocoloLaboratorio(e.target.value)}
+                                            placeholder="Ej: 123456"
+                                            className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
+                                        />
+                                    </label>
+
+                                    <label className="text-xs text-gray-700">
+                                        Diagnostico
+                                        <input
+                                            type="text"
+                                            value={diagnosticoLaboratorio}
+                                            onChange={(e) => setDiagnosticoLaboratorio(e.target.value)}
+                                            placeholder="Opcional"
+                                            className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
+                                        />
+                                    </label>
+
+                                    <div className="md:col-span-2 flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => void crearPedidoLaboratorio()}
+                                            disabled={guardandoPedidoLaboratorio}
+                                            className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                                        >
+                                            {guardandoPedidoLaboratorio ? 'Generando...' : 'Generar pedido'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setMostrarPedidoLaboratorio(false)
+                                                limpiarPedidoLaboratorio()
+                                            }}
+                                            disabled={guardandoPedidoLaboratorio}
+                                            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
 

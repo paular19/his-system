@@ -7,6 +7,7 @@ import { crearOrdenAmbulatorio, crearOrdenesAmbulatoriasPorPractica } from '../s
 import { prisma } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { crearPractica as crearPracticaInternacion } from '@/modules/internacion/service'
 import {
   clasificacionDesdeIncluyeCodigo,
   contieneClasificacion,
@@ -595,6 +596,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     revalidatePath('/dashboard/internacion')
     revalidatePath('/dashboard/admision')
     revalidatePath(`/dashboard/internacion/${ingreso.id}`)
+    revalidatePath(`/dashboard/internacion/${ingreso.id}/practicas`)
     revalidatePath(`/dashboard/admision/${ingreso.id}`)
 
     return {
@@ -687,6 +689,25 @@ export async function crearPedidoLaboratorioAction(input: {
     const numeroProtocolo = parsed.data.numeroProtocolo.trim()
     const diagnostico = parsed.data.diagnostico.trim()
 
+    const practicaLaboratorio = await crearPracticaInternacion(
+      {
+        ingresoId: ingreso.id,
+        convenioId: ingreso.obraSocialId,
+        codigoPractica: '66',
+        descripcionPractica: 'PROTOCOLO BIOQUIMICO',
+        numeroProtocoloLaboratorio: numeroProtocolo,
+        diagnosticoLaboratorio: diagnostico || null,
+        fecha: new Date(),
+        cantidad: 1,
+        numeroAutorizacion: null,
+        matriculaEspecialista: null,
+        matriculaAnestesista: null,
+        facturable: true,
+        importeBaseUnitario: null,
+      },
+      usuario.codigoUsuario
+    )
+
     const orden = await crearOrdenAmbulatorio(
       {
         ingresoId: ingreso.id,
@@ -702,6 +723,7 @@ export async function crearPedidoLaboratorioAction(input: {
         descripcion: `PROTOCOLO N°${numeroProtocolo}`,
         items: [
           {
+            practicaId: practicaLaboratorio.id,
             convenioId: ingreso.obraSocialId,
             codigoPractica: '66',
             descripcionPractica: 'PROTOCOLO BIOQUIMICO',

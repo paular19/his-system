@@ -17,7 +17,7 @@ import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/inter
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
-import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
+import { actualizarNumeroAutorizacionAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 import {
     agruparPracticasAutorizadasPorOrden,
     obtenerDestinoGrupoPracticasAutorizadas,
@@ -350,6 +350,9 @@ export function PracticaCargaRapidaPage({
     const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
+    const [ordenEditandoAutorizacionKey, setOrdenEditandoAutorizacionKey] = useState<string | null>(null)
+    const [borradorNumeroAutorizacion, setBorradorNumeroAutorizacion] = useState('')
+    const [guardandoAutorizacionOrdenKey, setGuardandoAutorizacionOrdenKey] = useState<string | null>(null)
     const [mostrarOrdenesHistoricas, setMostrarOrdenesHistoricas] = useState(true)
     const [busquedaHistorico, setBusquedaHistorico] = useState('')
     const [paginaHistorico, setPaginaHistorico] = useState(1)
@@ -1212,6 +1215,71 @@ export function PracticaCargaRapidaPage({
         setPopupImpresionSesion(null)
     }
 
+    const iniciarEdicionAutorizacionOrden = (grupo: GrupoPracticasAutorizadas) => {
+        if (grupo.tipo !== 'orden' || grupo.puestoNumero == null || grupo.ordenNumero == null) return
+        setMensajeError(null)
+        setOrdenEditandoAutorizacionKey(grupo.key)
+        setBorradorNumeroAutorizacion(grupo.numeroAutorizacion ?? '')
+    }
+
+    const cancelarEdicionAutorizacionOrden = () => {
+        if (guardandoAutorizacionOrdenKey) return
+        setOrdenEditandoAutorizacionKey(null)
+        setBorradorNumeroAutorizacion('')
+    }
+
+    const guardarAutorizacionOrden = async (grupo: GrupoPracticasAutorizadas) => {
+        if (grupo.tipo !== 'orden' || grupo.puestoNumero == null || grupo.ordenNumero == null) return
+
+        const numeroAutorizacion = borradorNumeroAutorizacion.trim()
+        if (!numeroAutorizacion) {
+            setMensajeError('Ingresa un numero de autorizacion para guardar')
+            return
+        }
+
+        const numeroNormalizado = numeroAutorizacion.slice(0, 15)
+        setMensajeError(null)
+        setGuardandoAutorizacionOrdenKey(grupo.key)
+        try {
+            const result = await actualizarNumeroAutorizacionAction(
+                grupo.puestoNumero,
+                grupo.ordenNumero,
+                numeroNormalizado
+            )
+
+            if (result?.error) {
+                setMensajeError(result.error)
+                return
+            }
+
+            setPracticas((prev) => prev.map((practica) => {
+                const tieneOrden = practica.ordenPractica.some(
+                    (orden) =>
+                        orden.puestoNumero === grupo.puestoNumero &&
+                        orden.ordenNumero === grupo.ordenNumero
+                )
+                if (!tieneOrden) return practica
+
+                return {
+                    ...practica,
+                    numeroAutorizacion: numeroNormalizado,
+                    ordenPractica: practica.ordenPractica.map((orden) =>
+                        orden.puestoNumero === grupo.puestoNumero && orden.ordenNumero === grupo.ordenNumero
+                            ? { ...orden, numeroAutorizacion: numeroNormalizado }
+                            : orden
+                    ),
+                }
+            }))
+
+            setOrdenEditandoAutorizacionKey(null)
+            setBorradorNumeroAutorizacion('')
+        } catch {
+            setMensajeError('No se pudo guardar el numero de autorizacion de la orden')
+        } finally {
+            setGuardandoAutorizacionOrdenKey(null)
+        }
+    }
+
     const resolverNomencladorExactoPorCodigo = async (
         codigo: string,
         opciones?: { ignorarConvenio?: boolean }
@@ -1481,6 +1549,13 @@ export function PracticaCargaRapidaPage({
     const renderGrupoOrden = (grupo: GrupoPracticasAutorizadas) => {
         const abierta = ordenesAutorizadasAbiertas[grupo.key] ?? false
         const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
+        const editandoAutorizacion = ordenEditandoAutorizacionKey === grupo.key
+        const guardandoAutorizacionOrden = guardandoAutorizacionOrdenKey === grupo.key
+        const grupoPermiteEditarAutorizacion =
+            puedeCrear &&
+            grupo.tipo === 'orden' &&
+            grupo.puestoNumero != null &&
+            grupo.ordenNumero != null
         const limitePracticas = 3
         const practicasVisibles = expandida ? grupo.practicas : grupo.practicas.slice(0, limitePracticas)
         const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
@@ -1601,10 +1676,66 @@ export function PracticaCargaRapidaPage({
                                     Abrir orden
                                 </Link>
                             )}
+                            {grupoPermiteEditarAutorizacion && (
+                                <button
+                                    type="button"
+                                    onClick={() => iniciarEdicionAutorizacionOrden(grupo)}
+                                    disabled={guardandoAutorizacionOrden}
+                                    className={generadaEnSesion
+                                        ? 'inline-flex items-center rounded-full border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-800 hover:bg-blue-50 disabled:opacity-50'
+                                        : 'inline-flex items-center rounded-full border border-emerald-300 bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50'}
+                                >
+                                    {grupo.numeroAutorizacion ? 'Editar N° autorizacion' : 'Agregar N° autorizacion'}
+                                </button>
+                            )}
                             <span className={badgeEstadoClase}>
                                 Estado: {grupoTieneNumeroAutorizacion(grupo) ? 'Autorizada' : 'Pendiente de autorizacion'}
                             </span>
                         </div>
+
+                        {editandoAutorizacion && grupoPermiteEditarAutorizacion && (
+                            <div className="rounded-md border border-blue-200 bg-white/90 p-2">
+                                <label className="block text-[11px] font-medium text-blue-900">
+                                    N° autorizacion
+                                    <input
+                                        type="text"
+                                        maxLength={15}
+                                        value={borradorNumeroAutorizacion}
+                                        onChange={(e) => setBorradorNumeroAutorizacion(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault()
+                                                void guardarAutorizacionOrden(grupo)
+                                            }
+                                            if (e.key === 'Escape') {
+                                                e.preventDefault()
+                                                cancelarEdicionAutorizacionOrden()
+                                            }
+                                        }}
+                                        className="mt-1 w-full rounded border border-blue-300 bg-white px-2 py-1 text-xs text-blue-900"
+                                        placeholder="Ej: 123456"
+                                    />
+                                </label>
+                                <div className="mt-2 flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => void guardarAutorizacionOrden(grupo)}
+                                        disabled={guardandoAutorizacionOrden}
+                                        className="inline-flex items-center rounded border border-blue-300 bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                                    >
+                                        {guardandoAutorizacionOrden ? 'Guardando...' : 'Guardar autorizacion'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={cancelarEdicionAutorizacionOrden}
+                                        disabled={guardandoAutorizacionOrden}
+                                        className="inline-flex items-center rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         <div className={bloqueDetalleClase}>
                             <div className="flex items-center justify-between gap-2">
@@ -1946,21 +2077,34 @@ export function PracticaCargaRapidaPage({
                                         : 'Seleccionar todas las practicas pendientes'}
                                 </label>
 
-                                <label className="inline-flex items-center gap-2 text-xs text-amber-900">
-                                    <input
-                                        type="checkbox"
-                                        checked={generarImprimirPorSeparadoEditor}
-                                        onChange={(e) => {
-                                            const checked = e.target.checked
-                                            setGenerarImprimirPorSeparadoEditor(checked)
-                                            if (checked) {
+                                <div className="space-y-1 rounded-md border border-amber-200 bg-white/80 p-2">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                                        Modo de generacion
+                                    </p>
+                                    <label className="inline-flex items-center gap-2 text-xs text-amber-900">
+                                        <input
+                                            type="radio"
+                                            name={`modo-generacion-${ingresoId}`}
+                                            checked={!generarImprimirPorSeparadoEditor}
+                                            onChange={() => setGenerarImprimirPorSeparadoEditor(false)}
+                                            className="h-4 w-4 border-amber-300 text-amber-700 focus:ring-amber-500"
+                                        />
+                                        Generar todas juntas en una sola orden
+                                    </label>
+                                    <label className="inline-flex items-center gap-2 text-xs text-amber-900">
+                                        <input
+                                            type="radio"
+                                            name={`modo-generacion-${ingresoId}`}
+                                            checked={generarImprimirPorSeparadoEditor}
+                                            onChange={() => {
+                                                setGenerarImprimirPorSeparadoEditor(true)
                                                 alternarSeleccionLista(idsPendientesEditor, true)
-                                            }
-                                        }}
-                                        className="h-4 w-4 rounded border-amber-300 text-amber-700 focus:ring-amber-500"
-                                    />
-                                    Generar e imprimir por separado (una orden por practica)
-                                </label>
+                                            }}
+                                            className="h-4 w-4 border-amber-300 text-amber-700 focus:ring-amber-500"
+                                        />
+                                        Generar e imprimir por separado (una orden por practica)
+                                    </label>
+                                </div>
 
                                 {practicasPendientesEditorAgrupadas.length === 0 ? (
                                     <p className="text-xs text-gray-500">

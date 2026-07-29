@@ -199,7 +199,7 @@ export function InternacionPracticasFichaTable({
             return
         }
 
-        const ventana = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=800')
+        const ventana = window.open('', '_blank', 'width=1100,height=800')
         if (!ventana) {
             setError('No se pudo abrir la ventana de impresión')
             return
@@ -278,7 +278,10 @@ export function InternacionPracticasFichaTable({
         ventana.document.write(html)
         ventana.document.close()
 
+        let impresionDisparada = false
         const ejecutarImpresion = () => {
+            if (impresionDisparada) return
+            impresionDisparada = true
             try {
                 ventana.focus()
                 ventana.print()
@@ -287,13 +290,9 @@ export function InternacionPracticasFichaTable({
             }
         }
 
-        if (ventana.document.readyState === 'complete') {
-            window.setTimeout(ejecutarImpresion, 80)
-        } else {
-            ventana.addEventListener('load', ejecutarImpresion, { once: true })
-            // Fallback para navegadores que no disparan load tras document.write.
-            window.setTimeout(ejecutarImpresion, 800)
-        }
+        ventana.onload = ejecutarImpresion
+        // Fallback para navegadores que no disparan onload tras document.write.
+        window.setTimeout(ejecutarImpresion, 500)
 
         setError(null)
     }

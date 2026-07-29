@@ -161,8 +161,8 @@ export function PracticaSection({
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
     const [mostrarUti, setMostrarUti] = useState(true)
     const [mostrarPiso, setMostrarPiso] = useState(true)
-    const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(true)
-    const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
+    const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(false)
+    const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(false)
     const [profesionalesConMatricula, setProfesionalesConMatricula] = useState<ProfesionalConMatricula[]>([])
 
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)

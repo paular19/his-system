@@ -742,9 +742,17 @@ export async function actualizarNumeroAutorizacionAction(
 ) {
   const usuario = await getUsuarioSesion()
 
-  const puedeModificar = tienePermiso(usuario.rol, 'AMBULATORIO', 'MODIFICAR')
-  const puedeCrear = tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
-  if (!puedeModificar && !puedeCrear) {
+  const puedeAmbulatorio =
+    tienePermiso(usuario.rol, 'AMBULATORIO', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
+  const puedeInternacion =
+    tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+  const puedeAdmision =
+    tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+
+  if (!puedeAmbulatorio && !puedeInternacion && !puedeAdmision) {
     return { error: 'Sin permiso para modificar órdenes' }
   }
 

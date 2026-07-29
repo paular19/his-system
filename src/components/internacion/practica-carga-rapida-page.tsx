@@ -792,7 +792,87 @@ export function PracticaCargaRapidaPage({
                     return { ok: true }
                 }
 
-                const practicasActualizadas = (jsonPanel.data.practicas as PracticaItem[])
+                const practicasPanelBase = (jsonPanel.data.practicas as PracticaItem[])
+                const practicasCirugiaEspejoRaw = Array.isArray(jsonPanel?.data?.practicasCirugiaEspejo)
+                    ? (jsonPanel.data.practicasCirugiaEspejo as Array<{
+                        id: number
+                        codigoPractica: string
+                        fecha: string | Date
+                        cantidad: number
+                        numeroAutorizacion: string | null
+                        facturable: boolean
+                        puestoNumero: number | null
+                        ordenNumero: number | null
+                        estado: string | null
+                        usuarioRegistro: string | null
+                        matriculaEspecialista: number | null
+                        matriculaAnestesista: number | null
+                        ordenPractica?: Array<{
+                            puestoNumero: number
+                            ordenNumero: number
+                            item: number
+                            numeroAutorizacion: string | null
+                        }>
+                    }>)
+                    : []
+
+                const descripcionPorCodigo = new Map<string, string>()
+                for (const practica of practicasPanelBase) {
+                    const codigo = practica.codigoPractica.trim().toUpperCase()
+                    const descripcion = practica.descripcionPractica?.trim()
+                    if (codigo && descripcion) descripcionPorCodigo.set(codigo, descripcion)
+                }
+                for (const entrada of entradasCrear) {
+                    const codigo = entrada.payload.codigoPractica.trim().toUpperCase()
+                    const descripcion = entrada.payload.descripcionPractica?.trim()
+                    if (codigo && descripcion) descripcionPorCodigo.set(codigo, descripcion)
+                }
+
+                const practicasCirugiaEspejo: PracticaItem[] = practicasCirugiaEspejoRaw.map((practica) => {
+                    const codigoTrim = practica.codigoPractica.trim()
+                    const codigoLookup = codigoTrim.toUpperCase()
+                    const ordenPractica = Array.isArray(practica.ordenPractica)
+                        ? practica.ordenPractica.map((orden) => ({
+                            puestoNumero: orden.puestoNumero,
+                            ordenNumero: orden.ordenNumero,
+                            item: orden.item,
+                            numeroAutorizacion: orden.numeroAutorizacion ?? null,
+                        }))
+                        : []
+
+                    return {
+                        id: practica.id,
+                        ingresoId,
+                        convenioId: contextoCirugia.obraSocialId ?? convenioId ?? 0,
+                        codigoPractica: codigoTrim,
+                        descripcionPractica: descripcionPorCodigo.get(codigoLookup) ?? codigoTrim,
+                        numeroProtocoloLaboratorio: null,
+                        diagnosticoLaboratorio: null,
+                        fecha: new Date(practica.fecha),
+                        cantidad: Number(practica.cantidad ?? 1),
+                        importeTotal: null,
+                        numeroAutorizacion: practica.numeroAutorizacion ?? null,
+                        matriculaEspecialista: practica.matriculaEspecialista ?? null,
+                        matriculaAnestesista: practica.matriculaAnestesista ?? null,
+                        puestoNumero: practica.puestoNumero ?? null,
+                        ordenNumero: practica.ordenNumero ?? null,
+                        ordenItem: ordenPractica[0]?.item ?? null,
+                        facturada:
+                            ordenPractica.length > 0 ||
+                            ((practica.puestoNumero ?? 0) > 0 && (practica.ordenNumero ?? 0) > 0),
+                        ordenPractica,
+                        facturable: Boolean(practica.facturable),
+                        estado: practica.estado ?? 'A',
+                        usuario: (practica.usuarioRegistro ?? 'CIRUGIA').trim() || 'CIRUGIA',
+                    }
+                })
+
+                const practicasUnicasPorId = new Map<number, PracticaItem>()
+                for (const practica of [...practicasPanelBase, ...practicasCirugiaEspejo]) {
+                    practicasUnicasPorId.set(practica.id, practica)
+                }
+
+                const practicasActualizadas = Array.from(practicasUnicasPorId.values())
                     .filter((practica) => practicaActiva(practica.estado))
                     .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
 

@@ -11,6 +11,7 @@ interface ProfesionalSelectProps {
   profesionales: ProfesionalBasico[]
   value: string
   onChange: (value: string) => void
+  autoSelectOnSearch?: boolean
   placeholderOption?: string
   searchPlaceholder?: string
   disabled?: boolean
@@ -49,6 +50,7 @@ export function ProfesionalSelect({
   profesionales,
   value,
   onChange,
+  autoSelectOnSearch = true,
   placeholderOption = '-- Seleccionar profesional --',
   searchPlaceholder = 'Buscar por nombre o matricula',
   disabled = false,
@@ -125,6 +127,11 @@ export function ProfesionalSelect({
 
   const handleTerminoChange = (nextTermino: string) => {
     setTermino(nextTermino)
+
+    if (!autoSelectOnSearch) {
+      if (!nextTermino.trim()) onChange('')
+      return
+    }
 
     const seleccionado = resolverSeleccionPorTexto(nextTermino)
     onChange(seleccionado)

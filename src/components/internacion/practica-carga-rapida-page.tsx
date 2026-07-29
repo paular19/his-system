@@ -636,7 +636,7 @@ export function PracticaCargaRapidaPage({
                 : null
 
         if (!profesionalIdSugerido) return
-        if (firmanteEditadoManualmente && medicoFirmanteId) return
+        if (firmanteEditadoManualmente) return
 
         const siguiente = String(profesionalIdSugerido)
         if (medicoFirmanteId === siguiente) return
@@ -707,7 +707,10 @@ export function PracticaCargaRapidaPage({
         setGuardadasSesion((prev) => [...nuevas, ...prev])
     }
 
-    const registrarGuardadasSesionDesdePracticas = (creadas: PracticaItem[]) => {
+    const registrarGuardadasSesionDesdePracticas = (
+        creadas: PracticaItem[],
+        clasificacionPorNuevaPracticaId?: Record<number, string>
+    ) => {
         if (creadas.length === 0) return
 
         const nuevas = creadas.map((practicaCreada, idx) => ({
@@ -716,7 +719,9 @@ export function PracticaCargaRapidaPage({
             codigo: practicaCreada.codigoPractica.trim(),
             descripcion: descripcionParaMostrar(practicaCreada),
             cantidad: Number(practicaCreada.cantidad),
-            clasificacion: clasificacionInferidaPractica(practicaCreada),
+            clasificacion:
+                clasificacionPorNuevaPracticaId?.[practicaCreada.id] ??
+                clasificacionInferidaPractica(practicaCreada),
             fecha: formatearFechaArgentina(practicaCreada.fecha, {
                 day: '2-digit',
                 month: '2-digit',
@@ -880,7 +885,32 @@ export function PracticaCargaRapidaPage({
 
                 const practicasNuevas = practicasActualizadas.filter((practica) => !idsPrevios.has(practica.id))
                 if (practicasNuevas.length > 0) {
-                    registrarGuardadasSesionDesdePracticas(practicasNuevas)
+                    const colaClasificacionPorCodigo = new Map<string, string[]>()
+                    for (const entrada of entradasCrear) {
+                        const codigo = entrada.payload.codigoPractica.trim().toUpperCase()
+                        if (!codigo) continue
+                        const cola = colaClasificacionPorCodigo.get(codigo) ?? []
+                        cola.push(entrada.clasificacion ?? 'HE')
+                        colaClasificacionPorCodigo.set(codigo, cola)
+                    }
+
+                    const clasificacionPorNuevaPracticaId: Record<number, string> = {}
+                    const practicasNuevasOrdenadas = [...practicasNuevas].sort((a, b) => a.id - b.id)
+                    for (const practica of practicasNuevasOrdenadas) {
+                        const codigo = practica.codigoPractica.trim().toUpperCase()
+                        const cola = colaClasificacionPorCodigo.get(codigo)
+                        const clasificacion =
+                            cola && cola.length > 0
+                                ? (cola.shift() ?? 'HE')
+                                : clasificacionInferidaPractica(practica)
+                        clasificacionPorNuevaPracticaId[practica.id] = clasificacion
+                    }
+
+                    setClasificacionPorPracticaId((prev) => ({
+                        ...prev,
+                        ...clasificacionPorNuevaPracticaId,
+                    }))
+                    registrarGuardadasSesionDesdePracticas(practicasNuevas, clasificacionPorNuevaPracticaId)
                 }
 
                 return { ok: true }
@@ -2172,6 +2202,7 @@ export function PracticaCargaRapidaPage({
                                         setMedicoFirmanteId(nextValue)
                                         setFirmanteEditadoManualmente(true)
                                     }}
+                                    autoSelectOnSearch={false}
                                     disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
                                     placeholderOption="-- Seleccionar firmante --"
                                     searchPlaceholder="Buscar por nombre o matricula"
@@ -2346,6 +2377,7 @@ export function PracticaCargaRapidaPage({
                                                     setMedicoFirmanteId(nextValue)
                                                     setFirmanteEditadoManualmente(true)
                                                 }}
+                                                autoSelectOnSearch={false}
                                                 disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
                                                 placeholderOption="-- Seleccionar firmante --"
                                                 searchPlaceholder="Buscar por nombre o matricula"
@@ -2683,6 +2715,7 @@ export function PracticaCargaRapidaPage({
                                                     : prev
                                             )
                                         }
+                                        autoSelectOnSearch={false}
                                         disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
                                         placeholderOption="-- Seleccionar firmante --"
                                         searchPlaceholder="Buscar por nombre o matricula"

@@ -109,6 +109,10 @@ const GUIA_VIDEOS_PASO_A_PASO_ORDENES: Array<{
         url: 'https://www.youtube.com/watch?v=PAoQoO66KAE',
       },
       {
+        titulo: 'CARGA DE PRACTICAS',
+        url: 'https://www.youtube.com/watch?v=vsBFz-onEmU',
+      },
+      {
         titulo: 'MODULO GENERAL DE INTERNACION',
         url: 'https://youtube.com/watch?v=kEghaXK6jCU&feature=youtu.be',
       },

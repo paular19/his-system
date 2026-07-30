@@ -39,6 +39,10 @@ const GUIA_VIDEOS_CENTRALES_ADMISION: GuiaVideoItem[] = [
 
 const GUIA_VIDEOS_CENTRALES_ORDENES: GuiaVideoItem[] = [
   {
+    titulo: 'Sistema HIS - Video central del sistema',
+    url: 'https://youtu.be/hAat2iEB2dU',
+  },
+  {
     titulo: 'Uso de multiples pestanas',
     url: 'https://www.youtube.com/watch?v=U5hMlxJjCF0',
   },
@@ -107,6 +111,10 @@ const GUIA_VIDEOS_PASO_A_PASO_ORDENES: Array<{
       {
         titulo: 'Admision por internacion',
         url: 'https://www.youtube.com/watch?v=PAoQoO66KAE',
+      },
+      {
+        titulo: 'CIRUGIA',
+        url: 'https://www.youtube.com/watch?v=_Euxks1ZNF0',
       },
       {
         titulo: 'CARGA DE PRACTICAS',

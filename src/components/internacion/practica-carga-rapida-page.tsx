@@ -587,6 +587,14 @@ export function PracticaCargaRapidaPage({
         )
     }, [guardadasSesion, practicasPendientes])
 
+    useEffect(() => {
+        const pendientes = new Set(practicasPendientes.map((practica) => practica.id))
+        setGuardadasSesion((prev) => {
+            const filtradas = prev.filter((item) => pendientes.has(item.practicaId))
+            return filtradas.length === prev.length ? prev : filtradas
+        })
+    }, [practicasPendientes])
+
     const ordenesAutorizadas = useMemo(
         () => agruparPracticasAutorizadasPorOrden(practicasAutorizadas),
         [practicasAutorizadas]
@@ -2657,7 +2665,7 @@ export function PracticaCargaRapidaPage({
 
                         {guardadasSesion.length === 0 ? (
                             <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
-                                Todavia no agregaste practicas en esta sesion.
+                                No hay practicas pendientes en esta sesion.
                             </p>
                         ) : (
                             <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">

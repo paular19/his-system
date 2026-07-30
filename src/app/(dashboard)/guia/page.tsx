@@ -10,6 +10,7 @@ import {
 } from '@/modules/guia/constants'
 
 const MODULOS_EXCLUIDOS_ADMISION = new Set(['CIRUGIA', 'TURNOS', 'FACTURACION'])
+const MODULOS_EXCLUIDOS_ORDENES = new Set(['CIRUGIA', 'TURNOS', 'FACTURACION'])
 
 const GUIA_MODULOS_ADMISION = [
   ...GUIA_MODULOS.filter((modulo) => !MODULOS_EXCLUIDOS_ADMISION.has(modulo.id)),
@@ -21,11 +22,22 @@ const GUIA_MODULOS_ADMISION = [
   },
 ]
 
+const GUIA_MODULOS_ORDENES = GUIA_MODULOS.filter(
+  (modulo) => !MODULOS_EXCLUIDOS_ORDENES.has(modulo.id)
+)
+
 const GUIA_VIDEOS_CENTRALES_ADMISION: GuiaVideoItem[] = [
   {
     titulo: 'Sistema HIS - Video central del sistema',
     url: 'https://www.youtube.com/watch?v=c3FHHSiQTsg',
   },
+  {
+    titulo: 'Uso de multiples pestanas',
+    url: 'https://www.youtube.com/watch?v=U5hMlxJjCF0',
+  },
+]
+
+const GUIA_VIDEOS_CENTRALES_ORDENES: GuiaVideoItem[] = [
   {
     titulo: 'Uso de multiples pestanas',
     url: 'https://www.youtube.com/watch?v=U5hMlxJjCF0',
@@ -73,6 +85,41 @@ const GUIA_VIDEOS_PASO_A_PASO_ADMISION: Array<{
   },
 ]
 
+const GUIA_VIDEOS_PASO_A_PASO_ORDENES: Array<{
+  id: string
+  nombre: string
+  videos: GuiaVideoItem[]
+}> = [
+  {
+    id: 'PACIENTES_ADMISION',
+    nombre: 'Registro de paciente y admision',
+    videos: [
+      {
+        titulo: 'Registro de paciente y admision',
+        url: 'https://www.youtube.com/watch?v=XMh5exNwx9w',
+      },
+    ],
+  },
+  {
+    id: 'INTERNACION_ORDENES',
+    nombre: 'Internacion',
+    videos: [
+      {
+        titulo: 'Admision por internacion',
+        url: 'https://www.youtube.com/watch?v=PAoQoO66KAE',
+      },
+      {
+        titulo: 'MODULO GENERAL DE INTERNACION',
+        url: 'https://youtube.com/watch?v=kEghaXK6jCU&feature=youtu.be',
+      },
+      {
+        titulo: 'CARGA DE PROTOCOLO BIOQUIMICO',
+        url: 'https://www.youtube.com/watch?v=0RpzFlJhVdg&feature=youtu.be',
+      },
+    ],
+  },
+]
+
 function extraerYoutubeId(url: string): string | null {
   try {
     const parsed = new URL(url)
@@ -113,8 +160,22 @@ function construirMiniaturaYoutube(url: string): string | null {
 export default async function GuiaPage() {
   const usuario = await getUsuarioSesion()
   const esVersionAdmision = usuario.rol === ROLES.ADMISION
-  const modulosGuia = esVersionAdmision ? GUIA_MODULOS_ADMISION : GUIA_MODULOS
-  const bloquesVideos = GUIA_VIDEOS_PASO_A_PASO_ADMISION
+  const esVersionOrdenes = usuario.rol === ROLES.ORDENES
+  const esVersionOperativa = esVersionAdmision || esVersionOrdenes
+
+  const modulosGuia = esVersionAdmision
+    ? GUIA_MODULOS_ADMISION
+    : esVersionOrdenes
+      ? GUIA_MODULOS_ORDENES
+      : GUIA_MODULOS
+
+  const videosCentrales = esVersionOrdenes
+    ? GUIA_VIDEOS_CENTRALES_ORDENES
+    : GUIA_VIDEOS_CENTRALES_ADMISION
+
+  const bloquesVideos = esVersionOrdenes
+    ? GUIA_VIDEOS_PASO_A_PASO_ORDENES
+    : GUIA_VIDEOS_PASO_A_PASO_ADMISION
 
   return (
     <>
@@ -130,7 +191,7 @@ export default async function GuiaPage() {
 
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
             <p className="text-sm font-semibold text-blue-900">Estructura base del circuito operativo</p>
-            {esVersionAdmision ? (
+            {esVersionOperativa ? (
               <div className="mt-2 space-y-2 text-sm text-blue-900">
                 <p>En caso de que el paciente no este registrado y sea su primera vez en la clinica hacemos el registro desde el modulo Pacientes (como muestra el video).</p>
                 <p>Con el paciente validado, se genera la admision segun el tipo de atencion.</p>
@@ -169,7 +230,7 @@ export default async function GuiaPage() {
 
         <section className="his-card p-5 space-y-3">
           <h2 className="text-lg font-semibold text-gray-900">Advertencias de uso</h2>
-          {esVersionAdmision ? (
+          {esVersionOperativa ? (
             <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
               <li>No hace falta que uses una pestana a la vez. Se recomienda el uso de multiples pestanas para evitar tener que recargar muchas veces la misma pagina (click derecho y luego abrir vinculo en una nueva pestana).</li>
               <li>No recargues la pagina varias veces mientras una accion este procesando.</li>
@@ -191,13 +252,15 @@ export default async function GuiaPage() {
         <section className="his-card p-5 space-y-3">
           <h2 className="text-lg font-semibold text-gray-900">Videos paso a paso</h2>
           <p className="text-sm text-gray-600">
-            Estos videos cubren el flujo principal de admision, internacion, el uso de multiples pestanas y la carga de presupuesto.
+            {esVersionOrdenes
+              ? 'Estos videos cubren el flujo de pacientes, admision e internacion, incluyendo carga de protocolo bioquimico.'
+              : 'Estos videos cubren el flujo principal de admision, internacion, el uso de multiples pestanas y la carga de presupuesto.'}
           </p>
 
           <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Videos centrales del sistema</p>
             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-              {GUIA_VIDEOS_CENTRALES_ADMISION.map((video) => {
+              {videosCentrales.map((video) => {
                 const miniatura = construirMiniaturaYoutube(video.url)
 
                 return (

@@ -43,6 +43,14 @@ const NAV_ITEMS_ADMISION: NavItem[] = [
   { label: 'Presupuesto', href: '/dashboard/cotizador', icon: Receipt },
 ]
 
+const NAV_ITEMS_ORDENES: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Pacientes', href: '/dashboard/pacientes', icon: Users },
+  { label: 'Admisión', href: '/dashboard/admision', icon: ClipboardList },
+  { label: 'Internación', href: '/dashboard/internacion', icon: BedDouble },
+  { label: 'Autorizaciones', href: '/dashboard/ambulatorio', icon: FilePlus },
+]
+
 interface SidebarProps {
   rol: RolHIS
 }
@@ -50,7 +58,12 @@ interface SidebarProps {
 export function Sidebar({ rol }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const navItems = rol === ROLES.ADMISION ? NAV_ITEMS_ADMISION : NAV_ITEMS_DEFAULT
+  const navItems =
+    rol === ROLES.ADMISION
+      ? NAV_ITEMS_ADMISION
+      : rol === ROLES.ORDENES
+        ? NAV_ITEMS_ORDENES
+        : NAV_ITEMS_DEFAULT
   const [hrefEnCurso, setHrefEnCurso] = useState<string | null>(null)
   const desbloqueoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 

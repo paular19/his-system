@@ -22,12 +22,19 @@ type SessionClaimsLike = {
 }
 
 const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
+  // ORDENES
+  'natividaddelvallelopez@gmail.com': ROLES.ORDENES,
+  'ivictoria123@hotmail.com': ROLES.ORDENES,
+  'sorianokaren223@gmail.com': ROLES.ORDENES,
+  'lautarouti@gmail.com': ROLES.ORDENES,
+  'internacionsanar@gmail.com': ROLES.ORDENES,
+  'altamirano97.leandro@gmail.com': ROLES.ORDENES,
+  'ramospaula1996@gmail.com': ROLES.ORDENES,
+
   // ADMISION
   'ficacode@gmail.com': ROLES.ADMISION,
   'barrionuevodamarisbelen@gmail.com': ROLES.ADMISION,
-  'ivictoria123@hotmail.com': ROLES.ADMISION,
   'eduardogutierrez0770@gmail.com': ROLES.ADMISION,
-  'altamirano97.leandro@gmail.com': ROLES.ADMISION,
   'enahirtni@gmail.com': ROLES.ADMISION,
   'lucianolozanoj2@gmail.com': ROLES.ADMISION,
   'ivanagtarcaya78@gmail.com': ROLES.ADMISION,
@@ -35,7 +42,6 @@ const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
 
   // ADMIN
   'marcelalejandra2015@gmail.com': ROLES.ADMIN,
-  'ramospaula1996@gmail.com': ROLES.ADMIN,
 
   // FACTURACION
   'marianacanaza24@gmail.com': ROLES.FACTURACION,

@@ -18,6 +18,7 @@ import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
 import {
+    anularOrdenAction,
     actualizarNumeroAutorizacionAction,
     crearPedidoLaboratorioAction,
     generarOrdenesDesdeInternacionAction,
@@ -122,6 +123,21 @@ type GuardarPracticasResult = {
     ok: boolean
     error?: string
     practicaIds?: number[]
+}
+
+type PracticaEditDraft = {
+    convenioId: number
+    codigoPractica: string
+    descripcionPractica: string
+    fecha: string
+    cantidad: string
+    numeroAutorizacion: string
+    numeroProtocoloLaboratorio: string
+    diagnosticoLaboratorio: string
+    matriculaEspecialista: string
+    matriculaAnestesista: string
+    facturable: boolean
+    importeBaseUnitario: string
 }
 
 interface PracticaCargaRapidaPageProps {
@@ -379,6 +395,10 @@ export function PracticaCargaRapidaPage({
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
+    const [practicaEditando, setPracticaEditando] = useState<PracticaItem | null>(null)
+    const [draftPracticaEditando, setDraftPracticaEditando] = useState<PracticaEditDraft | null>(null)
+    const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
+    const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
 
     const protocoloSeleccionado = useMemo(
         () => PROTOCOLOS_PREDEFINIDOS.find((protocolo) => protocolo.id === protocoloSeleccionadoId) ?? null,
@@ -1418,6 +1438,174 @@ export function PracticaCargaRapidaPage({
         setDiagnosticoLaboratorio('')
     }
 
+    const abrirEdicionPractica = (practica: PracticaItem) => {
+        if (practicaFacturada(practica)) {
+            setMensajeError('La practica ya fue facturada. Anula la orden en Facturacion para poder editarla.')
+            return
+        }
+
+        const cantidad = Number.isFinite(Number(practica.cantidad)) && Number(practica.cantidad) > 0
+            ? Number(practica.cantidad)
+            : 1
+        const importeBaseUnitario =
+            practica.importeTotal != null && cantidad > 0
+                ? Number(practica.importeTotal) / cantidad
+                : null
+
+        setMensajeError(null)
+        setPracticaEditando(practica)
+        setDraftPracticaEditando({
+            convenioId: Number(practica.convenioId) > 0 ? Number(practica.convenioId) : (convenioId ?? 0),
+            codigoPractica: practica.codigoPractica.trim(),
+            descripcionPractica: practica.descripcionPractica ?? '',
+            fecha: fechaAInputLocalSimple(practica.fecha),
+            cantidad: String(cantidad),
+            numeroAutorizacion: practica.numeroAutorizacion ?? '',
+            numeroProtocoloLaboratorio: practica.numeroProtocoloLaboratorio ?? '',
+            diagnosticoLaboratorio: practica.diagnosticoLaboratorio ?? '',
+            matriculaEspecialista: practica.matriculaEspecialista != null ? String(practica.matriculaEspecialista) : '',
+            matriculaAnestesista: practica.matriculaAnestesista != null ? String(practica.matriculaAnestesista) : '',
+            facturable: practica.facturable,
+            importeBaseUnitario: importeBaseUnitario != null && Number.isFinite(importeBaseUnitario)
+                ? String(Number(importeBaseUnitario.toFixed(2)))
+                : '',
+        })
+    }
+
+    const cerrarEdicionPractica = () => {
+        if (guardandoPracticaEditando) return
+        setPracticaEditando(null)
+        setDraftPracticaEditando(null)
+    }
+
+    const guardarEdicionPractica = async () => {
+        if (!practicaEditando || !draftPracticaEditando) return
+
+        const cantidad = Number.parseInt(draftPracticaEditando.cantidad, 10)
+        if (!Number.isFinite(cantidad) || cantidad <= 0 || cantidad > 999) {
+            setMensajeError('La cantidad debe estar entre 1 y 999')
+            return
+        }
+
+        const codigoPractica = draftPracticaEditando.codigoPractica.trim().toUpperCase()
+        if (!codigoPractica) {
+            setMensajeError('El codigo de practica es obligatorio')
+            return
+        }
+
+        if (!draftPracticaEditando.fecha) {
+            setMensajeError('La fecha de la practica es obligatoria')
+            return
+        }
+
+        const convenioIdFinal =
+            Number.isFinite(Number(draftPracticaEditando.convenioId)) && Number(draftPracticaEditando.convenioId) > 0
+                ? Number(draftPracticaEditando.convenioId)
+                : null
+
+        const payload = {
+            convenioId: convenioIdFinal,
+            codigoPractica,
+            descripcionPractica: draftPracticaEditando.descripcionPractica.trim() || null,
+            fecha: fechaSoloPracticaAISOString(draftPracticaEditando.fecha),
+            cantidad,
+            numeroAutorizacion: draftPracticaEditando.numeroAutorizacion.trim() || null,
+            numeroProtocoloLaboratorio: draftPracticaEditando.numeroProtocoloLaboratorio.trim() || null,
+            diagnosticoLaboratorio: draftPracticaEditando.diagnosticoLaboratorio.trim() || null,
+            facturable: draftPracticaEditando.facturable,
+            importeBaseUnitario:
+                draftPracticaEditando.importeBaseUnitario.trim() !== ''
+                    ? Number(draftPracticaEditando.importeBaseUnitario)
+                    : null,
+            matriculaEspecialista:
+                draftPracticaEditando.matriculaEspecialista.trim() !== ''
+                    ? Number(draftPracticaEditando.matriculaEspecialista)
+                    : null,
+            matriculaAnestesista:
+                draftPracticaEditando.matriculaAnestesista.trim() !== ''
+                    ? Number(draftPracticaEditando.matriculaAnestesista)
+                    : null,
+        }
+
+        setMensajeError(null)
+        setGuardandoPracticaEditando(true)
+        try {
+            const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaEditando.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                cache: 'no-store',
+            })
+
+            const json = await res.json().catch(() => null)
+            if (!res.ok) {
+                setMensajeError(json?.error ?? 'No se pudo editar la practica')
+                return
+            }
+
+            const actualizada = (json?.data ?? null) as PracticaItem | null
+            if (actualizada) {
+                setPracticas((prev) => prev.map((practica) => (practica.id === actualizada.id ? actualizada : practica)))
+                setClasificacionPorPracticaId((prev) => ({
+                    ...prev,
+                    [actualizada.id]: clasificacionInferidaPractica(actualizada),
+                }))
+            }
+
+            cerrarEdicionPractica()
+            router.refresh()
+        } catch {
+            setMensajeError('Error de conexion al editar la practica')
+        } finally {
+            setGuardandoPracticaEditando(false)
+        }
+    }
+
+    const anularOrdenDesdeGrupo = async (puestoNumero: number, ordenNumero: number, grupoKey: string) => {
+        if (typeof window !== 'undefined') {
+            const confirmar = window.confirm(
+                `Se anulara la orden ${formatearNumeroOrden(puestoNumero, ordenNumero)}. Desea continuar?`
+            )
+            if (!confirmar) return
+        }
+
+        setMensajeError(null)
+        setAnulandoOrdenKey(grupoKey)
+        try {
+            const result = await anularOrdenAction(puestoNumero, ordenNumero)
+            if ('error' in result && result.error) {
+                setMensajeError(result.error)
+                return
+            }
+
+            setPracticas((prev) => prev.map((practica) => {
+                const ordenesRestantes = (practica.ordenPractica ?? []).filter(
+                    (orden) => !(orden.puestoNumero === puestoNumero && orden.ordenNumero === ordenNumero)
+                )
+
+                if (ordenesRestantes.length === (practica.ordenPractica ?? []).length) {
+                    return practica
+                }
+
+                return {
+                    ...practica,
+                    ordenPractica: ordenesRestantes,
+                    facturada: false,
+                }
+            }))
+
+            const claveOrdenAnulada = `${puestoNumero}-${ordenNumero}`
+            setOrdenesGeneradasSesion((prev) => prev.filter((clave) => clave !== claveOrdenAnulada))
+            setOrdenEditandoAutorizacionKey((prev) => (prev === grupoKey ? null : prev))
+            setBorradorNumeroAutorizacion('')
+            router.refresh()
+        } catch {
+            setMensajeError('Error al anular la orden')
+        } finally {
+            setAnulandoOrdenKey(null)
+        }
+    }
+
     const crearPedidoLaboratorio = async () => {
         const numeroProtocolo = numeroProtocoloLaboratorio.trim()
         const diagnostico = diagnosticoLaboratorio.trim()
@@ -1802,20 +1990,32 @@ export function PracticaCargaRapidaPage({
         const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
         const destinoAbrir = obtenerDestinoGrupoPracticasAutorizadas(grupo)
         const sinAutorizacion = !grupoTieneNumeroAutorizacion(grupo)
-        const codigosGrupo = Array.from(
-            new Set(
-                grupo.practicas
-                    .map((practica) => practica.codigoPractica.trim())
-                    .filter((codigo) => codigo.length > 0)
-            )
-        )
-        const codigosResumen = codigosGrupo.slice(0, 4).join(', ')
-        const codigosRestantes = Math.max(0, codigosGrupo.length - 4)
+        const codigosConCantidad = Array.from(
+            grupo.practicas.reduce((mapa, practica) => {
+                const codigo = practica.codigoPractica.trim()
+                if (!codigo) return mapa
+
+                const cantidad = Number.isFinite(Number(practica.cantidad)) && Number(practica.cantidad) > 0
+                    ? Number(practica.cantidad)
+                    : 1
+                mapa.set(codigo, (mapa.get(codigo) ?? 0) + cantidad)
+                return mapa
+            }, new Map<string, number>())
+        ).map(([codigo, cantidad]) => `${codigo} x${cantidad}`)
+        const codigosResumen = codigosConCantidad.slice(0, 4).join(', ')
+        const codigosRestantes = Math.max(0, codigosConCantidad.length - 4)
         const claveOrdenSesion =
             grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null
                 ? `${grupo.puestoNumero}-${grupo.ordenNumero}`
                 : null
         const generadaEnSesion = claveOrdenSesion != null && ordenesGeneradasSesionSet.has(claveOrdenSesion)
+        const grupoFacturado = grupo.practicas.some((practica) => practicaFacturada(practica))
+        const puedeAnularGrupo =
+            grupo.tipo === 'orden' &&
+            grupo.puestoNumero != null &&
+            grupo.ordenNumero != null &&
+            !grupoFacturado
+        const grupoAnulandose = anulandoOrdenKey === grupo.key
 
         const contenedorClase = generadaEnSesion
             ? 'border border-blue-300 bg-blue-100/60'
@@ -1889,7 +2089,7 @@ export function PracticaCargaRapidaPage({
                                 : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
                         </span>
                         <span className={`min-w-0 truncate text-[10px] ${contadorClase}`}>
-                            Cod: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                            Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
                         </span>
                         {estadoSesionEtiqueta && (
                             <span className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
@@ -1927,6 +2127,18 @@ export function PracticaCargaRapidaPage({
                                         : 'inline-flex items-center rounded-full border border-emerald-300 bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50'}
                                 >
                                     {grupo.numeroAutorizacion ? 'Editar N° autorizacion' : 'Agregar N° autorizacion'}
+                                </button>
+                            )}
+                            {puedeCrear && grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null && (
+                                <button
+                                    type="button"
+                                    onClick={() => void anularOrdenDesdeGrupo(grupo.puestoNumero as number, grupo.ordenNumero as number, grupo.key)}
+                                    disabled={grupoAnulandose || !puedeAnularGrupo}
+                                    title={!puedeAnularGrupo ? 'La orden ya esta facturada' : 'Anular orden'}
+                                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                >
+                                    {grupoAnulandose && <Loader2 className="h-3 w-3 animate-spin" />}
+                                    {grupoAnulandose ? 'Anulando...' : 'Anular orden'}
                                 </button>
                             )}
                             <span className={badgeEstadoClase}>
@@ -2012,11 +2224,26 @@ export function PracticaCargaRapidaPage({
                                                 year: 'numeric',
                                             })}
                                         </p>
-                                        {practicaFacturada(practica) && (
-                                            <span className="mt-1 inline-flex rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
-                                                Facturada
-                                            </span>
-                                        )}
+                                        <div className="mt-1 flex items-center justify-end gap-2">
+                                            {practicaFacturada(practica) && (
+                                                <span className="inline-flex rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                                                    Facturada
+                                                </span>
+                                            )}
+                                            {puedeCrear && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => abrirEdicionPractica(practica)}
+                                                    disabled={guardandoPracticaEditando || practicaFacturada(practica)}
+                                                    title={practicaFacturada(practica)
+                                                        ? 'Practica facturada. Anula la orden en Facturacion para editar.'
+                                                        : 'Editar practica'}
+                                                    className="inline-flex items-center rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                >
+                                                    Editar
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -2691,6 +2918,191 @@ export function PracticaCargaRapidaPage({
                     </div>
                 </div>
             </div>
+
+            {practicaEditando && draftPracticaEditando && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+                    <div className="w-full max-w-2xl rounded-xl border border-blue-200 bg-white p-4 shadow-xl">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-900">Editar practica</h3>
+                                <p className="text-xs text-gray-600">
+                                    Puedes corregir fecha, cantidad, medicos y otros datos antes de facturar.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={cerrarEdicionPractica}
+                                disabled={guardandoPracticaEditando}
+                                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <label className="text-xs text-gray-600">
+                                Codigo
+                                <input
+                                    type="text"
+                                    value={draftPracticaEditando.codigoPractica}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        codigoPractica: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600">
+                                Fecha
+                                <input
+                                    type="date"
+                                    value={draftPracticaEditando.fecha}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        fecha: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600 md:col-span-2">
+                                Descripcion
+                                <input
+                                    type="text"
+                                    value={draftPracticaEditando.descripcionPractica}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        descripcionPractica: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600">
+                                Cantidad
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={999}
+                                    value={draftPracticaEditando.cantidad}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        cantidad: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600">
+                                N° autorizacion
+                                <input
+                                    type="text"
+                                    value={draftPracticaEditando.numeroAutorizacion}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        numeroAutorizacion: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600">
+                                Matricula especialista
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={draftPracticaEditando.matriculaEspecialista}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        matriculaEspecialista: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600">
+                                Matricula anestesista
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={draftPracticaEditando.matriculaAnestesista}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        matriculaAnestesista: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600">
+                                Importe base unitario
+                                <input
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    value={draftPracticaEditando.importeBaseUnitario}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        importeBaseUnitario: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600">
+                                N° protocolo laboratorio
+                                <input
+                                    type="text"
+                                    value={draftPracticaEditando.numeroProtocoloLaboratorio}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        numeroProtocoloLaboratorio: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600 md:col-span-2">
+                                Diagnostico laboratorio
+                                <input
+                                    type="text"
+                                    value={draftPracticaEditando.diagnosticoLaboratorio}
+                                    onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                        ...prev,
+                                        diagnosticoLaboratorio: e.target.value,
+                                    } : prev)}
+                                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
+                                />
+                            </label>
+                        </div>
+
+                        <label className="mt-3 inline-flex items-center gap-2 text-xs text-gray-700">
+                            <input
+                                type="checkbox"
+                                checked={draftPracticaEditando.facturable}
+                                onChange={(e) => setDraftPracticaEditando((prev) => prev ? {
+                                    ...prev,
+                                    facturable: e.target.checked,
+                                } : prev)}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Facturable
+                        </label>
+
+                        <div className="mt-3 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={cerrarEdicionPractica}
+                                disabled={guardandoPracticaEditando}
+                                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void guardarEdicionPractica()}
+                                disabled={guardandoPracticaEditando}
+                                className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {guardandoPracticaEditando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                {guardandoPracticaEditando ? 'Guardando...' : 'Guardar cambios'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {confirmacionOrdenUnica && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">

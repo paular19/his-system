@@ -590,15 +590,20 @@ export function PracticasAutorizacionSection({
                             const expandida = autorizadasExpandidas[grupo.key] ?? false
                             const itemsVisibles = expandida ? grupo.items : grupo.items.slice(0, limiteItems)
                             const restantes = Math.max(0, grupo.items.length - itemsVisibles.length)
-                            const codigosGrupo = Array.from(
-                                new Set(
-                                    grupo.items
-                                        .map((item) => item.codigo.trim())
-                                        .filter((codigo) => codigo.length > 0)
-                                )
-                            )
-                            const codigosResumen = codigosGrupo.slice(0, 4).join(', ')
-                            const codigosRestantes = Math.max(0, codigosGrupo.length - 4)
+                            const codigosConCantidad = Array.from(
+                                grupo.items.reduce((mapa, item) => {
+                                    const codigo = item.codigo.trim()
+                                    if (!codigo) return mapa
+
+                                    const cantidad = Number.isFinite(Number(item.cantidad)) && Number(item.cantidad) > 0
+                                        ? Number(item.cantidad)
+                                        : 1
+                                    mapa.set(codigo, (mapa.get(codigo) ?? 0) + cantidad)
+                                    return mapa
+                                }, new Map<string, number>())
+                            ).map(([codigo, cantidad]) => `${codigo} x${cantidad}`)
+                            const codigosResumen = codigosConCantidad.slice(0, 4).join(', ')
+                            const codigosRestantes = Math.max(0, codigosConCantidad.length - 4)
                             const destino =
                                 grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                     ? `/dashboard/ambulatorio/${grupo.puestoNumero}/${grupo.ordenNumero}`
@@ -624,7 +629,7 @@ export function PracticasAutorizacionSection({
                                                     : 'Autorización manual'}
                                             </span>
                                             <span className="min-w-0 truncate text-[10px] text-green-700">
-                                                Cod: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                                                Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
                                             </span>
                                         </span>
                                         <span className="text-[11px] text-green-700">{grupo.items.length} práctica(s)</span>

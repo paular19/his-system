@@ -203,7 +203,10 @@ async function mapearCamaConOcupante(
       numeroIngreso: number
       nombre: string | null
       fechaIngreso: Date | null
+      descripcionPatologia: string | null
+      obraSocialCoseguroId: number | null
       obraSocialId: number | null
+      profesionalTratante: { nombre: string } | null
       obraSocial: { nombre: string } | null
     }>
   },
@@ -263,6 +266,9 @@ async function mapearCamaConOcupante(
         numeroIngreso: ingresoParaMostrar.numeroIngreso,
         nombre: ingresoParaMostrar.nombre ?? 'Sin nombre',
         fechaIngreso: ingresoParaMostrar.fechaIngreso,
+        profesionalTratanteNombre: ingresoParaMostrar.profesionalTratante?.nombre ?? null,
+        diagnostico: ingresoParaMostrar.descripcionPatologia ?? null,
+        tieneCoseguro: Boolean(ingresoParaMostrar.obraSocialCoseguroId),
         obraSocialId: ingresoParaMostrar.obraSocialId ?? null,
         obraSocialNombre: ingresoParaMostrar.obraSocial?.nombre ?? null,
       }
@@ -281,7 +287,10 @@ export async function obtenerTodasLasCamas(fechaReferencia?: Date, obraSocialIdF
           numeroIngreso: true,
           nombre: true,
           fechaIngreso: true,
+          descripcionPatologia: true,
+          obraSocialCoseguroId: true,
           obraSocialId: true,
+          profesionalTratante: { select: { nombre: true } },
           obraSocial: { select: { nombre: true } },
         },
         orderBy: [{ fechaIngreso: 'asc' }, { id: 'asc' }],
@@ -333,7 +342,10 @@ export async function obtenerCamaPorId(id: number): Promise<CamaConOcupante | nu
           numeroIngreso: true,
           nombre: true,
           fechaIngreso: true,
+          descripcionPatologia: true,
+          obraSocialCoseguroId: true,
           obraSocialId: true,
+          profesionalTratante: { select: { nombre: true } },
           obraSocial: { select: { nombre: true } },
         },
         orderBy: [{ fechaIngreso: 'asc' }, { id: 'asc' }],
@@ -360,7 +372,10 @@ export async function obtenerCamasDisponibles(sector?: string): Promise<CamaConO
           numeroIngreso: true,
           nombre: true,
           fechaIngreso: true,
+          descripcionPatologia: true,
+          obraSocialCoseguroId: true,
           obraSocialId: true,
+          profesionalTratante: { select: { nombre: true } },
           obraSocial: { select: { nombre: true } },
         },
         orderBy: [{ fechaIngreso: 'asc' }, { id: 'asc' }],
@@ -436,6 +451,8 @@ export async function obtenerInternacionesActivas(
       fechaIngreso: true,
       fechaEgresoPrevista: true,
       estado: true,
+      descripcionPatologia: true,
+      obraSocialCoseguroId: true,
       cama: {
         select: { id: true, identificador: true, sector: true, habitacion: true, estado: true },
       },
@@ -454,10 +471,16 @@ export async function obtenerInternacionesActivas(
 
   const itemsFiltrados = itemsBase.filter((item) => ingresoActivoParaMapa(item.fechaIngreso, fecha))
   const total = itemsFiltrados.length
-  const items = itemsFiltrados.slice(skip, skip + porPagina)
+  const items = itemsFiltrados
+    .slice(skip, skip + porPagina)
+    .map((item) => ({
+      ...item,
+      descripcionPatologia: item.descripcionPatologia ?? null,
+      tieneCoseguro: Boolean(item.obraSocialCoseguroId),
+    }))
 
   return {
-    items: items as InternacionListItem[],
+    items,
     paginacion: {
       pagina,
       porPagina,
@@ -779,9 +802,7 @@ export async function obtenerInternacionDetalle(
       ? practicasOrdenadas.map((p) => ({
         ...p,
         usuario: p.usuarioRegistro,
-        facturada:
-          (ordenesPracticaPorId.get(p.id)?.length ?? 0) > 0 ||
-          (p.puestoNumero != null && p.ordenNumero != null && Number(p.puestoNumero) > 0),
+        facturada: (p.estado ?? '').trim().toUpperCase() === 'F',
         descripcionPractica: (() => {
           const key = `${p.convenioId}:${p.codigoPractica.trim()}`
           const descripcionBase = descripcionPorClave.get(key) ?? p.codigoPractica.trim()
@@ -1124,28 +1145,6 @@ export async function actualizarPractica(
     const estadoActual = (practicaActual.estado ?? '').trim().toUpperCase()
     if (estadoActual === 'X') {
       throw new Error('No se puede editar una práctica anulada')
-    }
-
-    if (
-      practicaActual.puestoNumero != null &&
-      practicaActual.ordenNumero != null &&
-      Number(practicaActual.puestoNumero) > 0
-    ) {
-      const ordenFacturada = await tx.orden.findFirst({
-        where: {
-          ingresoId,
-          puestoNumero: Number(practicaActual.puestoNumero),
-          numero: Number(practicaActual.ordenNumero),
-          NOT: { estado: 'X' },
-        },
-        select: { puestoNumero: true },
-      })
-
-      if (ordenFacturada) {
-        throw new Error(
-          'No se puede editar una práctica ya facturada. Anule la orden en Facturación para habilitar la edición.'
-        )
-      }
     }
 
     const ingreso = await tx.ingreso.findUnique({

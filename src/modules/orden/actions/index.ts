@@ -856,19 +856,6 @@ export async function anularOrdenAction(puestoNumero: number, numero: number) {
       return { error: 'La orden ya está anulada' }
     }
 
-    const existeFacturacion = await prisma.practica.findFirst({
-      where: {
-        puestoNumero,
-        ordenNumero: numero,
-        OR: [{ estado: 'A' }, { estado: null }],
-      },
-      select: { id: true },
-    })
-
-    if (existeFacturacion) {
-      return { error: 'Solo se pueden anular órdenes no facturadas' }
-    }
-
     await prisma.orden.update({
       where: { puestoNumero_numero: { puestoNumero, numero } },
       data: {

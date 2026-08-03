@@ -477,11 +477,7 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
     ...p,
     cantidad: Number(p.cantidad),
     importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
-    facturada:
-      p.puestoNumero != null &&
-      p.ordenNumero != null &&
-      Number(p.puestoNumero) > 0 &&
-      ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`),
+    facturada: (p.estado ?? '').trim().toUpperCase() === 'F',
     usuario: p.usuarioRegistro,
     descripcionPractica: (() => {
       const key = `${p.convenioId}:${p.codigoPractica.trim()}`
@@ -642,11 +638,7 @@ export async function obtenerPracticasIngresoPorId(
     ...p,
     cantidad: Number(p.cantidad),
     importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
-    facturada:
-      p.puestoNumero != null &&
-      p.ordenNumero != null &&
-      Number(p.puestoNumero) > 0 &&
-      ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`),
+    facturada: (p.estado ?? '').trim().toUpperCase() === 'F',
     usuario: p.usuarioRegistro,
     descripcionPractica: (() => {
       const key = `${p.convenioId}:${p.codigoPractica.trim()}`

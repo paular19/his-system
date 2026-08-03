@@ -224,8 +224,7 @@ function practicaActiva(estado: string | null | undefined): boolean {
 }
 
 function practicaFacturada(practica: PracticaItem): boolean {
-    if (typeof practica.facturada === 'boolean') return practica.facturada
-    return Boolean((practica.puestoNumero ?? 0) > 0 && (practica.ordenNumero ?? 0) > 0)
+    return Boolean(practica.facturada)
 }
 
 function descripcionParaMostrar(practica: Pick<PracticaItem, 'descripcionPractica' | 'codigoPractica'>): string {

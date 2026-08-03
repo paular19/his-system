@@ -121,8 +121,7 @@ type PracticaEditDraft = {
 }
 
 function practicaFacturada(practica: PracticaItem): boolean {
-    if (typeof practica.facturada === 'boolean') return practica.facturada
-    return Boolean((practica.puestoNumero ?? 0) > 0 && (practica.ordenNumero ?? 0) > 0)
+    return Boolean(practica.facturada)
 }
 
 function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {

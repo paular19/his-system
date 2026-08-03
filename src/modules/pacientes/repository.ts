@@ -291,10 +291,24 @@ export async function buscarPacientes(
         { historiaClinica: num },
       ]
     } else {
-      where.OR = [
-        { apellido: { contains: q, mode: 'insensitive' } },
-        { nombre: { contains: q, mode: 'insensitive' } },
-      ]
+      const tokens = q
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+
+      const construirCondicionTexto = (texto: string): Prisma.PacienteWhereInput => ({
+        OR: [
+          { apellido: { contains: texto, mode: 'insensitive' } },
+          { nombre: { contains: texto, mode: 'insensitive' } },
+          { nombreCompleto: { contains: texto, mode: 'insensitive' } },
+        ],
+      })
+
+      if (tokens.length <= 1) {
+        where.OR = construirCondicionTexto(q).OR
+      } else {
+        where.AND = tokens.map((token) => construirCondicionTexto(token))
+      }
     }
   }
 

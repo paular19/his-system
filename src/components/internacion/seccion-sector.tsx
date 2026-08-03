@@ -73,7 +73,7 @@ export function SeccionSector({ sector, soloOcupadas = false }: SeccionSectorPro
                 : 'Sin camas registradas en este sector'}
             </p>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 pt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pt-3">
               {camasVisibles.map((cama) => (
                 <div
                   key={cama.id}

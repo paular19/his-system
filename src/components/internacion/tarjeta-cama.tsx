@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { BedDouble, User, Clock, Wrench } from 'lucide-react'
 import type { CamaConOcupante } from '@/modules/internacion/types'
-import { diferenciaDiasCalendarioArgentina } from '@/lib/utils/argentina-date'
+import { formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 interface TarjetaCamaProps {
   cama: CamaConOcupante
@@ -28,12 +28,15 @@ const ESTADO_DOT: Record<string, string> = {
   MANTENIMIENTO: 'bg-gray-400',
 }
 
-function diasInternado(fechaIngreso: Date | null): string {
-  if (!fechaIngreso) return ''
-  const dias = diferenciaDiasCalendarioArgentina(fechaIngreso, new Date())
-  if (dias === null || dias <= 0) return 'Hoy'
-  if (dias === 1) return '1 día'
-  return `${dias} días`
+function formatearIngreso(fechaIngreso: Date | null): string {
+  if (!fechaIngreso) return '—'
+  return formatearFechaHoraArgentina(fechaIngreso, {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 export function TarjetaCama({ cama }: TarjetaCamaProps) {
@@ -44,7 +47,7 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
   const contenido = (
     <div
       className={`
-        relative border rounded-lg p-2.5 cursor-pointer transition-colors min-h-20
+        relative border rounded-lg p-3 cursor-pointer transition-colors min-h-36
         flex flex-col gap-0.5 ${estiloCard}
       `}
     >
@@ -68,7 +71,7 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
       )}
 
       {cama.estado === 'OCUPADA' && cama.ocupante && (
-        <div className="mt-auto space-y-0.5">
+        <div className="mt-auto space-y-1">
           <div className="flex items-start gap-1">
             <User className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${estiloTexto}`} />
             <span className="text-xs font-medium text-gray-800 leading-tight line-clamp-2">
@@ -80,12 +83,23 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
               {cama.ocupante.obraSocialNombre}
             </p>
           )}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 text-[11px] text-gray-600">
             <Clock className="h-3 w-3 text-gray-400" />
-            <span className="text-xs text-gray-500">
-              {diasInternado(cama.ocupante.fechaIngreso)}
+            <span className="line-clamp-1">
+              {formatearIngreso(cama.ocupante.fechaIngreso)}
             </span>
-            <span className="text-xs text-gray-400 ml-auto">
+          </div>
+          <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
+            Tratante: {cama.ocupante.profesionalTratanteNombre ?? '—'}
+          </p>
+          <p className="text-[11px] text-gray-600 leading-tight line-clamp-2">
+            Dx: {cama.ocupante.diagnostico?.trim() || '—'}
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-gray-600">
+              Coseguro: {cama.ocupante.tieneCoseguro ? 'Si' : 'No'}
+            </span>
+            <span className="text-[11px] text-gray-400 shrink-0">
               #{cama.ocupante.numeroIngreso}
             </span>
           </div>
@@ -93,7 +107,7 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
       )}
 
       {cama.estado === 'RESERVADA' && cama.ocupante && (
-        <div className="mt-auto space-y-0.5">
+        <div className="mt-auto space-y-1">
           <div className="flex items-start gap-1">
             <User className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${estiloTexto}`} />
             <span className="text-xs font-medium text-gray-800 leading-tight line-clamp-2">
@@ -105,10 +119,23 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
               {cama.ocupante.obraSocialNombre}
             </p>
           )}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 text-[11px] text-gray-600">
             <Clock className="h-3 w-3 text-gray-400" />
-            <span className="text-xs text-gray-500">Reserva</span>
-            <span className="text-xs text-gray-400 ml-auto">
+            <span className="line-clamp-1">
+              {formatearIngreso(cama.ocupante.fechaIngreso)}
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
+            Tratante: {cama.ocupante.profesionalTratanteNombre ?? '—'}
+          </p>
+          <p className="text-[11px] text-gray-600 leading-tight line-clamp-2">
+            Dx: {cama.ocupante.diagnostico?.trim() || '—'}
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-gray-600">
+              Coseguro: {cama.ocupante.tieneCoseguro ? 'Si' : 'No'}
+            </span>
+            <span className="text-[11px] text-gray-400 shrink-0">
               #{cama.ocupante.numeroIngreso}
             </span>
           </div>

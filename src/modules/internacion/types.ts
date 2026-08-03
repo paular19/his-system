@@ -44,6 +44,9 @@ export interface OcupanteCama {
   numeroIngreso: number
   nombre: string
   fechaIngreso: Date | null
+  profesionalTratanteNombre: string | null
+  diagnostico: string | null
+  tieneCoseguro: boolean
   obraSocialId: number | null
   obraSocialNombre: string | null
 }
@@ -81,6 +84,8 @@ export interface InternacionListItem {
   fechaIngreso: Date | null
   fechaEgresoPrevista: Date | null
   estado: string | null
+  descripcionPatologia: string | null
+  tieneCoseguro: boolean
   cama: {
     id: number
     identificador: string

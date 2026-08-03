@@ -22,6 +22,7 @@ import {
   claveDiaArgentina,
   fechaDesdeClaveArgentina,
   formatearFechaArgentina,
+  formatearFechaHoraArgentina,
 } from '@/lib/utils/argentina-date'
 
 export const metadata: Metadata = { title: 'Internación — Mapa de Camas' }
@@ -186,8 +187,8 @@ export default async function InternacionPage({ searchParams }: PageProps) {
               <p className="text-sm text-gray-500">No hay internaciones activas</p>
             </div>
           ) : (
-            <div className="his-card overflow-hidden ips-print-table">
-              <table className="w-full text-sm">
+            <div className="his-card overflow-x-auto ips-print-table">
+              <table className="w-full text-sm min-w-[980px]">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -196,14 +197,20 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Cama
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Ingreso
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Médico tratante
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
-                      Obra social
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Diagnóstico
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
-                      Ingreso
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Coseguro
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Obra social
                     </th>
                   </tr>
                 </thead>
@@ -240,23 +247,44 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 hidden sm:table-cell text-gray-700">
-                        {item.profesionalTratante?.nombre ?? (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell text-gray-700">
-                        {item.obraSocial?.nombre ?? <span className="text-gray-400">—</span>}
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
+                      <td className="px-4 py-3">
                         {item.fechaIngreso ? (
                           <div className="flex items-center gap-1 text-gray-600">
                             <Calendar className="h-3.5 w-3.5" />
-                            {formatearFechaArgentina(item.fechaIngreso)}
+                            {formatearFechaHoraArgentina(item.fechaIngreso, {
+                              weekday: 'short',
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
                           </div>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {item.profesionalTratante?.nombre ?? (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 max-w-[320px]">
+                        <p className="line-clamp-2 leading-tight">
+                          {item.descripcionPatologia?.trim() || '—'}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${item.tieneCoseguro
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-gray-100 text-gray-700'
+                            }`}
+                        >
+                          {item.tieneCoseguro ? 'Si' : 'No'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {item.obraSocial?.nombre ?? <span className="text-gray-400">—</span>}
                       </td>
                     </tr>
                   ))}

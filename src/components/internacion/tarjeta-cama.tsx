@@ -47,113 +47,101 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
   const contenido = (
     <div
       className={`
-        relative border rounded-lg p-3 cursor-pointer transition-colors min-h-36
-        flex flex-col gap-0.5 ${estiloCard}
+        relative border rounded-lg px-3 py-2 cursor-pointer transition-colors
+        ${estiloCard}
       `}
     >
-      {/* Header: ID + estado */}
-      <div className="flex items-center justify-between">
-        <span className="font-bold text-sm text-gray-900">{cama.identificador}</span>
-        <span className={`w-2.5 h-2.5 rounded-full ${estiloDot}`} />
+      <div className="flex items-start gap-3">
+        <div className="w-20 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-sm text-gray-900">{cama.identificador}</span>
+            <span className={`w-2.5 h-2.5 rounded-full ${estiloDot}`} />
+          </div>
+          {cama.habitacion && (
+            <span className="text-xs text-gray-500">Hab. {cama.habitacion}</span>
+          )}
+        </div>
+
+        {cama.estado === 'DISPONIBLE' && (
+          <div className="flex items-center gap-1 min-h-8">
+            <BedDouble className={`h-4 w-4 ${estiloTexto}`} />
+            <span className={`text-xs font-medium ${estiloTexto}`}>Disponible</span>
+          </div>
+        )}
+
+        {cama.estado === 'OCUPADA' && cama.ocupante && (
+          <>
+            <div className="min-w-0 flex-1 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-x-3 gap-y-0.5">
+              <div className="flex items-start gap-1 min-w-0">
+                <User className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${estiloTexto}`} />
+                <span className="text-xs font-medium text-gray-800 leading-tight line-clamp-1">
+                  {cama.ocupante.nombre}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
+                {cama.ocupante.obraSocialNombre ?? '—'}
+              </p>
+              <div className="flex items-center gap-1 text-[11px] text-gray-600 min-w-0">
+                <Clock className="h-3 w-3 text-gray-400 shrink-0" />
+                <span className="line-clamp-1">{formatearIngreso(cama.ocupante.fechaIngreso)}</span>
+              </div>
+              <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
+                Tratante: {cama.ocupante.profesionalTratanteNombre ?? '—'}
+              </p>
+              <p className="text-[11px] text-gray-600 leading-tight line-clamp-1 lg:col-span-2 xl:col-span-2">
+                Dx: {cama.ocupante.diagnostico?.trim() || '—'}
+              </p>
+              <p className="text-[11px] text-gray-600 leading-tight">
+                Coseguro: {cama.ocupante.tieneCoseguro ? 'Si' : 'No'}
+              </p>
+            </div>
+            <span className="text-[11px] text-gray-400 shrink-0">#{cama.ocupante.numeroIngreso}</span>
+          </>
+        )}
+
+        {cama.estado === 'RESERVADA' && cama.ocupante && (
+          <>
+            <div className="min-w-0 flex-1 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-x-3 gap-y-0.5">
+              <div className="flex items-start gap-1 min-w-0">
+                <User className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${estiloTexto}`} />
+                <span className="text-xs font-medium text-gray-800 leading-tight line-clamp-1">
+                  {cama.ocupante.nombre}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
+                {cama.ocupante.obraSocialNombre ?? '—'}
+              </p>
+              <div className="flex items-center gap-1 text-[11px] text-gray-600 min-w-0">
+                <Clock className="h-3 w-3 text-gray-400 shrink-0" />
+                <span className="line-clamp-1">{formatearIngreso(cama.ocupante.fechaIngreso)}</span>
+              </div>
+              <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
+                Tratante: {cama.ocupante.profesionalTratanteNombre ?? '—'}
+              </p>
+              <p className="text-[11px] text-gray-600 leading-tight line-clamp-1 lg:col-span-2 xl:col-span-2">
+                Dx: {cama.ocupante.diagnostico?.trim() || '—'}
+              </p>
+              <p className="text-[11px] text-gray-600 leading-tight">
+                Coseguro: {cama.ocupante.tieneCoseguro ? 'Si' : 'No'}
+              </p>
+            </div>
+            <span className="text-[11px] text-gray-400 shrink-0">#{cama.ocupante.numeroIngreso}</span>
+          </>
+        )}
+
+        {cama.estado === 'RESERVADA' && !cama.ocupante && (
+          <div className="flex items-center gap-1 min-h-8">
+            <span className={`text-xs font-medium ${estiloTexto}`}>Reservada</span>
+          </div>
+        )}
+
+        {cama.estado === 'MANTENIMIENTO' && (
+          <div className="flex items-center gap-1 min-h-8">
+            <Wrench className={`h-3.5 w-3.5 ${estiloTexto}`} />
+            <span className={`text-xs font-medium ${estiloTexto}`}>Mantenimiento</span>
+          </div>
+        )}
       </div>
-
-      {/* Habitación */}
-      {cama.habitacion && (
-        <span className="text-xs text-gray-500">Hab. {cama.habitacion}</span>
-      )}
-
-      {/* Contenido según estado */}
-      {cama.estado === 'DISPONIBLE' && (
-        <div className="flex items-center gap-1 mt-auto">
-          <BedDouble className={`h-4 w-4 ${estiloTexto}`} />
-          <span className={`text-xs font-medium ${estiloTexto}`}>Disponible</span>
-        </div>
-      )}
-
-      {cama.estado === 'OCUPADA' && cama.ocupante && (
-        <div className="mt-auto space-y-1">
-          <div className="flex items-start gap-1">
-            <User className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${estiloTexto}`} />
-            <span className="text-xs font-medium text-gray-800 leading-tight line-clamp-2">
-              {cama.ocupante.nombre}
-            </span>
-          </div>
-          {cama.ocupante.obraSocialNombre && (
-            <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
-              {cama.ocupante.obraSocialNombre}
-            </p>
-          )}
-          <div className="flex items-center gap-1 text-[11px] text-gray-600">
-            <Clock className="h-3 w-3 text-gray-400" />
-            <span className="line-clamp-1">
-              {formatearIngreso(cama.ocupante.fechaIngreso)}
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
-            Tratante: {cama.ocupante.profesionalTratanteNombre ?? '—'}
-          </p>
-          <p className="text-[11px] text-gray-600 leading-tight line-clamp-2">
-            Dx: {cama.ocupante.diagnostico?.trim() || '—'}
-          </p>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] text-gray-600">
-              Coseguro: {cama.ocupante.tieneCoseguro ? 'Si' : 'No'}
-            </span>
-            <span className="text-[11px] text-gray-400 shrink-0">
-              #{cama.ocupante.numeroIngreso}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {cama.estado === 'RESERVADA' && cama.ocupante && (
-        <div className="mt-auto space-y-1">
-          <div className="flex items-start gap-1">
-            <User className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${estiloTexto}`} />
-            <span className="text-xs font-medium text-gray-800 leading-tight line-clamp-2">
-              {cama.ocupante.nombre}
-            </span>
-          </div>
-          {cama.ocupante.obraSocialNombre && (
-            <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
-              {cama.ocupante.obraSocialNombre}
-            </p>
-          )}
-          <div className="flex items-center gap-1 text-[11px] text-gray-600">
-            <Clock className="h-3 w-3 text-gray-400" />
-            <span className="line-clamp-1">
-              {formatearIngreso(cama.ocupante.fechaIngreso)}
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-600 leading-tight line-clamp-1">
-            Tratante: {cama.ocupante.profesionalTratanteNombre ?? '—'}
-          </p>
-          <p className="text-[11px] text-gray-600 leading-tight line-clamp-2">
-            Dx: {cama.ocupante.diagnostico?.trim() || '—'}
-          </p>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] text-gray-600">
-              Coseguro: {cama.ocupante.tieneCoseguro ? 'Si' : 'No'}
-            </span>
-            <span className="text-[11px] text-gray-400 shrink-0">
-              #{cama.ocupante.numeroIngreso}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {cama.estado === 'RESERVADA' && !cama.ocupante && (
-        <div className="flex items-center gap-1 mt-auto">
-          <span className={`text-xs font-medium ${estiloTexto}`}>Reservada</span>
-        </div>
-      )}
-
-      {cama.estado === 'MANTENIMIENTO' && (
-        <div className="flex items-center gap-1 mt-auto">
-          <Wrench className={`h-3.5 w-3.5 ${estiloTexto}`} />
-          <span className={`text-xs font-medium ${estiloTexto}`}>Mantenimiento</span>
-        </div>
-      )}
     </div>
   )
 

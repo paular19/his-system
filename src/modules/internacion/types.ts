@@ -44,6 +44,8 @@ export interface OcupanteCama {
   numeroIngreso: number
   nombre: string
   fechaIngreso: Date | null
+  numeroDocumento: number | null
+  historiaClinica: number | null
   profesionalTratanteNombre: string | null
   diagnostico: string | null
   tieneCoseguro: boolean

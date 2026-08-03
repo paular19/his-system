@@ -94,9 +94,54 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   const puedeCrear = tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
   const hayFiltros = Boolean(q || obraSocialIdFiltro)
   const mostrarSoloOcupadas = Boolean(obraSocialIdFiltro)
-  const sectoresMapa = mostrarSoloOcupadas
-    ? mapa.sectores.filter((sector) => sector.camas.some((cama) => cama.estado === 'OCUPADA'))
+  const qNormalizado = q
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+
+  const sectoresFiltradosPorBusqueda = qNormalizado
+    ? mapa.sectores
+      .map((sector) => {
+        const camasFiltradas = sector.camas.filter((cama) => {
+          const ocupante = cama.ocupante
+          if (!ocupante) return false
+
+          const camposBusqueda = [
+            ocupante.nombre,
+            ocupante.obraSocialNombre ?? '',
+            ocupante.profesionalTratanteNombre ?? '',
+            ocupante.diagnostico ?? '',
+            String(ocupante.numeroIngreso),
+            ocupante.numeroDocumento != null ? String(ocupante.numeroDocumento) : '',
+            ocupante.historiaClinica != null ? String(ocupante.historiaClinica) : '',
+          ]
+
+          return camposBusqueda.some((valor) =>
+            valor
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .toLowerCase()
+              .includes(qNormalizado)
+          )
+        })
+
+        return {
+          ...sector,
+          total: camasFiltradas.length,
+          disponibles: camasFiltradas.filter((c) => c.estado === 'DISPONIBLE').length,
+          ocupadas: camasFiltradas.filter((c) => c.estado === 'OCUPADA').length,
+          reservadas: camasFiltradas.filter((c) => c.estado === 'RESERVADA').length,
+          mantenimiento: camasFiltradas.filter((c) => c.estado === 'MANTENIMIENTO').length,
+          camas: camasFiltradas,
+        }
+      })
+      .filter((sector) => sector.camas.length > 0)
     : mapa.sectores
+
+  const sectoresMapa = mostrarSoloOcupadas
+    ? sectoresFiltradosPorBusqueda.filter((sector) => sector.camas.some((cama) => cama.estado === 'OCUPADA'))
+    : sectoresFiltradosPorBusqueda
 
   return (
     <>
@@ -146,7 +191,9 @@ export default async function InternacionPage({ searchParams }: PageProps) {
         <div className="space-y-4 print:hidden">
           {sectoresMapa.length === 0 ? (
             <div className="his-card p-6 text-center text-sm text-gray-500">
-              No hay camas ocupadas para la obra social seleccionada.
+              {q
+                ? 'No hay camas que coincidan con la búsqueda aplicada.'
+                : 'No hay camas ocupadas para la obra social seleccionada.'}
             </div>
           ) : (
             sectoresMapa.map((sector) => (

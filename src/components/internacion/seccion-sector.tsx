@@ -63,7 +63,7 @@ export function SeccionSector({ sector, soloOcupadas = false }: SeccionSectorPro
         </div>
       </button>
 
-      {/* Grid de camas */}
+      {/* Listado de camas */}
       {expandido && (
         <div className="px-4 pb-3 border-t border-gray-100">
           {camasVisibles.length === 0 ? (
@@ -73,10 +73,11 @@ export function SeccionSector({ sector, soloOcupadas = false }: SeccionSectorPro
                 : 'Sin camas registradas en este sector'}
             </p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pt-3">
+            <div className="pt-3 space-y-2">
               {camasVisibles.map((cama) => (
                 <div
                   key={cama.id}
+                  className="w-full"
                   onContextMenu={(e) => {
                     // Click derecho para cambiar estado (no en camas ocupadas)
                     if (!soloOcupadas && cama.estado !== 'OCUPADA') {

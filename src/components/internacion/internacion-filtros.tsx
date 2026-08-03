@@ -59,7 +59,7 @@ export function InternacionFiltros({
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && aplicarFiltros()}
-                    placeholder="Nombre, apellido, DNI o N° ingreso"
+                    placeholder="Nombre, apellido, DNI, HC o N° ingreso"
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
             </div>

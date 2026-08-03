@@ -5,6 +5,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { prisma } from '@/lib/db'
 import { FichaQuirurgicaNotasCirujano } from '@/components/internacion/ficha-quirurgica-notas-cirujano'
 import { FichaQuirurgicaAltaCirugia } from '@/components/internacion/ficha-quirurgica-alta-cirugia'
+import { AnularFichaQuirurgicaButton } from '@/components/internacion/anular-ficha-quirurgica-button'
 import {
   formatearFechaArgentina,
   formatearFechaHoraArgentina,
@@ -256,9 +257,14 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
               <article id={`cirugia-${cirugia.id}`} key={cirugia.id} className="his-card p-4 print:p-0 space-y-3 print:space-y-0 break-inside-avoid print:border-none">
                 <div className="flex items-center justify-between gap-2 border-b pb-2 print:hidden">
                   <h3 className="text-sm font-semibold text-gray-900">Cirugia #{cirugia.id}</h3>
-                  <span className="text-xs text-gray-500">
-                    {fmtDate(cirugia.fechaCirugia)} {cirugia.horaCirugia ? `· ${cirugia.horaCirugia}` : ''}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">
+                      {fmtDate(cirugia.fechaCirugia)} {cirugia.horaCirugia ? `· ${cirugia.horaCirugia}` : ''}
+                    </span>
+                    {puedeCrearCirugia && (
+                      <AnularFichaQuirurgicaButton ingresoId={ingresoId} cirugiaId={cirugia.id} />
+                    )}
+                  </div>
                 </div>
 
                 <FichaQuirurgicaNotasCirujano

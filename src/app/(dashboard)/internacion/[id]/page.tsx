@@ -358,26 +358,20 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             {/* Columna central + derecha */}
                             <div className="lg:col-span-2 min-w-0 space-y-4">
                                 <div id="internacion-practicas">
-                                    {detalle.paciente ? (
-                                        <InternacionPanelClinicoLazy
-                                            ingresoId={ingresoId}
-                                            pacienteId={detalle.paciente.id}
-                                            convenioId={detalle.obraSocial?.id ?? null}
-                                            sectorInternacionActual={detalle.cama?.sector ?? null}
-                                            transferencias={detalle.transferencias}
-                                            puedeEditarPracticas={puedeEditarPracticas}
-                                            puedeCrearCirugia={puedeCrear}
-                                            obraSociales={obraSociales}
-                                            planes={planes}
-                                            coseguros={coseguros}
-                                            camasDisponibles={camasDisponiblesSimple}
-                                            matriculaTratanteDefault={matriculaTratanteDefault}
-                                        />
-                                    ) : (
-                                        <div className="his-card p-4 text-sm text-gray-500">
-                                            No hay paciente asociado para mostrar panel clinico.
-                                        </div>
-                                    )}
+                                    <InternacionPanelClinicoLazy
+                                        ingresoId={ingresoId}
+                                        pacienteId={detalle.paciente?.id ?? null}
+                                        convenioId={detalle.obraSocial?.id ?? null}
+                                        sectorInternacionActual={detalle.cama?.sector ?? null}
+                                        transferencias={detalle.transferencias}
+                                        puedeEditarPracticas={puedeEditarPracticas}
+                                        puedeCrearCirugia={puedeCrear && Boolean(detalle.paciente?.id)}
+                                        obraSociales={obraSociales}
+                                        planes={planes}
+                                        coseguros={coseguros}
+                                        camasDisponibles={camasDisponiblesSimple}
+                                        matriculaTratanteDefault={matriculaTratanteDefault}
+                                    />
                                 </div>
 
                                 <ViasSection

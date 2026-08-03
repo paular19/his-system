@@ -195,7 +195,7 @@ function siglasIncluidasPracticaCirugia(
 
 interface CirugiaUrgenciaSectionProps {
     ingresoId: number
-    pacienteId: number
+    pacienteId: number | null
     sectorInternacionActual?: string | null
     sectorPorPracticaId?: Record<number, SectorPracticaFiltro>
     puedeCrear: boolean
@@ -240,6 +240,7 @@ export function CirugiaUrgenciaSection({
     const [paginaPendientesPorCirugia, setPaginaPendientesPorCirugia] = useState<Record<number, number>>({})
     const [paginaOrdenesGeneradasPorCirugia, setPaginaOrdenesGeneradasPorCirugia] = useState<Record<number, number>>({})
     const [eliminandoPracticaCirugiaId, setEliminandoPracticaCirugiaId] = useState<number | null>(null)
+    const [anulandoCirugiaId, setAnulandoCirugiaId] = useState<number | null>(null)
     const [anulandoOrdenGrupoKey, setAnulandoOrdenGrupoKey] = useState<string | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [practicaEditando, setPracticaEditando] = useState<{
@@ -765,7 +766,57 @@ export function CirugiaUrgenciaSection({
         }
     }
 
+    const anularFichaQuirurgica = async (cirugiaId: number) => {
+        const cirugia = cirugias.find((item) => item.id === cirugiaId) ?? null
+        const totalPracticas = cirugia?.practicas.length ?? 0
+
+        if (typeof window !== 'undefined') {
+            const confirmar = window.confirm(
+                totalPracticas > 0
+                    ? `Se anulará la ficha quirúrgica ${cirugiaId}. Si tiene prácticas pendientes sin orden/autorización, también se anularán. ¿Desea continuar?`
+                    : `Se anulará la ficha quirúrgica ${cirugiaId}. ¿Desea continuar?`
+            )
+            if (!confirmar) return
+        }
+
+        setError(null)
+        setAnulandoCirugiaId(cirugiaId)
+        try {
+            const res = await fetch(`/api/internacion/${ingresoId}/cirugias/${cirugiaId}`, {
+                method: 'DELETE',
+                cache: 'no-store',
+            })
+
+            const json = await res.json().catch(() => null)
+            if (!res.ok) {
+                setError(json?.error ?? 'No se pudo anular la ficha quirúrgica')
+                return
+            }
+
+            const idsPracticasCirugia = new Set((cirugia?.practicas ?? []).map((practica) => practica.id))
+            setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => !idsPracticasCirugia.has(id)))
+
+            setCirugiasAbiertas((prev) => {
+                if (!(cirugiaId in prev)) return prev
+                const next = { ...prev }
+                delete next[cirugiaId]
+                return next
+            })
+
+            refreshInBackground()
+        } catch {
+            setError('Error de conexión al anular la ficha quirúrgica')
+        } finally {
+            setAnulandoCirugiaId(null)
+        }
+    }
+
     const iniciarNuevaCirugia = async () => {
+        if (!pacienteId) {
+            setError('No hay paciente asociado para crear una nueva cirugia')
+            return
+        }
+
         setError(null)
         setCreandoCirugia(true)
 
@@ -1071,6 +1122,21 @@ export function CirugiaUrgenciaSection({
                                                     >
                                                         Agregar practica
                                                     </Link>
+                                                )}
+                                                {puedeCrear && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void anularFichaQuirurgica(c.id)}
+                                                        disabled={anulandoCirugiaId === c.id}
+                                                        className="inline-flex items-center gap-1 text-xs font-medium text-red-700 border border-red-200 rounded-md px-2 py-1 hover:bg-red-50 disabled:opacity-60"
+                                                    >
+                                                        {anulandoCirugiaId === c.id ? (
+                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                        ) : (
+                                                            <Ban className="h-3.5 w-3.5" />
+                                                        )}
+                                                        {anulandoCirugiaId === c.id ? 'Anulando...' : 'Anular ficha'}
+                                                    </button>
                                                 )}
                                                 <Link
                                                     href={`/dashboard/internacion/${ingresoId}/ficha-quirurgica#cirugia-${c.id}`}

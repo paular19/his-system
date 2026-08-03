@@ -114,7 +114,7 @@ type PracticaEspejoApi = {
 
 interface InternacionPanelClinicoLazyProps {
   ingresoId: number
-  pacienteId: number
+  pacienteId: number | null
   convenioId: number | null
   sectorInternacionActual: string | null
   transferencias: TransferenciaLite[]

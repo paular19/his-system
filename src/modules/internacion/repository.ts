@@ -206,6 +206,10 @@ async function mapearCamaConOcupante(
       descripcionPatologia: string | null
       obraSocialCoseguroId: number | null
       obraSocialId: number | null
+      paciente: {
+        numeroDocumento: number | null
+        historiaClinica: number | null
+      } | null
       profesionalTratante: { nombre: string } | null
       obraSocial: { nombre: string } | null
     }>
@@ -266,6 +270,8 @@ async function mapearCamaConOcupante(
         numeroIngreso: ingresoParaMostrar.numeroIngreso,
         nombre: ingresoParaMostrar.nombre ?? 'Sin nombre',
         fechaIngreso: ingresoParaMostrar.fechaIngreso,
+        numeroDocumento: ingresoParaMostrar.paciente?.numeroDocumento ?? null,
+        historiaClinica: ingresoParaMostrar.paciente?.historiaClinica ?? null,
         profesionalTratanteNombre: ingresoParaMostrar.profesionalTratante?.nombre ?? null,
         diagnostico: ingresoParaMostrar.descripcionPatologia ?? null,
         tieneCoseguro: Boolean(ingresoParaMostrar.obraSocialCoseguroId),
@@ -290,6 +296,7 @@ export async function obtenerTodasLasCamas(fechaReferencia?: Date, obraSocialIdF
           descripcionPatologia: true,
           obraSocialCoseguroId: true,
           obraSocialId: true,
+          paciente: { select: { numeroDocumento: true, historiaClinica: true } },
           profesionalTratante: { select: { nombre: true } },
           obraSocial: { select: { nombre: true } },
         },
@@ -345,6 +352,7 @@ export async function obtenerCamaPorId(id: number): Promise<CamaConOcupante | nu
           descripcionPatologia: true,
           obraSocialCoseguroId: true,
           obraSocialId: true,
+          paciente: { select: { numeroDocumento: true, historiaClinica: true } },
           profesionalTratante: { select: { nombre: true } },
           obraSocial: { select: { nombre: true } },
         },
@@ -375,6 +383,7 @@ export async function obtenerCamasDisponibles(sector?: string): Promise<CamaConO
           descripcionPatologia: true,
           obraSocialCoseguroId: true,
           obraSocialId: true,
+          paciente: { select: { numeroDocumento: true, historiaClinica: true } },
           profesionalTratante: { select: { nombre: true } },
           obraSocial: { select: { nombre: true } },
         },
@@ -433,6 +442,7 @@ export async function obtenerInternacionesActivas(
         { numeroIngreso: num },
         { nombre: { contains: q, mode: 'insensitive' } },
         { paciente: { numeroDocumento: num } },
+        { paciente: { historiaClinica: num } },
       ]
     } else {
       where.OR = [
@@ -2012,6 +2022,143 @@ export async function crearCirugiaSimpleConDescripcion(
       cantidad: Number(p.cantidad),
     })),
   } as CirugiaUrgenciaItem
+}
+
+export async function anularCirugiaInternacionNoAutorizada(
+  ingresoId: number,
+  cirugiaId: number,
+  usuario: string
+): Promise<{ id: number; ingresoId: number; practicasAnuladas: number }> {
+  return prisma.$transaction(async (tx) => {
+    const cirugia = await tx.cirugiaProgramada.findFirst({
+      where: {
+        id: cirugiaId,
+        internacionId: ingresoId,
+      },
+      select: {
+        id: true,
+        internacionId: true,
+        fechaCirugia: true,
+        practicas: {
+          select: {
+            id: true,
+            codigo: true,
+            numeroAutorizacion: true,
+          },
+        },
+      },
+    })
+
+    if (!cirugia) {
+      throw new Error('Ficha quirúrgica no encontrada para la internación indicada')
+    }
+
+    const practicasAutorizadas = cirugia.practicas.filter(
+      (practica) => normalizarNumeroAutorizacion(practica.numeroAutorizacion) != null
+    )
+
+    if (practicasAutorizadas.length > 0) {
+      throw new Error('No se puede anular una ficha quirúrgica con prácticas autorizadas')
+    }
+
+    const codigosPractica = Array.from(
+      new Set(
+        cirugia.practicas
+          .map((practica) => practica.codigo.trim())
+          .filter((codigo) => codigo.length > 0)
+      )
+    )
+
+    const candidatasInternacion = codigosPractica.length > 0
+      ? await tx.practica.findMany({
+        where: {
+          ingresoId,
+          usuarioRegistro: USUARIO_REGISTRO_CIRUGIA,
+          OR: [{ estado: 'A' }, { estado: null }],
+          AND: [{ OR: codigosPractica.map((codigo) => ({ codigoPractica: { startsWith: codigo } })) }],
+        },
+        orderBy: { id: 'desc' },
+        select: {
+          id: true,
+          fecha: true,
+          codigoPractica: true,
+          numeroAutorizacion: true,
+          puestoNumero: true,
+          ordenNumero: true,
+          ordenPractica: {
+            where: {
+              orden: {
+                NOT: { estado: 'X' },
+              },
+            },
+            select: {
+              item: true,
+            },
+          },
+        },
+      })
+      : []
+
+    const diaCirugia = claveDiaArgentina(cirugia.fechaCirugia)
+    const setCodigos = new Set(codigosPractica)
+    const practicassMismoDia = candidatasInternacion.filter((practica) => {
+      const codigoTrim = practica.codigoPractica.trim()
+      if (![...setCodigos].some((codigo) => codigoTrim.startsWith(codigo))) return false
+      return claveDiaArgentina(practica.fecha) === diaCirugia
+    })
+
+    for (const practica of practicassMismoDia) {
+      if (normalizarNumeroAutorizacion(practica.numeroAutorizacion)) {
+        throw new Error('No se puede anular la ficha quirúrgica porque hay prácticas autorizadas')
+      }
+
+      if ((practica.ordenPractica?.length ?? 0) > 0) {
+        throw new Error('No se puede anular la ficha quirúrgica porque hay prácticas con orden generada')
+      }
+
+      if (
+        practica.puestoNumero != null &&
+        practica.ordenNumero != null &&
+        Number(practica.puestoNumero) > 0
+      ) {
+        const ordenActiva = await tx.orden.findFirst({
+          where: {
+            ingresoId,
+            puestoNumero: Number(practica.puestoNumero),
+            numero: Number(practica.ordenNumero),
+            NOT: { estado: 'X' },
+          },
+          select: { numero: true },
+        })
+
+        if (ordenActiva) {
+          throw new Error('No se puede anular la ficha quirúrgica porque hay prácticas con orden activa')
+        }
+      }
+    }
+
+    const idsParaAnular = practicassMismoDia.map((practica) => practica.id)
+
+    if (idsParaAnular.length > 0) {
+      await tx.practica.updateMany({
+        where: { id: { in: idsParaAnular } },
+        data: {
+          estado: 'X',
+          numeroAutorizacion: null,
+          fechaUsuario: new Date(),
+          usuarioRegistro: usuario.trim().slice(0, 10) || 'SISTEMA',
+        },
+      })
+    }
+
+    await tx.cirugiaProgramada.delete({ where: { id: cirugia.id } })
+
+    return {
+      id: cirugia.id,
+      ingresoId,
+      practicasAnuladas: idsParaAnular.length,
+    }
+  }, { timeout: 30000, maxWait: 10000 })
 }
 
 export async function guardarCondicionalCirugiaMultiple(

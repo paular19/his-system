@@ -429,6 +429,26 @@ export async function crearCirugiaSimpleConDescripcion(
   return cirugia
 }
 
+export async function anularCirugiaInternacionNoAutorizada(
+  ingresoId: number,
+  cirugiaId: number,
+  usuario: string,
+  ip?: string
+): Promise<{ id: number; ingresoId: number; practicasAnuladas: number }> {
+  const resultado = await repo.anularCirugiaInternacionNoAutorizada(ingresoId, cirugiaId, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'ELIMINAR',
+    entidad: 'CirugiaProgramada',
+    registroId: resultado.id,
+    detalle: `Ficha quirúrgica ${resultado.id} anulada en internación ${ingresoId}`,
+    direccionIp: ip,
+  })
+
+  return resultado
+}
+
 export async function guardarCondicionalCirugiaMultiple(
   data: GuardarCondicionalCirugiaMultipleInput,
   usuario: string,

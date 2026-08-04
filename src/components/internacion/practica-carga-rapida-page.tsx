@@ -1018,7 +1018,7 @@ export function PracticaCargaRapidaPage({
                         if (!tarea) return
 
                         try {
-                            const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
+                            const res = await fetch(`/api/internacion/${ingresoId}/practicas?skipRevalidate=1`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify(tarea.entrada.payload),

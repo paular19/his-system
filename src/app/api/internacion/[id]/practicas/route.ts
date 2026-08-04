@@ -28,13 +28,16 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
         const body = await req.json()
         const validado = CrearPracticaSchema.parse({ ...body, ingresoId })
+        const omitirRevalidacion = req.nextUrl.searchParams.get('skipRevalidate') === '1'
 
         const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? undefined
         const practica = await service.crearPractica(validado, usuario.codigoUsuario, ip ?? undefined)
 
-        revalidatePath(`/dashboard/admision/${ingresoId}`)
-        revalidatePath(`/dashboard/internacion/${ingresoId}`)
-        revalidatePath(`/dashboard/internacion/${ingresoId}/practicas`)
+        if (!omitirRevalidacion) {
+            revalidatePath(`/dashboard/admision/${ingresoId}`)
+            revalidatePath(`/dashboard/internacion/${ingresoId}`)
+            revalidatePath(`/dashboard/internacion/${ingresoId}/practicas`)
+        }
 
         return NextResponse.json({ data: practica }, { status: 201 })
     } catch (err) {

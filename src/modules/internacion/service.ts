@@ -313,7 +313,7 @@ export async function crearPractica(
 ): Promise<PracticaItem> {
   const practica = await repo.crearPractica(data, usuario)
 
-  await registrarAudit({
+  void registrarAudit({
     usuario,
     accion: 'CREAR',
     entidad: 'Practica',

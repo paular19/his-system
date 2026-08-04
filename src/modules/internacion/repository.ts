@@ -1005,7 +1005,13 @@ export async function crearPractica(
       convenioId: convenioResuelto,
       OR: [{ codigo }, { codigo: codigoTrim }],
     },
-    select: { codigo: true },
+    select: {
+      codigo: true,
+      valorEspecialista: true,
+      valorAyudante: true,
+      valorAnestesista: true,
+      valorGastos: true,
+    },
   })
 
   if (!nomencladorConvenio) {
@@ -1026,7 +1032,17 @@ export async function crearPractica(
       ingreso.obraSocial?.nombre,
       Boolean(ingreso.obraSocialCoseguroId)
     )
-    const valorPractica = await obtenerValorPractica(codigo.trim())
+
+    const valorDesdeNomenclador =
+      Number(nomencladorConvenio.valorEspecialista ?? 0) +
+      Number(nomencladorConvenio.valorAyudante ?? 0) +
+      Number(nomencladorConvenio.valorAnestesista ?? 0) +
+      Number(nomencladorConvenio.valorGastos ?? 0)
+
+    const valorPractica = valorDesdeNomenclador > 0
+      ? valorDesdeNomenclador
+      : await obtenerValorPractica(codigo.trim())
+
     if (valorPractica > 0) {
       const cobertura = calcularImporteFacturable(valorPractica, cantidad, regla)
       importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null

@@ -378,6 +378,7 @@ export function PracticaCargaRapidaPage({
     const [firmanteEditadoManualmente, setFirmanteEditadoManualmente] = useState(false)
     const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
     const [tareasGeneracionPendientes, setTareasGeneracionPendientes] = useState(0)
+    const [tareasGuardadoPendientes, setTareasGuardadoPendientes] = useState(0)
     const [practicaIdsEnGeneracion, setPracticaIdsEnGeneracion] = useState<number[]>([])
     const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(true)
     const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
@@ -413,9 +414,11 @@ export function PracticaCargaRapidaPage({
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
     const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
+    const colaGuardadoBackgroundRef = useRef<Promise<void>>(Promise.resolve())
     const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
 
     const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
+    const hayGuardadosEnBackground = tareasGuardadoPendientes > 0
 
     const protocoloSeleccionado = useMemo(
         () => PROTOCOLOS_PREDEFINIDOS.find((protocolo) => protocolo.id === protocoloSeleccionadoId) ?? null,
@@ -807,7 +810,97 @@ export function PracticaCargaRapidaPage({
         setGuardadasSesion((prev) => [...nuevas, ...prev])
     }
 
-    const handleGuardarPracticas = async (entradasCrear: PracticaCargaEntrada[]): Promise<GuardarPracticasResult> => {
+    const guardarPracticasInternacion = async (entradasCrear: PracticaCargaEntrada[]): Promise<GuardarPracticasResult> => {
+        try {
+            type ResultadoGuardadoPractica =
+                | { ok: true; idx: number; practica: PracticaItem }
+                | { ok: false; idx: number; error: string }
+
+            const tareas = entradasCrear.map((entrada, idx) => ({ entrada, idx }))
+            const resultados: ResultadoGuardadoPractica[] = new Array(tareas.length)
+            let cursor = 0
+
+            await Promise.all(
+                Array.from({ length: Math.min(CONCURRENCIA_GUARDADO_PRACTICAS, tareas.length) }, async () => {
+                    while (true) {
+                        const indiceActual = cursor
+                        const tarea = tareas[indiceActual]
+                        cursor += 1
+                        if (!tarea) return
+
+                        try {
+                            const res = await fetch(`/api/internacion/${ingresoId}/practicas?skipRevalidate=1&skipPrecioFallback=1`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(tarea.entrada.payload),
+                            })
+                            const json = await res.json().catch(() => null)
+
+                            if (!res.ok) {
+                                resultados[tarea.idx] = {
+                                    ok: false,
+                                    idx: tarea.idx,
+                                    error: json?.error ?? 'No se pudo registrar la practica',
+                                }
+                                continue
+                            }
+
+                            resultados[tarea.idx] = {
+                                ok: true,
+                                idx: tarea.idx,
+                                practica: json.data as PracticaItem,
+                            }
+                        } catch {
+                            resultados[tarea.idx] = {
+                                ok: false,
+                                idx: tarea.idx,
+                                error: 'Error de conexion al guardar practicas',
+                            }
+                        }
+                    }
+                })
+            )
+
+            const practicasCreadas: PracticaItem[] = []
+            const clasificacionesCreadas: Record<number, string> = {}
+
+            for (const resultado of resultados) {
+                if (!resultado?.ok) continue
+                practicasCreadas.push(resultado.practica)
+                clasificacionesCreadas[resultado.practica.id] = entradasCrear[resultado.idx]?.clasificacion ?? 'HE'
+            }
+
+            setPracticas((prev) => [...practicasCreadas, ...prev])
+            setClasificacionPorPracticaId((prev) => ({
+                ...prev,
+                ...clasificacionesCreadas,
+            }))
+            registrarGuardadasSesion(practicasCreadas, entradasCrear)
+
+            const primeraFalla = resultados.find((resultado) => resultado && !resultado.ok)
+            if (primeraFalla && !primeraFalla.ok) {
+                setMensajeError(primeraFalla.error)
+                return {
+                    ok: false,
+                    error: practicasCreadas.length > 0
+                        ? `Se guardaron ${practicasCreadas.length} prácticas y otras fallaron. ${primeraFalla.error}`
+                        : primeraFalla.error,
+                    practicaIds: practicasCreadas.map((practica) => practica.id),
+                }
+            }
+
+            return { ok: true, practicaIds: practicasCreadas.map((practica) => practica.id) }
+        } catch {
+            const mensaje = 'Error de conexion al guardar practicas'
+            setMensajeError(mensaje)
+            return { ok: false, error: mensaje }
+        }
+    }
+
+    const handleGuardarPracticas = async (
+        entradasCrear: PracticaCargaEntrada[],
+        options?: { background?: boolean }
+    ): Promise<GuardarPracticasResult> => {
         setMensajeError(null)
 
         if (contextoCirugia) {
@@ -1000,91 +1093,31 @@ export function PracticaCargaRapidaPage({
             }
         }
 
-        try {
-            type ResultadoGuardadoPractica =
-                | { ok: true; idx: number; practica: PracticaItem }
-                | { ok: false; idx: number; error: string }
+        if (options?.background) {
+            const cantidadEncolada = entradasCrear.length
+            setTareasGuardadoPendientes((prev) => prev + cantidadEncolada)
 
-            const tareas = entradasCrear.map((entrada, idx) => ({ entrada, idx }))
-            const resultados: ResultadoGuardadoPractica[] = new Array(tareas.length)
-            let cursor = 0
-
-            await Promise.all(
-                Array.from({ length: Math.min(CONCURRENCIA_GUARDADO_PRACTICAS, tareas.length) }, async () => {
-                    while (true) {
-                        const indiceActual = cursor
-                        const tarea = tareas[indiceActual]
-                        cursor += 1
-                        if (!tarea) return
-
-                        try {
-                            const res = await fetch(`/api/internacion/${ingresoId}/practicas?skipRevalidate=1&skipPrecioFallback=1`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(tarea.entrada.payload),
-                            })
-                            const json = await res.json().catch(() => null)
-
-                            if (!res.ok) {
-                                resultados[tarea.idx] = {
-                                    ok: false,
-                                    idx: tarea.idx,
-                                    error: json?.error ?? 'No se pudo registrar la practica',
-                                }
-                                continue
-                            }
-
-                            resultados[tarea.idx] = {
-                                ok: true,
-                                idx: tarea.idx,
-                                practica: json.data as PracticaItem,
-                            }
-                        } catch {
-                            resultados[tarea.idx] = {
-                                ok: false,
-                                idx: tarea.idx,
-                                error: 'Error de conexion al guardar practicas',
-                            }
-                        }
+            colaGuardadoBackgroundRef.current = colaGuardadoBackgroundRef.current
+                .catch(() => undefined)
+                .then(async () => {
+                    const resultado = await guardarPracticasInternacion(entradasCrear)
+                    if (!resultado.ok) {
+                        setMensajeError(resultado.error ?? 'No se pudo registrar la practica')
                     }
                 })
-            )
+                .finally(() => {
+                    setTareasGuardadoPendientes((prev) => Math.max(0, prev - cantidadEncolada))
+                })
 
-            const practicasCreadas: PracticaItem[] = []
-            const clasificacionesCreadas: Record<number, string> = {}
-
-            for (const resultado of resultados) {
-                if (!resultado?.ok) continue
-                practicasCreadas.push(resultado.practica)
-                clasificacionesCreadas[resultado.practica.id] = entradasCrear[resultado.idx]?.clasificacion ?? 'HE'
-            }
-
-            setPracticas((prev) => [...practicasCreadas, ...prev])
-            setClasificacionPorPracticaId((prev) => ({
-                ...prev,
-                ...clasificacionesCreadas,
-            }))
-            registrarGuardadasSesion(practicasCreadas, entradasCrear)
-
-            const primeraFalla = resultados.find((resultado) => resultado && !resultado.ok)
-            if (primeraFalla && !primeraFalla.ok) {
-                setMensajeError(primeraFalla.error)
-                return {
-                    ok: false,
-                    error: practicasCreadas.length > 0
-                        ? `Se guardaron ${practicasCreadas.length} prácticas y otras fallaron. ${primeraFalla.error}`
-                        : primeraFalla.error,
-                    practicaIds: practicasCreadas.map((practica) => practica.id),
-                }
-            }
-
-            return { ok: true, practicaIds: practicasCreadas.map((practica) => practica.id) }
-        } catch {
-            const mensaje = 'Error de conexion al guardar practicas'
-            setMensajeError(mensaje)
-            return { ok: false, error: mensaje }
+            return { ok: true }
         }
+
+        return guardarPracticasInternacion(entradasCrear)
     }
+
+    const handleGuardarPracticasModoRapido = async (
+        entradasCrear: PracticaCargaEntrada[]
+    ): Promise<GuardarPracticasResult> => handleGuardarPracticas(entradasCrear, { background: true })
 
     const alternarSeleccionPractica = (practicaId: number, checked: boolean) => {
         setPracticasSeleccionadas((prev) => {
@@ -2414,7 +2447,7 @@ export function PracticaCargaRapidaPage({
                             convenioId={convenioId}
                             sectorInternacionActual={sectorInternacionActual}
                             matriculaTratanteDefault={matriculaTratanteDefault}
-                            onGuardar={handleGuardarPracticas}
+                            onGuardar={handleGuardarPracticasModoRapido}
                             titulo={modoCirugia ? 'Carga rapida de practicas de cirugia' : 'Carga rapida de practicas'}
                             modoCargaRapida
                             autoFocusBusqueda
@@ -2591,6 +2624,12 @@ export function PracticaCargaRapidaPage({
                     {hayGeneracionesEnBackground && (
                         <p className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
                             Generando ordenes en segundo plano: {tareasGeneracionPendientes} tarea(s) en cola. Puedes seguir cargando practicas y encolando nuevas ordenes.
+                        </p>
+                    )}
+
+                    {hayGuardadosEnBackground && (
+                        <p className="rounded-lg border border-cyan-200 bg-cyan-50 p-2 text-xs text-cyan-800">
+                            Guardando practicas en segundo plano: {tareasGuardadoPendientes} item(s) en cola. Puedes seguir cargando sin esperar.
                         </p>
                     )}
 

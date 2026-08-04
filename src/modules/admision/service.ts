@@ -11,7 +11,7 @@ import type {
   MovimientoIngresoInput,
 } from './schemas'
 import type { IngresoConRelaciones, IngresoDetalle, IngresoListItem } from './types'
-import type { IngresoPatologia, MovimientoIngreso } from '@prisma/client'
+import type { IngresoPatologia, MovimientoIngreso, Prisma } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
 
 function normalizarNombreObraSocial(nombre: string): string {
@@ -732,10 +732,13 @@ export async function agregarPracticasIngresoRapido(
     )
   }
 
-  const obraSocialNombre = await obtenerNombreObraSocial(obraSocialId)
   const requiereCalculoImporte = practicasAgregar.some(
     (p) => !(p.importeTotal != null && p.importeTotal > 0)
   )
+
+  const obraSocialNombre = requiereCalculoImporte
+    ? await obtenerNombreObraSocial(obraSocialId)
+    : null
 
   const regla = requiereCalculoImporte
     ? resolverReglaFacturacion(obraSocialNombre, Boolean(ingreso.obraSocialCoseguroId))
@@ -782,6 +785,37 @@ export async function agregarPracticasIngresoRapido(
   const ahora = new Date()
   const usuarioNormalizado = usuario.slice(0, 10)
 
+  const practicasParaPersistir: Prisma.PracticaCreateManyInput[] = practicasAgregar.map((p) => {
+    let importeTotal = p.importeTotal != null && p.importeTotal > 0 ? p.importeTotal : null
+
+    if (importeTotal == null && regla) {
+      const clave = p.codigo.trim().toUpperCase()
+      const precio = valorNomenclador.get(clave) ?? 0
+      const cobertura = calcularImporteFacturable(precio, p.cantidad, regla)
+      importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null
+    }
+
+    return {
+      ingresoId: id,
+      convenioId: (p.convenioId ?? obraSocialId) as number,
+      codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
+      convenioValorId: 0,
+      fecha: ahora,
+      cantidad: p.cantidad,
+      numeroAutorizacion: normalizarNumeroAutorizacion(p.numeroAutorizacion),
+      matriculaEspecialista: p.matriculaEspecialista ?? null,
+      matriculaAnestesista: p.matriculaAnestesista ?? null,
+      obraSocialId,
+      planId,
+      facturable: true,
+      estado: 'A',
+      ordenItem: p.grupoOrden ?? null,
+      importeTotal,
+      usuarioRegistro: usuarioNormalizado,
+      fechaUsuario: ahora,
+    }
+  })
+
   const practicaIdsCreadas = await prisma.$transaction(async (tx) => {
     await tx.ingresoHistorial.create({
       data: {
@@ -798,44 +832,34 @@ export async function agregarPracticasIngresoRapido(
       select: { id: true },
     })
 
-    const ids: number[] = []
-    for (const p of practicasAgregar) {
-      let importeTotal = p.importeTotal != null && p.importeTotal > 0 ? p.importeTotal : null
+    type CreateManyAndReturnFn = (args: {
+      data: Prisma.PracticaCreateManyInput[]
+      select: { id: true }
+    }) => Promise<Array<{ id: number }>>
 
-      if (importeTotal == null && regla) {
-        const clave = p.codigo.trim().toUpperCase()
-        const precio = valorNomenclador.get(clave) ?? 0
-        const cobertura = calcularImporteFacturable(precio, p.cantidad, regla)
-        importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null
-      }
+    const practicaDelegate = tx.practica as typeof tx.practica & {
+      createManyAndReturn?: CreateManyAndReturnFn
+    }
 
-      const creada = await tx.practica.create({
-        data: {
-          ingresoId: id,
-          convenioId: (p.convenioId ?? obraSocialId) as number,
-          codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
-          convenioValorId: 0,
-          fecha: ahora,
-          cantidad: p.cantidad,
-          numeroAutorizacion: normalizarNumeroAutorizacion(p.numeroAutorizacion),
-          matriculaEspecialista: p.matriculaEspecialista ?? null,
-          matriculaAnestesista: p.matriculaAnestesista ?? null,
-          obraSocialId,
-          planId,
-          facturable: true,
-          estado: 'A',
-          ordenItem: p.grupoOrden ?? null,
-          importeTotal,
-          usuarioRegistro: usuarioNormalizado,
-          fechaUsuario: ahora,
-        },
+    if (typeof practicaDelegate.createManyAndReturn === 'function') {
+      const creadas = await practicaDelegate.createManyAndReturn({
+        data: practicasParaPersistir,
         select: { id: true },
       })
 
-      ids.push(creada.id)
+      return creadas.map((p) => p.id)
     }
 
-    return ids
+    const creadas = await Promise.all(
+      practicasParaPersistir.map((practica) =>
+        tx.practica.create({
+          data: practica,
+          select: { id: true },
+        })
+      )
+    )
+
+    return creadas.map((p) => p.id)
   })
 
   await registrarAudit({

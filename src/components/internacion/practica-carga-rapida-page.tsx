@@ -183,6 +183,7 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
 }
 
 const ORDENES_HISTORICO_POR_PAGINA = 8
+const CONCURRENCIA_GUARDADO_PRACTICAS = 6
 const PROTOCOLOS_PREDEFINIDOS: ProtocoloPredefinido[] = [
     {
         id: 'SALA_COMUN_COMPARTIDA',
@@ -1000,29 +1001,62 @@ export function PracticaCargaRapidaPage({
         }
 
         try {
+            type ResultadoGuardadoPractica =
+                | { ok: true; idx: number; practica: PracticaItem }
+                | { ok: false; idx: number; error: string }
+
+            const tareas = entradasCrear.map((entrada, idx) => ({ entrada, idx }))
+            const resultados: ResultadoGuardadoPractica[] = new Array(tareas.length)
+            let cursor = 0
+
+            await Promise.all(
+                Array.from({ length: Math.min(CONCURRENCIA_GUARDADO_PRACTICAS, tareas.length) }, async () => {
+                    while (true) {
+                        const indiceActual = cursor
+                        const tarea = tareas[indiceActual]
+                        cursor += 1
+                        if (!tarea) return
+
+                        try {
+                            const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(tarea.entrada.payload),
+                            })
+                            const json = await res.json().catch(() => null)
+
+                            if (!res.ok) {
+                                resultados[tarea.idx] = {
+                                    ok: false,
+                                    idx: tarea.idx,
+                                    error: json?.error ?? 'No se pudo registrar la practica',
+                                }
+                                continue
+                            }
+
+                            resultados[tarea.idx] = {
+                                ok: true,
+                                idx: tarea.idx,
+                                practica: json.data as PracticaItem,
+                            }
+                        } catch {
+                            resultados[tarea.idx] = {
+                                ok: false,
+                                idx: tarea.idx,
+                                error: 'Error de conexion al guardar practicas',
+                            }
+                        }
+                    }
+                })
+            )
+
             const practicasCreadas: PracticaItem[] = []
             const clasificacionesCreadas: Record<number, string> = {}
 
-            for (const [idx, entrada] of entradasCrear.entries()) {
-                const res = await fetch(`/api/internacion/${ingresoId}/practicas`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(entrada.payload),
-                })
-                const json = await res.json().catch(() => null)
-                if (!res.ok) {
-                    if (practicasCreadas.length > 0) {
-                        setPracticas((prev) => [...practicasCreadas, ...prev])
-                        registrarGuardadasSesion(practicasCreadas, entradasCrear)
-                    }
-                    const mensaje = json?.error ?? 'No se pudo registrar la practica'
-                    setMensajeError(mensaje)
-                    return { ok: false, error: mensaje }
-                }
-
-                const creada = json.data as PracticaItem
-                practicasCreadas.push(creada)
-                clasificacionesCreadas[creada.id] = entradasCrear[idx]?.clasificacion ?? 'HE'
+            for (const resultado of resultados) {
+                if (!resultado?.ok) continue
+                practicasCreadas.push(resultado.practica)
+                clasificacionesCreadas[resultado.practica.id] = entradasCrear[resultado.idx]?.clasificacion ?? 'HE'
             }
 
             setPracticas((prev) => [...practicasCreadas, ...prev])
@@ -1031,6 +1065,19 @@ export function PracticaCargaRapidaPage({
                 ...clasificacionesCreadas,
             }))
             registrarGuardadasSesion(practicasCreadas, entradasCrear)
+
+            const primeraFalla = resultados.find((resultado) => resultado && !resultado.ok)
+            if (primeraFalla && !primeraFalla.ok) {
+                setMensajeError(primeraFalla.error)
+                return {
+                    ok: false,
+                    error: practicasCreadas.length > 0
+                        ? `Se guardaron ${practicasCreadas.length} prácticas y otras fallaron. ${primeraFalla.error}`
+                        : primeraFalla.error,
+                    practicaIds: practicasCreadas.map((practica) => practica.id),
+                }
+            }
+
             return { ok: true, practicaIds: practicasCreadas.map((practica) => practica.id) }
         } catch {
             const mensaje = 'Error de conexion al guardar practicas'

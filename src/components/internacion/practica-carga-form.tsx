@@ -349,10 +349,16 @@ export function PracticaCargaForm({
         const codigoNormalizado = codigo.trim().toUpperCase()
         if (!esCodigoPracticaCompleto(codigoNormalizado)) return null
 
-        const qs = new URLSearchParams({ q: codigoNormalizado })
+        const qs = new URLSearchParams({
+            q: codigoNormalizado,
+            exact: '1',
+            limit: '20',
+        })
         if (convenioId) qs.set('convenioId', String(convenioId))
 
-        const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`)
+        const res = await fetch(`/api/practicas-nomenclador?${qs.toString()}`, {
+            cache: 'no-store',
+        })
         const json = await res.json().catch(() => null)
         const items: NomencladorItem[] = Array.isArray(json?.data) ? json.data : []
         return items.find((item) => item.codigo.trim().toUpperCase() === codigoNormalizado) ?? null
@@ -401,35 +407,55 @@ export function PracticaCargaForm({
                 return
             }
 
-            setBuscando(true)
-            try {
-                const matchExacto = await resolverPracticaExactaPorCodigo(codigoManual)
+            const matchLocal = resultados.find(
+                (item) => item.codigo.trim().toUpperCase() === codigoManual
+            )
 
-                if (!matchExacto) {
-                    setError('Selecciona una practica valida del listado de nomenclador antes de guardar')
-                    return
-                }
-
-                practicaBase = matchExacto
-                setPracticaSeleccionada(matchExacto)
-                setBusqueda(modoCargaRapida ? matchExacto.codigo.trim() : matchExacto.descripcion)
+            if (matchLocal) {
+                practicaBase = matchLocal
+                setPracticaSeleccionada(matchLocal)
+                setBusqueda(modoCargaRapida ? matchLocal.codigo.trim() : matchLocal.descripcion)
                 setResultados([])
                 const seleccionSugerida = seleccionPorDefecto({
-                    valorEspecialista: matchExacto.valorEspecialista,
-                    valorAyudante: matchExacto.valorAyudante,
-                    valorAnestesista: matchExacto.valorAnestesista,
-                    valorGastos: matchExacto.valorGastos,
-                    valorTotal: matchExacto.valor,
+                    valorEspecialista: matchLocal.valorEspecialista,
+                    valorAyudante: matchLocal.valorAyudante,
+                    valorAnestesista: matchLocal.valorAnestesista,
+                    valorGastos: matchLocal.valorGastos,
+                    valorTotal: matchLocal.valor,
                 })
                 componenteSeleccionActual = seleccionSugerida
-                setComponenteSeleccion(
-                    seleccionSugerida
-                )
-            } catch {
-                setError('No se pudo validar la practica en nomenclador')
-                return
-            } finally {
-                setBuscando(false)
+                setComponenteSeleccion(seleccionSugerida)
+            }
+
+            if (!practicaBase) {
+                setBuscando(true)
+                try {
+                    const matchExacto = await resolverPracticaExactaPorCodigo(codigoManual)
+
+                    if (!matchExacto) {
+                        setError('Selecciona una practica valida del listado de nomenclador antes de guardar')
+                        return
+                    }
+
+                    practicaBase = matchExacto
+                    setPracticaSeleccionada(matchExacto)
+                    setBusqueda(modoCargaRapida ? matchExacto.codigo.trim() : matchExacto.descripcion)
+                    setResultados([])
+                    const seleccionSugerida = seleccionPorDefecto({
+                        valorEspecialista: matchExacto.valorEspecialista,
+                        valorAyudante: matchExacto.valorAyudante,
+                        valorAnestesista: matchExacto.valorAnestesista,
+                        valorGastos: matchExacto.valorGastos,
+                        valorTotal: matchExacto.valor,
+                    })
+                    componenteSeleccionActual = seleccionSugerida
+                    setComponenteSeleccion(seleccionSugerida)
+                } catch {
+                    setError('No se pudo validar la practica en nomenclador')
+                    return
+                } finally {
+                    setBuscando(false)
+                }
             }
         }
 

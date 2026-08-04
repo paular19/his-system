@@ -29,23 +29,13 @@ interface PracticaIngresoFormProps {
     onCancel: () => void
 }
 
-type PracticaAdmisionApi = {
-    id: number
-    estado?: string | null
-    ordenPractica?: Array<unknown>
-}
-
-function estaPendienteDeOrden(practica: PracticaAdmisionApi): boolean {
-    const estado = (practica.estado ?? 'A').trim().toUpperCase()
-    if (estado === 'X') return false
-    return (practica.ordenPractica?.length ?? 0) === 0
-}
-
-async function obtenerPracticasIngreso(ingresoId: number): Promise<PracticaAdmisionApi[]> {
-    const res = await fetch(`/api/admision/${ingresoId}/practicas`, { cache: 'no-store' })
+async function obtenerIdsPendientesIngreso(ingresoId: number): Promise<number[]> {
+    const res = await fetch(`/api/admision/${ingresoId}/practicas?soloPendientesIds=1`, { cache: 'no-store' })
     const json = await res.json().catch(() => null)
-    const practicas = Array.isArray(json?.data) ? json.data : []
-    return practicas as PracticaAdmisionApi[]
+    const ids: unknown[] = Array.isArray(json?.data) ? json.data : []
+    return ids
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && id > 0)
 }
 
 export function PracticaIngresoForm({
@@ -156,18 +146,24 @@ export function PracticaIngresoForm({
                     practicasAgregar: practicasExpandida,
                 })
 
-                const practicasActualizadas = await obtenerPracticasIngreso(ingreso.id)
-                const idsNuevasPendientes = practicasActualizadas
-                    .filter((p) => !idsPrevios.has(p.id) && estaPendienteDeOrden(p))
-                    .map((p) => p.id)
+                const separarPorPractica = practicas.length > 1 && generarOrdenesSeparadasPorPractica
 
-                if (idsNuevasPendientes.length > 0) {
-                    onEncolarGeneracionOrdenes({
-                        practicaIds: idsNuevasPendientes,
-                        imprimirDespues: true,
-                        separarPorPractica: practicas.length > 1 && generarOrdenesSeparadasPorPractica,
-                    })
-                }
+                void (async () => {
+                    try {
+                        const idsPendientes = await obtenerIdsPendientesIngreso(ingreso.id)
+                        const idsNuevasPendientes = idsPendientes.filter((id) => !idsPrevios.has(id))
+
+                        if (idsNuevasPendientes.length > 0) {
+                            onEncolarGeneracionOrdenes({
+                                practicaIds: idsNuevasPendientes,
+                                imprimirDespues: true,
+                                separarPorPractica,
+                            })
+                        }
+                    } catch (error) {
+                        console.error('[ADMISION] No se pudieron resolver IDs pendientes tras guardar prácticas', error)
+                    }
+                })()
 
                 setPracticas([])
                 setGenerarOrdenesSeparadasPorPractica(false)

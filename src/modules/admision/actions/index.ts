@@ -17,7 +17,7 @@ import type {
   DiagnosticoIngresoInput,
   MovimientoIngresoInput,
 } from '../schemas'
-import type { IngresoConRelaciones, IngresoDetalle, IngresoListItem } from '../types'
+import type { IngresoDetalle, IngresoListItem } from '../types'
 import type { IngresoPatologia, MovimientoIngreso } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
 import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
@@ -109,13 +109,13 @@ export async function createIngresoAction(
 export async function updateIngresoAction(
   id: number,
   data: ActualizarIngresoInput
-): Promise<IngresoConRelaciones> {
+): Promise<void> {
   const usuario = await getUsuarioSesion()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')) {
     throw new Error('Sin permisos para modificar ingresos')
   }
   const validado = ActualizarIngresoSchema.parse(data)
-  return service.actualizarIngreso(id, validado, usuario.codigoUsuario)
+  await service.actualizarIngreso(id, validado, usuario.codigoUsuario)
 }
 
 export async function getIngresoByIdAction(id: number): Promise<IngresoDetalle> {

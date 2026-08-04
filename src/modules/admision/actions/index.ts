@@ -6,6 +6,7 @@ import * as service from '../service'
 import {
   CrearIngresoSchema,
   ActualizarIngresoSchema,
+  AgregarPracticasIngresoSchema,
   BusquedaIngresoSchema,
   DiagnosticoIngresoSchema,
   MovimientoIngresoSchema,
@@ -13,6 +14,7 @@ import {
 import type {
   CrearIngresoInput,
   ActualizarIngresoInput,
+  AgregarPracticasIngresoInput,
   BusquedaIngresoInput,
   DiagnosticoIngresoInput,
   MovimientoIngresoInput,
@@ -116,6 +118,20 @@ export async function updateIngresoAction(
   }
   const validado = ActualizarIngresoSchema.parse(data)
   await service.actualizarIngreso(id, validado, usuario.codigoUsuario)
+}
+
+export async function addPracticasIngresoAction(
+  id: number,
+  data: AgregarPracticasIngresoInput
+): Promise<{ practicaIds: number[] }> {
+  const usuario = await getUsuarioSesion()
+  if (!tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')) {
+    throw new Error('Sin permisos para modificar ingresos')
+  }
+
+  const validado = AgregarPracticasIngresoSchema.parse(data)
+  const practicaIds = await service.agregarPracticasIngresoRapido(id, validado, usuario.codigoUsuario)
+  return { practicaIds }
 }
 
 export async function getIngresoByIdAction(id: number): Promise<IngresoDetalle> {

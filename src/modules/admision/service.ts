@@ -5,6 +5,7 @@ import * as repo from './repository'
 import type {
   CrearIngresoInput,
   ActualizarIngresoInput,
+  AgregarPracticasIngresoInput,
   BusquedaIngresoInput,
   DiagnosticoIngresoInput,
   MovimientoIngresoInput,
@@ -691,6 +692,162 @@ export async function actualizarIngreso(
   })
 
   return actualizado
+}
+
+export async function agregarPracticasIngresoRapido(
+  id: number,
+  data: AgregarPracticasIngresoInput,
+  usuario: string,
+  ip?: string
+): Promise<number[]> {
+  const ingreso = await prisma.ingreso.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      obraSocialId: true,
+      planId: true,
+      obraSocialCoseguroId: true,
+    },
+  })
+
+  if (!ingreso) {
+    throw new Error(`Ingreso con ID ${id} no encontrado`)
+  }
+
+  const practicasAgregar = data.practicasAgregar
+  if (practicasAgregar.length === 0) {
+    return []
+  }
+
+  const obraSocialId = ingreso.obraSocialId ?? null
+  const planId = ingreso.planId ?? null
+
+  const practicasSinConvenio = practicasAgregar.filter(
+    (p) => !(p.convenioId ?? obraSocialId)
+  )
+
+  if (practicasSinConvenio.length > 0) {
+    throw new Error(
+      'No se pudo determinar el convenio de una o más prácticas. Seleccioná una obra social y volvés a intentarlo.'
+    )
+  }
+
+  const obraSocialNombre = await obtenerNombreObraSocial(obraSocialId)
+  const requiereCalculoImporte = practicasAgregar.some(
+    (p) => !(p.importeTotal != null && p.importeTotal > 0)
+  )
+
+  const regla = requiereCalculoImporte
+    ? resolverReglaFacturacion(obraSocialNombre, Boolean(ingreso.obraSocialCoseguroId))
+    : null
+
+  const codigos = requiereCalculoImporte
+    ? Array.from(new Set(practicasAgregar.map((p) => p.codigo.trim().toUpperCase())))
+    : []
+
+  const prestaciones = codigos.length
+    ? await prisma.nomencladorPrestacion.findMany({
+      where: { codigo: { in: codigos } },
+      select: { codigo: true, valor: true },
+    })
+    : []
+
+  const valorNomenclador = new Map(
+    prestaciones.map((pre) => [pre.codigo.trim().toUpperCase(), Number(pre.valor ?? 0)])
+  )
+
+  const sinPrecio = codigos.filter((c) => !valorNomenclador.has(c) || valorNomenclador.get(c) === 0)
+  if (sinPrecio.length > 0) {
+    const codigosConEspacio = sinPrecio.map((c) => c.padEnd(8, ' '))
+    const historicos = await prisma.practica.findMany({
+      where: {
+        codigoPractica: { in: codigosConEspacio },
+        importeTotal: { not: null, gt: 0 },
+        cantidad: { gt: 0 },
+      },
+      orderBy: { id: 'desc' },
+      select: { codigoPractica: true, importeTotal: true, cantidad: true },
+      take: sinPrecio.length * 10,
+    })
+
+    for (const h of historicos) {
+      const clave = h.codigoPractica.trim().toUpperCase()
+      if (!valorNomenclador.has(clave) || valorNomenclador.get(clave) === 0) {
+        const precioUnitario = Number(h.importeTotal) / Number(h.cantidad)
+        if (precioUnitario > 0) valorNomenclador.set(clave, precioUnitario)
+      }
+    }
+  }
+
+  const ahora = new Date()
+  const usuarioNormalizado = usuario.slice(0, 10)
+
+  const practicaIdsCreadas = await prisma.$transaction(async (tx) => {
+    await tx.ingresoHistorial.create({
+      data: {
+        ingresoId: id,
+        tipoCambio: 'M',
+        usuarioCambio: usuarioNormalizado,
+        fechaCambio: ahora,
+      },
+    })
+
+    await tx.ingreso.update({
+      where: { id },
+      data: { fechaEstado: ahora },
+      select: { id: true },
+    })
+
+    const ids: number[] = []
+    for (const p of practicasAgregar) {
+      let importeTotal = p.importeTotal != null && p.importeTotal > 0 ? p.importeTotal : null
+
+      if (importeTotal == null && regla) {
+        const clave = p.codigo.trim().toUpperCase()
+        const precio = valorNomenclador.get(clave) ?? 0
+        const cobertura = calcularImporteFacturable(precio, p.cantidad, regla)
+        importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null
+      }
+
+      const creada = await tx.practica.create({
+        data: {
+          ingresoId: id,
+          convenioId: (p.convenioId ?? obraSocialId) as number,
+          codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
+          convenioValorId: 0,
+          fecha: ahora,
+          cantidad: p.cantidad,
+          numeroAutorizacion: normalizarNumeroAutorizacion(p.numeroAutorizacion),
+          matriculaEspecialista: p.matriculaEspecialista ?? null,
+          matriculaAnestesista: p.matriculaAnestesista ?? null,
+          obraSocialId,
+          planId,
+          facturable: true,
+          estado: 'A',
+          ordenItem: p.grupoOrden ?? null,
+          importeTotal,
+          usuarioRegistro: usuarioNormalizado,
+          fechaUsuario: ahora,
+        },
+        select: { id: true },
+      })
+
+      ids.push(creada.id)
+    }
+
+    return ids
+  })
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'Ingreso',
+    registroId: id,
+    detalle: `Prácticas agregadas al ingreso ${id}: ${practicaIdsCreadas.length}`,
+    direccionIp: ip,
+  })
+
+  return practicaIdsCreadas
 }
 
 export async function buscarIngresos(

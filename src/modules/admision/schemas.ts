@@ -5,6 +5,18 @@ const DATETIME_LOCAL_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/
 const DATETIME_WITH_TZ_REGEX =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/
 
+const PracticaIngresoItemSchema = z.object({
+  convenioId: z.number().int().positive().optional().nullable(),
+  codigo: z.string().min(1).max(50),
+  descripcion: z.string().max(500),
+  numeroAutorizacion: z.string().max(50).trim().optional().nullable(),
+  cantidad: z.number().int().min(1).default(1),
+  matriculaEspecialista: z.number().int().positive().optional().nullable(),
+  matriculaAnestesista: z.number().int().positive().optional().nullable(),
+  grupoOrden: z.number().int().min(1).optional().nullable(),
+  importeTotal: z.number().min(0).optional().nullable(),
+})
+
 function parseFechaArgentina(value: unknown): unknown {
   if (value === undefined || value === null) return value
 
@@ -72,17 +84,7 @@ const CrearIngresoBaseSchema = z.object({
   tipoIndicacion: z.string().max(100).trim().optional().nullable(),
   descripcionIndicacion: z.string().max(500).trim().optional().nullable(),
   // Prácticas y medicamentos al ingreso (GUA/DER/IND)
-  practicas: z.array(z.object({
-    convenioId: z.number().int().positive().optional().nullable(),
-    codigo: z.string().min(1).max(50),
-    descripcion: z.string().max(500),
-    numeroAutorizacion: z.string().max(50).trim().optional().nullable(),
-    cantidad: z.number().int().min(1).default(1),
-    matriculaEspecialista: z.number().int().positive().optional().nullable(),
-    matriculaAnestesista: z.number().int().positive().optional().nullable(),
-    grupoOrden: z.number().int().min(1).optional().nullable(),
-    importeTotal: z.number().min(0).optional().nullable(),
-  })).optional(),
+  practicas: z.array(PracticaIngresoItemSchema).optional(),
   medicaciones: z.array(z.object({
     nombre: z.string().min(1).max(200),
     dosis: z.string().max(100).optional().nullable(),
@@ -126,17 +128,7 @@ export const ActualizarIngresoSchema = CrearIngresoBaseSchema.omit({
   motivoEgresoCodigo: z.string().max(2).optional().nullable(),
   fechaEgreso: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
   descripcionPatologiaDefinitiva: z.string().max(500).trim().optional().nullable(),
-  practicasAgregar: z.array(z.object({
-    convenioId: z.number().int().positive().optional().nullable(),
-    codigo: z.string().min(1).max(50),
-    descripcion: z.string().max(500),
-    numeroAutorizacion: z.string().max(50).trim().optional().nullable(),
-    cantidad: z.number().int().min(1).default(1),
-    matriculaEspecialista: z.number().int().positive().optional().nullable(),
-    matriculaAnestesista: z.number().int().positive().optional().nullable(),
-    grupoOrden: z.number().int().min(1).optional().nullable(),
-    importeTotal: z.number().min(0).optional().nullable(),
-  })).optional(),
+  practicasAgregar: z.array(PracticaIngresoItemSchema).optional(),
 }).refine(
   (data) => {
     // Si hay planId, debe haber obraSocialId
@@ -152,6 +144,12 @@ export const ActualizarIngresoSchema = CrearIngresoBaseSchema.omit({
 )
 
 export type ActualizarIngresoInput = z.infer<typeof ActualizarIngresoSchema>
+
+export const AgregarPracticasIngresoSchema = z.object({
+  practicasAgregar: z.array(PracticaIngresoItemSchema).min(1, 'Debe agregar al menos una práctica'),
+})
+
+export type AgregarPracticasIngresoInput = z.infer<typeof AgregarPracticasIngresoSchema>
 
 export const BusquedaIngresoSchema = z.object({
   q: z.string().max(200).trim().optional(),

@@ -1076,7 +1076,6 @@ export function FichaIngresoClient({
                     {editingCard === 'practicas' && puedeModificar ? (
                         <PracticaIngresoForm
                             ingreso={ingreso}
-                            practicasActuales={practicasIngreso}
                             onEncolarGeneracionOrdenes={(task) => {
                                 encolarGeneracionOrdenes(
                                     task.imprimirDespues,

@@ -120,6 +120,15 @@ type PracticaEditDraft = {
     importeBaseUnitario: string
 }
 
+type GeneracionOrdenTask = {
+    practicaIds: number[]
+    imprimirDespues: boolean
+    agruparEnUnaOrden: boolean
+    titularOrdenAgrupada: string | undefined
+    cirujanoFirmanteMatricula: number | undefined
+    clasificacionPayload: Record<string, string>
+}
+
 function practicaFacturada(practica: PracticaItem): boolean {
     return Boolean(practica.facturada)
 }
@@ -170,6 +179,8 @@ export function PracticaSection({
     const [desagrupandoPracticaId, setDesagrupandoPracticaId] = useState<number | null>(null)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
+    const [tareasGeneracionPendientes, setTareasGeneracionPendientes] = useState(0)
+    const [practicaIdsEnGeneracion, setPracticaIdsEnGeneracion] = useState<number[]>([])
     const [error, setError] = useState<string | null>(null)
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
     const [clasificacionPorPracticaId, setClasificacionPorPracticaId] = useState<Record<number, string>>({})
@@ -185,6 +196,10 @@ export function PracticaSection({
     const [draftPracticaEditando, setDraftPracticaEditando] = useState<PracticaEditDraft | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
+    const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
+    const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
+
+    const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
 
     useEffect(() => {
         setPracticas(practicasIniciales)
@@ -201,6 +216,10 @@ export function PracticaSection({
             return next
         })
     }, [practicasIniciales])
+
+    useEffect(() => {
+        setGenerandoOrdenes(hayGeneracionesEnBackground)
+    }, [hayGeneracionesEnBackground])
 
     useEffect(() => {
         let cancelled = false
@@ -592,43 +611,18 @@ export function PracticaSection({
         }
     }
 
-    const handleGenerarOrdenes = async (
-        imprimirDespues: boolean,
-        agruparEnUnaOrden = false,
-        titularOrdenAgrupadaOverride?: string
-    ) => {
-        if (idsPendientesSeleccionadas.length === 0) {
-            setError('Seleccioná al menos una práctica pendiente para generar órdenes')
-            return
-        }
-
-        setError(null)
-        setGenerandoOrdenes(true)
-        const ventanaImpresion = imprimirDespues ? abrirVentanaImpresionPendiente() : null
+    const ejecutarGeneracionOrdenesTask = async (task: GeneracionOrdenTask) => {
+        const ventanaImpresion = task.imprimirDespues ? abrirVentanaImpresionPendiente() : null
         let impresionDisparada = false
+
         try {
-            const profesionalIdFirmante = Number.parseInt(medicoFirmanteId, 10)
-            const medicoFirmanteMatricula = Number.isFinite(profesionalIdFirmante)
-                ? (matriculaPorProfesionalId.get(profesionalIdFirmante) ?? null)
-                : matriculaFirmanteSugerida
-
-            const clasificacionPayload = Object.fromEntries(
-                idsPendientesSeleccionadas.map((id) => {
-                    const practica = practicas.find((p) => p.id === id)
-                    const clasificacion = practica ? obtenerClasificacionPractica(practica) : 'HE'
-                    return [String(id), clasificacion]
-                })
-            )
-
             const result = await generarOrdenesDesdeInternacionAction({
                 ingresoId,
-                practicaIds: idsPendientesSeleccionadas,
-                clasificacionPorPracticaId: clasificacionPayload,
-                agruparEnUnaOrden,
-                titularOrdenAgrupada: agruparEnUnaOrden
-                    ? (titularOrdenAgrupadaOverride ?? titularOrdenAgrupada)
-                    : undefined,
-                cirujanoFirmanteMatricula: medicoFirmanteMatricula ?? undefined,
+                practicaIds: task.practicaIds,
+                clasificacionPorPracticaId: task.clasificacionPayload,
+                agruparEnUnaOrden: task.agruparEnUnaOrden,
+                titularOrdenAgrupada: task.titularOrdenAgrupada,
+                cirujanoFirmanteMatricula: task.cirujanoFirmanteMatricula,
             })
 
             if ('error' in result && result.error) {
@@ -673,9 +667,10 @@ export function PracticaSection({
                     ordenesPorGrupo: Array<{ clasificacion: string; puestoNumero: number; numero: number; practicaIds: number[] }>
                 }).ordenesPorGrupo)
                 : []
-            setPracticasSeleccionadas((prev) => prev.filter((id) => !idsPendientesSeleccionadas.includes(id)))
 
-            if (imprimirDespues && grupos.length > 0) {
+            setPracticasSeleccionadas((prev) => prev.filter((id) => !task.practicaIds.includes(id)))
+
+            if (task.imprimirDespues && grupos.length > 0) {
                 const ordenesParam = grupos
                     .map((o) => `${o.puestoNumero}-${o.numero}`)
                     .join(',')
@@ -693,8 +688,74 @@ export function PracticaSection({
             if (!impresionDisparada) {
                 cerrarVentanaImpresion(ventanaImpresion)
             }
-            setGenerandoOrdenes(false)
         }
+    }
+
+    const encolarGeneracionOrdenes = (
+        imprimirDespues: boolean,
+        agruparEnUnaOrden = false,
+        titularOrdenAgrupadaOverride?: string
+    ) => {
+        if (idsPendientesSeleccionadas.length === 0) {
+            setError('Seleccioná al menos una práctica pendiente para generar órdenes')
+            return
+        }
+
+        const practicaIds = Array.from(new Set(idsPendientesSeleccionadas)).filter((id) => {
+            if (practicaIdsEnGeneracionRef.current.has(id)) return false
+            const practica = practicas.find((item) => item.id === id)
+            if (!practica) return false
+            if (!practicaActiva(practica.estado)) return false
+            return (practica.ordenPractica?.length ?? 0) === 0
+        })
+
+        if (practicaIds.length === 0) {
+            setError('No hay prácticas pendientes disponibles para generar órdenes')
+            return
+        }
+
+        const profesionalIdFirmante = Number.parseInt(medicoFirmanteId, 10)
+        const medicoFirmanteMatricula = Number.isFinite(profesionalIdFirmante)
+            ? (matriculaPorProfesionalId.get(profesionalIdFirmante) ?? null)
+            : matriculaFirmanteSugerida
+
+        const clasificacionPayload = Object.fromEntries(
+            practicaIds.map((id) => {
+                const practica = practicas.find((p) => p.id === id)
+                const clasificacion = practica ? obtenerClasificacionPractica(practica) : 'HE'
+                return [String(id), clasificacion]
+            })
+        )
+
+        const task: GeneracionOrdenTask = {
+            practicaIds,
+            imprimirDespues,
+            agruparEnUnaOrden,
+            titularOrdenAgrupada: agruparEnUnaOrden
+                ? (titularOrdenAgrupadaOverride ?? titularOrdenAgrupada)
+                : undefined,
+            cirujanoFirmanteMatricula: medicoFirmanteMatricula ?? undefined,
+            clasificacionPayload,
+        }
+
+        setError(null)
+
+        task.practicaIds.forEach((id) => practicaIdsEnGeneracionRef.current.add(id))
+        setPracticaIdsEnGeneracion((prev) => Array.from(new Set([...prev, ...task.practicaIds])))
+        setPracticasSeleccionadas((prev) => prev.filter((id) => !task.practicaIds.includes(id)))
+        setTareasGeneracionPendientes((prev) => prev + 1)
+
+        colaGeneracionRef.current = colaGeneracionRef.current
+            .catch(() => undefined)
+            .then(async () => {
+                try {
+                    await ejecutarGeneracionOrdenesTask(task)
+                } finally {
+                    task.practicaIds.forEach((id) => practicaIdsEnGeneracionRef.current.delete(id))
+                    setPracticaIdsEnGeneracion((prev) => prev.filter((id) => !task.practicaIds.includes(id)))
+                    setTareasGeneracionPendientes((prev) => Math.max(0, prev - 1))
+                }
+            })
     }
 
     const handleClickAgruparYGenerarOrden = (imprimirDespues: boolean) => {
@@ -710,13 +771,13 @@ export function PracticaSection({
             return
         }
 
-        void handleGenerarOrdenes(imprimirDespues, true)
+        encolarGeneracionOrdenes(imprimirDespues, true)
     }
 
     const confirmarPopupTitularAgrupada = () => {
         setMostrarPopupTitularAgrupada(false)
         const titularSeleccionado = titularOrdenAgrupada || titularesAgrupadosDisponibles[0] || 'HONORARIOS'
-        void handleGenerarOrdenes(imprimirTrasAgrupar, true, titularSeleccionado)
+        encolarGeneracionOrdenes(imprimirTrasAgrupar, true, titularSeleccionado)
     }
 
     const handleAnularOrdenDesdeGrupo = async (puestoNumero: number, ordenNumero: number, grupoKey: string) => {
@@ -781,8 +842,13 @@ export function PracticaSection({
         [practicasVigentes, sectorPorPracticaId, sectorFallbackPracticas, mostrarUti, mostrarPiso]
     )
 
+    const practicaIdsEnGeneracionSet = useMemo(
+        () => new Set(practicaIdsEnGeneracion),
+        [practicaIdsEnGeneracion]
+    )
+
     const practicasPendientes = practicasVigentesFiltradasPorSector.filter(
-        (p) => (p.ordenPractica?.length ?? 0) === 0
+        (p) => (p.ordenPractica?.length ?? 0) === 0 && !practicaIdsEnGeneracionSet.has(p.id)
     )
     const practicasAutorizadas = practicasVigentesFiltradasPorSector.filter(
         (p) => (p.ordenPractica?.length ?? 0) > 0
@@ -1111,6 +1177,12 @@ export function PracticaSection({
 
             {expandido && (
                 <div className="p-4 space-y-4">
+                    {hayGeneracionesEnBackground && (
+                        <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                            Generando órdenes en segundo plano: {tareasGeneracionPendientes} tarea(s) en cola. Podés seguir trabajando sin esperar.
+                        </p>
+                    )}
+
                     {/* Historial de órdenes */}
                     {practicas.length === 0 ? (
                         <p className="text-xs text-gray-400 text-center py-3">

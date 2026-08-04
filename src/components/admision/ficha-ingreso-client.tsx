@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -46,6 +46,12 @@ type PracticaEditable = {
     matriculaAnestesista?: number | null
     facturable: boolean
     facturada?: boolean
+}
+
+type GeneracionOrdenTask = {
+    practicaIds: number[]
+    imprimirDespues: boolean
+    separarPorPractica?: boolean
 }
 
 const LABEL_ESTADO: Record<string, string> = {
@@ -103,26 +109,36 @@ export function FichaIngresoClient({
     const [cardValues, setCardValues] = useState<any>({})
     const [practicasIngreso, setPracticasIngreso] = useState(ingreso.practicas)
     const estadoIngreso = (ingreso.estado ?? '').trim().toUpperCase()
-    const practicasPendientes = practicasIngreso.filter(
-        (p) => (p.ordenPractica?.length ?? 0) === 0
-    )
-    const practicasAutorizadas = practicasIngreso.filter(
-        (p) => (p.ordenPractica?.length ?? 0) > 0
-    )
     const [filtroPracticas, setFiltroPracticas] = useState('')
     const [paginaPendientes, setPaginaPendientes] = useState(1)
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
     const [practicasSeleccionadas, setPracticasSeleccionadas] = useState<number[]>([])
     const [confirmarEliminacionSeleccionadas, setConfirmarEliminacionSeleccionadas] = useState(false)
     const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
-    const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
+    const [tareasGeneracionPendientes, setTareasGeneracionPendientes] = useState(0)
+    const [practicaIdsEnGeneracion, setPracticaIdsEnGeneracion] = useState<number[]>([])
     const [errorEliminarPractica, setErrorEliminarPractica] = useState<string | null>(null)
     const [errorGenerarOrdenes, setErrorGenerarOrdenes] = useState<string | null>(null)
     const [practicaEditando, setPracticaEditando] = useState<PracticaEditable | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
+    const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
+    const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
+    const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
+
+    const practicaIdsEnGeneracionSet = useMemo(
+        () => new Set(practicaIdsEnGeneracion),
+        [practicaIdsEnGeneracion]
+    )
+
+    const practicasPendientes = practicasIngreso.filter(
+        (p) => (p.ordenPractica?.length ?? 0) === 0 && !practicaIdsEnGeneracionSet.has(p.id)
+    )
+    const practicasAutorizadas = practicasIngreso.filter(
+        (p) => (p.ordenPractica?.length ?? 0) > 0
+    )
 
     const practicasPendientesFiltradas = terminoFiltroPracticas
         ? practicasPendientes.filter((p) => {
@@ -281,18 +297,14 @@ export function FichaIngresoClient({
         setPracticasIngreso(practicasActualizadas)
     }
 
-    const generarOrdenesSeleccionadas = async (imprimirDespues: boolean) => {
-        const seleccionActual = [...practicasSeleccionadas]
-        if (seleccionActual.length === 0) return
-
-        const ventanaImpresion = imprimirDespues ? abrirVentanaImpresionPendiente() : null
+    const ejecutarGeneracionOrdenesTask = async (task: GeneracionOrdenTask) => {
+        const ventanaImpresion = task.imprimirDespues ? abrirVentanaImpresionPendiente() : null
         let impresionDisparada = false
 
-        setErrorGenerarOrdenes(null)
-        setGenerandoOrdenes(true)
         try {
             const result = await generarOrdenesPendientesAdmision(ingreso.id, {
-                idsPendientesConfirmados: seleccionActual,
+                idsPendientesConfirmados: task.practicaIds,
+                separarPorPractica: task.separarPorPractica,
             })
 
             if (!result.ok) {
@@ -300,10 +312,10 @@ export function FichaIngresoClient({
                 return
             }
 
-            void recargarPracticasIngreso()
-            setPracticasSeleccionadas((prev) => prev.filter((id) => !seleccionActual.includes(id)))
+            await recargarPracticasIngreso()
+            setPracticasSeleccionadas((prev) => prev.filter((id) => !task.practicaIds.includes(id)))
 
-            if (imprimirDespues && result.ordenes.length > 0) {
+            if (task.imprimirDespues && result.ordenes.length > 0) {
                 const ordenesParam = result.ordenes.map((o) => `${o.puestoNumero}-${o.numero}`).join(',')
                 navegarVentanaImpresion(
                     ventanaImpresion,
@@ -317,8 +329,56 @@ export function FichaIngresoClient({
             if (!impresionDisparada) {
                 cerrarVentanaImpresion(ventanaImpresion)
             }
-            setGenerandoOrdenes(false)
         }
+    }
+
+    const encolarGeneracionOrdenes = (
+        imprimirDespues: boolean,
+        practicaIdsOverride?: number[],
+        separarPorPractica?: boolean
+    ) => {
+        const seleccionBase = practicaIdsOverride ?? practicasSeleccionadas
+        const permitirIdsNoCargados = Array.isArray(practicaIdsOverride)
+        const practicaIds = Array.from(new Set(seleccionBase)).filter((id) => {
+            if (practicaIdsEnGeneracionRef.current.has(id)) return false
+            const practica = practicasIngreso.find((item) => item.id === id)
+            if (!practica) return permitirIdsNoCargados
+            return (practica.ordenPractica?.length ?? 0) === 0
+        })
+
+        if (practicaIds.length === 0) {
+            setErrorGenerarOrdenes('No hay prácticas pendientes disponibles para generar órdenes')
+            return
+        }
+
+        const task: GeneracionOrdenTask = {
+            practicaIds,
+            imprimirDespues,
+            separarPorPractica,
+        }
+
+        setErrorGenerarOrdenes(null)
+
+        task.practicaIds.forEach((id) => practicaIdsEnGeneracionRef.current.add(id))
+        setPracticaIdsEnGeneracion((prev) => Array.from(new Set([...prev, ...task.practicaIds])))
+        setPracticasSeleccionadas((prev) => prev.filter((id) => !task.practicaIds.includes(id)))
+        setTareasGeneracionPendientes((prev) => prev + 1)
+
+        colaGeneracionRef.current = colaGeneracionRef.current
+            .catch(() => undefined)
+            .then(async () => {
+                try {
+                    await ejecutarGeneracionOrdenesTask(task)
+                } finally {
+                    task.practicaIds.forEach((id) => practicaIdsEnGeneracionRef.current.delete(id))
+                    setPracticaIdsEnGeneracion((prev) => prev.filter((id) => !task.practicaIds.includes(id)))
+                    setTareasGeneracionPendientes((prev) => Math.max(0, prev - 1))
+                }
+            })
+    }
+
+    const generarOrdenesSeleccionadas = (imprimirDespues: boolean) => {
+        encolarGeneracionOrdenes(imprimirDespues)
     }
 
     const guardarEdicionPractica = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1017,6 +1077,13 @@ export function FichaIngresoClient({
                         <PracticaIngresoForm
                             ingreso={ingreso}
                             practicasActuales={practicasIngreso}
+                            onEncolarGeneracionOrdenes={(task) => {
+                                encolarGeneracionOrdenes(
+                                    task.imprimirDespues,
+                                    task.practicaIds,
+                                    task.separarPorPractica
+                                )
+                            }}
                             onSuccess={() => {
                                 setEditingCard(null)
                                 void (async () => {
@@ -1031,6 +1098,12 @@ export function FichaIngresoClient({
                         </p>
                     ) : (
                         <div className="space-y-5">
+                            {hayGeneracionesEnBackground && (
+                                <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                                    Generando órdenes en segundo plano: {tareasGeneracionPendientes} tarea(s) en cola. Podés seguir trabajando sin esperar.
+                                </p>
+                            )}
+
                             <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <input
                                     type="text"
@@ -1064,15 +1137,15 @@ export function FichaIngresoClient({
                                         <button
                                             type="button"
                                             onClick={() => void generarOrdenesSeleccionadas(false)}
-                                            disabled={generandoOrdenes || practicasSeleccionadas.length === 0}
+                                            disabled={practicasSeleccionadas.length === 0}
                                             className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                         >
-                                            {generandoOrdenes ? 'Generando...' : `Generar órdenes (${practicasSeleccionadas.length})`}
+                                            {`Generar órdenes (${practicasSeleccionadas.length})`}
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => void generarOrdenesSeleccionadas(true)}
-                                            disabled={generandoOrdenes || practicasSeleccionadas.length === 0}
+                                            disabled={practicasSeleccionadas.length === 0}
                                             className="inline-flex items-center rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
                                         >
                                             Generar órdenes e imprimir

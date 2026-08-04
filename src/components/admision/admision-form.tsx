@@ -397,6 +397,7 @@ export function AdmisionForm({
 
     let ventanaImpresion: Window | null = null
     let impresionDisparada = false
+    let impresionDiferida = false
 
     try {
       const body: any = {
@@ -489,20 +490,8 @@ export function AdmisionForm({
           ? result.ordenesGeneradas
           : []
 
-        let ordenesFinales = ordenesGeneradas
-        if (ordenesFinales.length === 0) {
-          const autoOrdenResult = await generarOrdenesPendientesAdmision(result.id, {
-            separarPorPractica: generarOrdenesSeparadasPorPractica,
-          })
-          if (autoOrdenResult.ok) {
-            ordenesFinales = autoOrdenResult.ordenes
-          } else {
-            console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
-          }
-        }
-
-        if (ordenesFinales.length > 0) {
-          const ordenesParam = ordenesFinales
+        if (ordenesGeneradas.length > 0) {
+          const ordenesParam = ordenesGeneradas
             .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
             .join(',')
 
@@ -512,13 +501,38 @@ export function AdmisionForm({
           )
           impresionDisparada = true
         } else {
-          cerrarVentanaImpresion(ventanaImpresion)
+          impresionDiferida = true
+          void generarOrdenesPendientesAdmision(result.id, {
+            separarPorPractica: generarOrdenesSeparadasPorPractica,
+          })
+            .then((autoOrdenResult) => {
+              if (autoOrdenResult.ok && autoOrdenResult.ordenes.length > 0) {
+                const ordenesParam = autoOrdenResult.ordenes
+                  .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
+                  .join(',')
+
+                navegarVentanaImpresion(
+                  ventanaImpresion,
+                  `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+                )
+                return
+              }
+
+              if (!autoOrdenResult.ok) {
+                console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
+              }
+
+              cerrarVentanaImpresion(ventanaImpresion)
+            })
+            .catch(() => {
+              cerrarVentanaImpresion(ventanaImpresion)
+            })
         }
       } else {
         cerrarVentanaImpresion(ventanaImpresion)
       }
 
-      if (!impresionDisparada) {
+      if (!impresionDisparada && !impresionDiferida) {
         cerrarVentanaImpresion(ventanaImpresion)
       }
 

@@ -14,18 +14,17 @@ import {
     PracticasAdmisionCard,
     type PracticaAdmisionItem,
 } from './practicas-admision-card'
-import { generarOrdenesPendientesAdmision } from './ordenes-auto'
-import {
-    abrirVentanaImpresionPendiente,
-    cerrarVentanaImpresion,
-    navegarVentanaImpresion,
-} from '@/lib/utils/print-window'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 
 interface PracticaIngresoFormProps {
     ingreso: IngresoDetalle
     practicasActuales: IngresoDetalle['practicas']
+    onEncolarGeneracionOrdenes: (task: {
+        practicaIds: number[]
+        imprimirDespues: boolean
+        separarPorPractica?: boolean
+    }) => void
     onSuccess: () => void
     onCancel: () => void
 }
@@ -49,7 +48,13 @@ async function obtenerPracticasIngreso(ingresoId: number): Promise<PracticaAdmis
     return practicas as PracticaAdmisionApi[]
 }
 
-export function PracticaIngresoForm({ ingreso, practicasActuales, onSuccess, onCancel }: PracticaIngresoFormProps) {
+export function PracticaIngresoForm({
+    ingreso,
+    practicasActuales,
+    onEncolarGeneracionOrdenes,
+    onSuccess,
+    onCancel,
+}: PracticaIngresoFormProps) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const [practicas, setPracticas] = useState<PracticaAdmisionItem[]>([])
@@ -92,7 +97,6 @@ export function PracticaIngresoForm({ ingreso, practicasActuales, onSuccess, onC
         }
 
         setError(null)
-        const ventanaImpresion = abrirVentanaImpresionPendiente()
         startTransition(async () => {
             try {
                 const idsPrevios = new Set(practicasActuales.map((p) => p.id))
@@ -158,36 +162,17 @@ export function PracticaIngresoForm({ ingreso, practicasActuales, onSuccess, onC
                     .map((p) => p.id)
 
                 if (idsNuevasPendientes.length > 0) {
-                    const ordenesResult = await generarOrdenesPendientesAdmision(ingreso.id, {
-                        idsPendientesConfirmados: idsNuevasPendientes,
+                    onEncolarGeneracionOrdenes({
+                        practicaIds: idsNuevasPendientes,
+                        imprimirDespues: true,
                         separarPorPractica: practicas.length > 1 && generarOrdenesSeparadasPorPractica,
                     })
-
-                    if (!ordenesResult.ok) {
-                        throw new Error(ordenesResult.error)
-                    }
-
-                    if (ordenesResult.ordenes.length > 0) {
-                        const ordenesParam = ordenesResult.ordenes
-                            .map((o) => `${o.puestoNumero}-${o.numero}`)
-                            .join(',')
-
-                        navegarVentanaImpresion(
-                            ventanaImpresion,
-                            `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
-                        )
-                    } else {
-                        cerrarVentanaImpresion(ventanaImpresion)
-                    }
-                } else {
-                    cerrarVentanaImpresion(ventanaImpresion)
                 }
 
                 setPracticas([])
                 setGenerarOrdenesSeparadasPorPractica(false)
                 onSuccess()
             } catch (err) {
-                cerrarVentanaImpresion(ventanaImpresion)
                 setError(err instanceof Error ? err.message : 'Error al guardar')
             }
         })

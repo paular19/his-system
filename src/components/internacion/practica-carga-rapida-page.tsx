@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
     CheckCircle2,
     ChevronDown,
@@ -123,6 +123,17 @@ type GuardarPracticasResult = {
     ok: boolean
     error?: string
     practicaIds?: number[]
+}
+
+type GeneracionOrdenTask = {
+    practicaIds: number[]
+    imprimirDespues: boolean
+    agruparEnUnaOrden: boolean
+    origen: OrigenGeneracionOrden
+    titularOrdenAgrupada?: string | null
+    firmanteProfesionalId?: string
+    clasificacionPorPracticaId?: Record<number, string>
+    ventanaImpresionPrefijada?: Window | null
 }
 
 type PracticaEditDraft = {
@@ -365,6 +376,8 @@ export function PracticaCargaRapidaPage({
     const [medicoFirmanteId, setMedicoFirmanteId] = useState('')
     const [firmanteEditadoManualmente, setFirmanteEditadoManualmente] = useState(false)
     const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
+    const [tareasGeneracionPendientes, setTareasGeneracionPendientes] = useState(0)
+    const [practicaIdsEnGeneracion, setPracticaIdsEnGeneracion] = useState<number[]>([])
     const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(true)
     const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
@@ -398,6 +411,10 @@ export function PracticaCargaRapidaPage({
     const [draftPracticaEditando, setDraftPracticaEditando] = useState<PracticaEditDraft | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
+    const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
+    const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
+
+    const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
 
     const protocoloSeleccionado = useMemo(
         () => PROTOCOLOS_PREDEFINIDOS.find((protocolo) => protocolo.id === protocoloSeleccionadoId) ?? null,
@@ -411,6 +428,10 @@ export function PracticaCargaRapidaPage({
                 .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
         )
     }, [practicasIniciales])
+
+    useEffect(() => {
+        setGenerandoOrdenes(hayGeneracionesEnBackground)
+    }, [hayGeneracionesEnBackground])
 
     useEffect(() => {
         let cancelled = false
@@ -470,6 +491,16 @@ export function PracticaCargaRapidaPage({
         [practicasVigentes]
     )
 
+    const practicaIdsEnGeneracionSet = useMemo(
+        () => new Set(practicaIdsEnGeneracion),
+        [practicaIdsEnGeneracion]
+    )
+
+    const practicasPendientesDisponibles = useMemo(
+        () => practicasPendientes.filter((practica) => !practicaIdsEnGeneracionSet.has(practica.id)),
+        [practicasPendientes, practicaIdsEnGeneracionSet]
+    )
+
     const idsInternacionCirugiaObjetivo = useMemo(() => {
         if (!modoCirugia) return new Set<number>()
         return new Set(contextoCirugia?.practicaIdsInternacion ?? [])
@@ -483,12 +514,12 @@ export function PracticaCargaRapidaPage({
     const idsPendientesCirugiaObjetivo = useMemo(() => {
         if (!modoCirugia) return [] as number[]
 
-        const idsPendientes = practicasPendientes
+        const idsPendientes = practicasPendientesDisponibles
             .filter((practica) => idsCirugiaObjetivoExtendidos.has(practica.id))
             .map((practica) => practica.id)
 
         return idsPendientes
-    }, [modoCirugia, practicasPendientes, idsCirugiaObjetivoExtendidos])
+    }, [modoCirugia, practicasPendientesDisponibles, idsCirugiaObjetivoExtendidos])
 
     useEffect(() => {
         if (!modoCirugia) {
@@ -518,13 +549,13 @@ export function PracticaCargaRapidaPage({
 
     useEffect(() => {
         const pendientes = new Set(
-            modoCirugia ? idsPendientesCirugiaObjetivo : practicasPendientes.map((practica) => practica.id)
+            modoCirugia ? idsPendientesCirugiaObjetivo : practicasPendientesDisponibles.map((practica) => practica.id)
         )
         setPracticasSeleccionadas((prev) => prev.filter((id) => pendientes.has(id)))
-    }, [modoCirugia, practicasPendientes, idsPendientesCirugiaObjetivo])
+    }, [modoCirugia, practicasPendientesDisponibles, idsPendientesCirugiaObjetivo])
 
     const practicasPendientesOrdenadas = useMemo(() => {
-        const lista = [...practicasPendientes]
+        const lista = [...practicasPendientesDisponibles]
         lista.sort((a, b) => {
             const clasA = obtenerClasificacionPractica(a)
             const clasB = obtenerClasificacionPractica(b)
@@ -540,7 +571,7 @@ export function PracticaCargaRapidaPage({
             return new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
         })
         return lista
-    }, [practicasPendientes, clasificacionPorPracticaId])
+    }, [practicasPendientesDisponibles, clasificacionPorPracticaId])
 
     const practicasPendientesAgrupadas = useMemo(() => {
         const grupos = new Map<string, PracticaItem[]>()
@@ -558,9 +589,9 @@ export function PracticaCargaRapidaPage({
     }, [practicasPendientesOrdenadas, clasificacionPorPracticaId])
 
     const idsPendientesSeleccionadas = useMemo(() => {
-        const pendientesIds = new Set(practicasPendientes.map((practica) => practica.id))
+        const pendientesIds = new Set(practicasPendientesDisponibles.map((practica) => practica.id))
         return practicasSeleccionadas.filter((id) => pendientesIds.has(id))
-    }, [practicasPendientes, practicasSeleccionadas])
+    }, [practicasPendientesDisponibles, practicasSeleccionadas])
 
     const idsPendientesSeleccionadasCirugia = useMemo(
         () => practicasSeleccionadas.filter((id) => idsPendientesCirugiaObjetivoSet.has(id)),
@@ -585,7 +616,7 @@ export function PracticaCargaRapidaPage({
 
     const idsPendientesEditor = modoCirugia
         ? idsPendientesCirugiaObjetivo
-        : practicasPendientes.map((practica) => practica.id)
+        : practicasPendientesDisponibles.map((practica) => practica.id)
 
     const idsPendientesSeleccionadasEditor = modoCirugia
         ? idsPendientesSeleccionadasCirugia
@@ -596,7 +627,7 @@ export function PracticaCargaRapidaPage({
         : practicasPendientesAgrupadas
 
     const idsPendientesSesion = useMemo(() => {
-        const pendientes = new Set(practicasPendientes.map((practica) => practica.id))
+        const pendientes = new Set(practicasPendientesDisponibles.map((practica) => practica.id))
         return Array.from(
             new Set(
                 guardadasSesion
@@ -604,15 +635,15 @@ export function PracticaCargaRapidaPage({
                     .filter((id) => pendientes.has(id))
             )
         )
-    }, [guardadasSesion, practicasPendientes])
+    }, [guardadasSesion, practicasPendientesDisponibles])
 
     useEffect(() => {
-        const pendientes = new Set(practicasPendientes.map((practica) => practica.id))
+        const pendientes = new Set(practicasPendientesDisponibles.map((practica) => practica.id))
         setGuardadasSesion((prev) => {
             const filtradas = prev.filter((item) => pendientes.has(item.practicaId))
             return filtradas.length === prev.length ? prev : filtradas
         })
-    }, [practicasPendientes])
+    }, [practicasPendientesDisponibles])
 
     const ordenesAutorizadas = useMemo(
         () => agruparPracticasAutorizadasPorOrden(practicasAutorizadas),
@@ -655,7 +686,7 @@ export function PracticaCargaRapidaPage({
             ? idsPendientesCirugiaObjetivo
             : idsPendientesSeleccionadas.length > 0
                 ? idsPendientesSeleccionadas
-                : practicasPendientes.map((practica) => practica.id)
+                : practicasPendientesDisponibles.map((practica) => practica.id)
 
         for (const practicaId of idsRelevantes) {
             const practica = practicas.find((item) => item.id === practicaId)
@@ -670,7 +701,7 @@ export function PracticaCargaRapidaPage({
         }
 
         return matriculaTratanteDefault ?? null
-    }, [modoCirugia, idsPendientesCirugiaObjetivo, idsPendientesSeleccionadas, practicasPendientes, practicas, matriculaTratanteDefault])
+    }, [modoCirugia, idsPendientesCirugiaObjetivo, idsPendientesSeleccionadas, practicasPendientesDisponibles, practicas, matriculaTratanteDefault])
 
     useEffect(() => {
         const profesionalIdSugerido =
@@ -1046,41 +1077,13 @@ export function PracticaCargaRapidaPage({
         navegarVentanaImpresion(ventanaImpresion, url)
     }
 
-    const ejecutarGeneracionOrdenes = async (
-        imprimirDespues: boolean,
-        practicaIdsObjetivo?: number[],
-        agruparEnUnaOrden = false,
-        opciones?: {
-            titularOrdenAgrupada?: string | null
-            origen?: OrigenGeneracionOrden
-            firmanteProfesionalId?: string
-            separarPorPractica?: boolean
-            clasificacionPorPracticaId?: Record<number, string>
-            ventanaImpresionPrefijada?: Window | null
-        }
-    ): Promise<boolean> => {
-        const practicaIds = practicaIdsObjetivo ?? idsPendientesSeleccionadas
-        const origen = opciones?.origen ?? 'default'
-
+    const ejecutarGeneracionOrdenesTask = async (task: GeneracionOrdenTask): Promise<boolean> => {
+        const practicaIds = task.practicaIds
         if (practicaIds.length === 0) {
-            setMensajeError('Selecciona al menos una practica pendiente para generar ordenes')
             return false
         }
 
-        // Modo editor: generar e imprimir por separado debe crear una orden por práctica.
-        if (opciones?.separarPorPractica && practicaIds.length > 1) {
-            let todasGeneradas = true
-            for (const practicaId of practicaIds) {
-                const resultado = await ejecutarGeneracionOrdenes(imprimirDespues, [practicaId], false, {
-                    ...opciones,
-                    separarPorPractica: false,
-                })
-                if (!resultado) todasGeneradas = false
-            }
-            return todasGeneradas
-        }
-
-        const firmanteProfesionalId = opciones?.firmanteProfesionalId ?? medicoFirmanteId
+        const firmanteProfesionalId = task.firmanteProfesionalId ?? ''
         const profesionalIdFirmante = Number.parseInt(firmanteProfesionalId, 10)
 
         if (modoCirugia && !Number.isFinite(profesionalIdFirmante)) {
@@ -1099,23 +1102,16 @@ export function PracticaCargaRapidaPage({
 
         const clasificacionPayload = Object.fromEntries(
             practicaIds.map((id) => {
-                const clasificacionForzada = opciones?.clasificacionPorPracticaId?.[id]
-                if (clasificacionForzada) {
-                    return [String(id), normalizarClasificacionAgrupacion(clasificacionForzada) ?? clasificacionForzada]
-                }
-                const practica = practicas.find((item) => item.id === id)
-                const clasificacion = practica ? obtenerClasificacionPractica(practica) : 'HE'
-                return [String(id), clasificacion]
+                const clasificacionForzada = task.clasificacionPorPracticaId?.[id] ?? 'HE'
+                return [String(id), normalizarClasificacionAgrupacion(clasificacionForzada) ?? clasificacionForzada]
             })
         )
 
-        setMensajeError(null)
-        setGenerandoOrdenes(true)
         const requierePopupSeleccionImpresionSesion =
-            Boolean(imprimirDespues) && origen === 'sesion'
+            Boolean(task.imprimirDespues) && task.origen === 'sesion'
         const ventanaImpresion =
-            imprimirDespues
-                ? (opciones?.ventanaImpresionPrefijada ??
+            task.imprimirDespues
+                ? (task.ventanaImpresionPrefijada ??
                     (!requierePopupSeleccionImpresionSesion ? abrirVentanaImpresionPendiente() : null))
                 : null
         let impresionDisparada = false
@@ -1125,8 +1121,8 @@ export function PracticaCargaRapidaPage({
                 ingresoId,
                 practicaIds,
                 clasificacionPorPracticaId: clasificacionPayload,
-                agruparEnUnaOrden,
-                titularOrdenAgrupada: agruparEnUnaOrden ? (opciones?.titularOrdenAgrupada ?? null) : undefined,
+                agruparEnUnaOrden: task.agruparEnUnaOrden,
+                titularOrdenAgrupada: task.agruparEnUnaOrden ? (task.titularOrdenAgrupada ?? null) : undefined,
                 cirujanoFirmanteMatricula: medicoFirmanteMatricula ?? undefined,
             })
 
@@ -1192,7 +1188,7 @@ export function PracticaCargaRapidaPage({
             setPracticasSeleccionadas((prev) => prev.filter((id) => !practicaIds.includes(id)))
 
             if (grupos.length > 0) {
-                if (origen === 'sesion' || origen === 'protocolo') {
+                if (task.origen === 'sesion' || task.origen === 'protocolo') {
                     const nuevasOrdenesSesion = Array.from(
                         new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
                     )
@@ -1202,7 +1198,7 @@ export function PracticaCargaRapidaPage({
                 setGuardadasSesion((prev) => prev.filter((item) => !idsGeneradas.has(item.practicaId)))
             }
 
-            if (imprimirDespues && grupos.length > 0) {
+            if (task.imprimirDespues && grupos.length > 0) {
                 const ordenesUnicas = Array.from(
                     new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
                 ).map((clave) => {
@@ -1227,6 +1223,7 @@ export function PracticaCargaRapidaPage({
                     impresionDisparada = true
                 }
             }
+
             return true
         } catch {
             setMensajeError('Error al generar ordenes desde internacion')
@@ -1235,8 +1232,110 @@ export function PracticaCargaRapidaPage({
             if (!impresionDisparada) {
                 cerrarVentanaImpresion(ventanaImpresion)
             }
-            setGenerandoOrdenes(false)
         }
+    }
+
+    const encolarGeneracionOrdenes = (
+        imprimirDespues: boolean,
+        practicaIdsObjetivo?: number[],
+        agruparEnUnaOrden = false,
+        opciones?: {
+            titularOrdenAgrupada?: string | null
+            origen?: OrigenGeneracionOrden
+            firmanteProfesionalId?: string
+            separarPorPractica?: boolean
+            clasificacionPorPracticaId?: Record<number, string>
+            ventanaImpresionPrefijada?: Window | null
+        }
+    ): boolean => {
+        const origen = opciones?.origen ?? 'default'
+        const practicaIdsEntrada = practicaIdsObjetivo ?? idsPendientesSeleccionadas
+        const practicaIds = Array.from(new Set(practicaIdsEntrada)).filter((id) => {
+            if (practicaIdsEnGeneracionRef.current.has(id)) return false
+            const practica = practicas.find((item) => item.id === id)
+            if (!practica) return false
+            if (!practicaActiva(practica.estado)) return false
+            return (practica.ordenPractica?.length ?? 0) === 0
+        })
+
+        if (practicaIds.length === 0) {
+            setMensajeError('No hay practicas pendientes disponibles para generar ordenes')
+            return false
+        }
+
+        if (modoCirugia) {
+            const firmanteProfesionalId = opciones?.firmanteProfesionalId ?? medicoFirmanteId
+            const profesionalIdFirmante = Number.parseInt(firmanteProfesionalId, 10)
+            if (!Number.isFinite(profesionalIdFirmante)) {
+                setMensajeError('Selecciona medico firmante antes de generar o imprimir ordenes')
+                return false
+            }
+
+            const medicoFirmanteMatricula = matriculaPorProfesionalId.get(profesionalIdFirmante) ?? null
+            if (medicoFirmanteMatricula == null || medicoFirmanteMatricula <= 0) {
+                setMensajeError('Selecciona un medico firmante valido antes de generar o imprimir ordenes')
+                return false
+            }
+        }
+
+        const firmanteProfesionalIdFinal = opciones?.firmanteProfesionalId ?? medicoFirmanteId
+        const clasificacionSnapshot = Object.fromEntries(
+            practicaIds.map((id) => {
+                const clasificacionForzada = opciones?.clasificacionPorPracticaId?.[id]
+                if (clasificacionForzada) {
+                    return [id, normalizarClasificacionAgrupacion(clasificacionForzada) ?? clasificacionForzada]
+                }
+                const practica = practicas.find((item) => item.id === id)
+                return [id, practica ? obtenerClasificacionPractica(practica) : 'HE']
+            })
+        )
+
+        const tasks: GeneracionOrdenTask[] =
+            opciones?.separarPorPractica && practicaIds.length > 1
+                ? practicaIds.map((practicaId) => ({
+                    practicaIds: [practicaId],
+                    imprimirDespues,
+                    agruparEnUnaOrden: false,
+                    origen,
+                    titularOrdenAgrupada: opciones?.titularOrdenAgrupada,
+                    firmanteProfesionalId: firmanteProfesionalIdFinal,
+                    clasificacionPorPracticaId: clasificacionSnapshot,
+                    ventanaImpresionPrefijada: opciones?.ventanaImpresionPrefijada,
+                }))
+                : [{
+                    practicaIds,
+                    imprimirDespues,
+                    agruparEnUnaOrden,
+                    origen,
+                    titularOrdenAgrupada: opciones?.titularOrdenAgrupada,
+                    firmanteProfesionalId: firmanteProfesionalIdFinal,
+                    clasificacionPorPracticaId: clasificacionSnapshot,
+                    ventanaImpresionPrefijada: opciones?.ventanaImpresionPrefijada,
+                }]
+
+        setMensajeError(null)
+
+        for (const task of tasks) {
+            const idsTask = task.practicaIds
+            idsTask.forEach((id) => practicaIdsEnGeneracionRef.current.add(id))
+            setPracticaIdsEnGeneracion((prev) => Array.from(new Set([...prev, ...idsTask])))
+            setPracticasSeleccionadas((prev) => prev.filter((id) => !idsTask.includes(id)))
+            setTareasGeneracionPendientes((prev) => prev + 1)
+
+            colaGeneracionRef.current = colaGeneracionRef.current
+                .catch(() => undefined)
+                .then(async () => {
+                    try {
+                        await ejecutarGeneracionOrdenesTask(task)
+                    } finally {
+                        idsTask.forEach((id) => practicaIdsEnGeneracionRef.current.delete(id))
+                        setPracticaIdsEnGeneracion((prev) => prev.filter((id) => !idsTask.includes(id)))
+                        setTareasGeneracionPendientes((prev) => Math.max(0, prev - 1))
+                    }
+                })
+        }
+
+        return true
     }
 
     const solicitarConfirmacionOrdenUnica = (imprimirDespues: boolean) => {
@@ -1278,7 +1377,7 @@ export function PracticaCargaRapidaPage({
         const titularSeleccionado = titulosDisponibles[0] ?? 'HONORARIOS'
 
         if (!requiereElegirTitulo && !requiereElegirFirmante) {
-            void ejecutarGeneracionOrdenes(
+            encolarGeneracionOrdenes(
                 imprimirDespues,
                 idsPendientesSeleccionadasEditor,
                 agruparEnUnaOrden,
@@ -1325,7 +1424,7 @@ export function PracticaCargaRapidaPage({
 
         const { imprimirDespues, practicaIds, agruparEnUnaOrden } = confirmacionOrdenUnica
         setConfirmacionOrdenUnica(null)
-        void ejecutarGeneracionOrdenes(imprimirDespues, practicaIds, agruparEnUnaOrden, payload)
+        encolarGeneracionOrdenes(imprimirDespues, practicaIds, agruparEnUnaOrden, payload)
     }
 
     const solicitarGeneracionDesdeSesion = () => {
@@ -1358,7 +1457,7 @@ export function PracticaCargaRapidaPage({
         const opciones = Array.from(mapa.values())
 
         if (opciones.length <= 1) {
-            void ejecutarGeneracionOrdenes(true, idsSesion, false, { origen: 'sesion' })
+            encolarGeneracionOrdenes(true, idsSesion, false, { origen: 'sesion' })
             return
         }
 
@@ -1406,7 +1505,7 @@ export function PracticaCargaRapidaPage({
             return
         }
 
-        void ejecutarGeneracionOrdenes(true, idsFiltrados, false, { origen: 'sesion' })
+        encolarGeneracionOrdenes(true, idsFiltrados, false, { origen: 'sesion' })
     }
 
     const alternarOrdenPopupImpresionSesion = (clave: string, checked: boolean) => {
@@ -1909,7 +2008,7 @@ export function PracticaCargaRapidaPage({
                 ])
             )
 
-            const okGeneracion = await ejecutarGeneracionOrdenes(imprimirDespues, practicaIds, false, {
+            const okGeneracion = encolarGeneracionOrdenes(imprimirDespues, practicaIds, false, {
                 origen: 'protocolo',
                 clasificacionPorPracticaId,
                 ventanaImpresionPrefijada: ventanaImpresionProtocolo,
@@ -1917,6 +2016,8 @@ export function PracticaCargaRapidaPage({
 
             if (okGeneracion) {
                 setProtocoloItems([])
+            } else {
+                cerrarVentanaImpresion(ventanaImpresionProtocolo)
             }
         } finally {
             setProcesandoProtocolo(false)
@@ -2419,12 +2520,11 @@ export function PracticaCargaRapidaPage({
                                     disabled={
                                         procesandoProtocolo ||
                                         cargandoProtocolo ||
-                                        generandoOrdenes ||
                                         protocoloItems.length === 0
                                     }
                                     className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                                 >
-                                    {(procesandoProtocolo || generandoOrdenes) ? (
+                                    {procesandoProtocolo ? (
                                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                     ) : (
                                         <Printer className="h-3.5 w-3.5" />
@@ -2438,6 +2538,12 @@ export function PracticaCargaRapidaPage({
                     {mensajeError && (
                         <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">
                             {mensajeError}
+                        </p>
+                    )}
+
+                    {hayGeneracionesEnBackground && (
+                        <p className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                            Generando ordenes en segundo plano: {tareasGeneracionPendientes} tarea(s) en cola. Puedes seguir cargando practicas y encolando nuevas ordenes.
                         </p>
                     )}
 
@@ -2457,7 +2563,7 @@ export function PracticaCargaRapidaPage({
                                         setFirmanteEditadoManualmente(true)
                                     }}
                                     autoSelectOnSearch={false}
-                                    disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
+                                    disabled={profesionalesConMatricula.length === 0}
                                     placeholderOption="-- Seleccionar firmante --"
                                     searchPlaceholder="Buscar por nombre o matricula"
                                     selectClassName="mt-1 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-900 disabled:bg-emerald-100 disabled:text-emerald-700"
@@ -2472,8 +2578,8 @@ export function PracticaCargaRapidaPage({
                             <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesCirugiaObjetivo, false)}
-                                    disabled={generandoOrdenes || idsPendientesCirugiaObjetivo.length === 0 || !firmanteCirugiaValido}
+                                    onClick={() => encolarGeneracionOrdenes(false, idsPendientesCirugiaObjetivo, false)}
+                                    disabled={idsPendientesCirugiaObjetivo.length === 0 || !firmanteCirugiaValido}
                                     className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                 >
                                     {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
@@ -2481,8 +2587,8 @@ export function PracticaCargaRapidaPage({
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => void ejecutarGeneracionOrdenes(true, idsPendientesCirugiaObjetivo, false)}
-                                    disabled={generandoOrdenes || idsPendientesCirugiaObjetivo.length === 0 || !firmanteCirugiaValido}
+                                    onClick={() => encolarGeneracionOrdenes(true, idsPendientesCirugiaObjetivo, false)}
+                                    disabled={idsPendientesCirugiaObjetivo.length === 0 || !firmanteCirugiaValido}
                                     className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                 >
                                     <Printer className="h-3.5 w-3.5" />
@@ -2632,7 +2738,7 @@ export function PracticaCargaRapidaPage({
                                                     setFirmanteEditadoManualmente(true)
                                                 }}
                                                 autoSelectOnSearch={false}
-                                                disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
+                                                disabled={profesionalesConMatricula.length === 0}
                                                 placeholderOption="-- Seleccionar firmante --"
                                                 searchPlaceholder="Buscar por nombre o matricula"
                                                 selectClassName="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
@@ -2645,7 +2751,7 @@ export function PracticaCargaRapidaPage({
                                             <button
                                                 type="button"
                                                 onClick={() => solicitarConfirmacionOrdenUnica(false)}
-                                                disabled={generandoOrdenes || (modoCirugia && !firmanteCirugiaValido)}
+                                                disabled={modoCirugia && !firmanteCirugiaValido}
                                                 className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                             >
                                                 {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
@@ -2654,7 +2760,7 @@ export function PracticaCargaRapidaPage({
                                             <button
                                                 type="button"
                                                 onClick={() => solicitarConfirmacionOrdenUnica(true)}
-                                                disabled={generandoOrdenes || (modoCirugia && !firmanteCirugiaValido)}
+                                                disabled={modoCirugia && !firmanteCirugiaValido}
                                                 className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                             >
                                                 <Printer className="h-3.5 w-3.5" />
@@ -2864,8 +2970,8 @@ export function PracticaCargaRapidaPage({
                             <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => void ejecutarGeneracionOrdenes(false, idsPendientesSesion, false, { origen: 'sesion' })}
-                                    disabled={generandoOrdenes || idsPendientesSesion.length === 0 || (modoCirugia && !firmanteCirugiaValido)}
+                                    onClick={() => encolarGeneracionOrdenes(false, idsPendientesSesion, false, { origen: 'sesion' })}
+                                    disabled={idsPendientesSesion.length === 0 || (modoCirugia && !firmanteCirugiaValido)}
                                     className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                 >
                                     {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
@@ -2874,7 +2980,7 @@ export function PracticaCargaRapidaPage({
                                 <button
                                     type="button"
                                     onClick={solicitarGeneracionDesdeSesion}
-                                    disabled={generandoOrdenes || idsPendientesSesion.length === 0 || (modoCirugia && !firmanteCirugiaValido)}
+                                    disabled={idsPendientesSesion.length === 0 || (modoCirugia && !firmanteCirugiaValido)}
                                     className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                 >
                                     <Printer className="h-3.5 w-3.5" />
@@ -3155,7 +3261,7 @@ export function PracticaCargaRapidaPage({
                                             )
                                         }
                                         autoSelectOnSearch={false}
-                                        disabled={generandoOrdenes || profesionalesConMatricula.length === 0}
+                                        disabled={profesionalesConMatricula.length === 0}
                                         placeholderOption="-- Seleccionar firmante --"
                                         searchPlaceholder="Buscar por nombre o matricula"
                                         selectClassName="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
@@ -3176,7 +3282,6 @@ export function PracticaCargaRapidaPage({
                             <button
                                 type="button"
                                 onClick={confirmarGeneracionOrdenUnica}
-                                disabled={generandoOrdenes}
                                 className="inline-flex items-center rounded border border-amber-300 bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
                             >
                                 Confirmar y generar
@@ -3229,7 +3334,6 @@ export function PracticaCargaRapidaPage({
                             <button
                                 type="button"
                                 onClick={confirmarGeneracionSubitemsSesion}
-                                disabled={generandoOrdenes}
                                 className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                             >
                                 <Printer className="h-3.5 w-3.5" />

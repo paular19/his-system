@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Plus, Scissors, ChevronDown, ChevronUp, Loader2, ChevronRight, Pencil, Trash2, Ban } from 'lucide-react'
 import { anularOrdenAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
@@ -125,6 +125,17 @@ type PracticaCirugiaEditDraft = {
     facturable: boolean
 }
 
+type GeneracionOrdenCirugiaTask = {
+    practicaIdsCirugia: number[]
+    vinculaciones: Array<{
+        practicaIdCirugia: number
+        practicaIdInternacion: number
+    }>
+    practicaIdsInternacion: number[]
+    imprimirDespues: boolean
+    cirujanoFirmanteMatricula: number | undefined
+}
+
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const ORDENES_GENERADAS_POR_PAGINA = 5
 const PRACTICAS_PENDIENTES_POR_PAGINA = 8
@@ -225,6 +236,8 @@ export function CirugiaUrgenciaSection({
     const [expandido, setExpandido] = useState(true)
     const [creandoCirugia, setCreandoCirugia] = useState(false)
     const [generandoOrdenAgrupada, setGenerandoOrdenAgrupada] = useState(false)
+    const [tareasGeneracionPendientes, setTareasGeneracionPendientes] = useState(0)
+    const [practicaIdsCirugiaEnGeneracion, setPracticaIdsCirugiaEnGeneracion] = useState<number[]>([])
     const [error, setError] = useState<string | null>(null)
     const [mostrarUti, setMostrarUti] = useState(true)
     const [mostrarPiso, setMostrarPiso] = useState(true)
@@ -249,10 +262,18 @@ export function CirugiaUrgenciaSection({
         practicaInternacionId: number
     } | null>(null)
     const [draftPracticaEditando, setDraftPracticaEditando] = useState<PracticaCirugiaEditDraft | null>(null)
+    const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
+    const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
+
+    const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
 
     useEffect(() => {
         setCirugias(cirugiasIniciales)
     }, [cirugiasIniciales])
+
+    useEffect(() => {
+        setGenerandoOrdenAgrupada(hayGeneracionesEnBackground)
+    }, [hayGeneracionesEnBackground])
 
     useEffect(() => {
         let cancelled = false
@@ -386,9 +407,18 @@ export function CirugiaUrgenciaSection({
         return estadoPorId
     }, [cirugias, practicasInternacion])
 
+    const practicaIdsCirugiaEnGeneracionSet = useMemo(
+        () => new Set(practicaIdsCirugiaEnGeneracion),
+        [practicaIdsCirugiaEnGeneracion]
+    )
+
     const practicaIdsPendientesCirugia = useMemo(
-        () => practicaIdsCirugias.filter((id) => estadoPracticaCirugiaPorId.get(id)?.pendiente === true),
-        [practicaIdsCirugias, estadoPracticaCirugiaPorId]
+        () => practicaIdsCirugias.filter(
+            (id) =>
+                estadoPracticaCirugiaPorId.get(id)?.pendiente === true &&
+                !practicaIdsCirugiaEnGeneracionSet.has(id)
+        ),
+        [practicaIdsCirugias, estadoPracticaCirugiaPorId, practicaIdsCirugiaEnGeneracionSet]
     )
 
     const setPracticaIdsPendientesCirugia = useMemo(
@@ -400,6 +430,10 @@ export function CirugiaUrgenciaSection({
         () => practicasSeleccionadasImpresion.filter((id) => setPracticaIdsPendientesCirugia.has(id)),
         [practicasSeleccionadasImpresion, setPracticaIdsPendientesCirugia]
     )
+
+    useEffect(() => {
+        setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => setPracticaIdsPendientesCirugia.has(id)))
+    }, [setPracticaIdsPendientesCirugia])
 
     const gruposAutorizadosPorCirugia = useMemo(() => {
         const resultado = new Map<number, GrupoPracticasAutorizadasCirugia[]>()
@@ -871,50 +905,16 @@ export function CirugiaUrgenciaSection({
         })
     }
 
-    const generarOrdenAgrupada = async (imprimirDespues: boolean) => {
-        if (practicasSeleccionadasVigentes.length === 0) {
-            setError('Selecciona al menos una practica de cirugia para generar una sola orden')
-            return
-        }
-
-        const practicasCirugiaSeleccionadas = cirugias
-            .flatMap((cirugia) => cirugia.practicas)
-            .filter((practica) => practicasSeleccionadasVigentes.includes(practica.id))
-
-        const vinculacionesSeleccionadas = practicasCirugiaSeleccionadas
-            .map((practica) => {
-                const estado = estadoPracticaCirugiaPorId.get(practica.id)
-                if (!estado || !estado.pendiente) return null
-                return {
-                    practicaIdCirugia: practica.id,
-                    practicaIdInternacion: estado.practicaInternacionId,
-                }
-            })
-            .filter((item): item is { practicaIdCirugia: number; practicaIdInternacion: number } => item != null)
-
-        const practicaIdsInternacionSeleccionadas = vinculacionesSeleccionadas
-            .map((item) => item.practicaIdInternacion)
-
-        const profesionalIdFirmante = Number.parseInt(cirujanoFirmanteId, 10)
-        const cirujanoFirmanteMatricula = Number.isFinite(profesionalIdFirmante)
-            ? (matriculaPorProfesionalId.get(profesionalIdFirmante) ?? null)
-            : matriculaFirmanteSugerida
-
-        if (practicaIdsInternacionSeleccionadas.length === 0) {
-            setError('No se encontraron practicas pendientes de internacion para la seleccion de cirugia')
-            return
-        }
-
-        setError(null)
-        setGenerandoOrdenAgrupada(true)
-        const ventanaImpresion = imprimirDespues ? abrirVentanaImpresionPendiente() : null
+    const ejecutarGeneracionOrdenesCirugiaTask = async (task: GeneracionOrdenCirugiaTask) => {
+        const ventanaImpresion = task.imprimirDespues ? abrirVentanaImpresionPendiente() : null
         let impresionDisparada = false
+
         try {
             const result = await generarOrdenesDesdeInternacionAction({
                 ingresoId,
-                practicaIds: practicaIdsInternacionSeleccionadas,
+                practicaIds: task.practicaIdsInternacion,
                 agruparEnUnaOrden: true,
-                cirujanoFirmanteMatricula: cirujanoFirmanteMatricula ?? undefined,
+                cirujanoFirmanteMatricula: task.cirujanoFirmanteMatricula,
             })
 
             if ('error' in result && result.error) {
@@ -939,7 +939,7 @@ export function CirugiaUrgenciaSection({
 
             const idsAsignadosInternacion = new Set(grupos.flatMap((grupo) => grupo.practicaIds))
             const idsAsignadosCirugia = new Set<number>()
-            for (const vinculacion of vinculacionesSeleccionadas) {
+            for (const vinculacion of task.vinculaciones) {
                 if (idsAsignadosInternacion.has(vinculacion.practicaIdInternacion)) {
                     idsAsignadosCirugia.add(vinculacion.practicaIdCirugia)
                 }
@@ -947,12 +947,10 @@ export function CirugiaUrgenciaSection({
 
             setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => !idsAsignadosCirugia.has(id)))
 
-            if (imprimirDespues) {
+            if (task.imprimirDespues) {
                 const url = `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
                 navegarVentanaImpresion(ventanaImpresion, url)
                 impresionDisparada = true
-                refreshInBackground()
-                return
             }
 
             refreshInBackground()
@@ -962,8 +960,78 @@ export function CirugiaUrgenciaSection({
             if (!impresionDisparada) {
                 cerrarVentanaImpresion(ventanaImpresion)
             }
-            setGenerandoOrdenAgrupada(false)
         }
+    }
+
+    const generarOrdenAgrupada = (imprimirDespues: boolean) => {
+        if (practicasSeleccionadasVigentes.length === 0) {
+            setError('Selecciona al menos una practica de cirugia para generar una sola orden')
+            return
+        }
+
+        const practicaIdsDisponibles = Array.from(new Set(practicasSeleccionadasVigentes)).filter(
+            (id) => !practicaIdsEnGeneracionRef.current.has(id)
+        )
+
+        if (practicaIdsDisponibles.length === 0) {
+            setError('No hay practicas pendientes disponibles para generar')
+            return
+        }
+
+        const practicasCirugiaSeleccionadas = cirugias
+            .flatMap((cirugia) => cirugia.practicas)
+            .filter((practica) => practicaIdsDisponibles.includes(practica.id))
+
+        const vinculacionesSeleccionadas = practicasCirugiaSeleccionadas
+            .map((practica) => {
+                const estado = estadoPracticaCirugiaPorId.get(practica.id)
+                if (!estado || !estado.pendiente) return null
+                return {
+                    practicaIdCirugia: practica.id,
+                    practicaIdInternacion: estado.practicaInternacionId,
+                }
+            })
+            .filter((item): item is { practicaIdCirugia: number; practicaIdInternacion: number } => item != null)
+
+        const practicaIdsInternacionSeleccionadas = Array.from(
+            new Set(vinculacionesSeleccionadas.map((item) => item.practicaIdInternacion))
+        )
+
+        if (practicaIdsInternacionSeleccionadas.length === 0) {
+            setError('No se encontraron practicas pendientes de internacion para la seleccion de cirugia')
+            return
+        }
+
+        const profesionalIdFirmante = Number.parseInt(cirujanoFirmanteId, 10)
+        const cirujanoFirmanteMatricula = Number.isFinite(profesionalIdFirmante)
+            ? (matriculaPorProfesionalId.get(profesionalIdFirmante) ?? null)
+            : matriculaFirmanteSugerida
+
+        const task: GeneracionOrdenCirugiaTask = {
+            practicaIdsCirugia: practicaIdsDisponibles,
+            vinculaciones: vinculacionesSeleccionadas,
+            practicaIdsInternacion: practicaIdsInternacionSeleccionadas,
+            imprimirDespues,
+            cirujanoFirmanteMatricula: cirujanoFirmanteMatricula ?? undefined,
+        }
+
+        setError(null)
+        task.practicaIdsCirugia.forEach((id) => practicaIdsEnGeneracionRef.current.add(id))
+        setPracticaIdsCirugiaEnGeneracion((prev) => Array.from(new Set([...prev, ...task.practicaIdsCirugia])))
+        setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => !task.practicaIdsCirugia.includes(id)))
+        setTareasGeneracionPendientes((prev) => prev + 1)
+
+        colaGeneracionRef.current = colaGeneracionRef.current
+            .catch(() => undefined)
+            .then(async () => {
+                try {
+                    await ejecutarGeneracionOrdenesCirugiaTask(task)
+                } finally {
+                    task.practicaIdsCirugia.forEach((id) => practicaIdsEnGeneracionRef.current.delete(id))
+                    setPracticaIdsCirugiaEnGeneracion((prev) => prev.filter((id) => !task.practicaIdsCirugia.includes(id)))
+                    setTareasGeneracionPendientes((prev) => Math.max(0, prev - 1))
+                }
+            })
     }
 
     return (
@@ -1002,6 +1070,12 @@ export function CirugiaUrgenciaSection({
                     {error && (
                         <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
                             {error}
+                        </div>
+                    )}
+
+                    {hayGeneracionesEnBackground && (
+                        <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+                            Generando órdenes de cirugía en segundo plano: {tareasGeneracionPendientes} tarea(s) en cola.
                         </div>
                     )}
 

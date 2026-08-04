@@ -29,9 +29,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         const body = await req.json()
         const validado = CrearPracticaSchema.parse({ ...body, ingresoId })
         const omitirRevalidacion = req.nextUrl.searchParams.get('skipRevalidate') === '1'
+        const omitirFallbackHistoricoPrecio = req.nextUrl.searchParams.get('skipPrecioFallback') === '1'
 
         const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? undefined
-        const practica = await service.crearPractica(validado, usuario.codigoUsuario, ip ?? undefined)
+        const practica = await service.crearPractica(validado, usuario.codigoUsuario, ip ?? undefined, {
+            omitirFallbackHistoricoPrecio,
+        })
 
         if (!omitirRevalidacion) {
             revalidatePath(`/dashboard/admision/${ingresoId}`)

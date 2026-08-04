@@ -309,9 +309,14 @@ export async function transferirCama(
 export async function crearPractica(
   data: CrearPracticaInput,
   usuario: string,
-  ip?: string
+  ip?: string,
+  options?: {
+    omitirFallbackHistoricoPrecio?: boolean
+  }
 ): Promise<PracticaItem> {
-  const practica = await repo.crearPractica(data, usuario)
+  const practica = await repo.crearPractica(data, usuario, {
+    omitirFallbackHistoricoPrecio: options?.omitirFallbackHistoricoPrecio,
+  })
 
   void registrarAudit({
     usuario,

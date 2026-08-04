@@ -949,7 +949,10 @@ export async function actualizarProfesionalTratanteInternacion(
 
 export async function crearPractica(
   data: CrearPracticaInput,
-  usuario: string
+  usuario: string,
+  options?: {
+    omitirFallbackHistoricoPrecio?: boolean
+  }
 ): Promise<PracticaItem> {
   const codigo = data.codigoPractica.padEnd(8).slice(0, 8)
   const cantidad = Number.isFinite(Number(data.cantidad)) && Number(data.cantidad) > 0
@@ -1041,7 +1044,21 @@ export async function crearPractica(
 
     const valorPractica = valorDesdeNomenclador > 0
       ? valorDesdeNomenclador
-      : await obtenerValorPractica(codigo.trim())
+      : options?.omitirFallbackHistoricoPrecio
+        ? await (async () => {
+          const prestacion = await prisma.nomencladorPrestacion.findFirst({
+            where: {
+              OR: [
+                { codigo },
+                { codigo: codigoTrim },
+                { codigo: { startsWith: codigoTrim } },
+              ],
+            },
+            select: { valor: true },
+          })
+          return Number(prestacion?.valor ?? 0)
+        })()
+        : await obtenerValorPractica(codigo.trim())
 
     if (valorPractica > 0) {
       const cobertura = calcularImporteFacturable(valorPractica, cantidad, regla)

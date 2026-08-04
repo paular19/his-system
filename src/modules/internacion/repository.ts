@@ -445,9 +445,27 @@ export async function obtenerInternacionesActivas(
         { paciente: { historiaClinica: num } },
       ]
     } else {
+      const tokensBusqueda = q
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0)
+
+      const tokens = tokensBusqueda.length > 0 ? tokensBusqueda : [q.trim()]
+
       where.OR = [
-        { nombre: { contains: q, mode: 'insensitive' } },
-        { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' } } },
+        {
+          AND: tokens.map((token) => ({
+            nombre: { contains: token, mode: 'insensitive' },
+          })),
+        },
+        {
+          AND: tokens.map((token) => ({
+            paciente: { nombreCompleto: { contains: token, mode: 'insensitive' } },
+          })),
+        },
       ]
     }
   }

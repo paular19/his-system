@@ -94,11 +94,17 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   const puedeCrear = tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
   const hayFiltros = Boolean(q || obraSocialIdFiltro)
   const mostrarSoloOcupadas = Boolean(obraSocialIdFiltro)
-  const qNormalizado = q
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
+  const normalizarBusqueda = (valor: string): string =>
+    valor
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+  const qNormalizado = normalizarBusqueda(q)
+  const qTokens = qNormalizado.split(' ').filter((token) => token.length > 0)
 
   const sectoresFiltradosPorBusqueda = qNormalizado
     ? mapa.sectores
@@ -117,13 +123,11 @@ export default async function InternacionPage({ searchParams }: PageProps) {
             ocupante.historiaClinica != null ? String(ocupante.historiaClinica) : '',
           ]
 
-          return camposBusqueda.some((valor) =>
-            valor
-              .normalize('NFD')
-              .replace(/[\u0300-\u036f]/g, '')
-              .toLowerCase()
-              .includes(qNormalizado)
-          )
+          const textoBusqueda = normalizarBusqueda(camposBusqueda.join(' '))
+
+          if (qTokens.length === 0) return true
+
+          return qTokens.every((token) => textoBusqueda.includes(token))
         })
 
         return {

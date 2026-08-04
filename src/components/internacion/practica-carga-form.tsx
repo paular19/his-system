@@ -427,6 +427,25 @@ export function PracticaCargaForm({
                 setComponenteSeleccion(seleccionSugerida)
             }
 
+            if (!practicaBase && modoCargaRapida) {
+                const practicaManualRapida: NomencladorItem = {
+                    convenioId: convenioId ?? 0,
+                    codigo: codigoManual,
+                    descripcion: codigoManual,
+                    valor: null,
+                    valorEspecialista: null,
+                    valorAyudante: null,
+                    valorAnestesista: null,
+                    valorGastos: null,
+                }
+
+                practicaBase = practicaManualRapida
+                setPracticaSeleccionada(practicaManualRapida)
+                setBusqueda(codigoManual)
+                setResultados([])
+                setComponenteSeleccion({ especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 })
+            }
+
             if (!practicaBase) {
                 setBuscando(true)
                 try {

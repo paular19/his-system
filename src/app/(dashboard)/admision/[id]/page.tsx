@@ -77,12 +77,20 @@ async function FichaIngresoContenido({
   puedeModificar,
   puedeAgregarDiagnostico,
   puedeGenerarAutorizacion,
+  autoGenerarOrdenesInicial,
+  autoImprimirInicial,
+  autoSepararInicial,
+  ventanaImpresionNombreInicial,
 }: {
   ingresoId: number
   clerkId: string
   puedeModificar: boolean
   puedeAgregarDiagnostico: boolean
   puedeGenerarAutorizacion: boolean
+  autoGenerarOrdenesInicial: boolean
+  autoImprimirInicial: boolean
+  autoSepararInicial: boolean
+  ventanaImpresionNombreInicial: string | null
 }) {
   const tInicio = Date.now()
 
@@ -132,6 +140,10 @@ async function FichaIngresoContenido({
         puedeModificar={puedeModificar}
         puedeAgregarDiagnostico={puedeAgregarDiagnostico}
         puedeGenerarAutorizacion={puedeGenerarAutorizacion}
+        autoGenerarOrdenesInicial={autoGenerarOrdenesInicial}
+        autoImprimirInicial={autoImprimirInicial}
+        autoSepararInicial={autoSepararInicial}
+        ventanaImpresionNombreInicial={ventanaImpresionNombreInicial}
       />
     </>
   )
@@ -151,6 +163,10 @@ export default async function FichaIngresoPage({ params, searchParams }: PagePro
   if (isNaN(ingresoId)) notFound()
 
   const prefetch = resolverPrefetch(query)
+  const autoGenerarOrdenesInicial = resolverQueryString(query.autoGen) === '1'
+  const autoImprimirInicial = resolverQueryString(query.autoPrint) === '1'
+  const autoSepararInicial = resolverQueryString(query.autoSep) === '1'
+  const ventanaImpresionNombreInicial = resolverQueryString(query.printWin)?.slice(0, 80) ?? null
 
   const puedeModificar = tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')
   const puedeAgregarDiagnostico = tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
@@ -164,6 +180,10 @@ export default async function FichaIngresoPage({ params, searchParams }: PagePro
         puedeModificar={puedeModificar}
         puedeAgregarDiagnostico={puedeAgregarDiagnostico}
         puedeGenerarAutorizacion={puedeGenerarAutorizacion}
+        autoGenerarOrdenesInicial={autoGenerarOrdenesInicial}
+        autoImprimirInicial={autoImprimirInicial}
+        autoSepararInicial={autoSepararInicial}
+        ventanaImpresionNombreInicial={ventanaImpresionNombreInicial}
       />
     </Suspense>
   )

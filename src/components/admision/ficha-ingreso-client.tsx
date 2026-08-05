@@ -30,6 +30,10 @@ interface FichaIngresoClientProps {
     puedeModificar: boolean
     puedeAgregarDiagnostico: boolean
     puedeGenerarAutorizacion: boolean
+    autoGenerarOrdenesInicial?: boolean
+    autoImprimirInicial?: boolean
+    autoSepararInicial?: boolean
+    ventanaImpresionNombreInicial?: string | null
 }
 
 type PracticaEditable = {
@@ -96,6 +100,10 @@ export function FichaIngresoClient({
     puedeModificar,
     puedeAgregarDiagnostico,
     puedeGenerarAutorizacion,
+    autoGenerarOrdenesInicial = false,
+    autoImprimirInicial = false,
+    autoSepararInicial = false,
+    ventanaImpresionNombreInicial = null,
 }: FichaIngresoClientProps) {
     const router = useRouter()
     const [isEditing, setIsEditing] = useState(false)
@@ -133,6 +141,7 @@ export function FichaIngresoClient({
     const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
     const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
     const cardSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const autoGeneracionInicialEjecutadaRef = useRef(false)
     const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
 
@@ -431,6 +440,35 @@ export function FichaIngresoClient({
     const generarOrdenesSeleccionadas = (imprimirDespues: boolean) => {
         encolarGeneracionOrdenes(imprimirDespues)
     }
+
+    useEffect(() => {
+        if (!autoGenerarOrdenesInicial) return
+        if (autoGeneracionInicialEjecutadaRef.current) return
+        autoGeneracionInicialEjecutadaRef.current = true
+
+        const idsPendientes = (ingreso.practicas ?? [])
+            .filter((p) => (p.ordenPractica?.length ?? 0) === 0)
+            .map((p) => p.id)
+
+        if (idsPendientes.length === 0) return
+
+        const ventanaInicial = autoImprimirInicial && ventanaImpresionNombreInicial
+            ? window.open('', ventanaImpresionNombreInicial)
+            : null
+
+        encolarGeneracionOrdenes(
+            autoImprimirInicial,
+            idsPendientes,
+            autoSepararInicial,
+            ventanaInicial
+        )
+    }, [
+        autoGenerarOrdenesInicial,
+        autoImprimirInicial,
+        autoSepararInicial,
+        ventanaImpresionNombreInicial,
+        ingreso.practicas,
+    ])
 
     const guardarEdicionPractica = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()

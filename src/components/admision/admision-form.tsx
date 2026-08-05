@@ -403,7 +403,16 @@ export function AdmisionForm({
     const requiereOrdenAutomatica = practicasExpandida.length > 0
     setGenerandoOrdenesAuto(requiereOrdenAutomatica)
     const ventanaImpresion = requiereOrdenAutomatica ? abrirVentanaImpresionPendiente() : null
-    let impresionDisparada = false
+    const nombreVentanaImpresion = requiereOrdenAutomatica
+      ? `his-auto-print-${Date.now()}`
+      : null
+    if (ventanaImpresion && nombreVentanaImpresion) {
+      try {
+        ventanaImpresion.name = nombreVentanaImpresion
+      } catch {
+        // Ignore popup naming restrictions.
+      }
+    }
 
     try {
       const body: any = {
@@ -489,24 +498,6 @@ export function AdmisionForm({
         return
       }
 
-      if (requiereOrdenAutomatica) {
-        const autoOrdenResult = await generarOrdenesPendientesAdmision(ingresoId, {
-          separarPorPractica: generarOrdenesSeparadasPorPractica,
-        })
-        if (!autoOrdenResult.ok) {
-          console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
-        } else if (autoOrdenResult.ordenes.length > 0) {
-          const ordenesParam = autoOrdenResult.ordenes
-            .map((o) => `${o.puestoNumero}-${o.numero}`)
-            .join(',')
-          navegarVentanaImpresion(
-            ventanaImpresion,
-            `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
-          )
-          impresionDisparada = true
-        }
-      }
-
       const prefetchParams = new URLSearchParams()
       if (paciente?.nombreCompleto) {
         prefetchParams.set('prefetchNombre', paciente.nombreCompleto)
@@ -516,6 +507,16 @@ export function AdmisionForm({
       }
       if (obraSocialSeleccionada?.nombre) {
         prefetchParams.set('prefetchObraSocial', obraSocialSeleccionada.nombre)
+      }
+      if (requiereOrdenAutomatica) {
+        prefetchParams.set('autoGen', '1')
+        prefetchParams.set('autoPrint', '1')
+        if (generarOrdenesSeparadasPorPractica) {
+          prefetchParams.set('autoSep', '1')
+        }
+        if (nombreVentanaImpresion) {
+          prefetchParams.set('printWin', nombreVentanaImpresion)
+        }
       }
 
       const fichaPathBase = `/dashboard/admision/${ingresoId}`
@@ -534,7 +535,7 @@ export function AdmisionForm({
       setError(err instanceof Error ? err.message : 'Error inesperado')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } finally {
-      if (!impresionDisparada) {
+      if (!mantenerBloqueoHastaNavegacion) {
         cerrarVentanaImpresion(ventanaImpresion)
       }
       if (!mantenerBloqueoHastaNavegacion) {

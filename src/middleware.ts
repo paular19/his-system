@@ -11,8 +11,28 @@ const isPublicRoute = createRouteMatcher([
 // Rutas de API: requieren autenticación pero el control de acceso
 // detallado (RBAC) se maneja dentro de cada route handler.
 const isApiRoute = createRouteMatcher(['/api(.*)'])
+const isApiRouteConAuthEnHandler = createRouteMatcher(['/api/admision(.*)'])
+
+function aplicarHeadersSeguridad(response: NextResponse) {
+  response.headers.set('X-Content-Type-Options', 'nosniff')
+  response.headers.set('X-Frame-Options', 'DENY')
+  response.headers.set('X-XSS-Protection', '1; mode=block')
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  response.headers.set(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=()'
+  )
+
+  return response
+}
 
 export default clerkMiddleware(async (auth, request: NextRequest) => {
+  // En este endpoint, la autenticación y autorización se resuelven
+  // directamente en el route handler para evitar doble round-trip de auth.
+  if (isApiRouteConAuthEnHandler(request)) {
+    return aplicarHeadersSeguridad(NextResponse.next())
+  }
+
   const { userId } = await auth()
 
   // Si es ruta pública, dejar pasar
@@ -36,18 +56,7 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
   }
 
   // Usuario autenticado: agregar headers de seguridad
-  const response = NextResponse.next()
-
-  response.headers.set('X-Content-Type-Options', 'nosniff')
-  response.headers.set('X-Frame-Options', 'DENY')
-  response.headers.set('X-XSS-Protection', '1; mode=block')
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  response.headers.set(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=()'
-  )
-
-  return response
+  return aplicarHeadersSeguridad(NextResponse.next())
 })
 
 export const config = {

@@ -296,7 +296,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       where: {
         ingresoId: parsed.data.ingresoId,
         ...(idsSolicitados.length > 0 ? { id: { in: idsSolicitados } } : {}),
-        NOT: { estado: 'X' },
+        OR: [{ estado: null }, { estado: { not: 'X' } }],
         ordenPractica: {
           none: {
             orden: {

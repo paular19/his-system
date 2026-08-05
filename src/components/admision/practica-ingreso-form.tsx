@@ -14,6 +14,10 @@ import {
     PracticasAdmisionCard,
     type PracticaAdmisionItem,
 } from './practicas-admision-card'
+import {
+    abrirVentanaImpresionPendiente,
+    cerrarVentanaImpresion,
+} from '@/lib/utils/print-window'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 
@@ -23,6 +27,7 @@ interface PracticaIngresoFormProps {
         practicaIds: number[]
         imprimirDespues: boolean
         separarPorPractica?: boolean
+        ventanaImpresionInicial?: Window | null
     }) => void
     onSuccess: () => void
     onCancel: () => void
@@ -75,8 +80,12 @@ export function PracticaIngresoForm({
             return
         }
 
+        // Abrimos la pestana al hacer click en Guardar para evitar bloqueos de popup.
+        const ventanaImpresionInicial = abrirVentanaImpresionPendiente()
+
         setError(null)
         startTransition(async () => {
+            let ventanaTransferida = false
             try {
                 const practicasExpandida = practicas.flatMap((p) => {
                     const subitems = obtenerSubitemsSeleccionados(
@@ -139,7 +148,9 @@ export function PracticaIngresoForm({
                         practicaIds: resultado.practicaIds,
                         imprimirDespues: true,
                         separarPorPractica,
+                        ventanaImpresionInicial,
                     })
+                    ventanaTransferida = true
                 }
 
                 setPracticas([])
@@ -147,6 +158,10 @@ export function PracticaIngresoForm({
                 onSuccess()
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Error al guardar')
+            } finally {
+                if (!ventanaTransferida) {
+                    cerrarVentanaImpresion(ventanaImpresionInicial)
+                }
             }
         })
     }

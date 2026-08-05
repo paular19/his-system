@@ -52,6 +52,7 @@ type GeneracionOrdenTask = {
     practicaIds: number[]
     imprimirDespues: boolean
     separarPorPractica?: boolean
+    ventanaImpresionInicial?: Window | null
 }
 
 const LABEL_ESTADO: Record<string, string> = {
@@ -344,7 +345,9 @@ export function FichaIngresoClient({
     }
 
     const ejecutarGeneracionOrdenesTask = async (task: GeneracionOrdenTask) => {
-        const ventanaImpresion = task.imprimirDespues ? abrirVentanaImpresionPendiente() : null
+        const ventanaImpresion = task.imprimirDespues
+            ? (task.ventanaImpresionInicial ?? abrirVentanaImpresionPendiente())
+            : null
         let impresionDisparada = false
 
         try {
@@ -381,7 +384,8 @@ export function FichaIngresoClient({
     const encolarGeneracionOrdenes = (
         imprimirDespues: boolean,
         practicaIdsOverride?: number[],
-        separarPorPractica?: boolean
+        separarPorPractica?: boolean,
+        ventanaImpresionInicial?: Window | null
     ) => {
         const seleccionBase = practicaIdsOverride ?? practicasSeleccionadas
         const permitirIdsNoCargados = Array.isArray(practicaIdsOverride)
@@ -401,6 +405,7 @@ export function FichaIngresoClient({
             practicaIds,
             imprimirDespues,
             separarPorPractica,
+            ventanaImpresionInicial,
         }
 
         setErrorGenerarOrdenes(null)
@@ -1193,7 +1198,8 @@ export function FichaIngresoClient({
                                 encolarGeneracionOrdenes(
                                     task.imprimirDespues,
                                     task.practicaIds,
-                                    task.separarPorPractica
+                                    task.separarPorPractica,
+                                    task.ventanaImpresionInicial
                                 )
                             }}
                             onSuccess={() => {

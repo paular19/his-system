@@ -155,6 +155,12 @@ const incluirRelacionesDetalle = {
   },
 } as const
 
+export interface IngresoCreadoMinimo {
+  id: number
+  tipoIngresoCodigo: string
+  numeroIngreso: number
+}
+
 /**
  * Crea un ingreso generando el numeroIngreso atómicamente desde TipoIngreso.proximoNumero.
  */
@@ -162,7 +168,7 @@ export async function crearIngreso(
   data: CrearIngresoInput,
   paciente: Paciente,
   usuarioAlta: string
-): Promise<IngresoConRelaciones> {
+): Promise<IngresoCreadoMinimo> {
   const ahora = new Date()
   const edad = paciente.fechaNacimiento ? calcularEdad(paciente.fechaNacimiento) : null
   const usuarioNormalizado = usuarioAlta.slice(0, 10)
@@ -293,7 +299,11 @@ export async function crearIngreso(
         fechaEstado: ahora,
         usuario: usuarioNormalizado,
       },
-      include: incluirRelacionesBase,
+      select: {
+        id: true,
+        tipoIngresoCodigo: true,
+        numeroIngreso: true,
+      },
     })
 
     // Crear información del subtipo de admisión

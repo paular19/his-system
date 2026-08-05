@@ -84,28 +84,24 @@ export async function crearIngreso(
   data: CrearIngresoInput,
   usuario: string,
   ip?: string
-): Promise<IngresoConRelaciones> {
+): Promise<repo.IngresoCreadoMinimo> {
   const subtipoAdmisionCodigo = data.subtipoAdmisionCodigo?.trim() || null
 
-  const [paciente, tipoIngreso, subtipoAdmision, obraSocialNombre] = await Promise.all([
+  const requiereNombreObraSocial =
+    Boolean(data.obraSocialCoseguroId) ||
+    Boolean(data.planCoseguroId) ||
+    Boolean(data.numeroAfiliadoCoseguro?.trim()) ||
+    Boolean(data.practicas?.some((p) => !(p.importeTotal != null && p.importeTotal > 0)))
+
+  const [paciente, obraSocialNombre] = await Promise.all([
     prisma.paciente.findUnique({ where: { id: data.pacienteId } }),
-    prisma.tipoIngreso.findUnique({ where: { codigo: data.tipoIngresoCodigo } }),
-    subtipoAdmisionCodigo
-      ? prisma.subtipoAdmision.findUnique({ where: { codigo: subtipoAdmisionCodigo } })
+    requiereNombreObraSocial
+      ? obtenerNombreObraSocial(data.obraSocialId)
       : Promise.resolve(null),
-    obtenerNombreObraSocial(data.obraSocialId),
   ])
 
   if (!paciente) {
     throw new Error(`Paciente con ID ${data.pacienteId} no encontrado`)
-  }
-
-  if (!tipoIngreso) {
-    throw new Error(`Tipo de ingreso "${data.tipoIngresoCodigo}" no válido`)
-  }
-
-  if (subtipoAdmisionCodigo && !subtipoAdmision) {
-    throw new Error(`Subtipo de admisión "${subtipoAdmisionCodigo}" no válido`)
   }
 
   const dataConSubtipoNormalizado = subtipoAdmisionCodigo

@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       extraerIP(request)
     )
 
-    const response = apiCreado(ingreso)
+    const response = apiCreado({ id: ingreso.id })
     response.headers.set('x-ingreso-id', String(ingreso.id))
     return response
   } catch (error) {

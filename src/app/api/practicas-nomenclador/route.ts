@@ -32,13 +32,15 @@ export async function GET(request: NextRequest) {
     const convenioId = Number.isFinite(convenioNumber) ? convenioNumber : undefined
     const lite = searchParams.get('lite') === '1'
     const exactoCodigo = searchParams.get('exact') === '1'
+    const fallbackRaw = searchParams.get('fallback')
+    const fallbackGlobal = fallbackRaw != null ? fallbackRaw === '1' : !lite
     const limitRaw = searchParams.get('limit')
     const limitNumber = limitRaw ? parseInt(limitRaw, 10) : NaN
     const limit = Number.isFinite(limitNumber) ? Math.max(1, Math.min(limitNumber, 50)) : 20
 
     if (q.length < 2) return apiOk([])
 
-    const cacheKey = `${buildCacheKey(q, convenioId, lite)}:${exactoCodigo ? 'exact' : 'mixed'}:${limit}`
+    const cacheKey = `${buildCacheKey(q, convenioId, lite)}:${exactoCodigo ? 'exact' : 'mixed'}:${fallbackGlobal ? 'fb1' : 'fb0'}:${limit}`
     const cached = cache.get<Awaited<ReturnType<typeof buscarPracticas>>>(cacheKey)
     if (cached) return apiOk(cached)
 
@@ -46,6 +48,7 @@ export async function GET(request: NextRequest) {
       sinEnriquecer: lite,
       exactoCodigo,
       limite: limit,
+      fallbackGlobal,
     })
     cache.set(cacheKey, practicas)
     return apiOk(practicas)

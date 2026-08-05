@@ -68,7 +68,7 @@ export async function updateIngresoAction(
   id: number,
   data: ActualizarIngresoInput
 ): Promise<void> {
-  const usuario = await getUsuarioSesion()
+  const usuario = await getUsuarioSesionLectura()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')) {
     throw new Error('Sin permisos para modificar ingresos')
   }
@@ -80,7 +80,7 @@ export async function addPracticasIngresoAction(
   id: number,
   data: AgregarPracticasIngresoInput
 ): Promise<{ practicaIds: number[] }> {
-  const usuario = await getUsuarioSesion()
+  const usuario = await getUsuarioSesionLectura()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')) {
     throw new Error('Sin permisos para modificar ingresos')
   }

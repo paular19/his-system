@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import Link from 'next/link'
 import { ActualizarPacienteSchema, CrearPacienteSchema } from '@/modules/pacientes/schemas'
 
 // Tipo flexible para valores iniciales del formulario.
@@ -60,12 +61,15 @@ export function PacienteForm({
   const router = useRouter()
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pacienteCreadoId, setPacienteCreadoId] = useState<number | null>(null)
+  const [latenciaCreacionMs, setLatenciaCreacionMs] = useState<number | null>(null)
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<any>({
@@ -104,6 +108,10 @@ export function PacienteForm({
     const inicioSubmit = performance.now()
     setGuardando(true)
     setError(null)
+    if (!pacienteId) {
+      setPacienteCreadoId(null)
+      setLatenciaCreacionMs(null)
+    }
 
     try {
       const payload = {
@@ -129,14 +137,17 @@ export function PacienteForm({
       if (!pacienteId && res.ok && pacienteIdHeader) {
         const pacienteIdCreado = Number.parseInt(pacienteIdHeader, 10)
         if (!Number.isNaN(pacienteIdCreado) && pacienteIdCreado > 0) {
+          const latenciaMs = Math.round(performance.now() - inicioSubmit)
           if (typeof window !== 'undefined') {
-            const latenciaMs = Math.round(performance.now() - inicioSubmit)
             sessionStorage.setItem(
               'his.pacientes.creacion.submitMs',
               String(latenciaMs)
             )
           }
-          router.replace(`/dashboard/pacientes/${pacienteIdCreado}?alta=1`)
+
+          setLatenciaCreacionMs(latenciaMs)
+          setPacienteCreadoId(pacienteIdCreado)
+          reset({})
           return
         }
       }
@@ -150,13 +161,13 @@ export function PacienteForm({
       if (!pacienteId && typeof window !== 'undefined') {
         const latenciaMs = Math.round(performance.now() - inicioSubmit)
         sessionStorage.setItem('his.pacientes.creacion.submitMs', String(latenciaMs))
+        setLatenciaCreacionMs(latenciaMs)
+        setPacienteCreadoId(Number(json.data.id))
+        reset({})
+        return
       }
 
-      const destino = pacienteId
-        ? `/dashboard/pacientes/${json.data.id}`
-        : `/dashboard/pacientes/${json.data.id}?alta=1`
-
-      router.replace(destino)
+      router.replace(`/dashboard/pacientes/${json.data.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado')
     } finally {
@@ -169,6 +180,39 @@ export function PacienteForm({
       {error && (
         <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {!esEdicion && pacienteCreadoId && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 space-y-3">
+          <p className="font-medium">
+            Paciente creado correctamente.
+            {latenciaCreacionMs != null ? ` Tiempo de guardado: ${latenciaCreacionMs} ms.` : ''}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/dashboard/pacientes/${pacienteCreadoId}`}
+              className="inline-flex items-center rounded-md bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800"
+            >
+              Ver ficha
+            </Link>
+            <Link
+              href={`/dashboard/admision/nuevo?pacienteId=${pacienteCreadoId}`}
+              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              Nueva admisión
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setPacienteCreadoId(null)
+                setLatenciaCreacionMs(null)
+              }}
+              className="inline-flex items-center rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+            >
+              Cargar otro paciente
+            </button>
+          </div>
         </div>
       )}
 

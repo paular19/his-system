@@ -14,7 +14,6 @@ import { registrarAudit } from '@/lib/security/audit'
 
 interface PageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ alta?: string }>
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -22,7 +21,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return { title: `Paciente #${id}` }
 }
 
-export default async function FichaPacientePage({ params, searchParams }: PageProps) {
+export default async function FichaPacientePage({ params }: PageProps) {
   const usuario = await getUsuarioSesionLectura()
 
   if (!tienePermiso(usuario.rol, 'PACIENTES', 'LEER')) {
@@ -30,8 +29,6 @@ export default async function FichaPacientePage({ params, searchParams }: PagePr
   }
 
   const { id } = await params
-  const qs = await searchParams
-  const modoAltaRapida = qs.alta === '1'
   const pacienteId = parseInt(id, 10)
   if (isNaN(pacienteId)) notFound()
 
@@ -95,9 +92,7 @@ export default async function FichaPacientePage({ params, searchParams }: PagePr
     camaId: number | null
   }
 
-  const ingresosBaseOrdenados = modoAltaRapida
-    ? []
-    : await prisma.$queryRaw<IngresoBaseRow[]>`
+  const ingresosBaseOrdenados = await prisma.$queryRaw<IngresoBaseRow[]>`
       SELECT
         "IngID" AS id,
         "IngNro" AS "numeroIngreso",
@@ -412,16 +407,6 @@ export default async function FichaPacientePage({ params, searchParams }: PagePr
             )}
           </div>
         </div>
-
-        {modoAltaRapida && (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            Alta rápida habilitada para acelerar la creación.
-            {' '}
-            <Link href={`/dashboard/pacientes/${paciente.id}`} className="font-medium underline">
-              Ver ficha completa
-            </Link>
-          </div>
-        )}
 
         {/* Informe imprimible */}
         {ingresosPrint.length > 0 ? (

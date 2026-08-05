@@ -112,7 +112,7 @@ export async function obtenerPaciente(
     throw new Error(`Paciente con ID ${id} no encontrado`)
   }
 
-  await registrarAudit({
+  void registrarAudit({
     usuario,
     accion: 'CONSULTAR',
     entidad: 'Paciente',

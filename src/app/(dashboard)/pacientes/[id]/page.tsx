@@ -1,5 +1,5 @@
 import { Header } from '@/components/layout/header'
-import { getUsuarioSesion } from '@/lib/auth'
+import { getUsuarioSesionLectura } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { obtenerPaciente } from '@/modules/pacientes/service'
@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function FichaPacientePage({ params }: PageProps) {
-  const usuario = await getUsuarioSesion()
+  const usuario = await getUsuarioSesionLectura()
 
   if (!tienePermiso(usuario.rol, 'PACIENTES', 'LEER')) {
     redirect('/dashboard')
@@ -100,87 +100,93 @@ export default async function FichaPacientePage({ params }: PageProps) {
     new Set(ingresosBaseOrdenados.map((ing) => ing.camaId).filter((id): id is number => typeof id === 'number'))
   )
 
-  const patologiasRows = ingresoIds.length > 0
-    ? await prisma.ingresoPatologia.findMany({
-      where: { ingresoId: { in: ingresoIds } },
-      select: {
-        id: true,
-        ingresoId: true,
-        descripcion: true,
-        fecha: true,
-      },
-    })
-    : []
-
-  const practicasBaseRows = ingresoIds.length > 0
-    ? await prisma.practica.findMany({
-      where: {
-        ingresoId: { in: ingresoIds },
-        OR: [{ estado: 'A' }, { estado: null }],
-      },
-      select: {
-        id: true,
-        ingresoId: true,
-        codigoPractica: true,
-        cantidad: true,
-        fecha: true,
-        numeroAutorizacion: true,
-      },
-    })
-    : []
+  const [
+    patologiasRows,
+    practicasBaseRows,
+    tiposIngresoRows,
+    ingresoSubtipoRows,
+    subtiposRows,
+    profesionalesRows,
+    obrasRows,
+    planesRows,
+    camasRows,
+  ] = await Promise.all([
+    ingresoIds.length > 0
+      ? prisma.ingresoPatologia.findMany({
+        where: { ingresoId: { in: ingresoIds } },
+        select: {
+          id: true,
+          ingresoId: true,
+          descripcion: true,
+          fecha: true,
+        },
+      })
+      : Promise.resolve([]),
+    ingresoIds.length > 0
+      ? prisma.practica.findMany({
+        where: {
+          ingresoId: { in: ingresoIds },
+          OR: [{ estado: 'A' }, { estado: null }],
+        },
+        select: {
+          id: true,
+          ingresoId: true,
+          codigoPractica: true,
+          cantidad: true,
+          fecha: true,
+          numeroAutorizacion: true,
+        },
+      })
+      : Promise.resolve([]),
+    tipoIngresoCodigos.length > 0
+      ? prisma.tipoIngreso.findMany({
+        where: { codigo: { in: tipoIngresoCodigos } },
+        select: { codigo: true, descripcion: true },
+      })
+      : Promise.resolve([]),
+    ingresoIds.length > 0
+      ? prisma.ingresoSubtipo.findMany({
+        where: { ingresoId: { in: ingresoIds } },
+        select: { ingresoId: true, subtipoAdmisionCodigo: true },
+      })
+      : Promise.resolve([]),
+    ingresoIds.length > 0
+      ? prisma.subtipoAdmision.findMany({
+        where: { estado: 'A' },
+        select: { codigo: true, descripcion: true },
+      })
+      : Promise.resolve([]),
+    profesionalIds.length > 0
+      ? prisma.profesional.findMany({
+        where: { id: { in: profesionalIds } },
+        select: { id: true, nombre: true },
+      })
+      : Promise.resolve([]),
+    obraSocialIds.length > 0
+      ? prisma.obraSocial.findMany({
+        where: { id: { in: obraSocialIds } },
+        select: { id: true, nombre: true },
+      })
+      : Promise.resolve([]),
+    planIds.length > 0
+      ? prisma.planObraSocial.findMany({
+        where: { id: { in: planIds } },
+        select: { id: true, descripcion: true },
+      })
+      : Promise.resolve([]),
+    camaIds.length > 0
+      ? prisma.cama.findMany({
+        where: { id: { in: camaIds } },
+        select: { id: true, identificador: true, sector: true, habitacion: true, estado: true },
+      })
+      : Promise.resolve([]),
+  ])
 
   const codigosPractica = Array.from(new Set(practicasBaseRows.map((row) => row.codigoPractica)))
   const nomencladorRows = codigosPractica.length > 0
     ? await prisma.nomencladorPractica.findMany({
       where: { codigo: { in: codigosPractica } },
       select: { codigo: true, descripcion: true },
-    })
-    : []
-
-  const tiposIngresoRows = tipoIngresoCodigos.length > 0
-    ? await prisma.tipoIngreso.findMany({
-      where: { codigo: { in: tipoIngresoCodigos } },
-      select: { codigo: true, descripcion: true },
-    })
-    : []
-
-  const ingresoSubtipoRows = ingresoIds.length > 0
-    ? await prisma.ingresoSubtipo.findMany({
-      where: { ingresoId: { in: ingresoIds } },
-      select: { ingresoId: true, subtipoAdmisionCodigo: true },
-    })
-    : []
-
-  const subtiposRows = await prisma.subtipoAdmision.findMany({
-    where: { estado: 'A' },
-    select: { codigo: true, descripcion: true },
-  })
-
-  const profesionalesRows = profesionalIds.length > 0
-    ? await prisma.profesional.findMany({
-      where: { id: { in: profesionalIds } },
-      select: { id: true, nombre: true },
-    })
-    : []
-
-  const obrasRows = obraSocialIds.length > 0
-    ? await prisma.obraSocial.findMany({
-      where: { id: { in: obraSocialIds } },
-      select: { id: true, nombre: true },
-    })
-    : []
-
-  const planesRows = planIds.length > 0
-    ? await prisma.planObraSocial.findMany({
-      where: { id: { in: planIds } },
-      select: { id: true, descripcion: true },
-    })
-    : []
-
-  const camasRows = camaIds.length > 0
-    ? await prisma.cama.findMany({
-      where: { id: { in: camaIds } },
-      select: { id: true, identificador: true, sector: true, habitacion: true, estado: true },
     })
     : []
 
@@ -371,28 +377,35 @@ export default async function FichaPacientePage({ params }: PageProps) {
         </div>
 
         {/* Informe imprimible */}
-        <PacienteHospitalizacionPrint
-          paciente={{
-            id: paciente.id,
-            nombreCompleto: paciente.nombreCompleto,
-            apellido: paciente.apellido,
-            nombre: paciente.nombre,
-            historiaClinica: paciente.historiaClinica,
-            tipoDocumento: paciente.tipoDocumento,
-            numeroDocumento: paciente.numeroDocumento,
-            fechaNacimiento: paciente.fechaNacimiento,
-            sexo: paciente.sexo,
-            domicilio: paciente.domicilio,
-            celular1: paciente.celular1,
-            telefonoFijo: paciente.telefonoFijo,
-            email: paciente.email,
-            obraSocialId: paciente.obraSocialId,
-            planId: paciente.planId,
-            numeroAfiliado: paciente.numeroAfiliado,
-            observaciones: paciente.observaciones,
-          }}
-          ingresos={ingresosPrint}
-        />
+        {ingresosPrint.length > 0 ? (
+          <PacienteHospitalizacionPrint
+            paciente={{
+              id: paciente.id,
+              nombreCompleto: paciente.nombreCompleto,
+              apellido: paciente.apellido,
+              nombre: paciente.nombre,
+              historiaClinica: paciente.historiaClinica,
+              tipoDocumento: paciente.tipoDocumento,
+              numeroDocumento: paciente.numeroDocumento,
+              fechaNacimiento: paciente.fechaNacimiento,
+              sexo: paciente.sexo,
+              domicilio: paciente.domicilio,
+              celular1: paciente.celular1,
+              telefonoFijo: paciente.telefonoFijo,
+              email: paciente.email,
+              obraSocialId: paciente.obraSocialId,
+              planId: paciente.planId,
+              numeroAfiliado: paciente.numeroAfiliado,
+              observaciones: paciente.observaciones,
+            }}
+            ingresos={ingresosPrint}
+          />
+        ) : (
+          <div className="his-card p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2 pb-2 border-b">Informe de Hospitalización</h3>
+            <p className="text-sm text-gray-400">El paciente no tiene admisiones para imprimir.</p>
+          </div>
+        )}
 
         {internacionActiva && (
           <div className="his-card border border-rose-200 bg-rose-50/50 p-5">

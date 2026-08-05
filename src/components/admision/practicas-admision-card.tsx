@@ -139,6 +139,7 @@ export function PracticasAdmisionCard({
     try {
       const params = new URLSearchParams({ q: termino.trim(), convenioId: String(convenioId) })
       params.set('lite', '1')
+      params.set('fallback', '1')
       params.set('limit', String(limit))
       if (exactoCodigo) {
         params.set('exact', '1')

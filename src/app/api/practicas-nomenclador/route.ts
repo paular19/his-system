@@ -19,9 +19,14 @@ function buildCacheKey(q: string, convenioId?: number, lite = false): string {
 export async function GET(request: NextRequest) {
   try {
     const usuario = await getUsuarioSesionLectura()
-    const puedeBuscarPorAmbulatorio = tienePermiso(usuario.rol, 'AMBULATORIO', 'LEER')
-    const puedeBuscarPorCotizador = tienePermiso(usuario.rol, 'COTIZADOR', 'LEER')
-    if (!puedeBuscarPorAmbulatorio && !puedeBuscarPorCotizador) {
+    const puedeBuscarNomenclador =
+      tienePermiso(usuario.rol, 'AMBULATORIO', 'LEER') ||
+      tienePermiso(usuario.rol, 'COTIZADOR', 'LEER') ||
+      tienePermiso(usuario.rol, 'ADMISION', 'LEER') ||
+      tienePermiso(usuario.rol, 'INTERNACION', 'LEER') ||
+      tienePermiso(usuario.rol, 'FACTURACION', 'LEER')
+
+    if (!puedeBuscarNomenclador) {
       return apiForbidden()
     }
 
@@ -33,7 +38,7 @@ export async function GET(request: NextRequest) {
     const lite = searchParams.get('lite') === '1'
     const exactoCodigo = searchParams.get('exact') === '1'
     const fallbackRaw = searchParams.get('fallback')
-    const fallbackGlobal = fallbackRaw != null ? fallbackRaw === '1' : !lite
+    const fallbackGlobal = fallbackRaw != null ? fallbackRaw === '1' : true
     const limitRaw = searchParams.get('limit')
     const limitNumber = limitRaw ? parseInt(limitRaw, 10) : NaN
     const limit = Number.isFinite(limitNumber) ? Math.max(1, Math.min(limitNumber, 50)) : 20

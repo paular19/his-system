@@ -106,6 +106,7 @@ export function FichaIngresoClient({
     const [editingCard, setEditingCard] = useState<string | null>(null)
     const [cardLoading, setCardLoading] = useState(false)
     const [cardError, setCardError] = useState<string | null>(null)
+    const [cardSuccess, setCardSuccess] = useState<string | null>(null)
     const [cardValues, setCardValues] = useState<any>({})
     const [practicasIngreso, setPracticasIngreso] = useState(ingreso.practicas)
     const estadoIngreso = (ingreso.estado ?? '').trim().toUpperCase()
@@ -123,8 +124,14 @@ export function FichaIngresoClient({
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
+    const [admisionVista, setAdmisionVista] = useState(() => ({
+        fechaIngreso: ingreso.fechaIngreso,
+        fechaEgreso: ingreso.fechaEgreso,
+        fechaEgresoPrevista: ingreso.fechaEgresoPrevista,
+    }))
     const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
     const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
+    const cardSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
 
@@ -210,6 +217,14 @@ export function FichaIngresoClient({
     }, [ingreso.practicas])
 
     useEffect(() => {
+        setAdmisionVista({
+            fechaIngreso: ingreso.fechaIngreso,
+            fechaEgreso: ingreso.fechaEgreso,
+            fechaEgresoPrevista: ingreso.fechaEgresoPrevista,
+        })
+    }, [ingreso.fechaIngreso, ingreso.fechaEgreso, ingreso.fechaEgresoPrevista])
+
+    useEffect(() => {
         setPaginaPendientes((prev) => Math.min(prev, totalPaginasPendientes))
     }, [totalPaginasPendientes])
 
@@ -220,6 +235,14 @@ export function FichaIngresoClient({
     useEffect(() => {
         setPracticasSeleccionadas((prev) => prev.filter((id) => practicasPendientes.some((p) => p.id === id)))
     }, [practicasPendientes])
+
+    useEffect(() => {
+        return () => {
+            if (cardSuccessTimeoutRef.current) {
+                clearTimeout(cardSuccessTimeoutRef.current)
+            }
+        }
+    }, [])
 
     const profesionalTratanteNombre = ingreso.profesionalTratante?.nombre
         ?? ingreso.evoluciones?.[0]?.profesional?.nombre
@@ -258,6 +281,29 @@ export function FichaIngresoClient({
         const hh = String(date.getHours()).padStart(2, '0')
         const mm = String(date.getMinutes()).padStart(2, '0')
         return `${y}-${m}-${d}T${hh}:${mm}`
+    }
+
+    const parseFechaInputLocal = (value: string | null | undefined): Date | null => {
+        const raw = (value ?? '').trim()
+        if (!raw) return null
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            return new Date(`${raw}T12:00:00-03:00`)
+        }
+
+        const normalizado = raw.length === 16 ? `${raw}:00` : raw
+        return new Date(`${normalizado}-03:00`)
+    }
+
+    const notificarGuardadoCard = (mensaje: string) => {
+        setCardSuccess(mensaje)
+        if (cardSuccessTimeoutRef.current) {
+            clearTimeout(cardSuccessTimeoutRef.current)
+        }
+        cardSuccessTimeoutRef.current = setTimeout(() => {
+            setCardSuccess(null)
+            cardSuccessTimeoutRef.current = null
+        }, 4000)
     }
 
     const idsPendientesFiltradas = practicasPendientesFiltradas.map((p) => p.id)
@@ -610,6 +656,8 @@ export function FichaIngresoClient({
                         {puedeModificar && editingCard !== 'admision' && (
                             <button
                                 onClick={() => {
+                                    setCardError(null)
+                                    setCardSuccess(null)
                                     setEditingCard('admision');
                                     setCardValues({
                                         fechaIngreso: toDateTimeLocalInputValue(ingreso.fechaIngreso),
@@ -631,6 +679,11 @@ export function FichaIngresoClient({
                             </button>
                         )}
                     </div>
+                    {cardSuccess && editingCard !== 'admision' && (
+                        <div className="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                            {cardSuccess}
+                        </div>
+                    )}
                     {editingCard === 'admision' ? (
                         <form
                             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4"
@@ -638,6 +691,7 @@ export function FichaIngresoClient({
                                 e.preventDefault();
                                 setCardLoading(true);
                                 setCardError(null);
+                                setCardSuccess(null);
                                 try {
                                     const payload: ActualizarIngresoInput = {
                                         fechaIngreso: cardValues.fechaIngreso ? cardValues.fechaIngreso : undefined,
@@ -669,7 +723,24 @@ export function FichaIngresoClient({
                                     }
 
                                     await updateIngresoAction(ingreso.id, payload);
+
+                                    setAdmisionVista((prev) => ({
+                                        fechaIngreso: payload.fechaIngreso
+                                            ? parseFechaInputLocal(String(payload.fechaIngreso))
+                                            : prev.fechaIngreso,
+                                        fechaEgreso: 'fechaEgreso' in payload
+                                            ? (payload.fechaEgreso ? parseFechaInputLocal(String(payload.fechaEgreso)) : null)
+                                            : prev.fechaEgreso,
+                                        fechaEgresoPrevista: 'fechaEgresoPrevista' in payload
+                                            ? (payload.fechaEgresoPrevista
+                                                ? parseFechaInputLocal(String(payload.fechaEgresoPrevista))
+                                                : null)
+                                            : prev.fechaEgresoPrevista,
+                                    }))
+
                                     setEditingCard(null);
+                                    notificarGuardadoCard('Datos de admisión actualizados correctamente.')
+                                    router.refresh()
                                 } catch (err) {
                                     const detalle =
                                         err instanceof Error && err.message.trim().length > 0
@@ -767,7 +838,16 @@ export function FichaIngresoClient({
                                 </div>
                             )}
                             <div className="col-span-full flex gap-2 mt-2">
-                                <button type="submit" className="text-green-600 border px-3 py-1 rounded" disabled={cardLoading}>Guardar</button>
+                                <button type="submit" className="inline-flex items-center gap-1.5 text-green-600 border px-3 py-1 rounded" disabled={cardLoading}>
+                                    {cardLoading ? (
+                                        <>
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            Guardando...
+                                        </>
+                                    ) : (
+                                        'Guardar'
+                                    )}
+                                </button>
                                 <button type="button" className="text-gray-400 border px-3 py-1 rounded" onClick={() => setEditingCard(null)} disabled={cardLoading}>Cancelar</button>
                                 {cardError && <span className="text-red-500 ml-2">{cardError}</span>}
                             </div>
@@ -786,13 +866,13 @@ export function FichaIngresoClient({
                                 label="Número de Ingreso"
                                 value={`${ingreso.tipoIngresoCodigo}-${ingreso.numeroIngreso}`}
                             />
-                            <DataItem label="Fecha de Ingreso" value={formatearFechaHora(ingreso.fechaIngreso)} />
+                            <DataItem label="Fecha de Ingreso" value={formatearFechaHora(admisionVista.fechaIngreso)} />
                             <DataItem label="Profesional Guardia" value={ingreso.profesionalGuardia?.nombre} />
                             {!esIngresoAmbulatorio && (
-                                <DataItem label="Fecha de Egreso" value={formatearFecha(ingreso.fechaEgreso)} />
+                                <DataItem label="Fecha de Egreso" value={formatearFecha(admisionVista.fechaEgreso)} />
                             )}
                             {!ocultarEgresoPrevisto && (
-                                <DataItem label="Egreso Previsto" value={formatearFecha(ingreso.fechaEgresoPrevista)} />
+                                <DataItem label="Egreso Previsto" value={formatearFecha(admisionVista.fechaEgresoPrevista)} />
                             )}
                             {!esGuardia && (
                                 <DataItem label="Profesional Tratante" value={profesionalTratanteNombre} />

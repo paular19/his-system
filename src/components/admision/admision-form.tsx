@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Loader2 } from 'lucide-react'
 import Link from 'next/link'
@@ -108,8 +108,9 @@ export function AdmisionForm({
   const [resultadoAlta, setResultadoAlta] = useState<{
     ingresoId: number
     fichaPath: string
-    latenciaMs: number
   } | null>(null)
+  const [navegandoFicha, setNavegandoFicha] = useState(false)
+  const [navegacionPendiente, startNavigationTransition] = useTransition()
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
 
   // Tipo de ingreso por defecto para admisión general
@@ -345,6 +346,7 @@ export function AdmisionForm({
     }
 
     setResultadoAlta(null)
+    setNavegandoFicha(false)
 
     if (!paciente) {
       setError('Debe seleccionar un paciente')
@@ -504,19 +506,20 @@ export function AdmisionForm({
       })
 
       const ingresoIdHeader = response.headers.get('x-ingreso-id')
-      const json = await response.json().catch(() => null)
 
-      if (!response.ok || !json?.ok) {
+      if (!response.ok) {
+        const jsonError = await response.json().catch(() => null)
         cerrarVentanaImpresion(ventanaImpresion)
-        setError(json?.error ?? 'No se pudo crear la admisión')
+        setError(jsonError?.error ?? 'No se pudo crear la admisión')
         formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         return
       }
 
-      const ingresoId = Number.parseInt(
-        ingresoIdHeader ?? String(json?.data?.id ?? ''),
-        10
-      )
+      let ingresoId = Number.parseInt(ingresoIdHeader ?? '', 10)
+      if (!Number.isFinite(ingresoId) || ingresoId <= 0) {
+        const json = await response.json().catch(() => null)
+        ingresoId = Number.parseInt(String(json?.data?.id ?? ''), 10)
+      }
 
       if (!Number.isFinite(ingresoId) || ingresoId <= 0) {
         cerrarVentanaImpresion(ventanaImpresion)
@@ -586,13 +589,16 @@ export function AdmisionForm({
       setResultadoAlta({
         ingresoId,
         fichaPath,
-        latenciaMs,
       })
-      limpiarFormularioTrasAlta()
+      setNavegandoFicha(true)
+      startNavigationTransition(() => {
+        router.push(fichaPath)
+      })
     } catch (err) {
       if (!impresionDisparada) {
         cerrarVentanaImpresion(ventanaImpresion)
       }
+      setNavegandoFicha(false)
       setError(err instanceof Error ? err.message : 'Error inesperado')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } finally {
@@ -624,32 +630,39 @@ export function AdmisionForm({
       )}
 
       {resultadoAlta && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 space-y-3">
-          <p className="font-medium">
-            Admisión registrada correctamente.
-            {' '}
-            Tiempo de guardado: {resultadoAlta.latenciaMs} ms.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={resultadoAlta.fichaPath}
-              className="inline-flex items-center rounded-md bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800"
-            >
-              Ver admisión
-            </Link>
-            <Link
-              href={`/dashboard/ambulatorio/nueva?ingresoId=${resultadoAlta.ingresoId}`}
-              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
-            >
-              Ir a autorizaciones
-            </Link>
-            <button
-              type="button"
-              onClick={() => setResultadoAlta(null)}
-              className="inline-flex items-center rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
-            >
-              Cerrar aviso
-            </button>
+        <div className="fixed left-4 right-4 top-4 z-50 md:left-auto md:w-[28rem]">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 shadow-lg space-y-3">
+            <p className="font-semibold">Admisión registrada correctamente.</p>
+            <p className="text-emerald-800/90 flex items-center gap-2">
+              {(navegandoFicha || navegacionPendiente) && <Loader2 className="h-4 w-4 animate-spin" />}
+              {(navegandoFicha || navegacionPendiente)
+                ? 'Cargando ficha de admisión...'
+                : 'La ficha ya está lista para abrirse.'}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={resultadoAlta.fichaPath}
+                className="inline-flex items-center rounded-md bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800"
+              >
+                Ver admisión
+              </Link>
+              <Link
+                href={`/dashboard/ambulatorio/nueva?ingresoId=${resultadoAlta.ingresoId}`}
+                className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
+              >
+                Ir a autorizaciones
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setResultadoAlta(null)
+                  setNavegandoFicha(false)
+                }}
+                className="inline-flex items-center rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+              >
+                Cerrar aviso
+              </button>
+            </div>
           </div>
         </div>
       )}

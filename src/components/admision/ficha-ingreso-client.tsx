@@ -1234,7 +1234,7 @@ export function FichaIngresoClient({
                                         + Agregar práctica
                                     </Link>
                                     <Link
-                                        href={`/dashboard/internacion/${ingreso.id}#internacion-cirugia`}
+                                        href={`/dashboard/internacion/${ingreso.id}`}
                                         className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
                                     >
                                         + Nueva cirugía
@@ -1578,7 +1578,7 @@ export function FichaIngresoClient({
                                             ).map(([codigo, cantidad]) => `${codigo} x${cantidad}`)
                                             const codigosResumen = codigosConCantidad.slice(0, 4).join(', ')
                                             const codigosRestantes = Math.max(0, codigosConCantidad.length - 4)
-                                            const fechaResumenOrden = formatearFechaHora(grupo.fechaReferencia)
+                                            const fechaResumenOrden = formatearFecha(grupo.fechaReferencia)
                                             const tituloGrupo = grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                                 ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                                 : `Autorización ${grupo.numeroAutorizacion ?? '-'}`

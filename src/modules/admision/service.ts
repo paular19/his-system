@@ -121,17 +121,21 @@ export async function crearIngreso(
 
   const ingreso = await repo.crearIngreso(dataParaCrear, paciente, usuario)
 
+  const tareasPostAlta: Array<Promise<unknown>> = []
+
   // Auto-generar informe de hospitalización para internaciones
   if (dataNormalizada.tipoIngresoCodigo === 'INT') {
-    await prisma.informeHospitalizacion.create({
-      data: {
-        ingresoId: ingreso.id,
-        fecha: new Date(),
-        estado: 'A',
-        usuario: usuario.slice(0, 10),
-        fechaEstado: new Date(),
-      },
-    })
+    tareasPostAlta.push(
+      prisma.informeHospitalizacion.create({
+        data: {
+          ingresoId: ingreso.id,
+          fecha: new Date(),
+          estado: 'A',
+          usuario: usuario.slice(0, 10),
+          fechaEstado: new Date(),
+        },
+      })
+    )
   }
   // Auto-generar informe ambulatorio para admisiones ambulatorias, derivaciones e indicaciones médicas
   const subtiposInformeAmbulatorio = new Set([
@@ -154,16 +158,18 @@ export async function crearIngreso(
     !!dataParaCrear.subtipoAdmisionCodigo &&
     subtiposInformeAmbulatorio.has(dataParaCrear.subtipoAdmisionCodigo)
   ) {
-    await prisma.informeAmbulatorio.create({
-      data: {
-        ingresoId: ingreso.id,
-        fecha: new Date(),
-        estado: 'A',
-        profesionalId: dataParaCrear.profesionalGuardiaId ?? null,
-        usuario: usuario.slice(0, 10),
-        fechaEstado: new Date(),
-      },
-    })
+    tareasPostAlta.push(
+      prisma.informeAmbulatorio.create({
+        data: {
+          ingresoId: ingreso.id,
+          fecha: new Date(),
+          estado: 'A',
+          profesionalId: dataParaCrear.profesionalGuardiaId ?? null,
+          usuario: usuario.slice(0, 10),
+          fechaEstado: new Date(),
+        },
+      })
+    )
   }
 
   void registrarAudit({
@@ -237,71 +243,81 @@ export async function crearIngreso(
     }
 
     const ahora = new Date()
-    await prisma.practica.createMany({
-      data: dataParaCrear.practicas.map((p) => {
-        let importeTotal = p.importeTotal != null && p.importeTotal > 0 ? p.importeTotal : null
+    tareasPostAlta.push(
+      prisma.practica.createMany({
+        data: dataParaCrear.practicas.map((p) => {
+          let importeTotal = p.importeTotal != null && p.importeTotal > 0 ? p.importeTotal : null
 
-        if (importeTotal == null && regla) {
-          const clave = p.codigo.trim().toUpperCase()
-          const precio = valorNomenclador.get(clave) ?? 0
-          const cobertura = calcularImporteFacturable(precio, p.cantidad, regla)
-          importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null
-        }
+          if (importeTotal == null && regla) {
+            const clave = p.codigo.trim().toUpperCase()
+            const precio = valorNomenclador.get(clave) ?? 0
+            const cobertura = calcularImporteFacturable(precio, p.cantidad, regla)
+            importeTotal = cobertura.importeTotalFacturable > 0 ? cobertura.importeTotalFacturable : null
+          }
 
-        return {
-          ingresoId: ingreso.id,
-          convenioId: (p.convenioId ?? dataParaCrear.obraSocialId) as number,
-          codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
-          convenioValorId: 0,
-          fecha: ahora,
-          cantidad: p.cantidad,
-          numeroAutorizacion: normalizarNumeroAutorizacion(p.numeroAutorizacion),
-          matriculaEspecialista: p.matriculaEspecialista ?? null,
-          matriculaAnestesista: p.matriculaAnestesista ?? null,
-          obraSocialId: dataParaCrear.obraSocialId ?? null,
-          planId: dataParaCrear.planId ?? null,
-          facturable: true,
-          estado: 'A',
-          ordenItem: p.grupoOrden ?? null,
-          importeTotal,
-          usuarioRegistro: usuario.slice(0, 10),
-          fechaUsuario: ahora,
-        }
-      }),
-    })
+          return {
+            ingresoId: ingreso.id,
+            convenioId: (p.convenioId ?? dataParaCrear.obraSocialId) as number,
+            codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
+            convenioValorId: 0,
+            fecha: ahora,
+            cantidad: p.cantidad,
+            numeroAutorizacion: normalizarNumeroAutorizacion(p.numeroAutorizacion),
+            matriculaEspecialista: p.matriculaEspecialista ?? null,
+            matriculaAnestesista: p.matriculaAnestesista ?? null,
+            obraSocialId: dataParaCrear.obraSocialId ?? null,
+            planId: dataParaCrear.planId ?? null,
+            facturable: true,
+            estado: 'A',
+            ordenItem: p.grupoOrden ?? null,
+            importeTotal,
+            usuarioRegistro: usuario.slice(0, 10),
+            fechaUsuario: ahora,
+          }
+        }),
+      })
+    )
   }
 
   // Registrar medicamentos al ingreso si se enviaron
   if (data.medicaciones && data.medicaciones.length > 0) {
-    await prisma.medicacionIngreso.createMany({
-      data: data.medicaciones.map((m) => ({
-        ingresoId: ingreso.id,
-        nombre: m.nombre,
-        dosis: m.dosis ?? null,
-        viaAdministracion: m.viaAdministracion ?? null,
-        frecuencia: m.frecuencia ?? null,
-        observaciones: m.observaciones ?? null,
-        fechaInicio: new Date(),
-        estado: 'A',
-        usuario: usuario.slice(0, 10),
-        fechaEstado: new Date(),
-      })),
-    })
+    tareasPostAlta.push(
+      prisma.medicacionIngreso.createMany({
+        data: data.medicaciones.map((m) => ({
+          ingresoId: ingreso.id,
+          nombre: m.nombre,
+          dosis: m.dosis ?? null,
+          viaAdministracion: m.viaAdministracion ?? null,
+          frecuencia: m.frecuencia ?? null,
+          observaciones: m.observaciones ?? null,
+          fechaInicio: new Date(),
+          estado: 'A',
+          usuario: usuario.slice(0, 10),
+          fechaEstado: new Date(),
+        })),
+      })
+    )
   }
 
   if (data.descartables && data.descartables.length > 0) {
-    await prisma.descartableIngreso.createMany({
-      data: data.descartables.map((d) => ({
-        ingresoId: ingreso.id,
-        nombre: d.nombre,
-        cantidad: d.cantidad,
-        observaciones: d.observaciones ?? null,
-        fechaInicio: new Date(),
-        estado: 'A',
-        usuario: usuario.slice(0, 10),
-        fechaEstado: new Date(),
-      })),
-    })
+    tareasPostAlta.push(
+      prisma.descartableIngreso.createMany({
+        data: data.descartables.map((d) => ({
+          ingresoId: ingreso.id,
+          nombre: d.nombre,
+          cantidad: d.cantidad,
+          observaciones: d.observaciones ?? null,
+          fechaInicio: new Date(),
+          estado: 'A',
+          usuario: usuario.slice(0, 10),
+          fechaEstado: new Date(),
+        })),
+      })
+    )
+  }
+
+  if (tareasPostAlta.length > 0) {
+    await Promise.all(tareasPostAlta)
   }
 
   return ingreso

@@ -555,7 +555,7 @@ export function AdmisionForm({
               ? 'Admisión registrada. Cargando ficha...'
               : generandoOrdenesAuto
                 ? 'Generando admisión y órdenes para su impresión...'
-                : 'Registrando admisión... por favor espere.'}
+                : 'Generando admisión... por favor espere.'}
           </div>
         </div>
       )}

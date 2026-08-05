@@ -121,10 +121,10 @@ export function InternacionPracticasFichaTable({
                 usuarios: Array.from(item.usuarios).sort((a, b) => a.localeCompare(b, 'es')),
             }))
             .sort((a, b) => {
-                const porFecha = b.fechaCarga.getTime() - a.fechaCarga.getTime()
+                const porFecha = a.fechaCarga.getTime() - b.fechaCarga.getTime()
                 if (porFecha !== 0) return porFecha
-                if (a.puestoNumero !== b.puestoNumero) return b.puestoNumero - a.puestoNumero
-                return b.numeroOrden - a.numeroOrden
+                if (a.puestoNumero !== b.puestoNumero) return a.puestoNumero - b.puestoNumero
+                return a.numeroOrden - b.numeroOrden
             })
 
         return ordenadas.map((item, index) => ({

@@ -105,6 +105,7 @@ type GrupoPracticasAutorizadasCirugia = {
     puestoNumero: number | null
     ordenNumero: number | null
     numeroAutorizacion: string | null
+    fechaReferencia: Date | null
     totalCantidad: number
     practicas: CirugiaUrgenciaItem['practicas']
 }
@@ -270,6 +271,20 @@ export function CirugiaUrgenciaSection({
     useEffect(() => {
         setCirugias(cirugiasIniciales)
     }, [cirugiasIniciales])
+
+    const cirugiasOrdenadas = useMemo(() => {
+        const lista = [...cirugias]
+        lista.sort((a, b) => {
+            const fechaA = new Date(a.fechaCirugia).getTime()
+            const fechaB = new Date(b.fechaCirugia).getTime()
+            const fechaANormalizada = Number.isFinite(fechaA) ? fechaA : Number.MAX_SAFE_INTEGER
+            const fechaBNormalizada = Number.isFinite(fechaB) ? fechaB : Number.MAX_SAFE_INTEGER
+
+            if (fechaANormalizada !== fechaBNormalizada) return fechaANormalizada - fechaBNormalizada
+            return a.id - b.id
+        })
+        return lista
+    }, [cirugias])
 
     useEffect(() => {
         setGenerandoOrdenAgrupada(hayGeneracionesEnBackground)
@@ -466,6 +481,7 @@ export function CirugiaUrgenciaSection({
                             puestoNumero: orden.puestoNumero,
                             ordenNumero: orden.ordenNumero,
                             numeroAutorizacion: normalizarNumeroAutorizacion(orden.numeroAutorizacion) ?? numeroManual,
+                            fechaReferencia: null,
                             totalCantidad: Number.isFinite(practica.cantidad) ? Number(practica.cantidad) : 0,
                             practicas: [practica],
                         })
@@ -493,6 +509,7 @@ export function CirugiaUrgenciaSection({
                     puestoNumero: null,
                     ordenNumero: null,
                     numeroAutorizacion: numeroManual,
+                    fechaReferencia: null,
                     totalCantidad: Number.isFinite(practica.cantidad) ? Number(practica.cantidad) : 0,
                     practicas: [practica],
                 })
@@ -520,13 +537,14 @@ export function CirugiaUrgenciaSection({
                     return {
                         ...grupo,
                         fechaReferenciaMs,
+                        fechaReferencia: fechaReferenciaMs > 0 ? new Date(fechaReferenciaMs) : null,
                     }
                 })
                 .sort((a, b) => {
-                    if (a.fechaReferenciaMs !== b.fechaReferenciaMs) return b.fechaReferenciaMs - a.fechaReferenciaMs
+                    if (a.fechaReferenciaMs !== b.fechaReferenciaMs) return a.fechaReferenciaMs - b.fechaReferenciaMs
                     if (a.tipo !== b.tipo) return a.tipo === 'orden' ? -1 : 1
-                    if (a.puestoNumero !== b.puestoNumero) return (b.puestoNumero ?? 0) - (a.puestoNumero ?? 0)
-                    if (a.ordenNumero !== b.ordenNumero) return (b.ordenNumero ?? 0) - (a.ordenNumero ?? 0)
+                    if (a.puestoNumero !== b.puestoNumero) return (a.puestoNumero ?? 0) - (b.puestoNumero ?? 0)
+                    if (a.ordenNumero !== b.ordenNumero) return (a.ordenNumero ?? 0) - (b.ordenNumero ?? 0)
                     return a.key.localeCompare(b.key)
                 })
                 .map(({ fechaReferenciaMs: _, ...grupo }) => grupo)
@@ -1105,12 +1123,29 @@ export function CirugiaUrgenciaSection({
                                 </label>
                             </div>
 
-                            {cirugias.map((c) => {
+                            {cirugiasOrdenadas.map((c) => {
                                 const cirugiaAbierta = cirugiasAbiertas[c.id] ?? false
-                                const practicasPendientesCirugiaItem = c.practicas.filter((practica) => {
-                                    const estadoPractica = estadoPracticaCirugiaPorId.get(practica.id)
-                                    return estadoPractica?.pendiente !== false && coincideFiltroSectorPractica(practica.id)
-                                })
+                                const practicasPendientesCirugiaItem = c.practicas
+                                    .filter((practica) => {
+                                        const estadoPractica = estadoPracticaCirugiaPorId.get(practica.id)
+                                        return estadoPractica?.pendiente !== false && coincideFiltroSectorPractica(practica.id)
+                                    })
+                                    .sort((a, b) => {
+                                        const estadoA = estadoPracticaCirugiaPorId.get(a.id)
+                                        const estadoB = estadoPracticaCirugiaPorId.get(b.id)
+                                        const practicaA = estadoA
+                                            ? (practicasInternacionPorId.get(estadoA.practicaInternacionId) ?? null)
+                                            : null
+                                        const practicaB = estadoB
+                                            ? (practicasInternacionPorId.get(estadoB.practicaInternacionId) ?? null)
+                                            : null
+
+                                        const fechaA = practicaA ? new Date(practicaA.fecha).getTime() : Number.MAX_SAFE_INTEGER
+                                        const fechaB = practicaB ? new Date(practicaB.fecha).getTime() : Number.MAX_SAFE_INTEGER
+
+                                        if (fechaA !== fechaB) return fechaA - fechaB
+                                        return a.id - b.id
+                                    })
 
                                 const practicaIdsCirugia = practicasPendientesCirugiaItem.map((practica) => practica.id)
                                 const practicaIdsPendientesCirugiaItem = practicaIdsCirugia.filter(
@@ -1424,6 +1459,13 @@ export function CirugiaUrgenciaSection({
                                                     ).map(([codigo, cantidad]) => `${codigo} x${cantidad}`)
                                                     const codigosResumen = codigosConCantidad.slice(0, 4).join(', ')
                                                     const codigosRestantes = Math.max(0, codigosConCantidad.length - 4)
+                                                    const fechaResumenOrden = grupo.fechaReferencia
+                                                        ? formatearFechaArgentina(grupo.fechaReferencia, {
+                                                            day: '2-digit',
+                                                            month: '2-digit',
+                                                            year: 'numeric',
+                                                        })
+                                                        : '-'
 
                                                     return (
                                                         <div
@@ -1448,7 +1490,7 @@ export function CirugiaUrgenciaSection({
                                                                     <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
                                                                     <span className="shrink-0 font-semibold">{tituloGrupo}</span>
                                                                     <span className={`min-w-0 truncate text-[10px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
-                                                                        Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                                                                        Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Fecha: {fechaResumenOrden}
                                                                     </span>
                                                                 </span>
                                                                 <span className={`text-[11px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>

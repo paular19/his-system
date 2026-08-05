@@ -35,11 +35,30 @@ export function abrirVentanaImpresionPendiente(): Window | null {
   return popup
 }
 
+function agregarAutoCloseSiEsVistaImpresion(url: string): string {
+  if (typeof window === 'undefined') return url
+
+  try {
+    const parsed = new URL(url, window.location.origin)
+    if (parsed.pathname !== '/dashboard/ambulatorio/imprimir') return url
+
+    if (!parsed.searchParams.has('autoClose')) {
+      parsed.searchParams.set('autoClose', '1')
+    }
+
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return url
+  }
+}
+
 export function navegarVentanaImpresion(
   popup: Window | null,
   url: string
 ): void {
   if (typeof window === 'undefined') return
+
+  const destino = agregarAutoCloseSiEsVistaImpresion(url)
 
   const mantenerFoco = () => {
     try {
@@ -52,7 +71,7 @@ export function navegarVentanaImpresion(
 
   if (popup && !popup.closed) {
     try {
-      popup.location.href = url
+      popup.location.href = destino
       mantenerFoco()
       setTimeout(mantenerFoco, 0)
       return
@@ -61,7 +80,7 @@ export function navegarVentanaImpresion(
     }
   }
 
-  const nuevaVentana = window.open(url, '_blank', 'noopener,noreferrer')
+  const nuevaVentana = window.open(destino, '_blank', 'noopener,noreferrer')
   if (nuevaVentana) {
     try {
       nuevaVentana.blur()

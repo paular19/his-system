@@ -9,7 +9,7 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = { title: 'Impresión de Autorizaciones' }
 
 interface PageProps {
-  searchParams: Promise<{ ordenes?: string }>
+  searchParams: Promise<{ ordenes?: string; autoClose?: string }>
 }
 
 function parseOrdenesParam(raw: string): Array<{ puestoNumero: number; numero: number }> {
@@ -43,6 +43,7 @@ export default async function ImprimirAutorizacionesPage({ searchParams }: PageP
 
   const params = await searchParams
   const raw = params.ordenes?.trim() ?? ''
+  const cerrarDespuesDeImprimir = params.autoClose === '1'
   if (!raw) notFound()
 
   const refs = parseOrdenesParam(raw)
@@ -56,7 +57,11 @@ export default async function ImprimirAutorizacionesPage({ searchParams }: PageP
 
   return (
     <div className="p-6 max-w-5xl space-y-6 print:p-0 print:max-w-none print:space-y-0">
-      <PrintActions imprimirLabel="Imprimir todas las órdenes" volverLabel="Volver" />
+      <PrintActions
+        imprimirLabel="Imprimir todas las órdenes"
+        volverLabel="Volver"
+        cerrarDespuesDeImprimir={cerrarDespuesDeImprimir}
+      />
 
       {ordenes.map((orden) => (
         <AutorizacionPrint

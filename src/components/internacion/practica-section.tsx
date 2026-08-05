@@ -1308,6 +1308,7 @@ export function PracticaSection({
                                         const codigosResumen = codigosConCantidad.slice(0, 4).join(', ')
                                         const codigosRestantes = Math.max(0, codigosConCantidad.length - 4)
                                         const grupoYaAutorizado = grupoTieneNumeroAutorizacion(grupo)
+                                        const fechaResumenOrden = fmtFecha(grupo.fechaReferencia)
                                         const tituloGrupo = grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                             ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                             : `Autorización ${grupo.numeroAutorizacion ?? '-'}`
@@ -1335,7 +1336,7 @@ export function PracticaSection({
                                                         <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
                                                         <span className="shrink-0 font-semibold">{tituloGrupo}</span>
                                                         <span className={`min-w-0 truncate text-[10px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
-                                                            Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                                                            Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Fecha: {fechaResumenOrden}
                                                         </span>
                                                     </span>
                                                     <span className={`text-[11px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>

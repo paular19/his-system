@@ -1225,14 +1225,29 @@ export function FichaIngresoClient({
                     <div className="flex items-center justify-between mb-3 pb-2 border-b gap-3 flex-wrap">
                         <h3 className="text-sm font-semibold text-gray-700">Prácticas realizadas</h3>
                         <div className="flex items-center gap-2">
-                            {puedeModificar && (
+                            {puedeModificar && ingreso.tipoIngresoCodigo === 'INT' ? (
+                                <>
+                                    <Link
+                                        href={`/dashboard/internacion/${ingreso.id}/practicas`}
+                                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                    >
+                                        + Agregar práctica
+                                    </Link>
+                                    <Link
+                                        href={`/dashboard/internacion/${ingreso.id}#internacion-cirugia`}
+                                        className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
+                                    >
+                                        + Nueva cirugía
+                                    </Link>
+                                </>
+                            ) : puedeModificar ? (
                                 <button
                                     onClick={() => setEditingCard('practicas')}
                                     className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                                 >
                                     + Agregar práctica
                                 </button>
-                            )}
+                            ) : null}
                         </div>
                     </div>
 
@@ -1563,6 +1578,7 @@ export function FichaIngresoClient({
                                             ).map(([codigo, cantidad]) => `${codigo} x${cantidad}`)
                                             const codigosResumen = codigosConCantidad.slice(0, 4).join(', ')
                                             const codigosRestantes = Math.max(0, codigosConCantidad.length - 4)
+                                            const fechaResumenOrden = formatearFechaHora(grupo.fechaReferencia)
                                             const tituloGrupo = grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                                 ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                                 : `Autorización ${grupo.numeroAutorizacion ?? '-'}`
@@ -1584,7 +1600,7 @@ export function FichaIngresoClient({
                                                             <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
                                                             <span className="shrink-0 text-xs font-semibold">{tituloGrupo}</span>
                                                             <span className="min-w-0 truncate text-[10px] text-emerald-700">
-                                                                Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                                                                Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Fecha: {fechaResumenOrden}
                                                             </span>
                                                         </span>
                                                         <span className="text-[11px] text-emerald-700">{grupo.practicas.length} práctica(s)</span>

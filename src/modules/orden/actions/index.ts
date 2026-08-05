@@ -455,7 +455,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
                 ? practica.matriculaEspecialista
                 : MATRICULA_GASTOS_INTERNACION_DEFAULT)
             : esClasificacionSoloAyudante
-            ? MATRICULA_AYUDANTE_INTERNACION_DEFAULT
+            ? ((practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0)
+                ? practica.matriculaEspecialista
+                : MATRICULA_AYUDANTE_INTERNACION_DEFAULT)
             : clasificacion === 'HA'
             ? (practica.matriculaAnestesista ?? null)
             : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null),

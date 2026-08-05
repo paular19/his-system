@@ -2249,6 +2249,11 @@ export function PracticaCargaRapidaPage({
         const itemFechaClase = generadaEnSesion ? 'text-[11px] text-blue-700' : 'text-[11px] text-emerald-700'
         const restantesClase = generadaEnSesion ? 'mt-1 text-[11px] text-blue-700' : 'mt-1 text-[11px] text-emerald-700'
         const estadoSesionEtiqueta = generadaEnSesion ? 'Sesión actual' : null
+        const fechaResumenOrden = formatearFechaArgentina(grupo.fechaReferencia, {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+        })
 
         return (
             <div
@@ -2271,7 +2276,7 @@ export function PracticaCargaRapidaPage({
                                 : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
                         </span>
                         <span className={`min-w-0 truncate text-[10px] ${contadorClase}`}>
-                            Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''}
+                            Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Fecha: {fechaResumenOrden}
                         </span>
                         {estadoSesionEtiqueta && (
                             <span className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">

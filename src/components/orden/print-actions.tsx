@@ -1,14 +1,37 @@
 'use client'
 
+import { useEffect } from 'react'
+
 export function PrintActions({
   imprimirLabel = 'Imprimir',
   volverLabel = 'Volver',
   volverHref = '/dashboard/admision',
+  cerrarDespuesDeImprimir = false,
 }: {
   imprimirLabel?: string
   volverLabel?: string
   volverHref?: string
+  cerrarDespuesDeImprimir?: boolean
 }) {
+  useEffect(() => {
+    if (!cerrarDespuesDeImprimir) return
+
+    const handleAfterPrint = () => {
+      window.setTimeout(() => {
+        try {
+          window.close()
+        } catch {
+          // Ignore browser restrictions when not opened as popup.
+        }
+      }, 150)
+    }
+
+    window.addEventListener('afterprint', handleAfterPrint)
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint)
+    }
+  }, [cerrarDespuesDeImprimir])
+
   return (
     <div className="no-print flex gap-3">
       <button

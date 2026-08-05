@@ -68,6 +68,7 @@ type ItemPractica = OrdenPracticaItemInput & {
   seleccionComponentes?: ComponenteSeleccion
   matriculaEspecialista?: number | null
   matriculaAnestesista?: number | null
+  matriculaAyudante?: number | null
   subitemCodigo?: SubitemCodigo
   clasificacionAgrupacion: string
 }
@@ -180,7 +181,8 @@ function sonLineasSubitemCompatibles(a: ItemPractica, b: ItemPractica): boolean 
     a.grupoOrden === b.grupoOrden &&
     (a.clasificacionAgrupacion ?? null) === (b.clasificacionAgrupacion ?? null) &&
     (a.matriculaEspecialista ?? null) === (b.matriculaEspecialista ?? null) &&
-    (a.matriculaAnestesista ?? null) === (b.matriculaAnestesista ?? null)
+    (a.matriculaAnestesista ?? null) === (b.matriculaAnestesista ?? null) &&
+    (a.matriculaAyudante ?? null) === (b.matriculaAyudante ?? null)
   )
 }
 
@@ -402,6 +404,7 @@ export function ConsultaForm({
         seleccionComponentes: seleccionInicial,
         matriculaEspecialista: matriculasDefault.matriculaEspecialista,
         matriculaAnestesista: matriculasDefault.matriculaAnestesista,
+        matriculaAyudante: seleccionInicial.ayudante > 0 ? MATRICULA_AYUDANTE_DEFAULT : null,
         clasificacionAgrupacion:
           normalizarClasificacionAgrupacion(clasificacionPorPracticaIdInicial?.[p.id]) ??
           clasificacionDesdeSubitems(obtenerCodigosSubitemSeleccionados(seleccionInicial)),
@@ -657,6 +660,10 @@ export function ConsultaForm({
               codigo === 'HE' ? matriculasDefault.matriculaEspecialista : null,
             matriculaAnestesista:
               codigo === 'HA' ? matriculasDefault.matriculaAnestesista : null,
+            matriculaAyudante:
+              codigo === 'A1' || codigo === 'A2' || codigo === 'A3'
+                ? MATRICULA_AYUDANTE_DEFAULT
+                : null,
             subitemCodigo: codigo,
           }
         }
@@ -991,7 +998,7 @@ export function ConsultaForm({
 
     if (opciones?.incluyeEspecialista) return p.matriculaEspecialista ?? undefined
     if (opciones?.incluyeAnestesista) return p.matriculaAnestesista ?? undefined
-    if (opciones?.incluyeAyudante) return MATRICULA_AYUDANTE_DEFAULT
+    if (opciones?.incluyeAyudante) return p.matriculaAyudante ?? MATRICULA_AYUDANTE_DEFAULT
     if (opciones?.incluyeGastos) {
       return esInternacionContexto
         ? MATRICULA_GASTOS_INTERNACION_DEFAULT
@@ -1082,7 +1089,7 @@ export function ConsultaForm({
                 ? resolverEfectorMatricula(p, 'HA')
                 : p.subitemCodigo === 'GA'
                   ? resolverEfectorMatricula(p, 'AGRUPADO', { incluyeGastos: true })
-                  : MATRICULA_AYUDANTE_DEFAULT
+                  : (p.matriculaAyudante ?? MATRICULA_AYUDANTE_DEFAULT)
 
           return [{
             convenioId: p.convenioId,
@@ -1248,7 +1255,7 @@ export function ConsultaForm({
                 cantidad: baseCantidad,
                 tipoFacturacion: 'H',
                 incluyeCodigo,
-                efectorMatricula: MATRICULA_AYUDANTE_DEFAULT,
+                efectorMatricula: resolverEfectorMatricula(p, 'AGRUPADO', { incluyeAyudante: true }),
                 importeTotal: Number(d.valorAyudante) * baseCantidad,
               })
             }
@@ -1395,7 +1402,7 @@ export function ConsultaForm({
               cantidad: baseCantidad,
               tipoFacturacion: 'H',
               incluyeCodigo,
-              efectorMatricula: MATRICULA_AYUDANTE_DEFAULT,
+              efectorMatricula: resolverEfectorMatricula(p, 'AGRUPADO', { incluyeAyudante: true }),
               importeTotal: Number(d.valorAyudante) * baseCantidad,
             })
           }
@@ -1892,6 +1899,26 @@ export function ConsultaForm({
                                 setPracticas((prev) => prev.map((x) =>
                                   x._key === p._key
                                     ? { ...x, matriculaAnestesista: value ? parseInt(value, 10) || null : null }
+                                    : x
+                                ))
+                              }}
+                              className="w-24 rounded border border-gray-200 px-1 py-0.5 text-xs"
+                              placeholder="Matrícula"
+                            />
+                          </div>
+                        )}
+                        {(p.seleccionComponentes?.ayudante ?? 0) > 0 && (
+                          <div className="mt-1 flex items-center gap-2 text-xs">
+                            <span className="text-gray-500">Mat. AY</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={p.matriculaAyudante ?? ''}
+                              onChange={(e) => {
+                                const value = e.target.value.trim()
+                                setPracticas((prev) => prev.map((x) =>
+                                  x._key === p._key
+                                    ? { ...x, matriculaAyudante: value ? parseInt(value, 10) || null : null }
                                     : x
                                 ))
                               }}

@@ -20,6 +20,8 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
     const puedeCrear =
         tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||
         tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'CREAR') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
         (usuario.rol === ROLES.ADMIN)
 
     const { id } = await params

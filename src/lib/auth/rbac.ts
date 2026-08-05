@@ -78,9 +78,10 @@ export const MATRIZ_PERMISOS: MatrizPermisos = {
   },
   ORDENES: {
     PACIENTES: ['LEER'],
-    ADMISION: ['LEER'],
+    ADMISION: ['LEER', 'MODIFICAR'],
     INTERNACION: ['LEER', 'CREAR', 'MODIFICAR', 'ELIMINAR'],
     AMBULATORIO: ['LEER', 'CREAR', 'MODIFICAR'],
+    COTIZADOR: ['LEER'],
   },
   MEDICO: {
     PACIENTES: ['LEER'],

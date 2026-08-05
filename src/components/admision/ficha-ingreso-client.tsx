@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ActualizarPracticaSchema } from '@/modules/internacion/schemas'
-import { ActualizarIngresoSchema } from '@/modules/admision/schemas'
+import type { ActualizarIngresoInput } from '@/modules/admision/schemas'
 import { updateIngresoAction } from '@/modules/admision/actions'
 import { ChevronRight, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
@@ -613,7 +613,7 @@ export function FichaIngresoClient({
                                     setEditingCard('admision');
                                     setCardValues({
                                         fechaIngreso: toDateTimeLocalInputValue(ingreso.fechaIngreso),
-                                        profesionalGuardiaId: ingreso.profesionalGuardiaId || '',
+                                        profesionalGuardiaId: ingreso.profesionalGuardiaId ?? undefined,
                                         ...(!esIngresoAmbulatorio
                                             ? { fechaEgreso: toDateInputValue(ingreso.fechaEgreso) }
                                             : {}),
@@ -621,7 +621,7 @@ export function FichaIngresoClient({
                                             ? { fechaEgresoPrevista: toDateInputValue(ingreso.fechaEgresoPrevista) }
                                             : {}),
                                         ...(!esGuardia
-                                            ? { profesionalTratanteId: ingreso.profesionalTratanteId || '' }
+                                            ? { profesionalTratanteId: ingreso.profesionalTratanteId ?? undefined }
                                             : {}),
                                     });
                                 }}
@@ -639,10 +639,43 @@ export function FichaIngresoClient({
                                 setCardLoading(true);
                                 setCardError(null);
                                 try {
-                                    await updateIngresoAction(ingreso.id, cardValues);
+                                    const payload: ActualizarIngresoInput = {
+                                        fechaIngreso: cardValues.fechaIngreso ? cardValues.fechaIngreso : undefined,
+                                        ...(!esIngresoAmbulatorio
+                                            ? {
+                                                fechaEgreso: cardValues.fechaEgreso ? cardValues.fechaEgreso : undefined,
+                                            }
+                                            : {}),
+                                        ...(!ocultarEgresoPrevisto
+                                            ? {
+                                                fechaEgresoPrevista: cardValues.fechaEgresoPrevista
+                                                    ? cardValues.fechaEgresoPrevista
+                                                    : undefined,
+                                            }
+                                            : {}),
+                                        ...(
+                                            typeof cardValues.profesionalGuardiaId === 'number' &&
+                                                Number.isFinite(cardValues.profesionalGuardiaId)
+                                                ? { profesionalGuardiaId: cardValues.profesionalGuardiaId }
+                                                : {}
+                                        ),
+                                        ...(
+                                            !esGuardia &&
+                                                typeof cardValues.profesionalTratanteId === 'number' &&
+                                                Number.isFinite(cardValues.profesionalTratanteId)
+                                                ? { profesionalTratanteId: cardValues.profesionalTratanteId }
+                                                : {}
+                                        ),
+                                    }
+
+                                    await updateIngresoAction(ingreso.id, payload);
                                     setEditingCard(null);
                                 } catch (err) {
-                                    setCardError('Error al guardar');
+                                    const detalle =
+                                        err instanceof Error && err.message.trim().length > 0
+                                            ? err.message
+                                            : 'Error al guardar'
+                                    setCardError(detalle);
                                 } finally {
                                     setCardLoading(false);
                                 }

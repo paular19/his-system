@@ -105,6 +105,7 @@ export function AdmisionForm({
   const submitEnCursoRef = useRef(false)
   const [guardando, setGuardando] = useState(false)
   const [redirigiendoFicha, setRedirigiendoFicha] = useState(false)
+  const [generandoOrdenesAuto, setGenerandoOrdenesAuto] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
 
@@ -400,6 +401,7 @@ export function AdmisionForm({
 
     let mantenerBloqueoHastaNavegacion = false
     const requiereOrdenAutomatica = practicasExpandida.length > 0
+    setGenerandoOrdenesAuto(requiereOrdenAutomatica)
     const ventanaImpresion = requiereOrdenAutomatica ? abrirVentanaImpresionPendiente() : null
     let impresionDisparada = false
 
@@ -538,6 +540,7 @@ export function AdmisionForm({
       if (!mantenerBloqueoHastaNavegacion) {
         submitEnCursoRef.current = false
         setGuardando(false)
+        setGenerandoOrdenesAuto(false)
       }
     }
   }
@@ -550,7 +553,9 @@ export function AdmisionForm({
             <Loader2 className="h-4 w-4 animate-spin" />
             {redirigiendoFicha
               ? 'Admisión registrada. Cargando ficha...'
-              : 'Registrando admisión... por favor espere.'}
+              : generandoOrdenesAuto
+                ? 'Generando admisión y órdenes para su impresión...'
+                : 'Registrando admisión... por favor espere.'}
           </div>
         </div>
       )}

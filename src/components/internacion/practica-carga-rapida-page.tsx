@@ -1330,10 +1330,12 @@ export function PracticaCargaRapidaPage({
     ): boolean => {
         const origen = opciones?.origen ?? 'default'
         const practicaIdsEntrada = practicaIdsObjetivo ?? idsPendientesSeleccionadas
+        const permitirIdsNoSincronizados =
+            Array.isArray(practicaIdsObjetivo) && practicaIdsObjetivo.length > 0
         const practicaIds = Array.from(new Set(practicaIdsEntrada)).filter((id) => {
             if (practicaIdsEnGeneracionRef.current.has(id)) return false
             const practica = practicas.find((item) => item.id === id)
-            if (!practica) return false
+            if (!practica) return permitirIdsNoSincronizados
             if (!practicaActiva(practica.estado)) return false
             return (practica.ordenPractica?.length ?? 0) === 0
         })

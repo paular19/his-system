@@ -34,7 +34,7 @@ const CrearPedidoLaboratorioSchema = z.object({
 
 const GenerarOrdenesInternacionSchema = z.object({
   ingresoId: z.number().int().positive(),
-  practicaIds: z.array(z.number().int().positive()).min(1, 'Seleccioná al menos una práctica'),
+  practicaIds: z.array(z.number().int().positive()).optional().default([]),
   clasificacionPorPracticaId: z.record(z.string()).optional().default({}),
   agruparEnUnaOrden: z.boolean().optional().default(false),
   separarPorPractica: z.boolean().optional().default(false),
@@ -246,7 +246,7 @@ export async function crearOrdenesDesdeAdmisionAction(
 
 export async function generarOrdenesDesdeInternacionAction(input: {
   ingresoId: number
-  practicaIds: number[]
+  practicaIds?: number[]
   clasificacionPorPracticaId?: Record<string, string>
   agruparEnUnaOrden?: boolean
   separarPorPractica?: boolean
@@ -290,10 +290,19 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     if (!ingreso) return { error: 'Internación no encontrada' }
     if (!ingreso.obraSocialId) return { error: 'La internación no tiene obra social asignada' }
 
+    const idsSolicitados = parsed.data.practicaIds
     const practicas = await prisma.practica.findMany({
       where: {
         ingresoId: parsed.data.ingresoId,
-        id: { in: parsed.data.practicaIds },
+        ...(idsSolicitados.length > 0 ? { id: { in: idsSolicitados } } : {}),
+        NOT: { estado: 'X' },
+        ordenPractica: {
+          none: {
+            orden: {
+              estado: { not: 'X' },
+            },
+          },
+        },
       },
       select: {
         id: true,
@@ -307,26 +316,13 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         importeTotal: true,
         numeroProtocoloLab: true,
         diagnosticoLab: true,
-        estado: true,
-        ordenPractica: {
-          where: {
-            orden: {
-              estado: { not: 'X' },
-            },
-          },
-          select: { puestoNumero: true, ordenNumero: true },
-        },
         nomencladorPractica: {
           select: { descripcion: true },
         },
       },
     })
 
-    const practicasPendientes = practicas.filter((p) => {
-      const estado = (p.estado ?? 'A').trim().toUpperCase()
-      if (estado === 'X') return false
-      return (p.ordenPractica?.length ?? 0) === 0
-    })
+    const practicasPendientes = practicas
 
     if (practicasPendientes.length === 0) {
       return { error: 'No hay prácticas pendientes para generar órdenes' }

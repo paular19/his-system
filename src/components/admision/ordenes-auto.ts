@@ -1,16 +1,5 @@
 import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 
-async function obtenerIdsPendientesIngreso(ingresoId: number): Promise<number[]> {
-  const res = await fetch(`/api/admision/${ingresoId}/practicas?soloPendientesIds=1`, { cache: 'no-store' })
-  const json = await res.json().catch(() => null)
-  const ids = Array.isArray(json?.data)
-    ? (json.data as unknown[])
-      .filter((id): id is number => Number.isFinite(Number(id)))
-      .map((id) => Number(id))
-    : []
-  return ids
-}
-
 export async function generarOrdenesPendientesAdmision(
   ingresoId: number,
   opciones?: {
@@ -20,24 +9,21 @@ export async function generarOrdenesPendientesAdmision(
   }
 ): Promise<{ ok: true; cantidad: number; ordenes: Array<{ puestoNumero: number; numero: number }> } | { ok: false; error: string }> {
   try {
-    let idsPendientesResueltos: number[]
+    let idsPendientesResueltos: number[] | undefined
 
     if (Array.isArray(opciones?.idsPendientesConfirmados)) {
       idsPendientesResueltos = Array.from(new Set(opciones.idsPendientesConfirmados))
-    } else {
-      const idsPendientes = await obtenerIdsPendientesIngreso(ingresoId)
-      idsPendientesResueltos = opciones?.soloIds
-        ? idsPendientes.filter((id) => opciones.soloIds?.has(id))
-        : idsPendientes
+    } else if (opciones?.soloIds && opciones.soloIds.size > 0) {
+      idsPendientesResueltos = Array.from(opciones.soloIds)
     }
 
-    if (idsPendientesResueltos.length === 0) {
+    if (Array.isArray(idsPendientesResueltos) && idsPendientesResueltos.length === 0) {
       return { ok: true, cantidad: 0, ordenes: [] }
     }
 
     const result = await generarOrdenesDesdeInternacionAction({
       ingresoId,
-      practicaIds: idsPendientesResueltos,
+      ...(idsPendientesResueltos ? { practicaIds: idsPendientesResueltos } : {}),
       separarPorPractica: Boolean(opciones?.separarPorPractica),
     })
 

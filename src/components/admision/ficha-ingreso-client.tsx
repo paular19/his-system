@@ -446,6 +446,13 @@ export function FichaIngresoClient({
         if (autoGeneracionInicialEjecutadaRef.current) return
         autoGeneracionInicialEjecutadaRef.current = true
 
+        const urlActual = new URL(window.location.href)
+        urlActual.searchParams.delete('autoGen')
+        urlActual.searchParams.delete('autoPrint')
+        urlActual.searchParams.delete('autoSep')
+        urlActual.searchParams.delete('printWin')
+        window.history.replaceState(window.history.state, '', `${urlActual.pathname}${urlActual.search}${urlActual.hash}`)
+
         const idsPendientes = (ingreso.practicas ?? [])
             .filter((p) => (p.ordenPractica?.length ?? 0) === 0)
             .map((p) => p.id)

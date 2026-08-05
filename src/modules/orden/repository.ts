@@ -214,7 +214,10 @@ export async function crearOrden(data: CrearOrdenInput, usuario: string) {
 
 export async function crearOrdenInterna(
   data: CrearOrdenInput,
-  usuario: string
+  usuario: string,
+  options?: {
+    modoLigero?: boolean
+  }
 ) {
   return prisma.$transaction(async (tx) => {
     const usuarioRegistro = usuario.trim().slice(0, 10) || 'SISTEMA'
@@ -283,13 +286,23 @@ export async function crearOrdenInterna(
           }),
         },
       },
-      include: {
-        items: true,
-        obraSocial: { select: { id: true, nombre: true } },
-        plan: { select: { id: true, descripcion: true } },
-        profesional: { select: { id: true, nombre: true, matricula: true } },
-        tipoOrden: { select: { codigo: true, descripcion: true } },
-      },
+      ...(options?.modoLigero
+        ? {
+          select: {
+            puestoNumero: true,
+            numero: true,
+            nombrePaciente: true,
+          },
+        }
+        : {
+          include: {
+            items: true,
+            obraSocial: { select: { id: true, nombre: true } },
+            plan: { select: { id: true, descripcion: true } },
+            profesional: { select: { id: true, nombre: true, matricula: true } },
+            tipoOrden: { select: { codigo: true, descripcion: true } },
+          },
+        }),
     })
 
     return orden

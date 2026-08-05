@@ -4,16 +4,19 @@ import type { CrearOrdenInput } from './schemas'
 
 export async function crearOrdenAmbulatorio(
   data: CrearOrdenInput,
-  usuario: string
+  usuario: string,
+  options?: {
+    modoLigero?: boolean
+  }
 ) {
-  const orden = await crearOrdenInterna(data, usuario)
+  const orden = await crearOrdenInterna(data, usuario, options)
 
   void registrarAudit({
     usuario,
     accion: 'CREAR',
     entidad: 'Orden',
     registroId: `${orden.puestoNumero}-${orden.numero}`,
-    detalle: `Nueva orden ambulatoria para paciente: ${orden.nombrePaciente}`,
+    detalle: `Nueva orden ambulatoria para paciente: ${data.nombrePaciente}`,
   }).catch(() => undefined)
 
   return orden

@@ -568,7 +568,8 @@ export async function generarOrdenesDesdeInternacionAction(input: {
             imprimirPorDuplicado: Boolean(item.imprimirPorDuplicado) || esGrupoConDerechos,
           })),
         },
-        usuario.codigoUsuario
+        usuario.codigoUsuario,
+        { modoLigero: true }
       )
 
       const practicaIdsGrupo = itemsGrupo.map((x) => x.practicaId)
@@ -737,7 +738,8 @@ export async function crearPedidoLaboratorioAction(input: {
           },
         ],
       },
-      usuario.codigoUsuario
+      usuario.codigoUsuario,
+      { modoLigero: true }
     )
 
     revalidatePath('/dashboard/ambulatorio')

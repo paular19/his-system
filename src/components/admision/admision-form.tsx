@@ -481,6 +481,15 @@ export function AdmisionForm({
         return
       }
 
+      if (requiereOrdenAutomatica) {
+        const autoOrdenResult = await generarOrdenesPendientesAdmision(ingresoId, {
+          separarPorPractica: generarOrdenesSeparadasPorPractica,
+        })
+        if (!autoOrdenResult.ok) {
+          console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
+        }
+      }
+
       const prefetchParams = new URLSearchParams()
       if (paciente?.nombreCompleto) {
         prefetchParams.set('prefetchNombre', paciente.nombreCompleto)
@@ -498,18 +507,6 @@ export function AdmisionForm({
         : fichaPathBase
 
       void router.prefetch(fichaPath)
-
-      if (requiereOrdenAutomatica) {
-        void generarOrdenesPendientesAdmision(ingresoId, {
-          separarPorPractica: generarOrdenesSeparadasPorPractica,
-        })
-          .then((autoOrdenResult) => {
-            if (!autoOrdenResult.ok) {
-              console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
-            }
-          })
-          .catch(() => undefined)
-      }
 
       setRedirigiendoFicha(true)
       mantenerBloqueoHastaNavegacion = true

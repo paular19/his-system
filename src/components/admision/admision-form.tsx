@@ -22,6 +22,11 @@ import {
   type PracticaAdmisionItem,
 } from './practicas-admision-card'
 import { generarOrdenesPendientesAdmision } from './ordenes-auto'
+import {
+  abrirVentanaImpresionPendiente,
+  cerrarVentanaImpresion,
+  navegarVentanaImpresion,
+} from '@/lib/utils/print-window'
 
 interface ItemMedicacion {
   nombre: string
@@ -394,6 +399,9 @@ export function AdmisionForm({
     setError(null)
 
     let mantenerBloqueoHastaNavegacion = false
+    const requiereOrdenAutomatica = practicasExpandida.length > 0
+    const ventanaImpresion = requiereOrdenAutomatica ? abrirVentanaImpresionPendiente() : null
+    let impresionDisparada = false
 
     try {
       const body: any = {
@@ -450,8 +458,6 @@ export function AdmisionForm({
         body.descripcionIndicacion = descripcionIndicacion || null
       }
 
-      const requiereOrdenAutomatica = practicasExpandida.length > 0
-
       const response = await fetch('/api/admision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -487,6 +493,15 @@ export function AdmisionForm({
         })
         if (!autoOrdenResult.ok) {
           console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
+        } else if (autoOrdenResult.ordenes.length > 0) {
+          const ordenesParam = autoOrdenResult.ordenes
+            .map((o) => `${o.puestoNumero}-${o.numero}`)
+            .join(',')
+          navegarVentanaImpresion(
+            ventanaImpresion,
+            `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+          )
+          impresionDisparada = true
         }
       }
 
@@ -517,6 +532,9 @@ export function AdmisionForm({
       setError(err instanceof Error ? err.message : 'Error inesperado')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } finally {
+      if (!impresionDisparada) {
+        cerrarVentanaImpresion(ventanaImpresion)
+      }
       if (!mantenerBloqueoHastaNavegacion) {
         submitEnCursoRef.current = false
         setGuardando(false)

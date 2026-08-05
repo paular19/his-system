@@ -79,6 +79,9 @@ export async function POST(request: NextRequest) {
         `total;dur=${(despuesCrear - inicio).toFixed(1)}`,
       ].join(', ')
     )
+    response.headers.set('x-admision-auth-ms', String(Math.round(despuesAuth - inicio)))
+    response.headers.set('x-admision-parse-ms', String(Math.round(despuesParse - despuesAuth)))
+    response.headers.set('x-admision-create-ms', String(Math.round(despuesCrear - despuesParse)))
     response.headers.set('x-admision-total-ms', String(Math.round(despuesCrear - inicio)))
     return response
   } catch (error) {

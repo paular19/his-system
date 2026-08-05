@@ -269,6 +269,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       where: { id: parsed.data.ingresoId },
       select: {
         id: true,
+        tipoIngresoCodigo: true,
         pacienteId: true,
         nombre: true,
         numeroAfiliado: true,
@@ -588,12 +589,17 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       })
     }
 
+    const tipoIngreso = (ingreso.tipoIngresoCodigo ?? '').trim().toUpperCase()
     revalidatePath('/dashboard/ambulatorio')
-    revalidatePath('/dashboard/internacion')
-    revalidatePath('/dashboard/admision')
-    revalidatePath(`/dashboard/internacion/${ingreso.id}`)
-    revalidatePath(`/dashboard/internacion/${ingreso.id}/practicas`)
-    revalidatePath(`/dashboard/admision/${ingreso.id}`)
+
+    if (tipoIngreso === 'INT') {
+      revalidatePath('/dashboard/internacion')
+      revalidatePath(`/dashboard/internacion/${ingreso.id}`)
+      revalidatePath(`/dashboard/internacion/${ingreso.id}/practicas`)
+    } else {
+      revalidatePath('/dashboard/admision')
+      revalidatePath(`/dashboard/admision/${ingreso.id}`)
+    }
 
     return {
       ok: true,

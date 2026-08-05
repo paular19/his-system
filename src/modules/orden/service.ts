@@ -8,13 +8,13 @@ export async function crearOrdenAmbulatorio(
 ) {
   const orden = await crearOrdenInterna(data, usuario)
 
-  await registrarAudit({
+  void registrarAudit({
     usuario,
     accion: 'CREAR',
     entidad: 'Orden',
     registroId: `${orden.puestoNumero}-${orden.numero}`,
     detalle: `Nueva orden ambulatoria para paciente: ${orden.nombrePaciente}`,
-  })
+  }).catch(() => undefined)
 
   return orden
 }

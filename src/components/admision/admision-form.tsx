@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { BuscarPaciente } from './buscar-paciente'
-import { createIngresoAction } from '@/modules/admision/actions'
 import {
   calcularTotalSeleccionado,
 } from '@/components/ui/componente-selector'
@@ -496,10 +495,32 @@ export function AdmisionForm({
       const requiereOrdenAutomatica = practicasExpandida.length > 0
       ventanaImpresion = requiereOrdenAutomatica ? abrirVentanaImpresionPendiente() : null
 
-      const result = await createIngresoAction(body)
-      if ('error' in result) {
+      const response = await fetch('/api/admision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body, (_key, value) =>
+          typeof value === 'bigint' ? value.toString() : value
+        ),
+      })
+
+      const ingresoIdHeader = response.headers.get('x-ingreso-id')
+      const json = await response.json().catch(() => null)
+
+      if (!response.ok || !json?.ok) {
         cerrarVentanaImpresion(ventanaImpresion)
-        setError(result.error)
+        setError(json?.error ?? 'No se pudo crear la admisión')
+        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+
+      const ingresoId = Number.parseInt(
+        ingresoIdHeader ?? String(json?.data?.id ?? ''),
+        10
+      )
+
+      if (!Number.isFinite(ingresoId) || ingresoId <= 0) {
+        cerrarVentanaImpresion(ventanaImpresion)
+        setError('No se recibió el ID de admisión creada')
         formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         return
       }
@@ -520,7 +541,7 @@ export function AdmisionForm({
         prefetchParams.set('prefetchObraSocial', obraSocialSeleccionada.nombre)
       }
 
-      const fichaPathBase = `/dashboard/admision/${result.id}`
+      const fichaPathBase = `/dashboard/admision/${ingresoId}`
       const fichaPath = prefetchParams.toString().length > 0
         ? `${fichaPathBase}?${prefetchParams.toString()}`
         : fichaPathBase
@@ -528,48 +549,32 @@ export function AdmisionForm({
       void router.prefetch(fichaPath)
 
       if (requiereOrdenAutomatica) {
-        const ordenesGeneradas = Array.isArray(result.ordenesGeneradas)
-          ? result.ordenesGeneradas
-          : []
+        impresionDiferida = true
+        void generarOrdenesPendientesAdmision(ingresoId, {
+          separarPorPractica: generarOrdenesSeparadasPorPractica,
+        })
+          .then((autoOrdenResult) => {
+            if (autoOrdenResult.ok && autoOrdenResult.ordenes.length > 0) {
+              const ordenesParam = autoOrdenResult.ordenes
+                .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
+                .join(',')
 
-        if (ordenesGeneradas.length > 0) {
-          const ordenesParam = ordenesGeneradas
-            .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
-            .join(',')
+              navegarVentanaImpresion(
+                ventanaImpresion,
+                `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
+              )
+              return
+            }
 
-          navegarVentanaImpresion(
-            ventanaImpresion,
-            `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
-          )
-          impresionDisparada = true
-        } else {
-          impresionDiferida = true
-          void generarOrdenesPendientesAdmision(result.id, {
-            separarPorPractica: generarOrdenesSeparadasPorPractica,
+            if (!autoOrdenResult.ok) {
+              console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
+            }
+
+            cerrarVentanaImpresion(ventanaImpresion)
           })
-            .then((autoOrdenResult) => {
-              if (autoOrdenResult.ok && autoOrdenResult.ordenes.length > 0) {
-                const ordenesParam = autoOrdenResult.ordenes
-                  .map((orden) => `${orden.puestoNumero}-${orden.numero}`)
-                  .join(',')
-
-                navegarVentanaImpresion(
-                  ventanaImpresion,
-                  `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(ordenesParam)}`
-                )
-                return
-              }
-
-              if (!autoOrdenResult.ok) {
-                console.error('[ADMISION] No se pudieron generar ordenes automaticamente:', autoOrdenResult.error)
-              }
-
-              cerrarVentanaImpresion(ventanaImpresion)
-            })
-            .catch(() => {
-              cerrarVentanaImpresion(ventanaImpresion)
-            })
-        }
+          .catch(() => {
+            cerrarVentanaImpresion(ventanaImpresion)
+          })
       } else {
         cerrarVentanaImpresion(ventanaImpresion)
       }
@@ -579,7 +584,7 @@ export function AdmisionForm({
       }
 
       setResultadoAlta({
-        ingresoId: result.id,
+        ingresoId,
         fichaPath,
         latenciaMs,
       })

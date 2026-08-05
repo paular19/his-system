@@ -1,5 +1,5 @@
 import { Header } from '@/components/layout/header'
-import { getUsuarioSesion } from '@/lib/auth'
+import { getUsuarioSesionLectura } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
@@ -21,7 +21,7 @@ interface PageProps {
 }
 
 export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
-  const usuario = await getUsuarioSesion()
+  const usuario = await getUsuarioSesionLectura()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'CREAR')) {
     redirect('/dashboard/admision')
   }

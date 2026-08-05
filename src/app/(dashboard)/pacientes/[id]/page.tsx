@@ -73,6 +73,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
 
   const edad = calcularEdad(paciente.fechaNacimiento)
   const puedeModificar = tienePermiso(usuario.rol, 'PACIENTES', 'MODIFICAR')
+  const puedeCrearAdmision = tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
   const puedeCrearInternacion = tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
 
   // Workaround: evitar prisma.ingreso.findMany por panic de Query Engine en prod con casos puntuales.
@@ -380,13 +381,15 @@ export default async function FichaPacientePage({ params }: PageProps) {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Link
-              href={`/dashboard/admision/nuevo?pacienteId=${paciente.id}`}
-              className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
-            >
-              <ClipboardList className="h-4 w-4" />
-              Nueva Admisión
-            </Link>
+            {puedeCrearAdmision && (
+              <Link
+                href={`/dashboard/admision/nuevo?pacienteId=${paciente.id}`}
+                className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
+              >
+                <ClipboardList className="h-4 w-4" />
+                Nueva Admisión
+              </Link>
+            )}
             {puedeCrearInternacion && (
               <Link
                 href={`/dashboard/internacion/nuevo?pacienteId=${paciente.id}`}

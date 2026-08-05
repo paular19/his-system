@@ -50,8 +50,13 @@ async function construirDatosCreacionPaciente(
 ): Promise<PacienteCreateData> {
   const nombreCompleto = generarNombreCompleto(data.apellido, data.nombre)
   const ahora = new Date()
-  const esIPSS = await obraSocialEsIPSS(data.obraSocialId ?? null)
-  const obraSocialCoseguroId = esIPSS ? (data.obraSocialCoseguroId ?? null) : null
+  let obraSocialCoseguroId: number | null = null
+
+  // Evita una consulta extra a ObraSocial cuando no se intenta guardar coseguro.
+  if (data.obraSocialCoseguroId != null) {
+    const esIPSS = await obraSocialEsIPSS(data.obraSocialId ?? null)
+    obraSocialCoseguroId = esIPSS ? data.obraSocialCoseguroId : null
+  }
 
   return {
     apellido: data.apellido.toUpperCase(),

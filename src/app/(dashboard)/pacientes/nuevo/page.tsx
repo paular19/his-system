@@ -11,13 +11,16 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = { title: 'Nuevo Paciente' }
 
 export default async function NuevoPacientePage() {
-  const usuario = await getUsuarioSesion()
+  const [usuario, catalogo] = await Promise.all([
+    getUsuarioSesion(),
+    getCatalogoPacienteForm(),
+  ])
 
   if (!tienePermiso(usuario.rol, 'PACIENTES', 'CREAR')) {
     redirect('/dashboard/pacientes')
   }
 
-  const { obraSociales, coseguros } = await getCatalogoPacienteForm()
+  const { obraSociales, coseguros } = catalogo
 
   return (
     <>

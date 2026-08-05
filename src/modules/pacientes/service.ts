@@ -1,5 +1,6 @@
 import { registrarAudit } from '@/lib/security/audit'
 import * as repo from './repository'
+import { Prisma } from '@prisma/client'
 import type { CrearPacienteInput, ActualizarPacienteInput, BusquedaPacienteInput } from './schemas'
 import type { PacienteConRelaciones, PacienteBusqueda } from './types'
 import type { ResultadoPaginado } from '@/types'
@@ -13,18 +14,8 @@ type PacienteCreadoRapido = {
   id: number
 }
 
-async function validarDuplicadosParaCreacion(data: CrearPacienteInput): Promise<void> {
-  // Verificar duplicado por DNI si se provee
-  if (data.numeroDocumento) {
-    const existente = await repo.obtenerPacienteDuplicadoPorDNI(data.numeroDocumento)
-    if (existente) {
-      throw new Error(
-        `Ya existe un paciente con DNI ${data.numeroDocumento} (HC: ${existente.historiaClinica ?? 'sin HC'})`
-      )
-    }
-  }
-
-  // Verificar duplicado por CUIL si se provee
+async function validarDuplicadoCuilParaCreacion(data: CrearPacienteInput): Promise<void> {
+  // CUIL no es unico en schema Prisma; se valida explicitamente solo si llega en payload.
   if (data.cuil) {
     const existente = await repo.obtenerPacienteDuplicadoPorCUIL(data.cuil)
     if (existente) {
@@ -35,16 +26,44 @@ async function validarDuplicadosParaCreacion(data: CrearPacienteInput): Promise<
   }
 }
 
+function mapearErrorCreacionPaciente(
+  error: unknown,
+  data: CrearPacienteInput
+): Error {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return error instanceof Error ? error : new Error('Error inesperado')
+  }
+
+  if (error.code !== 'P2002') {
+    return error
+  }
+
+  const targetRaw = error.meta?.target
+  const target =
+    Array.isArray(targetRaw) ? targetRaw.join(',') : String(targetRaw ?? '')
+
+  if (/numeroDocumento|pacnrodoc|documento/i.test(target)) {
+    return new Error(`Ya existe un paciente con DNI ${data.numeroDocumento}`)
+  }
+
+  return new Error('Ya existe un paciente con un dato unico ya registrado')
+}
+
 export async function crearPaciente(
   data: CrearPacienteInput,
   usuario: string,
   ip?: string
 ): Promise<PacienteConRelaciones> {
-  await validarDuplicadosParaCreacion(data)
+  await validarDuplicadoCuilParaCreacion(data)
 
-  const paciente = await repo.crearPaciente(data, usuario)
+  let paciente: PacienteConRelaciones
+  try {
+    paciente = await repo.crearPaciente(data, usuario)
+  } catch (error) {
+    throw mapearErrorCreacionPaciente(error, data)
+  }
 
-  await registrarAudit({
+  void registrarAudit({
     usuario,
     accion: 'CREAR',
     entidad: 'Paciente',
@@ -61,11 +80,16 @@ export async function crearPacienteRapido(
   usuario: string,
   ip?: string
 ): Promise<PacienteCreadoRapido> {
-  await validarDuplicadosParaCreacion(data)
+  await validarDuplicadoCuilParaCreacion(data)
 
-  const paciente = await repo.crearPacienteMinimo(data, usuario)
+  let paciente: repo.PacienteCreadoMinimo
+  try {
+    paciente = await repo.crearPacienteMinimo(data, usuario)
+  } catch (error) {
+    throw mapearErrorCreacionPaciente(error, data)
+  }
 
-  await registrarAudit({
+  void registrarAudit({
     usuario,
     accion: 'CREAR',
     entidad: 'Paciente',

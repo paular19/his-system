@@ -60,7 +60,6 @@ export function PacienteForm({
   const router = useRouter()
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [exito, setExito] = useState(false)
 
   const {
     register,
@@ -102,9 +101,9 @@ export function PacienteForm({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onSubmit = async (data: any) => {
+    const inicioSubmit = performance.now()
     setGuardando(true)
     setError(null)
-    setExito(false)
 
     try {
       const payload = {
@@ -126,14 +125,34 @@ export function PacienteForm({
         ),
       })
 
+      const pacienteIdHeader = res.headers.get('x-paciente-id')
+      if (!pacienteId && res.ok && pacienteIdHeader) {
+        const pacienteIdCreado = Number.parseInt(pacienteIdHeader, 10)
+        if (!Number.isNaN(pacienteIdCreado) && pacienteIdCreado > 0) {
+          if (typeof window !== 'undefined') {
+            const latenciaMs = Math.round(performance.now() - inicioSubmit)
+            sessionStorage.setItem(
+              'his.pacientes.creacion.submitMs',
+              String(latenciaMs)
+            )
+          }
+          router.replace(`/dashboard/pacientes/${pacienteIdCreado}`)
+          return
+        }
+      }
+
       const json = await res.json()
 
       if (!res.ok || !json.ok) {
         throw new Error(json.error ?? 'Error al guardar el paciente')
       }
 
-      setExito(true)
-      router.push(`/dashboard/pacientes/${json.data.id}`)
+      if (!pacienteId && typeof window !== 'undefined') {
+        const latenciaMs = Math.round(performance.now() - inicioSubmit)
+        sessionStorage.setItem('his.pacientes.creacion.submitMs', String(latenciaMs))
+      }
+
+      router.replace(`/dashboard/pacientes/${json.data.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado')
     } finally {
@@ -146,12 +165,6 @@ export function PacienteForm({
       {error && (
         <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {error}
-        </div>
-      )}
-
-      {exito && (
-        <div className="rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-700">
-          Paciente guardado correctamente. Redirigiendo...
         </div>
       )}
 

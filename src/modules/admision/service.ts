@@ -170,7 +170,7 @@ export async function crearIngreso(
     })
   }
 
-  await registrarAudit({
+  void registrarAudit({
     usuario,
     accion: 'CREAR',
     entidad: 'Ingreso',

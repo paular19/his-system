@@ -1,6 +1,6 @@
 'use server'
 
-import { getUsuarioSesion } from '@/lib/auth'
+import { getUsuarioSesion, getUsuarioSesionLectura } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import * as service from '../service'
 import {
@@ -24,7 +24,6 @@ import type { IngresoPatologia, MovimientoIngreso } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
 import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 import { prisma } from '@/lib/db'
-import { generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
 
 // ============================================
 // SERVER ACTIONS — MÓDULO ADMISIÓN
@@ -36,7 +35,7 @@ export async function createIngresoAction(
   | { id: number; ordenesGeneradas?: Array<{ puestoNumero: number; numero: number }> }
   | { error: string }
 > {
-  const usuario = await getUsuarioSesion()
+  const usuario = await getUsuarioSesionLectura()
   if (!tienePermiso(usuario.rol, 'ADMISION', 'CREAR')) {
     return { error: 'Sin permisos para crear ingresos' }
   }
@@ -51,52 +50,9 @@ export async function createIngresoAction(
   try {
     const ingreso = await service.crearIngreso(validado.data, usuario.codigoUsuario)
 
-    const respuesta: { id: number; ordenesGeneradas?: Array<{ puestoNumero: number; numero: number }> } = {
-      id: ingreso.id,
-    }
-
-    const tienePracticas = Array.isArray(validado.data.practicas) && validado.data.practicas.length > 0
-    const puedeGenerarOrdenes = tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
-
-    if (validado.data.tipoIngresoCodigo === 'AMB' && tienePracticas && puedeGenerarOrdenes) {
-      const practicasPendientes = await prisma.practica.findMany({
-        where: {
-          ingresoId: ingreso.id,
-          NOT: { estado: 'X' },
-          ordenPractica: {
-            none: {
-              orden: {
-                estado: { not: 'X' },
-              },
-            },
-          },
-        },
-        select: { id: true },
-        orderBy: { id: 'asc' },
-      })
-
-      const practicaIds = practicasPendientes.map((p) => p.id)
-      if (practicaIds.length > 0) {
-        const ordenesResult = await generarOrdenesDesdeInternacionAction({
-          ingresoId: ingreso.id,
-          practicaIds,
-          separarPorPractica: Boolean(validado.data.generarOrdenesSeparadasPorPractica),
-        })
-
-        if ('ok' in ordenesResult && ordenesResult.ok) {
-          respuesta.ordenesGeneradas = (ordenesResult.ordenesPorGrupo ?? [])
-            .map((orden) => ({
-              puestoNumero: Number(orden.puestoNumero),
-              numero: Number(orden.numero),
-            }))
-            .filter((orden) => orden.puestoNumero > 0 && orden.numero > 0)
-        } else if ('error' in ordenesResult && ordenesResult.error) {
-          console.error('[ADMISION] No se pudieron generar ordenes automáticas en createIngresoAction:', ordenesResult.error)
-        }
-      }
-    }
-
-    return respuesta
+    // La generación de órdenes se resuelve en cliente de forma diferida para no
+    // bloquear el tiempo de respuesta del alta de admisión.
+    return { id: ingreso.id }
   } catch (error) {
     console.error('[ADMISION] Error creando ingreso desde server action', error)
     return {

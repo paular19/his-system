@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Loader2 } from 'lucide-react'
+import Link from 'next/link'
 import { BuscarPaciente } from './buscar-paciente'
 import { createIngresoAction } from '@/modules/admision/actions'
 import {
@@ -105,6 +106,11 @@ export function AdmisionForm({
   const submitEnCursoRef = useRef(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resultadoAlta, setResultadoAlta] = useState<{
+    ingresoId: number
+    fichaPath: string
+    latenciaMs: number
+  } | null>(null)
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
 
   // Tipo de ingreso por defecto para admisión general
@@ -301,12 +307,45 @@ export function AdmisionForm({
     }
   }
 
+  const limpiarFormularioTrasAlta = () => {
+    setPaciente(null)
+    setFechaIngreso(ahoraLocalDateTimeInput())
+    setFechaEgresoPrevista('')
+    setSubtipoAdmisionCodigo('')
+    setProfesionalGuardiaId('')
+    setProfesionalTratanteId('')
+    setObraSocialId('')
+    setPlanId('')
+    setObraSocialCoseguroId('')
+    setNumeroAfiliado('')
+    setDescripcionPatologia('')
+    setObservaciones('')
+    setProfesionalIdTurno('')
+    setCentroDerivante('')
+    setProfesionalDerivanteNombre('')
+    setMotivoDerivacion('')
+    setDiagnosticoDerivacion('')
+    setProfesionalIndicadorNombre('')
+    setTipoIndicacion('')
+    setDescripcionIndicacion('')
+    setPracticas([])
+    setGenerarOrdenesSeparadasPorPractica(false)
+    setMedicaciones([])
+    setDescartables([])
+    setBusquedaPracticaPendiente({ termino: '', hayResultados: false })
+    setNuevaMedNombre('')
+    setNuevoDesNombre('')
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    const inicioSubmit = performance.now()
 
     if (submitEnCursoRef.current || guardando) {
       return
     }
+
+    setResultadoAlta(null)
 
     if (!paciente) {
       setError('Debe seleccionar un paciente')
@@ -462,9 +501,12 @@ export function AdmisionForm({
         cerrarVentanaImpresion(ventanaImpresion)
         setError(result.error)
         formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        submitEnCursoRef.current = false
-        setGuardando(false)
         return
+      }
+
+      const latenciaMs = Math.round(performance.now() - inicioSubmit)
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('his.admision.creacion.submitMs', String(latenciaMs))
       }
 
       const prefetchParams = new URLSearchParams()
@@ -536,13 +578,19 @@ export function AdmisionForm({
         cerrarVentanaImpresion(ventanaImpresion)
       }
 
-      router.push(fichaPath)
+      setResultadoAlta({
+        ingresoId: result.id,
+        fichaPath,
+        latenciaMs,
+      })
+      limpiarFormularioTrasAlta()
     } catch (err) {
       if (!impresionDisparada) {
         cerrarVentanaImpresion(ventanaImpresion)
       }
       setError(err instanceof Error ? err.message : 'Error inesperado')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } finally {
       submitEnCursoRef.current = false
       setGuardando(false)
     }
@@ -567,6 +615,37 @@ export function AdmisionForm({
       {error && (
         <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {resultadoAlta && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 space-y-3">
+          <p className="font-medium">
+            Admisión registrada correctamente.
+            {' '}
+            Tiempo de guardado: {resultadoAlta.latenciaMs} ms.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={resultadoAlta.fichaPath}
+              className="inline-flex items-center rounded-md bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800"
+            >
+              Ver admisión
+            </Link>
+            <Link
+              href={`/dashboard/ambulatorio/nueva?ingresoId=${resultadoAlta.ingresoId}`}
+              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              Ir a autorizaciones
+            </Link>
+            <button
+              type="button"
+              onClick={() => setResultadoAlta(null)}
+              className="inline-flex items-center rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+            >
+              Cerrar aviso
+            </button>
+          </div>
         </div>
       )}
 

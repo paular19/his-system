@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server'
-import { getUsuarioSesion } from '@/lib/auth'
+import { getUsuarioSesionLectura } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { registrarAudit, extraerIP } from '@/lib/security/audit'
 import {
@@ -16,7 +16,7 @@ import { ZodError } from 'zod'
 // GET /api/admision — Listar / buscar ingresos
 export async function GET(request: NextRequest) {
   try {
-    const usuario = await getUsuarioSesion()
+    const usuario = await getUsuarioSesionLectura()
     if (!tienePermiso(usuario.rol, 'ADMISION', 'LEER')) {
       return apiForbidden()
     }
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 // POST /api/admision — Crear ingreso
 export async function POST(request: NextRequest) {
   try {
-    const usuario = await getUsuarioSesion()
+    const usuario = await getUsuarioSesionLectura()
     if (!tienePermiso(usuario.rol, 'ADMISION', 'CREAR')) {
       await registrarAudit({
         usuario: usuario.clerkId,
@@ -64,7 +64,9 @@ export async function POST(request: NextRequest) {
       extraerIP(request)
     )
 
-    return apiCreado(ingreso)
+    const response = apiCreado(ingreso)
+    response.headers.set('x-ingreso-id', String(ingreso.id))
+    return response
   } catch (error) {
     if (error instanceof ZodError) return apiValidationError(error)
     return manejarErrorApi(error)

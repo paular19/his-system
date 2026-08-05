@@ -26,6 +26,10 @@ export function AutorizacionPrint({
 }: AutorizacionPrintProps) {
   const MATRICULA_PATOLOGIA_DEFAULT = 2675
   const NOMBRE_PATOLOGIA_DEFAULT = 'ANA MARIA VEGA'
+  const MATRICULA_GUARDIA_PRINT = 9092
+  const esOrdenGuardiaAmbulatoria =
+    (orden.ingresoTipoCodigo ?? '').trim().toUpperCase() === 'AMB' &&
+    (orden.ingresoSubtipoCodigo ?? '').trim().toUpperCase() === 'GUA'
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([])
   const limpiarEspecialidadEntreParentesis = (nombre: string): string => {
     return nombre.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
@@ -92,6 +96,10 @@ export function AutorizacionPrint({
       return `${nombrePatologia} · MP ${matriculaPatologia ?? '-'}`
     }
 
+    if (esOrdenGuardiaAmbulatoria) {
+      return 'CLINICA SAN RAFAEL · MP 9995'
+    }
+
     // Verificar si es HE o HA (incluso en combinaciones como HE+GA)
     const incluyeCodigo = item.incluyeCodigo || ''
     const esGastos = contieneClasificacion(item.clasificacionAgrupacion, 'GA') || incluyeCodigo.includes('GA')
@@ -139,6 +147,10 @@ export function AutorizacionPrint({
         nombre: NOMBRE_PATOLOGIA_DEFAULT,
         matricula: MATRICULA_PATOLOGIA_DEFAULT,
       }
+    }
+
+    if (esOrdenGuardiaAmbulatoria) {
+      return { nombre: 'GUARDIA', matricula: MATRICULA_GUARDIA_PRINT }
     }
 
     if (esInternacion && firmanteDesdeOrden) {

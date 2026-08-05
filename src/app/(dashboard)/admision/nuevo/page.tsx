@@ -65,6 +65,10 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
           planId: true,
           obraSocialCoseguroId: true,
           numeroAfiliado: true,
+          nombreTutor: true,
+          telefonoTutor: true,
+          obraSocial: { select: { nombre: true } },
+          plan: { select: { descripcion: true } },
         },
       })
       if (p) {
@@ -85,7 +89,11 @@ export default async function NuevaAdmisionPage({ searchParams }: PageProps) {
           obraSocialId: p.obraSocialId,
           planId: p.planId,
           obraSocialCoseguroId: p.obraSocialCoseguroId,
+          obraSocialNombre: p.obraSocial?.nombre ?? null,
+          planDescripcion: p.plan?.descripcion ?? null,
           numeroAfiliado: p.numeroAfiliado,
+          nombreTutor: p.nombreTutor,
+          telefonoTutor: p.telefonoTutor,
         }
       }
     }

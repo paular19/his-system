@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db'
 import type { Cama, Prisma } from '@prisma/client'
 import { calcularImporteFacturable, resolverReglaFacturacion } from '@/modules/facturacion/cobertura'
 import { obtenerValorPractica } from '@/modules/facturacion/repository'
+import { prefijoBloqueoHabitacionPorIngreso } from '@/lib/internacion/bloqueo-habitacion'
+import { parseObservacionBloqueoHabitacion } from '@/lib/internacion/bloqueo-habitacion'
 import {
   parseObservacionesInternacion,
   serializarObservacionesInternacion,
@@ -29,6 +31,7 @@ import type {
   CrearDescartableInput,
   ActualizarDescartableInput,
   TransferirCamaInput,
+  EditarTransferenciaCamaInput,
   CrearPracticaInput,
   ActualizarPracticaInput,
   RegistrarAltaInternacionInput,
@@ -88,6 +91,30 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
 function normalizarTextoOpcional(value: string | null | undefined): string | null {
   const normalized = value?.trim() ?? ''
   return normalized.length > 0 ? normalized : null
+}
+
+async function liberarBloqueosHabitacionDeIngreso(
+  tx: Prisma.TransactionClient,
+  ingresoId: number,
+  usuario: string,
+  fechaEstado: Date
+): Promise<void> {
+  const prefijo = prefijoBloqueoHabitacionPorIngreso(ingresoId)
+
+  await tx.cama.updateMany({
+    where: {
+      estado: 'OCUPADA',
+      observaciones: {
+        startsWith: prefijo,
+      },
+    },
+    data: {
+      estado: 'DISPONIBLE',
+      observaciones: null,
+      usuario: usuario.slice(0, 10),
+      fechaEstado,
+    },
+  })
 }
 
 type ComponentesPractica = {
@@ -241,6 +268,7 @@ async function mapearCamaConOcupante(
   const hayIngresoActivo = ingresoActivo !== null
 
   let estadoVisual = cama.estado
+  const bloqueoHabitacion = parseObservacionBloqueoHabitacion(cama.observaciones)
   if (cama.estado !== 'MANTENIMIENTO') {
     if (cama.estado === 'RESERVADA' && hayIngresoDelDia) {
       estadoVisual = 'RESERVADA'
@@ -262,6 +290,25 @@ async function mapearCamaConOcupante(
       ? (ingresosOrdenadosPorFechaDesc[0] ?? null)
       : null)
 
+  const ocupanteBloqueo =
+    !ingresoParaMostrar && estadoVisual === 'OCUPADA' && bloqueoHabitacion
+      ? {
+        ingresoId: bloqueoHabitacion.ingresoId,
+        numeroIngreso: 0,
+        nombre: 'Bloqueo de habitación',
+        fechaIngreso: null,
+        numeroDocumento: null,
+        historiaClinica: null,
+        profesionalTratanteNombre: null,
+        diagnostico: bloqueoHabitacion.habitacion
+          ? `Habitación ${bloqueoHabitacion.habitacion}`
+          : 'Bloqueo de habitación completa',
+        tieneCoseguro: false,
+        obraSocialId: null,
+        obraSocialNombre: 'Bloqueo',
+      }
+      : null
+
   return {
     ...cama,
     estado: estadoVisual,
@@ -279,7 +326,7 @@ async function mapearCamaConOcupante(
         obraSocialId: ingresoParaMostrar.obraSocialId ?? null,
         obraSocialNombre: ingresoParaMostrar.obraSocial?.nombre ?? null,
       }
-      : null,
+      : ocupanteBloqueo,
   }
 }
 
@@ -873,9 +920,10 @@ export async function obtenerInternacionDetalle(
 export async function actualizarProfesionalTratanteInternacion(
   ingresoId: number,
   profesionalTratanteId: number,
-  usuario: string
+  usuario: string,
+  fecha?: Date | null
 ) {
-  const ahora = new Date()
+  const fechaCambio = fecha ?? new Date()
 
   const ingresoActual = await prisma.ingreso.findUnique({
     where: { id: ingresoId },
@@ -916,7 +964,7 @@ export async function actualizarProfesionalTratanteInternacion(
         ingresoId,
         tipoCambio: 'M',
         usuarioCambio: usuario.slice(0, 10),
-        fechaCambio: ahora,
+        fechaCambio,
       },
     }),
     prisma.ingreso.update({
@@ -924,7 +972,7 @@ export async function actualizarProfesionalTratanteInternacion(
       data: {
         profesionalTratanteId,
         usuario: usuario.slice(0, 10),
-        fechaEstado: ahora,
+        fechaEstado: fechaCambio,
       },
     }),
   ])
@@ -2489,6 +2537,8 @@ export async function transferirCama(
       )
     }
 
+    await liberarBloqueosHabitacionDeIngreso(tx, data.ingresoId, usuario, ahora)
+
     // Liberar cama origen
     if (ingreso.camaId) {
       await tx.cama.update({
@@ -2538,6 +2588,63 @@ export async function transferirCama(
   return transferencia as TransferenciaItem
 }
 
+export async function editarTransferenciaCama(
+  data: EditarTransferenciaCamaInput,
+  usuario: string
+): Promise<TransferenciaItem> {
+  const transferenciaActual = await prisma.transferenciaIngreso.findUnique({
+    where: { id: data.transferenciaId },
+    select: {
+      id: true,
+      ingresoId: true,
+      camaDestinoId: true,
+      fecha: true,
+      motivo: true,
+      profesionalId: true,
+    },
+  })
+
+  if (!transferenciaActual || transferenciaActual.ingresoId !== data.ingresoId) {
+    throw new Error('Transferencia no encontrada para la internacion indicada')
+  }
+
+  const camaDestino = await prisma.cama.findUnique({
+    where: { id: data.camaDestinoId },
+    select: { id: true },
+  })
+
+  if (!camaDestino) {
+    throw new Error('La cama destino indicada no existe')
+  }
+
+  const actualizado = await prisma.transferenciaIngreso.update({
+    where: { id: data.transferenciaId },
+    data: {
+      camaDestinoId: data.camaDestinoId,
+      fecha: data.fecha ?? transferenciaActual.fecha,
+      motivo: data.motivo === undefined ? transferenciaActual.motivo : (data.motivo ?? null),
+      profesionalId:
+        data.profesionalId === undefined
+          ? transferenciaActual.profesionalId
+          : (data.profesionalId ?? null),
+      usuario: usuario.slice(0, 10),
+      fechaEstado: new Date(),
+    },
+    select: {
+      id: true,
+      ingresoId: true,
+      fecha: true,
+      motivo: true,
+      usuario: true,
+      camaOrigen: { select: { id: true, identificador: true, sector: true } },
+      camaDestino: { select: { id: true, identificador: true, sector: true, estado: true } },
+      profesional: { select: { id: true, nombre: true } },
+    },
+  })
+
+  return actualizado as TransferenciaItem
+}
+
 // ============================================
 // DIAGNOSTICOS / ALTA
 // ============================================
@@ -2546,6 +2653,7 @@ export async function actualizarObservacionesInternacion(
   ingresoId: number,
   data: {
     observaciones: string | null | undefined
+    clinicaDerivante?: string | null
     checklistDocumental?: {
       DOCUMENTO?: boolean
       CARNET?: boolean
@@ -2559,7 +2667,7 @@ export async function actualizarObservacionesInternacion(
     }
     armRegistros?: Array<{
       id?: string | null
-      fechaIngreso: Date
+      fechaIngreso?: Date | null
       fechaEgreso?: Date | null
       profesionalId?: number | null
     }>
@@ -2600,11 +2708,13 @@ export async function actualizarObservacionesInternacion(
     const actual = parseObservacionesInternacion(ingreso.observaciones)
     observacionesFinal = serializarObservacionesInternacion({
       observaciones: data.observaciones !== undefined ? data.observaciones : actual.observaciones,
+      clinicaDerivante:
+        data.clinicaDerivante !== undefined ? data.clinicaDerivante : actual.clinicaDerivante,
       checklistDocumental: data.checklistDocumental ?? actual.checklistDocumental,
       armRegistros:
         data.armRegistros?.map((item) => ({
           id: item.id ?? null,
-          fechaIngreso: item.fechaIngreso,
+          fechaIngreso: item.fechaIngreso ?? null,
           fechaEgreso: item.fechaEgreso ?? null,
           profesionalId: item.profesionalId ?? null,
         })) ?? actual.armRegistros,
@@ -2710,6 +2820,8 @@ export async function registrarAltaInternacion(
   const fechaEgreso = data.fechaEgreso ?? new Date()
 
   return prisma.$transaction(async (tx) => {
+    const ahora = new Date()
+
     const alta = await tx.ingreso.update({
       where: { id: data.ingresoId },
       data: {
@@ -2717,7 +2829,7 @@ export async function registrarAltaInternacion(
         motivoEgresoCodigo: data.motivoEgresoCodigo ?? null,
         descripcionPatologiaDefinitiva: data.descripcionPatologiaDefinitiva ?? null,
         estado: 'E',
-        fechaEstado: new Date(),
+        fechaEstado: ahora,
         usuario: usuario.slice(0, 10),
       },
       select: {
@@ -2735,11 +2847,14 @@ export async function registrarAltaInternacion(
         where: { id: ingreso.camaId },
         data: {
           estado: 'DISPONIBLE',
+          observaciones: null,
           usuario: usuario.slice(0, 10),
-          fechaEstado: new Date(),
+          fechaEstado: ahora,
         },
       })
     }
+
+    await liberarBloqueosHabitacionDeIngreso(tx, data.ingresoId, usuario, ahora)
 
     return alta
   })

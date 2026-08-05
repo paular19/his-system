@@ -291,9 +291,13 @@ export function AdmisionForm({
   const handleSeleccionarPaciente = (p: PacienteResumen | null) => {
     setPaciente(p)
     if (p) {
+      const obraSocialPaciente = obraSociales.find((os) => os.id === p.obraSocialId)
+      const pacienteEsIPSS = esNombreIPSS(obraSocialPaciente?.nombre ?? '')
       setObraSocialId(p.obraSocialId ? p.obraSocialId.toString() : '')
-      setPlanId(p.planId ? p.planId.toString() : '')
-      setObraSocialCoseguroId(p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : '')
+      setPlanId(!pacienteEsIPSS && p.planId ? p.planId.toString() : '')
+      setObraSocialCoseguroId(
+        pacienteEsIPSS && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
+      )
       setNumeroAfiliado(p.numeroAfiliado ?? '')
     } else {
       setObraSocialId('')
@@ -426,12 +430,14 @@ export function AdmisionForm({
           ? null
           : (profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null),
         obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
-        planId: planId ? parseInt(planId, 10) : null,
+        planId: esCoberturaConCoseguro ? null : (planId ? parseInt(planId, 10) : null),
         obraSocialCoseguroId:
           esCoberturaConCoseguro && obraSocialCoseguroId
             ? parseInt(obraSocialCoseguroId, 10)
             : null,
         numeroAfiliado: numeroAfiliado || null,
+        nombreTutor: paciente?.nombreTutor?.trim() || null,
+        telefonoTutor: paciente?.telefonoTutor?.trim() || null,
         descripcionPatologia: descripcionPatologia || null,
         observaciones: observaciones || null,
         generarOrdenesSeparadasPorPractica,
@@ -601,6 +607,16 @@ export function AdmisionForm({
             {paciente.email && (
               <div className="col-span-2 md:col-span-1">
                 <span className="text-gray-400">Email:</span> {paciente.email}
+              </div>
+            )}
+            {paciente.nombreTutor && (
+              <div>
+                <span className="text-gray-400">Familiar responsable:</span> {paciente.nombreTutor}
+              </div>
+            )}
+            {paciente.telefonoTutor && (
+              <div>
+                <span className="text-gray-400">Tel. familiar:</span> {paciente.telefonoTutor}
               </div>
             )}
           </div>

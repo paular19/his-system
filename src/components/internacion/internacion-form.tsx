@@ -49,10 +49,16 @@ interface PlanOption {
   obraSocialId: number | null
 }
 
+interface CoseguroOption {
+  id: number
+  nombre: string
+}
+
 interface InternacionFormProps {
   profesionales: ProfesionalOption[]
   obraSociales: ObraSocialOption[]
   planes: PlanOption[]
+  coseguros: CoseguroOption[]
   camasDisponibles: CamaConOcupante[]
   pacienteInicial?: PacienteResumen | null
   camaInicial?: number | null
@@ -99,10 +105,26 @@ function crearIdTemporalDeposito(): string {
   return `dep-${Date.now()}-${Math.floor(Math.random() * 1000)}`
 }
 
+function normalizarTexto(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function esNombreIPSS(nombre: string): boolean {
+  const tokens = normalizarTexto(nombre).split(' ')
+  return tokens.includes('IPSS') || tokens.includes('IPS')
+}
+
 export function InternacionForm({
   profesionales,
   obraSociales,
   planes,
+  coseguros,
   camasDisponibles,
   pacienteInicial,
   camaInicial,
@@ -120,13 +142,18 @@ export function InternacionForm({
   const [profesionalGuardiaId, setProfesionalGuardiaId] = useState('')
   const [profesionalDerivanteId, setProfesionalDerivanteId] = useState('')
   const [profesionalTratanteId, setProfesionalTratanteId] = useState('')
+  const [clinicaDerivante, setClinicaDerivante] = useState('')
   const [esCirugiaProgramada, setEsCirugiaProgramada] = useState(false)
+  const [bloquearHabitacionCompleta, setBloquearHabitacionCompleta] = useState(false)
   const [fechaCirugiaProgramada, setFechaCirugiaProgramada] = useState(ahoraLocalDateTimeInput())
   const [obraSocialId, setObraSocialId] = useState(pacienteInicial?.obraSocialId?.toString() ?? '')
   const [planId, setPlanId] = useState(pacienteInicial?.planId?.toString() ?? '')
+  const [obraSocialCoseguroId, setObraSocialCoseguroId] = useState(
+    pacienteInicial?.obraSocialCoseguroId?.toString() ?? ''
+  )
   const [numeroAfiliado, setNumeroAfiliado] = useState(pacienteInicial?.numeroAfiliado ?? '')
-  const [nombreTutor, setNombreTutor] = useState('')
-  const [telefonoTutor, setTelefonoTutor] = useState('')
+  const [nombreTutor, setNombreTutor] = useState(pacienteInicial?.nombreTutor ?? '')
+  const [telefonoTutor, setTelefonoTutor] = useState(pacienteInicial?.telefonoTutor ?? '')
   const [descripcionPatologia, setDescripcionPatologia] = useState('')
   const [observaciones, setObservaciones] = useState('')
   const [checklistDocumental, setChecklistDocumental] = useState<ChecklistDocumental>(
@@ -156,6 +183,14 @@ export function InternacionForm({
     [camasDisponibles, camaId]
   )
 
+  const obraSocialSeleccionada = useMemo(
+    () => obraSociales.find((os) => String(os.id) === obraSocialId) ?? null,
+    [obraSociales, obraSocialId]
+  )
+
+  const esIPSS = esNombreIPSS(obraSocialSeleccionada?.nombre ?? '')
+  const cosegurosDisponibles = esIPSS ? coseguros : []
+
   const obtenerMatriculaDefault = () => {
     const profesionalTratante = Number.parseInt(profesionalTratanteId, 10)
     if (Number.isFinite(profesionalTratante)) {
@@ -175,13 +210,23 @@ export function InternacionForm({
   const handleSeleccionarPaciente = (p: PacienteResumen | null) => {
     setPaciente(p)
     if (p) {
+      const obraSocialPaciente = obraSociales.find((os) => os.id === p.obraSocialId)
+      const pacienteEsIPSS = esNombreIPSS(obraSocialPaciente?.nombre ?? '')
       setObraSocialId(p.obraSocialId ? p.obraSocialId.toString() : '')
-      setPlanId(p.planId ? p.planId.toString() : '')
+      setPlanId(!pacienteEsIPSS && p.planId ? p.planId.toString() : '')
+      setObraSocialCoseguroId(
+        pacienteEsIPSS && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
+      )
       setNumeroAfiliado(p.numeroAfiliado ?? '')
+      setNombreTutor(p.nombreTutor ?? '')
+      setTelefonoTutor(p.telefonoTutor ?? '')
     } else {
       setObraSocialId('')
       setPlanId('')
+      setObraSocialCoseguroId('')
       setNumeroAfiliado('')
+      setNombreTutor('')
+      setTelefonoTutor('')
     }
   }
 
@@ -246,6 +291,18 @@ export function InternacionForm({
       return
     }
 
+    if (bloquearHabitacionCompleta && !camaId) {
+      setError('Para bloquear la habitacion completa debe seleccionar una cama')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
+    if (bloquearHabitacionCompleta && !camaSeleccionada?.habitacion) {
+      setError('La cama seleccionada no tiene habitacion asociada para poder bloquearla completa')
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
     if (esCirugiaProgramada && !fechaCirugiaProgramada) {
       setError('Debe completar fecha y hora de la cirugia programada')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -260,16 +317,6 @@ export function InternacionForm({
 
     if (!profesionalTratanteId) {
       setError('Seleccione un medico tratante para la internacion')
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      return
-    }
-
-    if (
-      profesionalGuardiaId
-      && profesionalDerivanteId
-      && profesionalGuardiaId === profesionalDerivanteId
-    ) {
-      setError('El medico derivante debe ser distinto al medico de cabecera')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
@@ -356,6 +403,7 @@ export function InternacionForm({
 
     const observacionesSerializadas = serializarObservacionesInternacion({
       observaciones: observaciones || null,
+      clinicaDerivante: clinicaDerivante.trim() || null,
       checklistDocumental,
       depositosRegistros: depositosRegistros.map((item) => ({
         id: item.id,
@@ -378,11 +426,14 @@ export function InternacionForm({
         fechaIngreso: fechaIngreso || undefined,
         fechaTurno: esCirugiaProgramada ? fechaCirugiaProgramada : undefined,
         camaId: camaId ? parseInt(camaId, 10) : null,
+        bloquearHabitacionCompleta,
         profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null,
         profesionalDerivanteId: profesionalDerivanteId ? parseInt(profesionalDerivanteId, 10) : null,
         profesionalTratanteId: profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null,
         obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
-        planId: planId ? parseInt(planId, 10) : null,
+        planId: !esIPSS && planId ? parseInt(planId, 10) : null,
+        obraSocialCoseguroId:
+          esIPSS && obraSocialCoseguroId ? parseInt(obraSocialCoseguroId, 10) : null,
         numeroAfiliado: numeroAfiliado || null,
         nombreTutor: nombreTutor.trim() || null,
         telefonoTutor: telefonoTutor.trim() || null,
@@ -519,6 +570,19 @@ export function InternacionForm({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
+              Clinica derivante
+            </label>
+            <input
+              type="text"
+              value={clinicaDerivante}
+              onChange={(e) => setClinicaDerivante(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              placeholder="Opcional"
+              maxLength={200}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
               Fecha y hora de ingreso <span className="text-red-500">*</span>
             </label>
             <input
@@ -600,6 +664,24 @@ export function InternacionForm({
           )}
         </div>
 
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+          <label className="flex items-center gap-2 text-sm text-red-900">
+            <input
+              type="checkbox"
+              checked={bloquearHabitacionCompleta}
+              onChange={(e) => setBloquearHabitacionCompleta(e.target.checked)}
+              className="h-4 w-4 rounded border-red-300"
+              disabled={!camaSeleccionada}
+            />
+            Bloquear habitacion completa
+          </label>
+          <p className="mt-1 text-xs text-red-800">
+            {camaSeleccionada?.habitacion
+              ? `Si se activa, se bloquearan las otras camas de la habitacion ${camaSeleccionada.habitacion}.`
+              : 'Seleccione una cama con habitacion para habilitar esta opcion.'}
+          </p>
+        </div>
+
         {camasDisponibles.length === 0 ? (
           <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-lg">
             No hay camas disponibles en este momento.
@@ -655,6 +737,7 @@ export function InternacionForm({
               onChange={(e) => {
                 setObraSocialId(e.target.value)
                 setPlanId('')
+                setObraSocialCoseguroId('')
               }}
               className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
             >
@@ -664,20 +747,38 @@ export function InternacionForm({
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Plan</label>
-            <select
-              value={planId}
-              onChange={(e) => setPlanId(e.target.value)}
-              disabled={!obraSocialId}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50"
-            >
-              <option value="">— Seleccionar plan —</option>
-              {planesDisponibles.map((p) => (
-                <option key={p.id} value={p.id}>{p.nombre}</option>
-              ))}
-            </select>
-          </div>
+          {!esIPSS && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Plan</label>
+              <select
+                value={planId}
+                onChange={(e) => setPlanId(e.target.value)}
+                disabled={!obraSocialId}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50"
+              >
+                <option value="">— Seleccionar plan —</option>
+                {planesDisponibles.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {esIPSS && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Coseguro</label>
+              <select
+                value={obraSocialCoseguroId}
+                onChange={(e) => setObraSocialCoseguroId(e.target.value)}
+                disabled={!obraSocialId}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50"
+              >
+                <option value="">— Sin coseguro —</option>
+                {cosegurosDisponibles.map((coseguro) => (
+                  <option key={coseguro.id} value={coseguro.id}>{coseguro.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Nro. afiliado</label>
             <input

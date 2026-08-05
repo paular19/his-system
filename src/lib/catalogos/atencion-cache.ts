@@ -33,10 +33,63 @@ export type CatalogoSubtipoAdmision = {
 }
 
 const CODIGOS_SUBTIPO_ADMISION = ['RAY', 'GUA', 'CUR', 'SUT', 'ECG', 'ECO', 'DER', 'TUR'] as const
+const MATRICULA_GUARDIA_RODOLFO_SABIO = 9092
+const NOMBRE_GUARDIA_RODOLFO_SABIO = 'DR RODOLFO SABIO'
+
+function normalizarTexto(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+async function asegurarProfesionalGuardia9092(): Promise<void> {
+    try {
+        const existente = await prisma.profesional.findFirst({
+            where: { matricula: MATRICULA_GUARDIA_RODOLFO_SABIO },
+            select: { id: true, nombre: true, estado: true },
+        })
+
+        if (!existente) {
+            await prisma.profesional.create({
+                data: {
+                    nombre: NOMBRE_GUARDIA_RODOLFO_SABIO,
+                    matricula: MATRICULA_GUARDIA_RODOLFO_SABIO,
+                    estado: 'A',
+                    fechaEstado: new Date(),
+                    usuario: 'SISTEMA',
+                },
+            })
+            return
+        }
+
+        const nombreNormalizado = normalizarTexto(existente.nombre)
+        const requiereActualizacionNombre = !nombreNormalizado.includes('RODOLFO SABIO')
+        const requiereActivar = existente.estado !== 'A'
+
+        if (requiereActualizacionNombre || requiereActivar) {
+            await prisma.profesional.update({
+                where: { id: existente.id },
+                data: {
+                    nombre: requiereActualizacionNombre ? NOMBRE_GUARDIA_RODOLFO_SABIO : existente.nombre,
+                    estado: 'A',
+                    fechaEstado: new Date(),
+                    usuario: 'SISTEMA',
+                },
+            })
+        }
+    } catch (error) {
+        console.error('[catalogos] No se pudo asegurar Dr. Rodolfo Sabio MP 9092', error)
+    }
+}
 
 const getProfesionalesActivosCached = unstable_cache(
     async (): Promise<CatalogoProfesional[]> => {
         try {
+            await asegurarProfesionalGuardia9092()
             return await prisma.profesional.findMany({
                 where: { estado: 'A' },
                 select: { id: true, nombre: true, matricula: true },
@@ -47,7 +100,7 @@ const getProfesionalesActivosCached = unstable_cache(
             return []
         }
     },
-    ['catalogo-profesionales-activos-v1'],
+    ['catalogo-profesionales-activos-v2'],
     { revalidate: 300, tags: ['catalogo-profesionales'] }
 )
 

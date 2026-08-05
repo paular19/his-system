@@ -330,7 +330,13 @@ export async function obtenerOrden(
       obraSocial: { select: { id: true, nombre: true } },
       plan: { select: { id: true, descripcion: true } },
       profesional: { select: { id: true, nombre: true, matricula: true } },
-      ingreso: { select: { numeroIngreso: true, tipoIngresoCodigo: true } },
+      ingreso: {
+        select: {
+          numeroIngreso: true,
+          tipoIngresoCodigo: true,
+          ingresoSubtipo: { select: { subtipoAdmisionCodigo: true } },
+        },
+      },
       tipoOrden: { select: { codigo: true, descripcion: true } },
     },
   })
@@ -353,7 +359,11 @@ export async function obtenerOrden(
       ? await prisma.ingreso.findFirst({
         where: { pacienteId: orden.pacienteId },
         orderBy: [{ fechaIngreso: 'desc' }, { id: 'desc' }],
-        select: { numeroIngreso: true, tipoIngresoCodigo: true },
+        select: {
+          numeroIngreso: true,
+          tipoIngresoCodigo: true,
+          ingresoSubtipo: { select: { subtipoAdmisionCodigo: true } },
+        },
       })
       : null)
 
@@ -389,6 +399,7 @@ export async function obtenerOrden(
     ingresoId: orden.ingresoId,
     ingresoNumero: ingresoRelacionado?.numeroIngreso ?? null,
     ingresoTipoCodigo: ingresoRelacionado?.tipoIngresoCodigo ?? null,
+    ingresoSubtipoCodigo: ingresoRelacionado?.ingresoSubtipo?.subtipoAdmisionCodigo ?? null,
     pacienteId: orden.pacienteId,
     nombrePaciente: orden.nombrePaciente,
     numeroAfiliado: orden.numeroAfiliado,

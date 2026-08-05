@@ -39,10 +39,19 @@ function formatearIngreso(fechaIngreso: Date | null): string {
   })
 }
 
+function esOcupacionPorBloqueo(cama: CamaConOcupante): boolean {
+  return (
+    cama.estado === 'OCUPADA' &&
+    Boolean(cama.ocupante) &&
+    (cama.ocupante?.nombre ?? '').toLowerCase() === 'bloqueo de habitación'
+  )
+}
+
 export function TarjetaCama({ cama }: TarjetaCamaProps) {
   const estiloCard = ESTADO_STYLES[cama.estado] ?? 'bg-white border-gray-200'
   const estiloTexto = ESTADO_TEXT[cama.estado] ?? 'text-gray-700'
   const estiloDot = ESTADO_DOT[cama.estado] ?? 'bg-gray-400'
+  const ocupacionPorBloqueo = esOcupacionPorBloqueo(cama)
 
   const contenido = (
     <div
@@ -89,13 +98,17 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
                 Tratante: {cama.ocupante.profesionalTratanteNombre ?? '—'}
               </p>
               <p className="text-[11px] text-gray-600 leading-tight line-clamp-1 lg:col-span-2 xl:col-span-2">
-                Dx: {cama.ocupante.diagnostico?.trim() || '—'}
+                {ocupacionPorBloqueo ? 'Detalle:' : 'Dx:'} {cama.ocupante.diagnostico?.trim() || '—'}
               </p>
               <p className="text-[11px] text-gray-600 leading-tight">
-                Coseguro: {cama.ocupante.tieneCoseguro ? 'Si' : 'No'}
+                {ocupacionPorBloqueo
+                  ? 'Estado: Bloqueada'
+                  : `Coseguro: ${cama.ocupante.tieneCoseguro ? 'Si' : 'No'}`}
               </p>
             </div>
-            <span className="text-[11px] text-gray-400 shrink-0">#{cama.ocupante.numeroIngreso}</span>
+            {cama.ocupante.numeroIngreso > 0 && (
+              <span className="text-[11px] text-gray-400 shrink-0">#{cama.ocupante.numeroIngreso}</span>
+            )}
           </>
         )}
 

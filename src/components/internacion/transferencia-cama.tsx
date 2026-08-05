@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ArrowRightLeft } from 'lucide-react'
 import type { TransferenciaItem, CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
@@ -101,11 +101,128 @@ export function TransferenciaCama({
     const [correccionError, setCorreccionError] = useState<string | null>(null)
     const [correccionExito, setCorreccionExito] = useState<string | null>(null)
     const [confirmacionCorreccionAlta, setConfirmacionCorreccionAlta] = useState(false)
+    const [transferenciaEditandoId, setTransferenciaEditandoId] = useState<number | null>(null)
+    const [fechaTransferenciaEdit, setFechaTransferenciaEdit] = useState('')
+    const [camaDestinoEditId, setCamaDestinoEditId] = useState('')
+    const [motivoTransferenciaEdit, setMotivoTransferenciaEdit] = useState('')
+    const [guardandoEdicionTransferencia, setGuardandoEdicionTransferencia] = useState(false)
+    const [errorEdicionTransferencia, setErrorEdicionTransferencia] = useState<string | null>(null)
 
     const estadoCamaActual = normalizarEstadoCama(cama?.estado)
 
     // Refresh camas disponibles (excluir la cama actual del listado)
     const camasParaTransferir = camasDisponibles.filter((c) => c.id !== cama?.id)
+    const opcionesCamasHistorial = useMemo(() => {
+        const map = new Map<number, { id: number; identificador: string; sector: string; habitacion: string | null }>()
+
+        for (const camaDisponible of camasDisponibles) {
+            map.set(camaDisponible.id, {
+                id: camaDisponible.id,
+                identificador: camaDisponible.identificador,
+                sector: camaDisponible.sector,
+                habitacion: camaDisponible.habitacion ?? null,
+            })
+        }
+
+        if (camaActual) {
+            map.set(camaActual.id, {
+                id: camaActual.id,
+                identificador: camaActual.identificador,
+                sector: camaActual.sector,
+                habitacion: null,
+            })
+        }
+
+        for (const item of transferencias) {
+            if (item.camaDestino) {
+                map.set(item.camaDestino.id, {
+                    id: item.camaDestino.id,
+                    identificador: item.camaDestino.identificador,
+                    sector: item.camaDestino.sector,
+                    habitacion: null,
+                })
+            }
+            if (item.camaOrigen) {
+                map.set(item.camaOrigen.id, {
+                    id: item.camaOrigen.id,
+                    identificador: item.camaOrigen.identificador,
+                    sector: item.camaOrigen.sector,
+                    habitacion: null,
+                })
+            }
+        }
+
+        return Array.from(map.values()).sort((a, b) => a.identificador.localeCompare(b.identificador))
+    }, [camaActual, camasDisponibles, transferencias])
+
+    const iniciarEdicionTransferencia = (item: TransferenciaItem) => {
+        setTransferenciaEditandoId(item.id)
+        setFechaTransferenciaEdit(toDateTimeLocalInput(item.fecha))
+        setCamaDestinoEditId(String(item.camaDestino.id))
+        setMotivoTransferenciaEdit(item.motivo ?? '')
+        setErrorEdicionTransferencia(null)
+    }
+
+    const cancelarEdicionTransferencia = () => {
+        setTransferenciaEditandoId(null)
+        setFechaTransferenciaEdit('')
+        setCamaDestinoEditId('')
+        setMotivoTransferenciaEdit('')
+        setErrorEdicionTransferencia(null)
+    }
+
+    const guardarEdicionTransferencia = async (transferenciaId: number) => {
+        if (!camaDestinoEditId) {
+            setErrorEdicionTransferencia('Seleccione una cama destino para el historial.')
+            return
+        }
+
+        setGuardandoEdicionTransferencia(true)
+        setErrorEdicionTransferencia(null)
+
+        try {
+            const res = await fetch(`/api/internacion/${ingresoId}/transferencias/${transferenciaId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    camaDestinoId: Number.parseInt(camaDestinoEditId, 10),
+                    fecha: fechaTransferenciaEdit || undefined,
+                    motivo: motivoTransferenciaEdit || null,
+                }),
+            })
+
+            const json = await res.json().catch(() => null)
+            if (!res.ok) {
+                throw new Error(json?.error ?? 'No se pudo editar la transferencia')
+            }
+
+            const data = json?.data
+            if (!data?.id) {
+                throw new Error('Respuesta inválida al editar la transferencia')
+            }
+
+            const actualizado = {
+                ...data,
+                fecha: new Date(data.fecha),
+            } as TransferenciaItem
+
+            setTransferencias((prev) => {
+                const next = prev.map((item) => (item.id === transferenciaId ? actualizado : item))
+                next.sort((a, b) => {
+                    const af = a.fecha instanceof Date ? a.fecha.getTime() : new Date(a.fecha).getTime()
+                    const bf = b.fecha instanceof Date ? b.fecha.getTime() : new Date(b.fecha).getTime()
+                    return bf - af
+                })
+                return next
+            })
+
+            cancelarEdicionTransferencia()
+        } catch (err) {
+            setErrorEdicionTransferencia(err instanceof Error ? err.message : 'No se pudo editar la transferencia')
+        } finally {
+            setGuardandoEdicionTransferencia(false)
+        }
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -398,14 +515,98 @@ export function TransferenciaCama({
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Historial de camas</p>
                     <div className="space-y-2">
                         {transferencias.map((t) => (
-                            <div key={t.id} className="flex items-center gap-2 text-xs text-gray-600">
-                                <span className="text-gray-400">{fmt(t.fecha)}</span>
-                                <ArrowRightLeft className="h-3 w-3 text-gray-400" />
-                                <span>
-                                    {t.camaOrigen ? `${t.camaOrigen.identificador} → ` : ''}
-                                    <span className="font-medium">{t.camaDestino.identificador}</span>
-                                </span>
-                                {t.motivo && <span className="text-gray-400">({t.motivo})</span>}
+                            <div key={t.id} className="rounded-md border border-gray-200 p-2 text-xs text-gray-600">
+                                {transferenciaEditandoId === t.id ? (
+                                    <div className="space-y-2">
+                                        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                                            <div>
+                                                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                                                    Fecha y hora
+                                                </label>
+                                                <input
+                                                    type="datetime-local"
+                                                    value={fechaTransferenciaEdit}
+                                                    onChange={(e) => setFechaTransferenciaEdit(e.target.value)}
+                                                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                                                    Cama destino
+                                                </label>
+                                                <select
+                                                    value={camaDestinoEditId}
+                                                    onChange={(e) => setCamaDestinoEditId(e.target.value)}
+                                                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+                                                >
+                                                    <option value="">Seleccionar cama</option>
+                                                    {opcionesCamasHistorial.map((camaOption) => (
+                                                        <option key={camaOption.id} value={String(camaOption.id)}>
+                                                            {camaOption.identificador}
+                                                            {camaOption.habitacion ? ` · ${camaOption.habitacion}` : ''}
+                                                            {camaOption.sector ? ` — ${SECTOR_LABEL[camaOption.sector] ?? camaOption.sector}` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                                                    Motivo
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={motivoTransferenciaEdit}
+                                                    onChange={(e) => setMotivoTransferenciaEdit(e.target.value)}
+                                                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+                                                    placeholder="Opcional"
+                                                />
+                                            </div>
+                                        </div>
+                                        {errorEdicionTransferencia && (
+                                            <p className="rounded border border-red-200 bg-red-50 p-1.5 text-[11px] text-red-700">
+                                                {errorEdicionTransferencia}
+                                            </p>
+                                        )}
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={cancelarEdicionTransferencia}
+                                                className="rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+                                            >
+                                                Cancelar
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => void guardarEdicionTransferencia(t.id)}
+                                                disabled={guardandoEdicionTransferencia}
+                                                className="rounded bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                                            >
+                                                {guardandoEdicionTransferencia ? 'Guardando...' : 'Guardar cambios'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2 text-xs text-gray-600 min-w-0">
+                                            <span className="text-gray-400">{fmt(t.fecha)}</span>
+                                            <ArrowRightLeft className="h-3 w-3 text-gray-400" />
+                                            <span className="min-w-0">
+                                                {t.camaOrigen ? `${t.camaOrigen.identificador} → ` : ''}
+                                                <span className="font-medium">{t.camaDestino.identificador}</span>
+                                            </span>
+                                            {t.motivo && <span className="text-gray-400">({t.motivo})</span>}
+                                        </div>
+                                        {puedeModificar && (
+                                            <button
+                                                type="button"
+                                                onClick={() => iniciarEdicionTransferencia(t)}
+                                                className="rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+                                            >
+                                                Editar
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

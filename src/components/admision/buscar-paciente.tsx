@@ -26,7 +26,27 @@ interface ApiPaciente {
   obraSocialId: number | null
   planId: number | null
   obraSocialCoseguroId: number | null
+  obraSocialNombre: string | null
+  planDescripcion: string | null
+  obraSocialCoseguroNombre: string | null
   numeroAfiliado: string | null
+  nombreTutor: string | null
+  telefonoTutor: string | null
+}
+
+function normalizarTexto(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function esNombreIPSS(nombre: string | null | undefined): boolean {
+  const tokens = normalizarTexto(nombre ?? '').split(' ')
+  return tokens.includes('IPSS') || tokens.includes('IPS')
 }
 
 export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPacienteProps) {
@@ -136,7 +156,12 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
       obraSocialId: paciente.obraSocialId,
       planId: paciente.planId,
       obraSocialCoseguroId: paciente.obraSocialCoseguroId,
+      obraSocialNombre: paciente.obraSocialNombre,
+      planDescripcion: paciente.planDescripcion,
+      obraSocialCoseguroNombre: paciente.obraSocialCoseguroNombre,
       numeroAfiliado: paciente.numeroAfiliado,
+      nombreTutor: paciente.nombreTutor,
+      telefonoTutor: paciente.telefonoTutor,
     })
     setResultados([])
     setBusqueda('')
@@ -162,6 +187,14 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
                 <> · HC: {pacienteSeleccionado.historiaClinica}</>
               )}
             </p>
+            {(pacienteSeleccionado.obraSocialNombre || pacienteSeleccionado.obraSocialCoseguroNombre || pacienteSeleccionado.planDescripcion) && (
+              <p className="text-[11px] text-green-700">
+                Cobertura:{' '}
+                {esNombreIPSS(pacienteSeleccionado.obraSocialNombre)
+                  ? `${pacienteSeleccionado.obraSocialNombre ?? '—'} · Coseguro: ${pacienteSeleccionado.obraSocialCoseguroNombre ?? 'Sin coseguro'}`
+                  : `${pacienteSeleccionado.obraSocialNombre ?? '—'}${pacienteSeleccionado.planDescripcion ? ` · Plan: ${pacienteSeleccionado.planDescripcion}` : ''}`}
+              </p>
+            )}
           </div>
         </div>
         <button
@@ -257,6 +290,13 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
                 {paciente.tipoDocumento?.trim()} {paciente.numeroDocumento ?? '-'}
                 {paciente.historiaClinica && ` · HC: ${paciente.historiaClinica}`}
               </p>
+              {(paciente.obraSocialNombre || paciente.obraSocialCoseguroNombre || paciente.planDescripcion) && (
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {esNombreIPSS(paciente.obraSocialNombre)
+                    ? `${paciente.obraSocialNombre ?? '—'} · Coseguro: ${paciente.obraSocialCoseguroNombre ?? 'Sin coseguro'}`
+                    : `${paciente.obraSocialNombre ?? '—'}${paciente.planDescripcion ? ` · Plan: ${paciente.planDescripcion}` : ''}`}
+                </p>
+              )}
             </button>
           ))}
         </div>

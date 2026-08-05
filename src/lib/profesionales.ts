@@ -21,7 +21,10 @@ export function nombreProfesionalParaMostrar(nombre: string): string {
   const sinEspecialidad = sinPrefijo.replace(/\s*\([^)]*\)\s*/g, ' ')
   const limpio = sinEspecialidad.replace(/\s+/g, ' ').trim()
 
-  return limpio || nombre.trim()
+  // Correccion puntual solicitada por negocio.
+  const corregido = limpio.replace(/\bTOMAS\s+ENGEL\s+OSCAR\b/i, 'TOMA ENGEL OSCAR')
+
+  return corregido || nombre.trim()
 }
 
 export function coincideBusquedaProfesional(profesional: ProfesionalBasico, termino: string): boolean {
@@ -32,5 +35,13 @@ export function coincideBusquedaProfesional(profesional: ProfesionalBasico, term
   const nombreOriginal = normalizarTextoBusqueda(profesional.nombre)
   const matricula = typeof profesional.matricula === 'number' ? String(profesional.matricula) : ''
 
-  return nombreLimpio.includes(q) || nombreOriginal.includes(q) || matricula.includes(q)
+  const tokens = q.split(' ').filter(Boolean)
+  if (tokens.length === 0) return true
+
+  return tokens.every(
+    (token) =>
+      nombreLimpio.includes(token) ||
+      nombreOriginal.includes(token) ||
+      matricula.includes(token)
+  )
 }

@@ -9,6 +9,21 @@ interface FichaAdmisionPrintProps {
     ingreso: IngresoDetalle
 }
 
+function normalizarTexto(value: string | null | undefined): string {
+    return (value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+function esNombreIPSS(nombre: string | null | undefined): boolean {
+    const tokens = normalizarTexto(nombre).split(' ')
+    return tokens.includes('IPSS') || tokens.includes('IPS')
+}
+
 export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
     const fechaNacimientoPaciente = ingreso.paciente?.fechaNacimiento ?? ingreso.fechaNacimiento
     const edad = fechaNacimientoPaciente ? calcularEdad(fechaNacimientoPaciente) : null
@@ -31,6 +46,11 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
     const ocultarEgresoPrevisto =
         esPracticaAmbulatoria ||
         ['GUA', 'DER', 'IND'].includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
+    const esCoberturaIPSS = esNombreIPSS(ingreso.obraSocial?.nombre)
+    const coberturaSecundariaLabel = esCoberturaIPSS ? 'Coseguro' : 'Plan'
+    const coberturaSecundariaValor = esCoberturaIPSS
+        ? (ingreso.obraSocialCoseguroNombre ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : '—'))
+        : (ingreso.plan?.descripcion ?? '—')
 
     useEffect(() => {
         const originalTitle = document.title
@@ -165,7 +185,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                     <tr>
                                         <td className="print-label">Cobertura:</td>
                                         <td className="print-value" colSpan={3}>
-                                            {ingreso.obraSocial?.nombre ?? '—'} - {ingreso.plan?.descripcion ?? '—'}
+                                            {ingreso.obraSocial?.nombre ?? '—'} - {coberturaSecundariaValor}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -347,8 +367,8 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                             <dd className="font-medium">{ingreso.obraSocial?.nombre ?? '—'}</dd>
                         </div>
                         <div className="flex justify-between">
-                            <dt className="text-gray-600">Plan:</dt>
-                            <dd className="font-medium">{ingreso.plan?.descripcion ?? '—'}</dd>
+                            <dt className="text-gray-600">{coberturaSecundariaLabel}:</dt>
+                            <dd className="font-medium">{coberturaSecundariaValor}</dd>
                         </div>
                         <div className="flex justify-between">
                             <dt className="text-gray-600">N° Afiliado:</dt>

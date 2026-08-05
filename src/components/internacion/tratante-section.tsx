@@ -6,6 +6,16 @@ import { Stethoscope } from 'lucide-react'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 
+function ahoraLocalDateTimeInput(): string {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    const hh = String(now.getHours()).padStart(2, '0')
+    const mm = String(now.getMinutes()).padStart(2, '0')
+    return `${y}-${m}-${d}T${hh}:${mm}`
+}
+
 interface ProfesionalOption {
     id: number
     nombre: string
@@ -43,6 +53,7 @@ export function TratanteSection({
     )
     const [guardando, setGuardando] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [fechaCambioTratante, setFechaCambioTratante] = useState(() => ahoraLocalDateTimeInput())
 
     const cambiosDetectados = useMemo(
         () => (tratanteActualId ? String(tratanteActualId) !== tratanteSeleccionado : Boolean(tratanteSeleccionado)),
@@ -67,7 +78,10 @@ export function TratanteSection({
             const res = await fetch(`/api/internacion/${ingresoId}/tratante`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ profesionalTratanteId: Number(tratanteSeleccionado) }),
+                body: JSON.stringify({
+                    profesionalTratanteId: Number(tratanteSeleccionado),
+                    fecha: fechaCambioTratante || undefined,
+                }),
             })
 
             const json = await res.json().catch(() => ({}))
@@ -112,6 +126,20 @@ export function TratanteSection({
                     disabled={!puedeModificar || guardando}
                     placeholderOption="Seleccionar medico tratante"
                 />
+                {puedeModificar && (
+                    <div>
+                        <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                            Fecha y hora del traspaso
+                        </label>
+                        <input
+                            type="datetime-local"
+                            value={fechaCambioTratante}
+                            onChange={(e) => setFechaCambioTratante(e.target.value)}
+                            disabled={guardando}
+                            className="w-full rounded-md border border-gray-300 px-2.5 py-2 text-xs"
+                        />
+                    </div>
+                )}
                 {puedeModificar && cambiosDetectados && (
                     <button
                         type="button"

@@ -83,6 +83,11 @@ function normalizarTexto(value: string | null | undefined): string {
         .trim()
 }
 
+function esNombreIPSS(nombre: string | null | undefined): boolean {
+    const tokens = normalizarTexto(nombre).toUpperCase().split(' ')
+    return tokens.includes('IPSS') || tokens.includes('IPS')
+}
+
 function DataItem({ label, value }: { label: string; value?: string | null }) {
     if (!value) return null
     return (
@@ -269,6 +274,11 @@ export function FichaIngresoClient({
         ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
             ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
         )
+    const esCoberturaIPSS = esNombreIPSS(ingreso.obraSocial?.nombre)
+    const coberturaSecundariaLabel = esCoberturaIPSS ? 'Coseguro' : 'Plan'
+    const coberturaSecundariaValor = esCoberturaIPSS
+        ? (ingreso.obraSocialCoseguroNombre ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : null))
+        : (ingreso.plan?.descripcion ?? (ingreso.planId ? `ID ${ingreso.planId}` : null))
     const ocultarEgresoPrevisto =
         esPracticaAmbulatoria ||
         ['GUA', 'DER', 'IND'].includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
@@ -1018,7 +1028,9 @@ export function FichaIngresoClient({
                                     setEditingCard('cobertura');
                                     setCardValues({
                                         obraSocial: ingreso.obraSocial?.nombre || '',
-                                        plan: ingreso.plan?.descripcion || '',
+                                            plan: esCoberturaIPSS
+                                                ? (ingreso.obraSocialCoseguroNombre || '')
+                                                : (ingreso.plan?.descripcion || ''),
                                         numeroAfiliado: ingreso.numeroAfiliado || '',
                                     });
                                 }}
@@ -1061,14 +1073,14 @@ export function FichaIngresoClient({
                                 </dd>
                             </div>
                             <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Plan</dt>
+                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{coberturaSecundariaLabel}</dt>
                                 <dd className="text-sm text-gray-900">
                                     <input
                                         type="text"
                                         className="border rounded px-2 py-1 w-full"
                                         value={cardValues.plan}
                                         onChange={e => setCardValues((v: any) => ({ ...v, plan: e.target.value }))}
-                                        disabled={cardLoading}
+                                        disabled={cardLoading || esCoberturaIPSS}
                                     />
                                 </dd>
                             </div>
@@ -1097,8 +1109,8 @@ export function FichaIngresoClient({
                                 value={ingreso.obraSocial?.nombre ?? (ingreso.obraSocialId ? `ID ${ingreso.obraSocialId}` : null)}
                             />
                             <DataItem
-                                label="Plan"
-                                value={ingreso.plan?.descripcion ?? (ingreso.planId ? `ID ${ingreso.planId}` : null)}
+                                label={coberturaSecundariaLabel}
+                                value={coberturaSecundariaValor}
                             />
                             <DataItem label="Número de Afiliado" value={ingreso.numeroAfiliado} />
                         </dl>

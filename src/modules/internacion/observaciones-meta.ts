@@ -16,7 +16,7 @@ export type ChecklistDocumental = Record<RequisitoDocumentalKey, boolean>
 
 export interface ArmRegistroMeta {
   id: string
-  fechaIngreso: string
+  fechaIngreso: string | null
   fechaEgreso: string | null
   profesionalId: number | null
 }
@@ -37,6 +37,7 @@ export interface DepositoRegistroMeta {
 }
 
 export interface ObservacionesInternacionMeta {
+  clinicaDerivante: string | null
   checklistDocumental: ChecklistDocumental
   armRegistros: ArmRegistroMeta[]
   oxigenoterapiaRegistros: OxigenoterapiaRegistroMeta[]
@@ -78,20 +79,22 @@ function normalizarRegistroArm(value: unknown, index: number): ArmRegistroMeta |
   if (!value || typeof value !== 'object') return null
   const row = value as Record<string, unknown>
   const fechaIngreso = normalizarFechaIso(row.fechaIngreso)
-  if (!fechaIngreso) return null
-
   const fechaEgreso = normalizarFechaIso(row.fechaEgreso)
   const profesionalId =
     typeof row.profesionalId === 'number' && Number.isFinite(row.profesionalId)
       ? Math.floor(row.profesionalId)
       : null
 
+  if (!fechaIngreso && !fechaEgreso && !(profesionalId != null && profesionalId > 0)) {
+    return null
+  }
+
   return {
     id:
       typeof row.id === 'string' && row.id.trim().length > 0
         ? row.id.trim()
         : `arm-${index + 1}`,
-    fechaIngreso,
+    fechaIngreso: fechaIngreso ?? null,
     fechaEgreso,
     profesionalId: profesionalId != null && profesionalId > 0 ? profesionalId : null,
   }
@@ -177,6 +180,7 @@ function normalizarChecklist(value: unknown): ChecklistDocumental {
 function normalizarMeta(value: unknown): ObservacionesInternacionMeta {
   if (!value || typeof value !== 'object') {
     return {
+      clinicaDerivante: null,
       checklistDocumental: crearChecklistVacio(),
       armRegistros: [],
       oxigenoterapiaRegistros: [],
@@ -194,6 +198,7 @@ function normalizarMeta(value: unknown): ObservacionesInternacionMeta {
     : []
 
   return {
+    clinicaDerivante: recortarTexto(typeof row.clinicaDerivante === 'string' ? row.clinicaDerivante : null),
     checklistDocumental: normalizarChecklist(row.checklistDocumental),
     armRegistros: armRegistrosRaw
       .map((item, index) => normalizarRegistroArm(item, index))
@@ -219,6 +224,7 @@ export function parseObservacionesInternacion(
   if (!raw.trim()) {
     return {
       observaciones: null,
+      clinicaDerivante: null,
       checklistDocumental: crearChecklistVacio(),
       armRegistros: [],
       oxigenoterapiaRegistros: [],
@@ -230,6 +236,7 @@ export function parseObservacionesInternacion(
   if (markerIndex === -1) {
     return {
       observaciones: recortarTexto(raw),
+      clinicaDerivante: null,
       checklistDocumental: crearChecklistVacio(),
       armRegistros: [],
       oxigenoterapiaRegistros: [],
@@ -251,6 +258,7 @@ export function parseObservacionesInternacion(
   } catch {
     return {
       observaciones: recortarTexto(raw),
+      clinicaDerivante: null,
       checklistDocumental: crearChecklistVacio(),
       armRegistros: [],
       oxigenoterapiaRegistros: [],
@@ -266,6 +274,7 @@ export function tieneChecklistCompleto(checklist: ChecklistDocumental): boolean 
 function tieneMetaNoVacia(meta: ObservacionesInternacionMeta): boolean {
   const checklistTieneAlgo = REQUISITOS_DOCUMENTALES.some((item) => meta.checklistDocumental[item.key])
   return (
+    Boolean(meta.clinicaDerivante && meta.clinicaDerivante.trim().length > 0) ||
     checklistTieneAlgo ||
     meta.armRegistros.length > 0 ||
     meta.oxigenoterapiaRegistros.length > 0 ||
@@ -275,10 +284,11 @@ function tieneMetaNoVacia(meta: ObservacionesInternacionMeta): boolean {
 
 export function serializarObservacionesInternacion(data: {
   observaciones: string | null | undefined
+  clinicaDerivante?: string | null | undefined
   checklistDocumental?: Partial<ChecklistDocumental> | null
   armRegistros?: Array<{
     id?: string | null
-    fechaIngreso: Date | string
+    fechaIngreso?: Date | string | null
     fechaEgreso?: Date | string | null
     profesionalId?: number | null
   }> | null
@@ -297,6 +307,7 @@ export function serializarObservacionesInternacion(data: {
   }> | null
 }): string | null {
   const observaciones = recortarTexto(data.observaciones)
+  const clinicaDerivante = recortarTexto(data.clinicaDerivante)
 
   const checklistNormalizado = {
     ...crearChecklistVacio(),
@@ -347,6 +358,7 @@ export function serializarObservacionesInternacion(data: {
     .filter((item): item is DepositoRegistroMeta => item !== null)
 
   const meta: ObservacionesInternacionMeta = {
+    clinicaDerivante,
     checklistDocumental: checklistNormalizado,
     armRegistros,
     oxigenoterapiaRegistros,

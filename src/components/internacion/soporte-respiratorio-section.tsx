@@ -47,7 +47,7 @@ function crearIdTemporal(prefix: 'arm' | 'oxi') {
 }
 
 function mapearArmEditable(
-  armRegistros: Array<{ id: string; fechaIngreso: string; fechaEgreso: string | null; profesionalId: number | null }>
+  armRegistros: Array<{ id: string; fechaIngreso: string | null; fechaEgreso: string | null; profesionalId: number | null }>
 ): RegistroArmEditable[] {
   return armRegistros.map((item, index) => ({
     id: item.id || `arm-${index + 1}`,
@@ -125,7 +125,7 @@ export function SoporteRespiratorioSection({
       ...prev,
       {
         id: crearIdTemporal('arm'),
-        fechaIngreso: ahoraLocalDateTimeInput(),
+        fechaIngreso: '',
         fechaEgreso: '',
         profesionalId: '',
       },
@@ -174,9 +174,6 @@ export function SoporteRespiratorioSection({
   }
 
   const validarRegistros = (): string | null => {
-    const armInvalido = armRegistros.find((item) => !item.fechaIngreso)
-    if (armInvalido) return 'Todos los registros ARM deben tener fecha y hora de ingreso.'
-
     const oxiSinIngreso = oxigenoterapiaRegistros.find((item) => !item.fechaIngreso)
     if (oxiSinIngreso) {
       return 'Todos los registros de oxigenoterapia deben tener fecha y hora de ingreso.'
@@ -210,7 +207,7 @@ export function SoporteRespiratorioSection({
         body: JSON.stringify({
           armRegistros: armRegistros.map((item) => ({
             id: item.id,
-            fechaIngreso: item.fechaIngreso,
+            fechaIngreso: item.fechaIngreso || null,
             fechaEgreso: item.fechaEgreso || null,
             profesionalId: item.profesionalId ? Number(item.profesionalId) : null,
           })),
@@ -240,7 +237,7 @@ export function SoporteRespiratorioSection({
   }
 
   const formatearFechaHora = (value: string | null | undefined) => {
-    if (!value) return 'Sin fecha de salida'
+    if (!value) return 'Sin fecha registrada'
     return formatearFechaHoraArgentina(value, {
       day: '2-digit',
       month: '2-digit',

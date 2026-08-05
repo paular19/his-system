@@ -29,6 +29,7 @@ export type IngresoConRelaciones = Ingreso & {
 export type IngresoDetalle = IngresoConRelaciones & {
   obraSocial?: Pick<ObraSocial, 'id' | 'nombre'> | null
   plan?: Pick<PlanObraSocial, 'obraSocialId' | 'id' | 'descripcion'> | null
+  obraSocialCoseguroNombre?: string | null
   cama?: (Pick<Cama, 'id' | 'identificador' | 'sector' | 'habitacion'>) | null
   profesionalTratanteFallback?: {
     nombre: string
@@ -110,7 +111,12 @@ export interface PacienteResumen {
   obraSocialId: number | null
   planId?: number | null
   obraSocialCoseguroId?: number | null
+  obraSocialNombre?: string | null
+  planDescripcion?: string | null
+  obraSocialCoseguroNombre?: string | null
   numeroAfiliado: string | null
+  nombreTutor?: string | null
+  telefonoTutor?: string | null
 }
 
 // Tipos de admisión disponibles

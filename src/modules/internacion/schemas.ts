@@ -58,6 +58,7 @@ export type BusquedaInternacionInput = z.infer<typeof BusquedaInternacionSchema>
 export const ActualizarTratanteInternacionSchema = z.object({
   ingresoId: z.number().int().positive(),
   profesionalTratanteId: z.number().int().positive(),
+  fecha: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
 })
 
 export type ActualizarTratanteInternacionInput = z.infer<typeof ActualizarTratanteInternacionSchema>
@@ -76,7 +77,7 @@ const ChecklistDocumentalSchema = z.object({
 
 const RegistroArmSchema = z.object({
   id: z.string().max(80).trim().optional().nullable(),
-  fechaIngreso: z.preprocess(parseFechaArgentina, z.date()),
+  fechaIngreso: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
   fechaEgreso: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
   profesionalId: z.number().int().positive().optional().nullable(),
 })
@@ -99,6 +100,7 @@ const RegistroDepositoSchema = z.object({
 export const ActualizarObservacionesInternacionSchema = z.object({
   ingresoId: z.number().int().positive(),
   observaciones: z.string().max(5000).trim().optional().nullable(),
+  clinicaDerivante: z.string().max(200).trim().optional().nullable(),
   checklistDocumental: ChecklistDocumentalSchema.optional(),
   armRegistros: z.array(RegistroArmSchema).max(500).optional(),
   oxigenoterapiaRegistros: z.array(RegistroOxigenoterapiaSchema).max(500).optional(),
@@ -184,6 +186,17 @@ export const TransferirCamaSchema = z.object({
 })
 
 export type TransferirCamaInput = z.infer<typeof TransferirCamaSchema>
+
+export const EditarTransferenciaCamaSchema = z.object({
+  ingresoId: z.number().int().positive(),
+  transferenciaId: z.number().int().positive(),
+  camaDestinoId: z.number().int().positive(),
+  fecha: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
+  motivo: z.string().max(500).trim().optional().nullable(),
+  profesionalId: z.number().int().positive().optional().nullable(),
+})
+
+export type EditarTransferenciaCamaInput = z.infer<typeof EditarTransferenciaCamaSchema>
 
 // ============================================
 // PRÁCTICAS

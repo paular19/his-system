@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { calcularEdad } from '@/lib/utils'
+import { construirObservacionBloqueoHabitacion } from '@/lib/internacion/bloqueo-habitacion'
 import type {
   CrearIngresoInput,
   ActualizarIngresoInput,
@@ -205,10 +206,12 @@ export async function crearIngreso(
     // El número a usar es el valor ANTES del incremento
     const numeroIngreso = tipoIngreso.proximoNumero - 1
 
+    let habitacionParaBloqueo: string | null = null
+
     if (data.tipoIngresoCodigo === 'INT' && data.camaId) {
       const cama = await tx.cama.findUnique({
         where: { id: data.camaId },
-        select: { id: true, estado: true },
+        select: { id: true, estado: true, habitacion: true },
       })
 
       if (!cama) {
@@ -240,10 +243,19 @@ export async function crearIngreso(
 
       const estadoDestino = data.subtipoAdmisionCodigo === 'PRG' ? 'RESERVADA' : 'OCUPADA'
 
+      if (data.bloquearHabitacionCompleta) {
+        const habitacion = cama.habitacion?.trim() ?? ''
+        if (!habitacion) {
+          throw new Error('No se puede bloquear la habitacion porque la cama seleccionada no tiene habitacion asociada')
+        }
+        habitacionParaBloqueo = habitacion
+      }
+
       await tx.cama.update({
         where: { id: data.camaId },
         data: {
           estado: estadoDestino,
+          observaciones: null,
           usuario: usuarioNormalizado,
           fechaEstado: ahora,
         },
@@ -306,6 +318,66 @@ export async function crearIngreso(
         numeroIngreso: true,
       },
     })
+
+    if (
+      data.tipoIngresoCodigo === 'INT' &&
+      data.camaId &&
+      data.bloquearHabitacionCompleta &&
+      habitacionParaBloqueo
+    ) {
+      const camasHabitacion = await tx.cama.findMany({
+        where: { habitacion: habitacionParaBloqueo },
+        select: { id: true, identificador: true, estado: true },
+      })
+
+      const camasABloquear = camasHabitacion.filter((item) => item.id !== data.camaId)
+      const camasNoDisponibles = camasABloquear.filter((item) => item.estado !== 'DISPONIBLE')
+
+      if (camasNoDisponibles.length > 0) {
+        const camasTexto = camasNoDisponibles.map((item) => item.identificador).join(', ')
+        throw new Error(`No se puede bloquear la habitacion completa porque hay camas no disponibles: ${camasTexto}`)
+      }
+
+      const camasABloquearIds = camasABloquear.map((item) => item.id)
+
+      if (camasABloquearIds.length > 0) {
+        const internacionesActivas = await tx.ingreso.findMany({
+          where: {
+            camaId: { in: camasABloquearIds },
+            estado: 'A',
+            tipoIngresoCodigo: 'INT',
+          },
+          select: { numeroIngreso: true },
+        })
+
+        if (internacionesActivas.length > 0) {
+          const numeros = internacionesActivas.map((item) => `INT-${item.numeroIngreso}`).join(', ')
+          throw new Error(`No se puede bloquear la habitacion completa porque ya hay internaciones activas en esas camas (${numeros})`)
+        }
+
+        const observacionBloqueo = construirObservacionBloqueoHabitacion(
+          ingreso.id,
+          habitacionParaBloqueo
+        )
+
+        const resultadoBloqueo = await tx.cama.updateMany({
+          where: {
+            id: { in: camasABloquearIds },
+            estado: 'DISPONIBLE',
+          },
+          data: {
+            estado: 'OCUPADA',
+            observaciones: observacionBloqueo,
+            usuario: usuarioNormalizado,
+            fechaEstado: ahora,
+          },
+        })
+
+        if (resultadoBloqueo.count !== camasABloquearIds.length) {
+          throw new Error('No se pudo bloquear la habitacion completa por un cambio concurrente de camas')
+        }
+      }
+    }
 
     // Crear información del subtipo de admisión
     if (data.subtipoAdmisionCodigo) {

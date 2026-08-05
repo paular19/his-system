@@ -334,6 +334,13 @@ export async function obtenerIngreso(
     throw new Error(`Ingreso con ID ${id} no encontrado`)
   }
 
+  const obraSocialCoseguroNombre = ingreso.obraSocialCoseguroId
+    ? (await prisma.obraSocial.findUnique({
+      where: { id: ingreso.obraSocialCoseguroId },
+      select: { nombre: true },
+    }))?.nombre ?? null
+    : null
+
   void registrarAudit({
     usuario,
     accion: 'CONSULTAR',
@@ -515,6 +522,7 @@ export async function obtenerIngreso(
 
   return {
     ...ingreso,
+    obraSocialCoseguroNombre,
     profesionalTratanteFallback,
     profesionalInterviniente,
     practicas: ingreso.practicas.map((p) => {

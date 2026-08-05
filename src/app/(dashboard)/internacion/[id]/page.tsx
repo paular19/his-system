@@ -34,6 +34,7 @@ import {
 } from '@/lib/utils/argentina-date'
 import { calcularEdad } from '@/lib/utils'
 import { logServerPerf } from '@/lib/perf/server-perf'
+import { parseObservacionesInternacion } from '@/modules/internacion/observaciones-meta'
 
 interface PageProps {
     params: Promise<{ id: string }>
@@ -199,6 +200,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
         : detalle.ingresoSubtipo?.profesionalDerivanteNombre?.trim()
             ? nombreProfesionalParaMostrar(detalle.ingresoSubtipo.profesionalDerivanteNombre)
             : null
+    const metaObservaciones = parseObservacionesInternacion(detalle.observaciones ?? null)
+    const clinicaDerivante = metaObservaciones.clinicaDerivante
 
     logServerPerf('internacion.ficha', {
         ingresoId,
@@ -292,6 +295,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                 <DataItem label="Médico tratante" value={detalle.profesionalTratante?.nombre ? nombreProfesionalParaMostrar(detalle.profesionalTratante.nombre) : null} />
                                 <DataItem label="Médico de cabecera" value={medicoCabecera} />
                                 <DataItem label="Médico derivante" value={medicoDerivante} />
+                                <DataItem label="Clínica derivante" value={clinicaDerivante} />
                             </dl>
                         </div>
 

@@ -29,6 +29,7 @@ export type OrdenConItems = {
   ingresoId: number | null
   ingresoNumero: number | null
   ingresoTipoCodigo: string | null
+  ingresoSubtipoCodigo: string | null
   pacienteId: number | null
   nombrePaciente: string
   numeroAfiliado: string

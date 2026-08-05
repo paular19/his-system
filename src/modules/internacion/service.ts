@@ -11,6 +11,7 @@ import type {
   CrearDescartableInput,
   ActualizarDescartableInput,
   TransferirCamaInput,
+  EditarTransferenciaCamaInput,
   CrearPracticaInput,
   ActualizarPracticaInput,
   RegistrarAltaInternacionInput,
@@ -128,7 +129,8 @@ export async function actualizarTratanteInternacion(
   const resultado = await repo.actualizarProfesionalTratanteInternacion(
     data.ingresoId,
     data.profesionalTratanteId,
-    usuario
+    usuario,
+    data.fecha
   )
 
   if (resultado.actualizado) {
@@ -154,6 +156,7 @@ export async function actualizarObservacionesInternacion(
     data.ingresoId,
     {
       observaciones: data.observaciones,
+      clinicaDerivante: data.clinicaDerivante,
       checklistDocumental: data.checklistDocumental,
       armRegistros: data.armRegistros,
       oxigenoterapiaRegistros: data.oxigenoterapiaRegistros,
@@ -296,6 +299,25 @@ export async function transferirCama(
     entidad: 'TransferenciaIngreso',
     registroId: transferencia.id,
     detalle: `Transferencia: cama ${transferencia.camaOrigen?.identificador ?? 'N/A'} → ${transferencia.camaDestino.identificador}`,
+    direccionIp: ip,
+  })
+
+  return transferencia
+}
+
+export async function editarTransferenciaCama(
+  data: EditarTransferenciaCamaInput,
+  usuario: string,
+  ip?: string
+): Promise<TransferenciaItem> {
+  const transferencia = await repo.editarTransferenciaCama(data, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'TransferenciaIngreso',
+    registroId: transferencia.id,
+    detalle: `Historial cama editado: ingreso ${data.ingresoId}, destino ${transferencia.camaDestino.identificador}`,
     direccionIp: ip,
   })
 

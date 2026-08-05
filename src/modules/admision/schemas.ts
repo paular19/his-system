@@ -59,6 +59,7 @@ const CrearIngresoBaseSchema = z.object({
   profesionalDerivanteId: z.number().int().positive().optional().nullable(),
   profesionalTratanteId: z.number().int().positive().optional().nullable(),
   camaId: z.number().int().positive().optional().nullable(),
+  bloquearHabitacionCompleta: z.boolean().optional(),
   sedeId: z.number().int().positive().optional().nullable(),
   obraSocialId: z.number().int().positive().optional().nullable(),
   planId: z.number().int().positive().optional().nullable(),

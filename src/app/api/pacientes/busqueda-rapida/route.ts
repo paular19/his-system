@@ -25,6 +25,21 @@ const BusquedaRapidaSchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(10),
 })
 
+function normalizarTexto(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function esNombreIPSS(nombre: string | null | undefined): boolean {
+  const tokens = normalizarTexto(nombre ?? '').split(' ')
+  return tokens.includes('IPSS') || tokens.includes('IPS')
+}
+
 export async function GET(request: NextRequest) {
   try {
     const usuario = await getUsuarioSesion()
@@ -69,7 +84,86 @@ export async function GET(request: NextRequest) {
       planId: true,
       obraSocialCoseguroId: true,
       numeroAfiliado: true,
+      nombreTutor: true,
+      telefonoTutor: true,
+      obraSocial: {
+        select: { nombre: true },
+      },
+      plan: {
+        select: { descripcion: true },
+      },
     } as const
+
+    const serializarPacientes = async (
+      rows: Array<{
+        id: number
+        historiaClinica: number | null
+        apellido: string | null
+        nombre: string | null
+        nombreCompleto: string
+        tipoDocumento: string | null
+        numeroDocumento: number | null
+        sexo: string | null
+        fechaNacimiento: Date | null
+        domicilio: string | null
+        telefonoFijo: string | null
+        celular1: string | null
+        email: string | null
+        obraSocialId: number | null
+        planId: number | null
+        obraSocialCoseguroId: number | null
+        numeroAfiliado: string | null
+        nombreTutor: string | null
+        telefonoTutor: string | null
+        obraSocial: { nombre: string } | null
+        plan: { descripcion: string } | null
+      }>
+    ) => {
+      const idsCoseguro = Array.from(
+        new Set(rows.map((paciente) => paciente.obraSocialCoseguroId).filter((id): id is number => id != null))
+      )
+
+      const coseguros = idsCoseguro.length > 0
+        ? await prisma.obraSocial.findMany({
+          where: { id: { in: idsCoseguro } },
+          select: { id: true, nombre: true },
+        })
+        : []
+
+      const coseguroPorId = new Map(coseguros.map((item) => [item.id, item.nombre]))
+
+      return rows.map((paciente) => {
+        const obraSocialNombre = paciente.obraSocial?.nombre ?? null
+        const esIps = esNombreIPSS(obraSocialNombre)
+        return {
+          id: paciente.id,
+          historiaClinica: paciente.historiaClinica,
+          apellido: paciente.apellido,
+          nombre: paciente.nombre,
+          nombreCompleto: paciente.nombreCompleto,
+          tipoDocumento: paciente.tipoDocumento,
+          numeroDocumento: paciente.numeroDocumento,
+          sexo: paciente.sexo,
+          fechaNacimiento: paciente.fechaNacimiento,
+          domicilio: paciente.domicilio,
+          telefonoFijo: paciente.telefonoFijo,
+          celular1: paciente.celular1,
+          email: paciente.email,
+          obraSocialId: paciente.obraSocialId,
+          planId: paciente.planId,
+          obraSocialCoseguroId: paciente.obraSocialCoseguroId,
+          numeroAfiliado: paciente.numeroAfiliado,
+          nombreTutor: paciente.nombreTutor,
+          telefonoTutor: paciente.telefonoTutor,
+          obraSocialNombre,
+          planDescripcion: paciente.plan?.descripcion ?? null,
+          obraSocialCoseguroNombre:
+            esIps && paciente.obraSocialCoseguroId
+              ? (coseguroPorId.get(paciente.obraSocialCoseguroId) ?? null)
+              : null,
+        }
+      })
+    }
 
     if (esNumerico) {
       const numero = Number.parseInt(termino, 10)
@@ -85,8 +179,9 @@ export async function GET(request: NextRequest) {
         orderBy: [{ numeroDocumento: 'asc' }, { apellido: 'asc' }, { nombre: 'asc' }],
       })
 
-      cache.set(cacheKey, itemsNumericos)
-      return apiOk(itemsNumericos)
+      const payload = await serializarPacientes(itemsNumericos)
+      cache.set(cacheKey, payload)
+      return apiOk(payload)
     }
 
     const prefijo = await prisma.paciente.findMany({
@@ -114,8 +209,9 @@ export async function GET(request: NextRequest) {
     })
 
     if (prefijo.length >= parsed.limit) {
-      cache.set(cacheKey, prefijo)
-      return apiOk(prefijo)
+      const payload = await serializarPacientes(prefijo)
+      cache.set(cacheKey, payload)
+      return apiOk(payload)
     }
 
     const idsPrefijo = prefijo.map((p) => p.id)
@@ -136,8 +232,9 @@ export async function GET(request: NextRequest) {
     })
 
     const items = [...prefijo, ...restantes]
-    cache.set(cacheKey, items)
-    return apiOk(items)
+    const payload = await serializarPacientes(items)
+    cache.set(cacheKey, payload)
+    return apiOk(payload)
   } catch (error) {
     if (error instanceof ZodError) {
       return apiValidationError(error)

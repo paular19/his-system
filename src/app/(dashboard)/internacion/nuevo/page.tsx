@@ -37,6 +37,8 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
         select: {
           id: true,
           historiaClinica: true,
+          apellido: true,
+          nombre: true,
           nombreCompleto: true,
           tipoDocumento: true,
           numeroDocumento: true,
@@ -44,6 +46,10 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
           planId: true,
           obraSocialCoseguroId: true,
           numeroAfiliado: true,
+          nombreTutor: true,
+          telefonoTutor: true,
+          obraSocial: { select: { nombre: true } },
+          plan: { select: { descripcion: true } },
         },
       })
       : Promise.resolve(null)
@@ -56,19 +62,25 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
     pacienteInicialPromise,
   ])
 
-  const { obraSociales, planes } = catalogoCobertura
+  const { obraSociales, planes, coseguros } = catalogoCobertura
 
   const pacienteInicial: PacienteResumen | null = pacienteRaw
     ? {
       id: pacienteRaw.id,
       historiaClinica: pacienteRaw.historiaClinica,
+      apellido: pacienteRaw.apellido,
+      nombre: pacienteRaw.nombre,
       nombreCompleto: pacienteRaw.nombreCompleto,
       tipoDocumento: pacienteRaw.tipoDocumento,
       numeroDocumento: pacienteRaw.numeroDocumento,
       obraSocialId: pacienteRaw.obraSocialId,
       planId: pacienteRaw.planId,
       obraSocialCoseguroId: pacienteRaw.obraSocialCoseguroId,
+      obraSocialNombre: pacienteRaw.obraSocial?.nombre ?? null,
+      planDescripcion: pacienteRaw.plan?.descripcion ?? null,
       numeroAfiliado: pacienteRaw.numeroAfiliado,
+      nombreTutor: pacienteRaw.nombreTutor,
+      telefonoTutor: pacienteRaw.telefonoTutor,
     }
     : null
 
@@ -89,6 +101,7 @@ export default async function NuevaInternacionPage({ searchParams }: PageProps) 
           profesionales={profesionales}
           obraSociales={obraSociales}
           planes={planes}
+          coseguros={coseguros}
           camasDisponibles={camasDisponibles}
           pacienteInicial={pacienteInicial}
           camaInicial={isNaN(camaInicial ?? NaN) ? null : camaInicial}

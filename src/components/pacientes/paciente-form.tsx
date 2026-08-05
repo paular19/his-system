@@ -136,7 +136,7 @@ export function PacienteForm({
               String(latenciaMs)
             )
           }
-          router.replace(`/dashboard/pacientes/${pacienteIdCreado}`)
+          router.replace(`/dashboard/pacientes/${pacienteIdCreado}?alta=1`)
           return
         }
       }
@@ -152,7 +152,11 @@ export function PacienteForm({
         sessionStorage.setItem('his.pacientes.creacion.submitMs', String(latenciaMs))
       }
 
-      router.replace(`/dashboard/pacientes/${json.data.id}`)
+      const destino = pacienteId
+        ? `/dashboard/pacientes/${json.data.id}`
+        : `/dashboard/pacientes/${json.data.id}?alta=1`
+
+      router.replace(destino)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado')
     } finally {

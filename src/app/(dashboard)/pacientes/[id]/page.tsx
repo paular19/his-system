@@ -2,7 +2,6 @@ import { Header } from '@/components/layout/header'
 import { getUsuarioSesionLectura } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
-import { obtenerPaciente } from '@/modules/pacientes/service'
 import { prisma } from '@/lib/db'
 import { formatearFecha, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import Link from 'next/link'
@@ -11,9 +10,11 @@ import type { Metadata } from 'next'
 import { PacienteHospitalizacionPrint } from '@/components/pacientes/paciente-hospitalizacion-print'
 import { AltaInternacionButton } from '@/components/internacion/alta-internacion-button'
 import { ConfirmarCamaReservadaButton } from '@/components/internacion/confirmar-cama-reservada-button'
+import { registrarAudit } from '@/lib/security/audit'
 
 interface PageProps {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ alta?: string }>
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return { title: `Paciente #${id}` }
 }
 
-export default async function FichaPacientePage({ params }: PageProps) {
+export default async function FichaPacientePage({ params, searchParams }: PageProps) {
   const usuario = await getUsuarioSesionLectura()
 
   if (!tienePermiso(usuario.rol, 'PACIENTES', 'LEER')) {
@@ -29,15 +30,49 @@ export default async function FichaPacientePage({ params }: PageProps) {
   }
 
   const { id } = await params
+  const qs = await searchParams
+  const modoAltaRapida = qs.alta === '1'
   const pacienteId = parseInt(id, 10)
   if (isNaN(pacienteId)) notFound()
 
-  let paciente
-  try {
-    paciente = await obtenerPaciente(pacienteId, usuario.clerkId)
-  } catch {
+  const paciente = await prisma.paciente.findUnique({
+    where: { id: pacienteId },
+    select: {
+      id: true,
+      historiaClinica: true,
+      apellido: true,
+      nombre: true,
+      nombreCompleto: true,
+      tipoDocumento: true,
+      numeroDocumento: true,
+      fechaNacimiento: true,
+      sexo: true,
+      domicilio: true,
+      telefonoFijo: true,
+      celular1: true,
+      email: true,
+      obraSocialId: true,
+      planId: true,
+      numeroAfiliado: true,
+      observaciones: true,
+      obraSocial: {
+        select: {
+          nombre: true,
+        },
+      },
+    },
+  })
+
+  if (!paciente) {
     notFound()
   }
+
+  void registrarAudit({
+    usuario: usuario.codigoUsuario,
+    accion: 'CONSULTAR',
+    entidad: 'Paciente',
+    registroId: paciente.id,
+  })
 
   const edad = calcularEdad(paciente.fechaNacimiento)
   const puedeModificar = tienePermiso(usuario.rol, 'PACIENTES', 'MODIFICAR')
@@ -60,26 +95,28 @@ export default async function FichaPacientePage({ params }: PageProps) {
     camaId: number | null
   }
 
-  const ingresosBaseOrdenados = await prisma.$queryRaw<IngresoBaseRow[]>`
-    SELECT
-      "IngID" AS id,
-      "IngNro" AS "numeroIngreso",
-      "TigCodig" AS "tipoIngresoCodigo",
-      "IngFchIngreso" AS "fechaIngreso",
-      "IngFchEgreso" AS "fechaEgreso",
-      "IngFchEgresoPrevista" AS "fechaEgresoPrevista",
-      "IngEstad" AS estado,
-      "IngNom" AS nombre,
-      "PrfIDGuardia" AS "profesionalGuardiaId",
-      "PrfIDTratante" AS "profesionalTratanteId",
-      "OSID" AS "obraSocialId",
-      "PosID" AS "planId",
-      "CamID" AS "camaId"
-    FROM "Ingreso"
-    WHERE "PacID" = ${paciente.id}
-    ORDER BY "IngFchIngreso" DESC NULLS LAST, "IngID" DESC
-    LIMIT 100
-  `
+  const ingresosBaseOrdenados = modoAltaRapida
+    ? []
+    : await prisma.$queryRaw<IngresoBaseRow[]>`
+      SELECT
+        "IngID" AS id,
+        "IngNro" AS "numeroIngreso",
+        "TigCodig" AS "tipoIngresoCodigo",
+        "IngFchIngreso" AS "fechaIngreso",
+        "IngFchEgreso" AS "fechaEgreso",
+        "IngFchEgresoPrevista" AS "fechaEgresoPrevista",
+        "IngEstad" AS estado,
+        "IngNom" AS nombre,
+        "PrfIDGuardia" AS "profesionalGuardiaId",
+        "PrfIDTratante" AS "profesionalTratanteId",
+        "OSID" AS "obraSocialId",
+        "PosID" AS "planId",
+        "CamID" AS "camaId"
+      FROM "Ingreso"
+      WHERE "PacID" = ${paciente.id}
+      ORDER BY "IngFchIngreso" DESC NULLS LAST, "IngID" DESC
+      LIMIT 100
+    `
 
   const ingresoIds = ingresosBaseOrdenados.map((ing) => ing.id)
   const tipoIngresoCodigos = Array.from(new Set(ingresosBaseOrdenados.map((ing) => ing.tipoIngresoCodigo)))
@@ -375,6 +412,16 @@ export default async function FichaPacientePage({ params }: PageProps) {
             )}
           </div>
         </div>
+
+        {modoAltaRapida && (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            Alta rápida habilitada para acelerar la creación.
+            {' '}
+            <Link href={`/dashboard/pacientes/${paciente.id}`} className="font-medium underline">
+              Ver ficha completa
+            </Link>
+          </div>
+        )}
 
         {/* Informe imprimible */}
         {ingresosPrint.length > 0 ? (

@@ -239,71 +239,72 @@ export async function crearOrdenInterna(
       ? new Date(Math.min(...fechasItems.map((fecha) => fecha.getTime())))
       : new Date()
 
-    const orden = await tx.orden.create({
-      data: {
-        puestoNumero: PUESTO_NUMERO,
-        numero,
-        ingresoId: data.ingresoId ?? null,
-        pacienteId: data.pacienteId ?? null,
-        descripcion: data.descripcion ?? null,
-        nombrePaciente: data.nombrePaciente,
-        numeroAfiliado: data.numeroAfiliado,
-        obraSocialId: data.obraSocialId,
-        planId,
-        obraSocialCoseguroId: data.obraSocialCoseguroId ?? null,
-        planCoseguroId: data.planCoseguroId ?? null,
-        profesionalId: data.profesionalId,
-        tipoOrdenCodigo,
-        descripcionPatologia: data.descripcionPatologia ?? null,
-        titularModular: data.titularModular ?? null,
-        imprimirPorDuplicado: data.imprimirPorDuplicado ?? false,
-        fechaEmision: fechaOrden,
-        fechaPedido: fechaOrden,
-        importeTotal: totalOrden,
-        estado: 'A',
-        fechaEstado: new Date(),
-        usuarioRegistro,
-        items: {
-          create: data.items.map((item, idx) => {
-            const fechaItem = item.fecha instanceof Date ? item.fecha : fechaOrden
-            return {
-              item: idx + 1,
-              practicaId: item.practicaId ?? null,
-              convenioId: item.convenioId,
-              codigoPractica: item.codigoPractica.trim().slice(0, 8),
-              cantidad: item.cantidad,
-              tipoFacturacion: item.tipoFacturacion ?? 'H',
-              clasificacionAgrupacion: normalizarClasificacion(item.clasificacionAgrupacion),
-              modulo: normalizarIncluyeCodigo(item.incluyeCodigo),
-              titularModular: item.titularModular ?? null,
-              imprimirPorDuplicado: item.imprimirPorDuplicado ?? false,
-              efectorMatricula: item.efectorMatricula ?? null,
-              importeTotal: item.importeTotal ?? null,
-              porcentajeCargoPac: item.porcentajeCargoPac ?? null,
-              fecha: fechaItem,
-              numeroAutorizacion: normalizarNumeroAutorizacion(item.numeroAutorizacion)?.slice(0, 15) ?? null,
-            }
-          }),
-        },
-      },
-      ...(options?.modoLigero
-        ? {
-          select: {
-            puestoNumero: true,
-            numero: true,
-            nombrePaciente: true,
-          },
-        }
-        : {
-          include: {
-            items: true,
-            obraSocial: { select: { id: true, nombre: true } },
-            plan: { select: { id: true, descripcion: true } },
-            profesional: { select: { id: true, nombre: true, matricula: true } },
-            tipoOrden: { select: { codigo: true, descripcion: true } },
-          },
+    const ordenData = {
+      puestoNumero: PUESTO_NUMERO,
+      numero,
+      ingresoId: data.ingresoId ?? null,
+      pacienteId: data.pacienteId ?? null,
+      descripcion: data.descripcion ?? null,
+      nombrePaciente: data.nombrePaciente,
+      numeroAfiliado: data.numeroAfiliado,
+      obraSocialId: data.obraSocialId,
+      planId,
+      obraSocialCoseguroId: data.obraSocialCoseguroId ?? null,
+      planCoseguroId: data.planCoseguroId ?? null,
+      profesionalId: data.profesionalId,
+      tipoOrdenCodigo,
+      descripcionPatologia: data.descripcionPatologia ?? null,
+      titularModular: data.titularModular ?? null,
+      imprimirPorDuplicado: data.imprimirPorDuplicado ?? false,
+      fechaEmision: fechaOrden,
+      fechaPedido: fechaOrden,
+      importeTotal: totalOrden,
+      estado: 'A' as const,
+      fechaEstado: new Date(),
+      usuarioRegistro,
+      items: {
+        create: data.items.map((item, idx) => {
+          const fechaItem = item.fecha instanceof Date ? item.fecha : fechaOrden
+          return {
+            item: idx + 1,
+            practicaId: item.practicaId ?? null,
+            convenioId: item.convenioId,
+            codigoPractica: item.codigoPractica.trim().slice(0, 8),
+            cantidad: item.cantidad,
+            tipoFacturacion: item.tipoFacturacion ?? 'H',
+            clasificacionAgrupacion: normalizarClasificacion(item.clasificacionAgrupacion),
+            modulo: normalizarIncluyeCodigo(item.incluyeCodigo),
+            titularModular: item.titularModular ?? null,
+            imprimirPorDuplicado: item.imprimirPorDuplicado ?? false,
+            efectorMatricula: item.efectorMatricula ?? null,
+            importeTotal: item.importeTotal ?? null,
+            porcentajeCargoPac: item.porcentajeCargoPac ?? null,
+            fecha: fechaItem,
+            numeroAutorizacion: normalizarNumeroAutorizacion(item.numeroAutorizacion)?.slice(0, 15) ?? null,
+          }
         }),
-    })
+      },
+    }
+
+    const orden = options?.modoLigero
+      ? await tx.orden.create({
+        data: ordenData,
+        select: {
+          puestoNumero: true,
+          numero: true,
+          nombrePaciente: true,
+        },
+      })
+      : await tx.orden.create({
+        data: ordenData,
+        include: {
+          items: true,
+          obraSocial: { select: { id: true, nombre: true } },
+          plan: { select: { id: true, descripcion: true } },
+          profesional: { select: { id: true, nombre: true, matricula: true } },
+          tipoOrden: { select: { codigo: true, descripcion: true } },
+        },
+      })
 
     return orden
   })

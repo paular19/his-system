@@ -1515,7 +1515,7 @@ export function PracticaCargaRapidaPage({
 
         const idsSesion = idsPendientesSesion
         if (idsSesion.length === 0) {
-            setMensajeError('No hay practicas guardadas en esta sesion para generar ordenes')
+            setMensajeError('No hay practicas guardadas en esta sesión para generar ordenes')
             return
         }
 
@@ -2246,7 +2246,7 @@ export function PracticaCargaRapidaPage({
         const itemTextoClase = generadaEnSesion ? 'text-blue-900' : 'text-emerald-900'
         const itemFechaClase = generadaEnSesion ? 'text-[11px] text-blue-700' : 'text-[11px] text-emerald-700'
         const restantesClase = generadaEnSesion ? 'mt-1 text-[11px] text-blue-700' : 'mt-1 text-[11px] text-emerald-700'
-        const estadoSesionEtiqueta = generadaEnSesion ? 'Sesion actual' : null
+        const estadoSesionEtiqueta = generadaEnSesion ? 'Sesión actual' : null
 
         return (
             <div
@@ -3040,7 +3040,7 @@ export function PracticaCargaRapidaPage({
                     <div className="his-card p-4 space-y-3">
                         <div className="flex items-center gap-2">
                             <ClipboardList className="h-4 w-4 text-blue-600" />
-                            <h3 className="text-sm font-semibold text-gray-900">Codigos agregados en esta sesion</h3>
+                            <h3 className="text-sm font-semibold text-gray-900">Codigos agregados en esta sesión</h3>
                         </div>
                         <p className="text-xs text-gray-600">
                             {modoCirugia
@@ -3050,7 +3050,7 @@ export function PracticaCargaRapidaPage({
 
                         <>
                             <div className="rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5 text-[11px] text-blue-800">
-                                Pendientes de esta sesion: {idsPendientesSesion.length}
+                                Pendientes de esta sesión: {idsPendientesSesion.length}
                             </div>
 
                             <div className="flex flex-wrap gap-2">
@@ -3061,7 +3061,7 @@ export function PracticaCargaRapidaPage({
                                     className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                 >
                                     {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                                    Generar orden (sesion)
+                                    Generar orden (sesión)
                                 </button>
                                 <button
                                     type="button"
@@ -3070,20 +3070,20 @@ export function PracticaCargaRapidaPage({
                                     className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                 >
                                     <Printer className="h-3.5 w-3.5" />
-                                    Generar orden e imprimir (sesion)
+                                    Generar orden e imprimir (sesión)
                                 </button>
                             </div>
 
                             {modoCirugia && !firmanteCirugiaValido && (
                                 <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                                    Selecciona un medico firmante para generar o imprimir ordenes de la sesion.
+                                    Selecciona un medico firmante para generar o imprimir ordenes de la sesión.
                                 </p>
                             )}
                         </>
 
                         {guardadasSesion.length === 0 ? (
                             <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
-                                No hay practicas pendientes en esta sesion.
+                                No hay practicas pendientes en esta sesión.
                             </p>
                         ) : (
                             <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
@@ -3380,7 +3380,7 @@ export function PracticaCargaRapidaPage({
             {popupSubitemsSesion && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
                     <div className="w-full max-w-xl rounded-xl border border-blue-200 bg-white p-4 shadow-xl">
-                        <h4 className="text-sm font-semibold text-blue-900">Codigos de sesion: titulos a generar e imprimir</h4>
+                        <h4 className="text-sm font-semibold text-blue-900">Codigos de sesión: titulos a generar e imprimir</h4>
                         <p className="mt-1 text-xs text-gray-700">
                             Marca los titulos de subitems que deseas incluir en esta generacion.
                         </p>

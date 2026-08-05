@@ -4,6 +4,18 @@ export function abrirVentanaImpresionPendiente(): Window | null {
   const popup = window.open('', '_blank')
   if (!popup) return null
 
+  const mantenerFoco = () => {
+    try {
+      popup.blur()
+      window.focus()
+    } catch {
+      // Ignore browser focus restrictions.
+    }
+  }
+
+  mantenerFoco()
+  setTimeout(mantenerFoco, 0)
+
   try {
     popup.opener = null
     popup.document.title = 'Preparando impresion'
@@ -29,16 +41,39 @@ export function navegarVentanaImpresion(
 ): void {
   if (typeof window === 'undefined') return
 
+  const mantenerFoco = () => {
+    try {
+      popup?.blur()
+      window.focus()
+    } catch {
+      // Ignore browser focus restrictions.
+    }
+  }
+
   if (popup && !popup.closed) {
     try {
       popup.location.href = url
+      mantenerFoco()
+      setTimeout(mantenerFoco, 0)
       return
     } catch {
       // Fallback below.
     }
   }
 
-  window.open(url, '_blank')
+  const nuevaVentana = window.open(url, '_blank', 'noopener,noreferrer')
+  if (nuevaVentana) {
+    try {
+      nuevaVentana.blur()
+    } catch {
+      // Ignore browser focus restrictions.
+    }
+  }
+  try {
+    window.focus()
+  } catch {
+    // Ignore browser focus restrictions.
+  }
 }
 
 export function cerrarVentanaImpresion(popup: Window | null): void {

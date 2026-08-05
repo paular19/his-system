@@ -42,8 +42,10 @@ export async function GET(request: NextRequest) {
 
 // POST /api/admision — Crear ingreso
 export async function POST(request: NextRequest) {
+  const inicio = performance.now()
   try {
     const usuario = await getUsuarioSesionLectura()
+    const despuesAuth = performance.now()
     if (!tienePermiso(usuario.rol, 'ADMISION', 'CREAR')) {
       await registrarAudit({
         usuario: usuario.clerkId,
@@ -57,15 +59,27 @@ export async function POST(request: NextRequest) {
 
     const body: unknown = await request.json()
     const data = CrearIngresoSchema.parse(body)
+    const despuesParse = performance.now()
 
     const ingreso = await admisionService.crearIngreso(
       data,
       usuario.codigoUsuario,
       extraerIP(request)
     )
+    const despuesCrear = performance.now()
 
     const response = apiCreado({ id: ingreso.id })
     response.headers.set('x-ingreso-id', String(ingreso.id))
+    response.headers.set(
+      'server-timing',
+      [
+        `auth;dur=${(despuesAuth - inicio).toFixed(1)}`,
+        `parse;dur=${(despuesParse - despuesAuth).toFixed(1)}`,
+        `create;dur=${(despuesCrear - despuesParse).toFixed(1)}`,
+        `total;dur=${(despuesCrear - inicio).toFixed(1)}`,
+      ].join(', ')
+    )
+    response.headers.set('x-admision-total-ms', String(Math.round(despuesCrear - inicio)))
     return response
   } catch (error) {
     if (error instanceof ZodError) return apiValidationError(error)

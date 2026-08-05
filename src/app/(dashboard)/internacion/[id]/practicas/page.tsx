@@ -15,7 +15,10 @@ interface PageProps {
 
 export default async function InternacionPracticasRapidasPage({ params, searchParams }: PageProps) {
     const usuario = await getUsuarioSesion()
-    if (!tienePermiso(usuario.rol, 'INTERNACION', 'LEER')) redirect('/dashboard')
+    const puedeLeerInternacion =
+        tienePermiso(usuario.rol, 'INTERNACION', 'LEER') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'LEER')
+    if (!puedeLeerInternacion) redirect('/dashboard')
 
     const puedeCrear =
         tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||

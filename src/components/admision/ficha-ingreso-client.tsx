@@ -1246,7 +1246,7 @@ export function FichaIngresoClient({
                                         + Agregar práctica
                                     </Link>
                                     <Link
-                                        href={`/dashboard/internacion/${ingreso.id}`}
+                                        href={`/dashboard/internacion/${ingreso.id}#internacion-cirugia`}
                                         className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
                                     >
                                         + Nueva cirugía

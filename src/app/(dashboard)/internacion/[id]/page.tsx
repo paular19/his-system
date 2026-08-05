@@ -83,7 +83,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function InternacionDetallePage({ params }: PageProps) {
     const tInicio = Date.now()
     const usuario = await getUsuarioSesion()
-    if (!tienePermiso(usuario.rol, 'INTERNACION', 'LEER')) redirect('/dashboard')
+    const puedeLeerInternacion =
+        tienePermiso(usuario.rol, 'INTERNACION', 'LEER') ||
+        tienePermiso(usuario.rol, 'ADMISION', 'LEER')
+    if (!puedeLeerInternacion) redirect('/dashboard')
 
     const { id } = await params
     const ingresoId = parseInt(id, 10)

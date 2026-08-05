@@ -350,7 +350,11 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
                 setSuccessMsg('Ingreso actualizado correctamente')
                 setTimeout(() => onSuccess(), 1200)
             } catch (error) {
-                setErrorMsg('Error al actualizar el ingreso')
+                const detalle =
+                    error instanceof Error && error.message.trim().length > 0
+                        ? error.message
+                        : 'Error al actualizar el ingreso'
+                setErrorMsg(detalle)
                 console.error(error)
             }
         })

@@ -124,8 +124,19 @@ export const ActualizarIngresoSchema = CrearIngresoBaseSchema.omit({
   practicas: true,
 }).extend({
   subtipoAdmisionCodigo: z.string().max(3).optional(),
-  estado: z.enum(['A', 'E', 'P', 'X']).optional(),
-  motivoEgresoCodigo: z.string().max(2).optional().nullable(),
+  estado: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['A', 'E', 'P', 'X']).optional()
+  ),
+  motivoEgresoCodigo: z.preprocess(
+    (value) => {
+      if (value == null) return value
+      if (typeof value !== 'string') return value
+      const trimmed = value.trim()
+      return trimmed.length === 0 ? null : trimmed
+    },
+    z.string().max(2).optional().nullable()
+  ),
   fechaEgreso: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
   descripcionPatologiaDefinitiva: z.string().max(500).trim().optional().nullable(),
   practicasAgregar: z.array(PracticaIngresoItemSchema).optional(),

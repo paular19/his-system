@@ -10,6 +10,7 @@ import {
   diferenciaDiasCalendarioArgentina,
   formatearFechaArgentina,
 } from '@/lib/utils/argentina-date'
+import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 export const metadata: Metadata = { title: 'Historial de Internaciones' }
 
@@ -29,6 +30,8 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
   const porPagina = 20
   const skip = (pagina - 1) * porPagina
   const q = params.q?.trim() ?? ''
+  const qTokens = obtenerTokensBusquedaFlexible(q)
+  const tieneFiltroTexto = qTokens.length > 0
 
   const where = {
     tipoIngresoCodigo: 'INT',
@@ -39,11 +42,19 @@ export default async function HistorialInternacionPage({ searchParams }: PagePro
           { fechaEgreso: { not: null } },
         ],
       },
-      ...(q
+      ...(tieneFiltroTexto
         ? [{
           OR: [
-            { nombre: { contains: q, mode: 'insensitive' as const } },
-            { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' as const } } },
+            {
+              AND: qTokens.map((token) => ({
+                nombre: { contains: token, mode: 'insensitive' as const },
+              })),
+            },
+            {
+              AND: qTokens.map((token) => ({
+                paciente: { nombreCompleto: { contains: token, mode: 'insensitive' as const } },
+              })),
+            },
           ],
         }]
         : []),

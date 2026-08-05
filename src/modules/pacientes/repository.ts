@@ -5,6 +5,7 @@ import type { CrearPacienteInput, ActualizarPacienteInput, BusquedaPacienteInput
 import type { ResultadoPaginado } from '@/types'
 import type { PacienteConRelaciones, PacienteBusqueda } from './types'
 import { normalizarNombreObraSocial } from '@/lib/utils/coseguros'
+import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 // Selección de campos para incluir en relaciones
 const incluirRelaciones = {
@@ -296,10 +297,8 @@ export async function buscarPacientes(
         { historiaClinica: num },
       ]
     } else {
-      const tokens = q
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean)
+      const tokens = obtenerTokensBusquedaFlexible(q)
+      const tokensBusqueda = tokens.length > 0 ? tokens : [q.trim()]
 
       const construirCondicionTexto = (texto: string): Prisma.PacienteWhereInput => ({
         OR: [
@@ -309,11 +308,7 @@ export async function buscarPacientes(
         ],
       })
 
-      if (tokens.length <= 1) {
-        where.OR = construirCondicionTexto(q).OR
-      } else {
-        where.AND = tokens.map((token) => construirCondicionTexto(token))
-      }
+      where.AND = tokensBusqueda.map((token) => construirCondicionTexto(token))
     }
   }
 

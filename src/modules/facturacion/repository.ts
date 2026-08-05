@@ -34,6 +34,7 @@ import { calcularImporteFacturable, resolverReglaFacturacion } from './cobertura
 import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './diferenciales'
 import { crearOrdenAmbulatorio } from '@/modules/orden/service'
 import { claveDiaArgentina } from '@/lib/utils/argentina-date'
+import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 const NOMBRE_MATRICULA_9110_DEFAULT = 'CLINICA SAN RAFAEL'
@@ -1107,11 +1108,15 @@ export async function buscarAdmisionesFacturacion(
     }
 
     if (pacienteNombre) {
+        const tokens = obtenerTokensBusquedaFlexible(pacienteNombre)
+        const tokensBusqueda = tokens.length > 0 ? tokens : [pacienteNombre]
         andFilters.push({
-            OR: [
-                { nombre: { contains: pacienteNombre, mode: 'insensitive' } },
-                { paciente: { nombreCompleto: { contains: pacienteNombre, mode: 'insensitive' } } },
-            ],
+            AND: tokensBusqueda.map((token) => ({
+                OR: [
+                    { nombre: { contains: token, mode: 'insensitive' } },
+                    { paciente: { nombreCompleto: { contains: token, mode: 'insensitive' } } },
+                ],
+            })),
         })
     }
 
@@ -1163,11 +1168,15 @@ export async function buscarAdmisionesFacturacion(
                 ],
             })
         } else {
+            const tokens = obtenerTokensBusquedaFlexible(q)
+            const tokensBusqueda = tokens.length > 0 ? tokens : [q]
             andFilters.push({
-                OR: [
-                    { nombre: { contains: q, mode: 'insensitive' } },
-                    { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' } } },
-                ],
+                AND: tokensBusqueda.map((token) => ({
+                    OR: [
+                        { nombre: { contains: token, mode: 'insensitive' } },
+                        { paciente: { nombreCompleto: { contains: token, mode: 'insensitive' } } },
+                    ],
+                })),
             })
         }
     }

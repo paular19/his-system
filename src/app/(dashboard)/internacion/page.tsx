@@ -24,6 +24,7 @@ import {
   formatearFechaArgentina,
   formatearFechaHoraArgentina,
 } from '@/lib/utils/argentina-date'
+import { normalizarTextoBusquedaFlexible, obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 export const metadata: Metadata = { title: 'Internación — Mapa de Camas' }
 
@@ -94,17 +95,8 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   const puedeCrear = tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
   const hayFiltros = Boolean(q || obraSocialIdFiltro)
   const mostrarSoloOcupadas = Boolean(obraSocialIdFiltro)
-  const normalizarBusqueda = (valor: string): string =>
-    valor
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-
-  const qNormalizado = normalizarBusqueda(q)
-  const qTokens = qNormalizado.split(' ').filter((token) => token.length > 0)
+  const qNormalizado = normalizarTextoBusquedaFlexible(q)
+  const qTokens = obtenerTokensBusquedaFlexible(q)
 
   const sectoresFiltradosPorBusqueda = qNormalizado
     ? mapa.sectores
@@ -123,7 +115,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
             ocupante.historiaClinica != null ? String(ocupante.historiaClinica) : '',
           ]
 
-          const textoBusqueda = normalizarBusqueda(camposBusqueda.join(' '))
+          const textoBusqueda = normalizarTextoBusquedaFlexible(camposBusqueda.join(' '))
 
           if (qTokens.length === 0) return true
 

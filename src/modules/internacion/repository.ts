@@ -39,6 +39,7 @@ import type {
   GuardarCondicionalCirugiaMultipleInput,
 } from './schemas'
 import type { ResultadoPaginado } from '@/types'
+import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 // ============================================
 // REPOSITORIO INTERNACIÓN
@@ -445,14 +446,7 @@ export async function obtenerInternacionesActivas(
         { paciente: { historiaClinica: num } },
       ]
     } else {
-      const tokensBusqueda = q
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .map((token) => token.trim())
-        .filter((token) => token.length > 0)
-
+      const tokensBusqueda = obtenerTokensBusquedaFlexible(q)
       const tokens = tokensBusqueda.length > 0 ? tokensBusqueda : [q.trim()]
 
       where.OR = [

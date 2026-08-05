@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 import type { CirugiaProgramadaListItem, PracticaCirugiaInput } from './types'
 import { generarCodigoBarras } from '@/modules/orden/types'
+import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 interface GuardarCirugiaParams {
     pacienteId: number
@@ -146,6 +148,20 @@ export async function listarCirugiasProgramadas(
     startOfTodayUtc.setUTCHours(0, 0, 0, 0)
     const termino = params.q?.trim()
     const dni = termino ? Number.parseInt(termino, 10) : NaN
+    const tokens = obtenerTokensBusquedaFlexible(termino)
+    const tokensBusqueda = tokens.length > 0 && termino ? tokens : termino ? [termino] : []
+
+    const filtrosTermino: Prisma.CirugiaProgramadaWhereInput[] = []
+    if (tokensBusqueda.length > 0) {
+        filtrosTermino.push({
+            AND: tokensBusqueda.map((token) => ({
+                paciente: { nombreCompleto: { contains: token, mode: 'insensitive' as const } },
+            })),
+        })
+    }
+    if (Number.isFinite(dni)) {
+        filtrosTermino.push({ paciente: { numeroDocumento: dni } })
+    }
 
     const where = {
         AND: [
@@ -154,10 +170,7 @@ export async function listarCirugiasProgramadas(
                 : { fechaCirugia: { gte: startOfTodayUtc } },
             termino
                 ? {
-                    OR: [
-                        { paciente: { nombreCompleto: { contains: termino, mode: 'insensitive' as const } } },
-                        Number.isFinite(dni) ? { paciente: { numeroDocumento: dni } } : {},
-                    ],
+                    OR: filtrosTermino,
                 }
                 : {},
         ],

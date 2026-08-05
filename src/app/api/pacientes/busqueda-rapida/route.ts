@@ -11,8 +11,10 @@ import {
   manejarErrorApi,
 } from '@/lib/utils/response'
 import NodeCache from 'node-cache'
+import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 const cache = new NodeCache({ stdTTL: 45 })
+const INSENSITIVE = 'insensitive' as const
 
 function buildCacheKey(q: string, limit: number): string {
   return `pacientes-busqueda-rapida:${q.toLowerCase()}:${limit}`
@@ -36,6 +38,10 @@ export async function GET(request: NextRequest) {
     })
 
     const termino = parsed.q.trim()
+    const tokens = obtenerTokensBusquedaFlexible(termino)
+    const tokensBusqueda = tokens.length > 0 ? tokens : [termino]
+    const tokenPrincipal = tokensBusqueda[0] ?? termino
+    const tokensSecundarios = tokensBusqueda.slice(1)
     const cacheKey = buildCacheKey(termino, parsed.limit)
     const cacheado = cache.get<unknown[]>(cacheKey)
     if (cacheado) {
@@ -85,10 +91,21 @@ export async function GET(request: NextRequest) {
 
     const prefijo = await prisma.paciente.findMany({
       where: {
-        OR: [
-          { apellido: { startsWith: termino, mode: 'insensitive' } },
-          { nombre: { startsWith: termino, mode: 'insensitive' } },
-          { nombreCompleto: { startsWith: termino, mode: 'insensitive' } },
+        AND: [
+          {
+            OR: [
+              { apellido: { startsWith: tokenPrincipal, mode: INSENSITIVE } },
+              { nombre: { startsWith: tokenPrincipal, mode: INSENSITIVE } },
+              { nombreCompleto: { startsWith: tokenPrincipal, mode: INSENSITIVE } },
+            ],
+          },
+          ...tokensSecundarios.map((token) => ({
+            OR: [
+              { apellido: { contains: token, mode: INSENSITIVE } },
+              { nombre: { contains: token, mode: INSENSITIVE } },
+              { nombreCompleto: { contains: token, mode: INSENSITIVE } },
+            ],
+          })),
         ],
       },
       take: parsed.limit,
@@ -104,11 +121,13 @@ export async function GET(request: NextRequest) {
     const idsPrefijo = prefijo.map((p) => p.id)
     const restantes = await prisma.paciente.findMany({
       where: {
-        OR: [
-          { apellido: { contains: termino, mode: 'insensitive' } },
-          { nombre: { contains: termino, mode: 'insensitive' } },
-          { nombreCompleto: { contains: termino, mode: 'insensitive' } },
-        ],
+        AND: tokensBusqueda.map((token) => ({
+          OR: [
+            { apellido: { contains: token, mode: INSENSITIVE } },
+            { nombre: { contains: token, mode: INSENSITIVE } },
+            { nombreCompleto: { contains: token, mode: INSENSITIVE } },
+          ],
+        })),
         ...(idsPrefijo.length > 0 ? { id: { notIn: idsPrefijo } } : {}),
       },
       take: parsed.limit - prefijo.length,

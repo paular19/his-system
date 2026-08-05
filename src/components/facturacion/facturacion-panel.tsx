@@ -20,6 +20,7 @@ import { resumenDiferenciales } from '@/modules/facturacion/diferenciales'
 import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/practicas-subitems'
 import { fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
+import { normalizarTextoBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 type AutorizacionVinculadaExtendida = {
     ordenPuestoNumero: number
@@ -146,13 +147,7 @@ function formatOrderNumber(puestoNumero: number | null | undefined, ordenNumero:
     return `${puestoNumero.toString().padStart(4, '0')}-${ordenNumero.toString().padStart(8, '0')}`
 }
 
-function normalizarTextoBusqueda(value: string | null | undefined): string {
-    return (value ?? '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim()
-}
+const normalizarTextoBusqueda = normalizarTextoBusquedaFlexible
 
 function parseEnteroPositivo(value: string | null | undefined): number | null {
     if (!value) return null

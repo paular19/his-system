@@ -10,6 +10,7 @@ import type {
 import type { IngresoConRelaciones, IngresoDetalle, IngresoListItem } from './types'
 import type { Paciente, IngresoPatologia, MovimientoIngreso, Prisma } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
+import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 // ============================================
 // REPOSITORIO ADMISIÓN
@@ -765,20 +766,28 @@ export async function buscarIngresos(
 
       where.OR = orFilters
     } else {
+      const tokens = obtenerTokensBusquedaFlexible(termino)
+      const tokensBusqueda = tokens.length > 0 ? tokens : [termino]
+
       const [pacientesPorTexto, obrasSocialesPorTexto] = await Promise.all([
         prisma.paciente.findMany({
           where: {
-            OR: [
-              { nombreCompleto: { contains: termino, mode: 'insensitive' } },
-              { apellido: { contains: termino, mode: 'insensitive' } },
-            ],
+            AND: tokensBusqueda.map((token) => ({
+              OR: [
+                { nombreCompleto: { contains: token, mode: 'insensitive' } },
+                { apellido: { contains: token, mode: 'insensitive' } },
+                { nombre: { contains: token, mode: 'insensitive' } },
+              ],
+            })),
           },
           select: { id: true },
           take: MAX_IDS_BUSQUEDA_INGRESO,
         }),
         prisma.obraSocial.findMany({
           where: {
-            nombre: { contains: termino, mode: 'insensitive' },
+            AND: tokensBusqueda.map((token) => ({
+              nombre: { contains: token, mode: 'insensitive' },
+            })),
           },
           select: { id: true },
           take: MAX_IDS_BUSQUEDA_INGRESO,
@@ -786,7 +795,11 @@ export async function buscarIngresos(
       ])
 
       const orFilters: Prisma.IngresoWhereInput[] = [
-        { nombre: { contains: termino, mode: 'insensitive' } },
+        {
+          AND: tokensBusqueda.map((token) => ({
+            nombre: { contains: token, mode: 'insensitive' },
+          })),
+        },
       ]
 
       if (pacientesPorTexto.length > 0) {

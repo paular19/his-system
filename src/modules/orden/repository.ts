@@ -10,6 +10,7 @@ import type {
 } from './types'
 import { generarCodigoBarras } from './types'
 import { normalizarClasificacionAgrupacion } from './clasificacion'
+import { coincideTextoConBusquedaFlexible, obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 const PUESTO_NUMERO = 1 // Número de puesto fijo (configurable a futuro)
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
@@ -452,6 +453,7 @@ export async function listarOrdenes(params: {
 }): Promise<{ ordenes: OrdenListItem[]; total: number }> {
   const q = params.q?.trim()
   const qLower = q?.toLowerCase()
+  const qTokens = obtenerTokensBusquedaFlexible(q)
   const numeroBuscado = q && /^\d+$/.test(q) ? parseInt(q, 10) : null
   const skip = params.skip ?? 0
   const take = params.take ?? 20
@@ -557,7 +559,7 @@ export async function listarOrdenes(params: {
           .toLowerCase()
 
         return (
-          nombrePaciente.includes(qLower) ||
+          coincideTextoConBusquedaFlexible(row.nombrePaciente, q) ||
           numeroAfiliado.includes(qLower) ||
           numeroAutorizacion.includes(qLower) ||
           practicas.includes(qLower) ||
@@ -586,7 +588,11 @@ export async function listarOrdenes(params: {
   const filtroBusqueda = q
     ? {
       OR: [
-        { nombrePaciente: { contains: q, mode: 'insensitive' as const } },
+        {
+          AND: (qTokens.length > 0 ? qTokens : [q]).map((token) => ({
+            nombrePaciente: { contains: token, mode: 'insensitive' as const },
+          })),
+        },
         { numeroAfiliado: { contains: q, mode: 'insensitive' as const } },
         { numeroAutorizacion: { contains: q, mode: 'insensitive' as const } },
         ...(numeroBuscado != null ? [{ numero: numeroBuscado }] : []),
@@ -644,19 +650,37 @@ export async function buscarAdmisionesActivasPorPaciente(query: string): Promise
   if (q.length < 2) return []
 
   const esNumerico = /^\d+$/.test(q)
+  const tokens = obtenerTokensBusquedaFlexible(q)
+  const tokensBusqueda = tokens.length > 0 ? tokens : [q]
+  const filtroNombreIngreso: Prisma.IngresoWhereInput = {
+    AND: tokensBusqueda.map((token) => ({
+      nombre: { contains: token, mode: 'insensitive' },
+    })),
+  }
+  const filtroObraSocial: Prisma.IngresoWhereInput = {
+    AND: tokensBusqueda.map((token) => ({
+      obraSocial: { nombre: { contains: token, mode: 'insensitive' } },
+    })),
+  }
+  const filtroNombrePaciente: Prisma.IngresoWhereInput = {
+    AND: tokensBusqueda.map((token) => ({
+      paciente: { nombreCompleto: { contains: token, mode: 'insensitive' } },
+    })),
+  }
+
   const where: Prisma.IngresoWhereInput = {
     estado: { in: ['A', 'P', 'E'] },
     OR: esNumerico
       ? [
         { numeroIngreso: parseInt(q, 10) },
         { paciente: { numeroDocumento: parseInt(q, 10) } },
-        { nombre: { contains: q, mode: 'insensitive' } },
-        { obraSocial: { nombre: { contains: q, mode: 'insensitive' } } },
+        filtroNombreIngreso,
+        filtroObraSocial,
       ]
       : [
-        { nombre: { contains: q, mode: 'insensitive' } },
-        { obraSocial: { nombre: { contains: q, mode: 'insensitive' } } },
-        { paciente: { nombreCompleto: { contains: q, mode: 'insensitive' } } },
+        filtroNombreIngreso,
+        filtroObraSocial,
+        filtroNombrePaciente,
       ],
   }
 

@@ -1,5 +1,5 @@
 import { Header } from '@/components/layout/header'
-import { getUsuarioSesion } from '@/lib/auth'
+import { getUsuarioSesionLectura } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { obtenerIngreso } from '@/modules/admision/service'
@@ -138,14 +138,18 @@ async function FichaIngresoContenido({
 }
 
 export default async function FichaIngresoPage({ params, searchParams }: PageProps) {
-  const usuario = await getUsuarioSesion()
+  const [usuario, paramsResueltos, query] = await Promise.all([
+    getUsuarioSesionLectura(),
+    params,
+    searchParams,
+  ])
+
   if (!tienePermiso(usuario.rol, 'ADMISION', 'LEER')) redirect('/dashboard')
 
-  const { id } = await params
+  const { id } = paramsResueltos
   const ingresoId = parseInt(id, 10)
   if (isNaN(ingresoId)) notFound()
 
-  const query = await searchParams
   const prefetch = resolverPrefetch(query)
 
   const puedeModificar = tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')

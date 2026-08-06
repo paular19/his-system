@@ -977,6 +977,249 @@ export function PracticaCargaRapidaPage({
         }
     }
 
+    const guardarPracticasCirugia = async (
+        entradasCrear: PracticaCargaEntrada[]
+    ): Promise<GuardarPracticasResult> => {
+        if (!contextoCirugia) {
+            const mensaje = 'No se encontro contexto de cirugia para guardar practicas'
+            setMensajeError(mensaje)
+            return { ok: false, error: mensaje }
+        }
+
+        if (!contextoCirugia.obraSocialId) {
+            const mensaje = 'La internacion no tiene obra social asignada. Actualizala para cargar practicas de cirugia.'
+            setMensajeError(mensaje)
+            return { ok: false, error: mensaje }
+        }
+
+        try {
+            const prePanel = await fetch(`/api/internacion/${ingresoId}/panel-clinico`, {
+                cache: 'no-store',
+            })
+            const preJson = await prePanel.json().catch(() => null)
+            const preIdsBackend = new Set<number>(
+                Array.isArray(preJson?.data?.practicasCirugiaEspejo)
+                    ? (preJson.data.practicasCirugiaEspejo as Array<{ id: number }>).map((practica) => practica.id)
+                    : practicas.map((practica) => practica.id)
+            )
+
+            const practicasExpandida = entradasCrear.map((entrada) => ({
+                convenioId: entrada.payload.convenioId,
+                codigo: entrada.payload.codigoPractica,
+                descripcion: entrada.payload.descripcionPractica,
+                fecha: entrada.payload.fecha,
+                cantidad: entrada.payload.cantidad,
+                importeTotal: entrada.payload.importeBaseUnitario,
+                matriculaEspecialista: entrada.payload.matriculaEspecialista,
+                matriculaAnestesista: entrada.payload.matriculaAnestesista,
+            }))
+
+            const res = await fetch(`/api/internacion/${ingresoId}/cirugia-urgencia`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cirugiaId: contextoCirugia.cirugiaId,
+                    pacienteId: contextoCirugia.pacienteId,
+                    fechaCirugia: fechaAInputLocalSimple(contextoCirugia.fechaCirugia),
+                    horaCirugia: null,
+                    camaId: null,
+                    obraSocialId: contextoCirugia.obraSocialId,
+                    planId: contextoCirugia.planId,
+                    obraSocialCoseguroId: contextoCirugia.obraSocialCoseguroId,
+                    numeroAfiliado: contextoCirugia.numeroAfiliado,
+                    diagnostico: null,
+                    observaciones: null,
+                    practicas: practicasExpandida,
+                    diferenciales: {
+                        esFeriado: false,
+                        esNocturna: false,
+                        mismaViaPatologia: false,
+                        diferentesViasPatologia: false,
+                        diferentesViasDiferentesPatologia: false,
+                    },
+                }),
+            })
+
+            const json = await res.json().catch(() => null)
+            if (!res.ok) {
+                const mensaje = json?.error ?? 'No se pudo registrar la practica en la cirugia seleccionada'
+                setMensajeError(mensaje)
+                return { ok: false, error: mensaje }
+            }
+
+            const resPanel = await fetch(`/api/internacion/${ingresoId}/panel-clinico`, {
+                cache: 'no-store',
+            })
+            const jsonPanel = await resPanel.json().catch(() => null)
+
+            if (!resPanel.ok || !Array.isArray(jsonPanel?.data?.practicas)) {
+                setMensajeError('Las practicas se guardaron, pero no se pudo actualizar la lista sin recargar')
+                return { ok: true }
+            }
+
+            const practicasPanelBase = (jsonPanel.data.practicas as PracticaItem[])
+            const practicasCirugiaEspejoRaw = Array.isArray(jsonPanel?.data?.practicasCirugiaEspejo)
+                ? (jsonPanel.data.practicasCirugiaEspejo as Array<{
+                    id: number
+                    codigoPractica: string
+                    fecha: string | Date
+                    cantidad: number
+                    numeroAutorizacion: string | null
+                    facturable: boolean
+                    puestoNumero: number | null
+                    ordenNumero: number | null
+                    estado: string | null
+                    usuarioRegistro: string | null
+                    matriculaEspecialista: number | null
+                    matriculaAnestesista: number | null
+                    tuvoOrdenGenerada?: boolean
+                    ordenPractica?: Array<{
+                        puestoNumero: number
+                        ordenNumero: number
+                        item: number
+                        numeroAutorizacion: string | null
+                        fechaEmision?: string | Date | null
+                    }>
+                }>)
+                : []
+
+            const descripcionPorCodigo = new Map<string, string>()
+            for (const practica of practicasPanelBase) {
+                const codigo = practica.codigoPractica.trim().toUpperCase()
+                const descripcion = practica.descripcionPractica?.trim()
+                if (codigo && descripcion) descripcionPorCodigo.set(codigo, descripcion)
+            }
+            for (const entrada of entradasCrear) {
+                const codigo = entrada.payload.codigoPractica.trim().toUpperCase()
+                const descripcion = entrada.payload.descripcionPractica?.trim()
+                if (codigo && descripcion) descripcionPorCodigo.set(codigo, descripcion)
+            }
+
+            const practicasCirugiaEspejo: PracticaItem[] = practicasCirugiaEspejoRaw.map((practica) => {
+                const codigoTrim = practica.codigoPractica.trim()
+                const codigoLookup = codigoTrim.toUpperCase()
+                const ordenPractica = Array.isArray(practica.ordenPractica)
+                    ? practica.ordenPractica.map((orden) => ({
+                        puestoNumero: orden.puestoNumero,
+                        ordenNumero: orden.ordenNumero,
+                        item: orden.item,
+                        numeroAutorizacion: orden.numeroAutorizacion ?? null,
+                        fechaEmision: orden.fechaEmision ? new Date(orden.fechaEmision) : null,
+                    }))
+                    : []
+
+                return {
+                    id: practica.id,
+                    ingresoId,
+                    convenioId: contextoCirugia.obraSocialId ?? convenioId ?? 0,
+                    codigoPractica: codigoTrim,
+                    descripcionPractica: descripcionPorCodigo.get(codigoLookup) ?? codigoTrim,
+                    numeroProtocoloLaboratorio: null,
+                    diagnosticoLaboratorio: null,
+                    fecha: new Date(practica.fecha),
+                    cantidad: Number(practica.cantidad ?? 1),
+                    importeTotal: null,
+                    numeroAutorizacion: practica.numeroAutorizacion ?? null,
+                    matriculaEspecialista: practica.matriculaEspecialista ?? null,
+                    matriculaAnestesista: practica.matriculaAnestesista ?? null,
+                    puestoNumero: practica.puestoNumero ?? null,
+                    ordenNumero: practica.ordenNumero ?? null,
+                    ordenItem: ordenPractica[0]?.item ?? null,
+                    facturada:
+                        ordenPractica.length > 0 ||
+                        ((practica.puestoNumero ?? 0) > 0 && (practica.ordenNumero ?? 0) > 0),
+                    ordenPractica,
+                    facturable: Boolean(practica.facturable),
+                    estado: practica.estado ?? 'A',
+                    usuario: (practica.usuarioRegistro ?? 'CIRUGIA').trim() || 'CIRUGIA',
+                    tuvoOrdenGenerada:
+                        practica.tuvoOrdenGenerada === true ||
+                        ordenPractica.length > 0 ||
+                        (
+                            practica.puestoNumero != null &&
+                            practica.ordenNumero != null &&
+                            Number(practica.puestoNumero) > 0 &&
+                            Number(practica.ordenNumero) > 0
+                        ),
+                }
+            })
+
+            const practicasUnicasPorId = new Map<number, PracticaItem>()
+            for (const practica of practicasCirugiaEspejo) {
+                practicasUnicasPorId.set(practica.id, practica)
+            }
+
+            const practicasNoPrevias = Array.from(practicasUnicasPorId.values())
+                .filter((practica) => !preIdsBackend.has(practica.id))
+                .sort((a, b) => b.id - a.id)
+
+            const practicasNoPreviasDisponibles = [...practicasNoPrevias]
+            const practicasNuevasDelLote: PracticaItem[] = []
+            const clasificacionPorNuevaPracticaId: Record<number, string> = {}
+
+            for (const entrada of entradasCrear) {
+                const codigoEsperado = entrada.payload.codigoPractica.trim().toUpperCase()
+                const cantidadEsperada = Number(entrada.payload.cantidad ?? 1)
+                const matriculaEspecialistaEsperada = entrada.payload.matriculaEspecialista ?? null
+                const matriculaAnestesistaEsperada = entrada.payload.matriculaAnestesista ?? null
+
+                const idxExacta = practicasNoPreviasDisponibles.findIndex((practica) =>
+                    practica.codigoPractica.trim().toUpperCase() === codigoEsperado &&
+                    Number(practica.cantidad ?? 1) === cantidadEsperada &&
+                    (practica.matriculaEspecialista ?? null) === matriculaEspecialistaEsperada &&
+                    (practica.matriculaAnestesista ?? null) === matriculaAnestesistaEsperada
+                )
+
+                const idxCodigo = idxExacta >= 0
+                    ? idxExacta
+                    : practicasNoPreviasDisponibles.findIndex(
+                        (practica) => practica.codigoPractica.trim().toUpperCase() === codigoEsperado
+                    )
+
+                if (idxCodigo < 0) continue
+
+                const [match] = practicasNoPreviasDisponibles.splice(idxCodigo, 1)
+                if (!match) continue
+
+                practicasNuevasDelLote.push(match)
+                clasificacionPorNuevaPracticaId[match.id] = entrada.clasificacion ?? 'HE'
+            }
+
+            const practicasNuevas = practicasNuevasDelLote.length > 0
+                ? practicasNuevasDelLote
+                : (practicasNoPrevias.length === entradasCrear.length ? practicasNoPrevias : [])
+
+            const practicasActualizadas = Array.from(practicasUnicasPorId.values())
+                .filter((practica) => practicaActiva(practica.estado))
+                .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+
+            setPracticas(practicasActualizadas)
+
+            if (practicasNuevas.length > 0) {
+                setPracticaIdsCirugiaLocales((prev) =>
+                    Array.from(new Set([...prev, ...practicasNuevas.map((practica) => practica.id)]))
+                )
+
+                for (const practica of practicasNuevas) {
+                    if (clasificacionPorNuevaPracticaId[practica.id]) continue
+                    clasificacionPorNuevaPracticaId[practica.id] = clasificacionInferidaPractica(practica)
+                }
+
+                setClasificacionPorPracticaId((prev) => ({
+                    ...prev,
+                    ...clasificacionPorNuevaPracticaId,
+                }))
+                registrarGuardadasSesionDesdePracticas(practicasNuevas, clasificacionPorNuevaPracticaId)
+            }
+
+            return { ok: true }
+        } catch {
+            const mensaje = 'Error de conexion al guardar practicas de cirugia'
+            setMensajeError(mensaje)
+            return { ok: false, error: mensaje }
+        }
+    }
+
     const handleGuardarPracticas = async (
         entradasCrear: PracticaCargaEntrada[],
         options?: { background?: boolean }
@@ -984,238 +1227,26 @@ export function PracticaCargaRapidaPage({
         setMensajeError(null)
 
         if (contextoCirugia) {
-            if (!contextoCirugia.obraSocialId) {
-                const mensaje = 'La internacion no tiene obra social asignada. Actualizala para cargar practicas de cirugia.'
-                setMensajeError(mensaje)
-                return { ok: false, error: mensaje }
-            }
+            if (options?.background) {
+                const cantidadEncolada = entradasCrear.length
+                setTareasGuardadoPendientes((prev) => prev + cantidadEncolada)
 
-            try {
-                const prePanel = await fetch(`/api/internacion/${ingresoId}/panel-clinico`, {
-                    cache: 'no-store',
-                })
-                const preJson = await prePanel.json().catch(() => null)
-                const preIdsBackend = new Set<number>(
-                    Array.isArray(preJson?.data?.practicasCirugiaEspejo)
-                        ? (preJson.data.practicasCirugiaEspejo as Array<{ id: number }>).map((practica) => practica.id)
-                        : practicas.map((practica) => practica.id)
-                )
-
-                const practicasExpandida = entradasCrear.map((entrada) => ({
-                    convenioId: entrada.payload.convenioId,
-                    codigo: entrada.payload.codigoPractica,
-                    descripcion: entrada.payload.descripcionPractica,
-                    fecha: entrada.payload.fecha,
-                    cantidad: entrada.payload.cantidad,
-                    importeTotal: entrada.payload.importeBaseUnitario,
-                    matriculaEspecialista: entrada.payload.matriculaEspecialista,
-                    matriculaAnestesista: entrada.payload.matriculaAnestesista,
-                }))
-
-                const res = await fetch(`/api/internacion/${ingresoId}/cirugia-urgencia`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        cirugiaId: contextoCirugia.cirugiaId,
-                        pacienteId: contextoCirugia.pacienteId,
-                        fechaCirugia: fechaAInputLocalSimple(contextoCirugia.fechaCirugia),
-                        horaCirugia: null,
-                        camaId: null,
-                        obraSocialId: contextoCirugia.obraSocialId,
-                        planId: contextoCirugia.planId,
-                        obraSocialCoseguroId: contextoCirugia.obraSocialCoseguroId,
-                        numeroAfiliado: contextoCirugia.numeroAfiliado,
-                        diagnostico: null,
-                        observaciones: null,
-                        practicas: practicasExpandida,
-                        diferenciales: {
-                            esFeriado: false,
-                            esNocturna: false,
-                            mismaViaPatologia: false,
-                            diferentesViasPatologia: false,
-                            diferentesViasDiferentesPatologia: false,
-                        },
-                    }),
-                })
-
-                const json = await res.json().catch(() => null)
-                if (!res.ok) {
-                    const mensaje = json?.error ?? 'No se pudo registrar la practica en la cirugia seleccionada'
-                    setMensajeError(mensaje)
-                    return { ok: false, error: mensaje }
-                }
-
-                const resPanel = await fetch(`/api/internacion/${ingresoId}/panel-clinico`, {
-                    cache: 'no-store',
-                })
-                const jsonPanel = await resPanel.json().catch(() => null)
-
-                if (!resPanel.ok || !Array.isArray(jsonPanel?.data?.practicas)) {
-                    setMensajeError('Las practicas se guardaron, pero no se pudo actualizar la lista sin recargar')
-                    return { ok: true }
-                }
-
-                const practicasPanelBase = (jsonPanel.data.practicas as PracticaItem[])
-                const practicasCirugiaEspejoRaw = Array.isArray(jsonPanel?.data?.practicasCirugiaEspejo)
-                    ? (jsonPanel.data.practicasCirugiaEspejo as Array<{
-                        id: number
-                        codigoPractica: string
-                        fecha: string | Date
-                        cantidad: number
-                        numeroAutorizacion: string | null
-                        facturable: boolean
-                        puestoNumero: number | null
-                        ordenNumero: number | null
-                        estado: string | null
-                        usuarioRegistro: string | null
-                        matriculaEspecialista: number | null
-                        matriculaAnestesista: number | null
-                        tuvoOrdenGenerada?: boolean
-                        ordenPractica?: Array<{
-                            puestoNumero: number
-                            ordenNumero: number
-                            item: number
-                            numeroAutorizacion: string | null
-                            fechaEmision?: string | Date | null
-                        }>
-                    }>)
-                    : []
-
-                const descripcionPorCodigo = new Map<string, string>()
-                for (const practica of practicasPanelBase) {
-                    const codigo = practica.codigoPractica.trim().toUpperCase()
-                    const descripcion = practica.descripcionPractica?.trim()
-                    if (codigo && descripcion) descripcionPorCodigo.set(codigo, descripcion)
-                }
-                for (const entrada of entradasCrear) {
-                    const codigo = entrada.payload.codigoPractica.trim().toUpperCase()
-                    const descripcion = entrada.payload.descripcionPractica?.trim()
-                    if (codigo && descripcion) descripcionPorCodigo.set(codigo, descripcion)
-                }
-
-                const practicasCirugiaEspejo: PracticaItem[] = practicasCirugiaEspejoRaw.map((practica) => {
-                    const codigoTrim = practica.codigoPractica.trim()
-                    const codigoLookup = codigoTrim.toUpperCase()
-                    const ordenPractica = Array.isArray(practica.ordenPractica)
-                        ? practica.ordenPractica.map((orden) => ({
-                            puestoNumero: orden.puestoNumero,
-                            ordenNumero: orden.ordenNumero,
-                            item: orden.item,
-                            numeroAutorizacion: orden.numeroAutorizacion ?? null,
-                            fechaEmision: orden.fechaEmision ? new Date(orden.fechaEmision) : null,
-                        }))
-                        : []
-
-                    return {
-                        id: practica.id,
-                        ingresoId,
-                        convenioId: contextoCirugia.obraSocialId ?? convenioId ?? 0,
-                        codigoPractica: codigoTrim,
-                        descripcionPractica: descripcionPorCodigo.get(codigoLookup) ?? codigoTrim,
-                        numeroProtocoloLaboratorio: null,
-                        diagnosticoLaboratorio: null,
-                        fecha: new Date(practica.fecha),
-                        cantidad: Number(practica.cantidad ?? 1),
-                        importeTotal: null,
-                        numeroAutorizacion: practica.numeroAutorizacion ?? null,
-                        matriculaEspecialista: practica.matriculaEspecialista ?? null,
-                        matriculaAnestesista: practica.matriculaAnestesista ?? null,
-                        puestoNumero: practica.puestoNumero ?? null,
-                        ordenNumero: practica.ordenNumero ?? null,
-                        ordenItem: ordenPractica[0]?.item ?? null,
-                        facturada:
-                            ordenPractica.length > 0 ||
-                            ((practica.puestoNumero ?? 0) > 0 && (practica.ordenNumero ?? 0) > 0),
-                        ordenPractica,
-                        facturable: Boolean(practica.facturable),
-                        estado: practica.estado ?? 'A',
-                        usuario: (practica.usuarioRegistro ?? 'CIRUGIA').trim() || 'CIRUGIA',
-                        tuvoOrdenGenerada:
-                            practica.tuvoOrdenGenerada === true ||
-                            ordenPractica.length > 0 ||
-                            (
-                                practica.puestoNumero != null &&
-                                practica.ordenNumero != null &&
-                                Number(practica.puestoNumero) > 0 &&
-                                Number(practica.ordenNumero) > 0
-                            ),
-                    }
-                })
-
-                const practicasUnicasPorId = new Map<number, PracticaItem>()
-                for (const practica of practicasCirugiaEspejo) {
-                    practicasUnicasPorId.set(practica.id, practica)
-                }
-
-                const practicasNoPrevias = Array.from(practicasUnicasPorId.values())
-                    .filter((practica) => !preIdsBackend.has(practica.id))
-                    .sort((a, b) => b.id - a.id)
-
-                const practicasNoPreviasDisponibles = [...practicasNoPrevias]
-                const practicasNuevasDelLote: PracticaItem[] = []
-                const clasificacionPorNuevaPracticaId: Record<number, string> = {}
-
-                for (const entrada of entradasCrear) {
-                    const codigoEsperado = entrada.payload.codigoPractica.trim().toUpperCase()
-                    const cantidadEsperada = Number(entrada.payload.cantidad ?? 1)
-                    const matriculaEspecialistaEsperada = entrada.payload.matriculaEspecialista ?? null
-                    const matriculaAnestesistaEsperada = entrada.payload.matriculaAnestesista ?? null
-
-                    const idxExacta = practicasNoPreviasDisponibles.findIndex((practica) =>
-                        practica.codigoPractica.trim().toUpperCase() === codigoEsperado &&
-                        Number(practica.cantidad ?? 1) === cantidadEsperada &&
-                        (practica.matriculaEspecialista ?? null) === matriculaEspecialistaEsperada &&
-                        (practica.matriculaAnestesista ?? null) === matriculaAnestesistaEsperada
-                    )
-
-                    const idxCodigo = idxExacta >= 0
-                        ? idxExacta
-                        : practicasNoPreviasDisponibles.findIndex(
-                            (practica) => practica.codigoPractica.trim().toUpperCase() === codigoEsperado
-                        )
-
-                    if (idxCodigo < 0) continue
-
-                    const [match] = practicasNoPreviasDisponibles.splice(idxCodigo, 1)
-                    if (!match) continue
-
-                    practicasNuevasDelLote.push(match)
-                    clasificacionPorNuevaPracticaId[match.id] = entrada.clasificacion ?? 'HE'
-                }
-
-                const practicasNuevas = practicasNuevasDelLote.length > 0
-                    ? practicasNuevasDelLote
-                    : (practicasNoPrevias.length === entradasCrear.length ? practicasNoPrevias : [])
-
-                const practicasActualizadas = Array.from(practicasUnicasPorId.values())
-                    .filter((practica) => practicaActiva(practica.estado))
-                    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-
-                setPracticas(practicasActualizadas)
-
-                if (practicasNuevas.length > 0) {
-                    setPracticaIdsCirugiaLocales((prev) =>
-                        Array.from(new Set([...prev, ...practicasNuevas.map((practica) => practica.id)]))
-                    )
-
-                    for (const practica of practicasNuevas) {
-                        if (clasificacionPorNuevaPracticaId[practica.id]) continue
-                        clasificacionPorNuevaPracticaId[practica.id] = clasificacionInferidaPractica(practica)
-                    }
-
-                    setClasificacionPorPracticaId((prev) => ({
-                        ...prev,
-                        ...clasificacionPorNuevaPracticaId,
-                    }))
-                    registrarGuardadasSesionDesdePracticas(practicasNuevas, clasificacionPorNuevaPracticaId)
-                }
+                colaGuardadoBackgroundRef.current = colaGuardadoBackgroundRef.current
+                    .catch(() => undefined)
+                    .then(async () => {
+                        const resultado = await guardarPracticasCirugia(entradasCrear)
+                        if (!resultado.ok) {
+                            setMensajeError(resultado.error ?? 'No se pudo registrar la practica en la cirugia seleccionada')
+                        }
+                    })
+                    .finally(() => {
+                        setTareasGuardadoPendientes((prev) => Math.max(0, prev - cantidadEncolada))
+                    })
 
                 return { ok: true }
-            } catch {
-                const mensaje = 'Error de conexion al guardar practicas de cirugia'
-                setMensajeError(mensaje)
-                return { ok: false, error: mensaje }
             }
+
+            return guardarPracticasCirugia(entradasCrear)
         }
 
         if (options?.background) {

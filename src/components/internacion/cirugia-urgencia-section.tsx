@@ -1630,10 +1630,15 @@ export function CirugiaUrgenciaSection({
                                                                                                         Facturada
                                                                                                     </span>
                                                                                                 )}
-                                                                                                <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                                                                                                    <Pencil className="h-3.5 w-3.5" />
-                                                                                                    Editar completa en orden
-                                                                                                </span>
+                                                                                                {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero && (
+                                                                                                    <Link
+                                                                                                        href={`/dashboard/ambulatorio/${grupo.puestoNumero}/${grupo.ordenNumero}`}
+                                                                                                        className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                                                                                                    >
+                                                                                                        <Pencil className="h-3.5 w-3.5" />
+                                                                                                        Abrir orden
+                                                                                                    </Link>
+                                                                                                )}
                                                                                             </div>
                                                                                         )}
                                                                                     </div>

@@ -2638,9 +2638,14 @@ export function PracticaCargaRapidaPage({
                                                 </button>
                                             )}
                                             {puedeCrear && modoCirugia && (
-                                                <span className="inline-flex rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                                                    Editar completa en orden
-                                                </span>
+                                                grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero ? (
+                                                    <Link
+                                                        href={`/dashboard/ambulatorio/${grupo.puestoNumero}/${grupo.ordenNumero}`}
+                                                        className="inline-flex rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                                                    >
+                                                        Abrir orden
+                                                    </Link>
+                                                ) : null
                                             )}
                                         </div>
                                     </div>

@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ActualizarPracticaSchema } from '@/modules/internacion/schemas'
 import type { ActualizarIngresoInput } from '@/modules/admision/schemas'
 import { updateIngresoAction } from '@/modules/admision/actions'
-import { ChevronRight, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle } from 'lucide-react'
+import { ChevronRight, ChevronDown, ChevronUp, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import { claveDiaArgentina, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
@@ -158,6 +158,8 @@ export function FichaIngresoClient({
     const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
+    const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(true)
+    const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
     const [admisionVista, setAdmisionVista] = useState(() => ({
         fechaIngreso: ingreso.fechaIngreso,
         fechaEgreso: ingreso.fechaEgreso,
@@ -250,6 +252,19 @@ export function FichaIngresoClient({
     const ordenesAutorizadasPaginadas = ordenesAutorizadasFiltradas.slice(
         (paginaAutorizadasActual - 1) * PRACTICAS_POR_PAGINA,
         paginaAutorizadasActual * PRACTICAS_POR_PAGINA
+    )
+
+    const ordenesAutorizadasPaginadasVisibles = useMemo(
+        () =>
+            ordenesAutorizadasPaginadas.filter((grupo) => {
+                const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
+                return yaAutorizada ? mostrarOrdenesYaAutorizadas : mostrarOrdenesPendientesAutorizacion
+            }),
+        [
+            ordenesAutorizadasPaginadas,
+            mostrarOrdenesPendientesAutorizacion,
+            mostrarOrdenesYaAutorizadas,
+        ]
     )
 
     useEffect(() => {
@@ -1610,18 +1625,53 @@ export function FichaIngresoClient({
                                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
                                     Ordenes generadas ({ordenesAutorizadasFiltradas.length})
                                 </p>
-                                <p className="mb-2 text-[11px] text-gray-600">
-                                    Pendientes de autorizacion: {ordenesPendientesAutorizacion} · Ya autorizadas: {ordenesYaAutorizadas}
-                                </p>
+                                <div className="mb-2 space-y-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMostrarOrdenesPendientesAutorizacion((prev) => !prev)}
+                                        disabled={ordenesPendientesAutorizacion === 0}
+                                        className="flex w-full items-center justify-between rounded border border-amber-200 bg-amber-50/50 px-2 py-1 text-left disabled:opacity-60"
+                                    >
+                                        <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                                            Pendientes de autorizacion ({ordenesPendientesAutorizacion})
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800">
+                                            {mostrarOrdenesPendientesAutorizacion ? 'Contraer' : 'Expandir'}
+                                            {mostrarOrdenesPendientesAutorizacion
+                                                ? <ChevronUp className="h-3.5 w-3.5" />
+                                                : <ChevronDown className="h-3.5 w-3.5" />}
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMostrarOrdenesYaAutorizadas((prev) => !prev)}
+                                        disabled={ordenesYaAutorizadas === 0}
+                                        className="flex w-full items-center justify-between rounded border border-emerald-200 bg-emerald-50/50 px-2 py-1 text-left disabled:opacity-60"
+                                    >
+                                        <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                            Ya autorizadas ({ordenesYaAutorizadas})
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800">
+                                            {mostrarOrdenesYaAutorizadas ? 'Contraer' : 'Expandir'}
+                                            {mostrarOrdenesYaAutorizadas
+                                                ? <ChevronUp className="h-3.5 w-3.5" />
+                                                : <ChevronDown className="h-3.5 w-3.5" />}
+                                        </span>
+                                    </button>
+                                </div>
                                 {ordenesAutorizadasFiltradas.length === 0 ? (
                                     <p className="text-sm text-gray-400">
                                         {practicasAutorizadas.length === 0
                                             ? 'No hay ordenes generadas.'
                                             : 'No hay ordenes generadas para este filtro.'}
                                     </p>
+                                ) : ordenesAutorizadasPaginadasVisibles.length === 0 ? (
+                                    <p className="text-sm text-gray-500">
+                                        No hay ordenes visibles con los paneles cerrados.
+                                    </p>
                                 ) : (
                                     <div className="space-y-2">
-                                        {ordenesAutorizadasPaginadas.map((grupo) => {
+                                        {ordenesAutorizadasPaginadasVisibles.map((grupo) => {
                                             const destinoAutorizada = obtenerDestinoGrupoPracticasAutorizadas(grupo)
                                             const destinoOrdenImpresion =
                                                 grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero

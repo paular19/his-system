@@ -87,10 +87,54 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                         numeroAutorizacion: true,
                     },
                 },
+                _count: {
+                    select: {
+                        ordenPractica: true,
+                    },
+                },
             },
             orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
         })
         : []
+
+    const clavesOrdenLegacy = Array.from(new Set(
+        practicasCirugiaActivas
+            .map((practica) => {
+                if (
+                    practica.puestoNumero == null ||
+                    practica.ordenNumero == null ||
+                    Number(practica.puestoNumero) <= 0 ||
+                    Number(practica.ordenNumero) <= 0
+                ) {
+                    return null
+                }
+                return `${Number(practica.puestoNumero)}:${Number(practica.ordenNumero)}`
+            })
+            .filter((key): key is string => key != null)
+    ))
+
+    const ordenesLegacyActivasSet = new Set(
+        clavesOrdenLegacy.length === 0
+            ? []
+            : (
+                await prisma.orden.findMany({
+                    where: {
+                        estado: { not: 'X' },
+                        OR: clavesOrdenLegacy.map((key) => {
+                            const [puestoNumeroRaw, ordenNumeroRaw] = key.split(':')
+                            return {
+                                puestoNumero: Number.parseInt(puestoNumeroRaw ?? '', 10),
+                                numero: Number.parseInt(ordenNumeroRaw ?? '', 10),
+                            }
+                        }),
+                    },
+                    select: {
+                        puestoNumero: true,
+                        numero: true,
+                    },
+                })
+            ).map((orden) => `${orden.puestoNumero}:${orden.numero}`)
+    )
 
     const descripcionCirugiaPorCodigo = new Map<string, string>()
     for (const practicaCirugia of cirugiaObjetivo?.practicas ?? []) {
@@ -113,6 +157,28 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
     const practicasCirugiaParaPagina = practicasCirugiaActivas.map((practica) => {
         const codigoNormalizado = practica.codigoPractica.trim().toUpperCase()
         const descripcion = descripcionCirugiaPorCodigo.get(codigoNormalizado) ?? practica.codigoPractica.trim()
+        const ordenPracticaActivas = practica.ordenPractica.map((orden) => ({
+            puestoNumero: orden.puestoNumero,
+            ordenNumero: orden.ordenNumero,
+            item: orden.item,
+            numeroAutorizacion: orden.numeroAutorizacion,
+        }))
+        if (
+            ordenPracticaActivas.length === 0 &&
+            practica.puestoNumero != null &&
+            practica.ordenNumero != null &&
+            Number(practica.puestoNumero) > 0 &&
+            Number(practica.ordenNumero) > 0 &&
+            ordenesLegacyActivasSet.has(`${Number(practica.puestoNumero)}:${Number(practica.ordenNumero)}`)
+        ) {
+            ordenPracticaActivas.push({
+                puestoNumero: Number(practica.puestoNumero),
+                ordenNumero: Number(practica.ordenNumero),
+                item: practica.ordenItem != null ? Number(practica.ordenItem) : 1,
+                numeroAutorizacion: practica.numeroAutorizacion,
+            })
+        }
+
         return {
             id: practica.id,
             ingresoId: practica.ingresoId,
@@ -131,15 +197,18 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             ordenNumero: practica.ordenNumero,
             ordenItem: practica.ordenItem,
             facturada: (practica.estado ?? '').trim().toUpperCase() === 'F',
-            ordenPractica: practica.ordenPractica.map((orden) => ({
-                puestoNumero: orden.puestoNumero,
-                ordenNumero: orden.ordenNumero,
-                item: orden.item,
-                numeroAutorizacion: orden.numeroAutorizacion,
-            })),
+            ordenPractica: ordenPracticaActivas,
             facturable: Boolean(practica.facturable),
             estado: practica.estado,
             usuario: practica.usuarioRegistro,
+            tuvoOrdenGenerada:
+                (practica._count?.ordenPractica ?? 0) > 0 ||
+                (
+                    practica.puestoNumero != null &&
+                    practica.ordenNumero != null &&
+                    Number(practica.puestoNumero) > 0 &&
+                    Number(practica.ordenNumero) > 0
+                ),
         }
     })
 

@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Ingreso no corresponde a internación' }, { status: 400 })
     }
 
-    const practicasCirugiaEspejo =
+    const practicasCirugiaEspejoRaw =
       usuario.rol === ROLES.ADMISION
         ? []
         : await prisma.practica.findMany({
@@ -52,6 +52,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
             facturable: true,
             puestoNumero: true,
             ordenNumero: true,
+            ordenItem: true,
             estado: true,
             usuarioRegistro: true,
             matriculaEspecialista: true,
@@ -69,9 +70,91 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
                 numeroAutorizacion: true,
               },
             },
+            _count: {
+              select: {
+                ordenPractica: true,
+              },
+            },
           },
           orderBy: { id: 'asc' },
         })
+
+    const clavesOrdenLegacy = Array.from(new Set(
+      practicasCirugiaEspejoRaw
+        .map((practica) => {
+          if (
+            practica.puestoNumero == null ||
+            practica.ordenNumero == null ||
+            Number(practica.puestoNumero) <= 0 ||
+            Number(practica.ordenNumero) <= 0
+          ) {
+            return null
+          }
+          return `${Number(practica.puestoNumero)}:${Number(practica.ordenNumero)}`
+        })
+        .filter((key): key is string => key != null)
+    ))
+
+    const ordenesLegacyActivasSet = new Set(
+      clavesOrdenLegacy.length === 0
+        ? []
+        : (
+          await prisma.orden.findMany({
+            where: {
+              estado: { not: 'X' },
+              OR: clavesOrdenLegacy.map((key) => {
+                const [puestoNumeroRaw, ordenNumeroRaw] = key.split(':')
+                return {
+                  puestoNumero: Number.parseInt(puestoNumeroRaw ?? '', 10),
+                  numero: Number.parseInt(ordenNumeroRaw ?? '', 10),
+                }
+              }),
+            },
+            select: {
+              puestoNumero: true,
+              numero: true,
+            },
+          })
+        ).map((orden) => `${orden.puestoNumero}:${orden.numero}`)
+    )
+
+    const practicasCirugiaEspejo = practicasCirugiaEspejoRaw.map((practica) => {
+      const ordenPracticaActivas = practica.ordenPractica.map((orden) => ({
+        puestoNumero: orden.puestoNumero,
+        ordenNumero: orden.ordenNumero,
+        item: orden.item,
+        numeroAutorizacion: orden.numeroAutorizacion,
+      }))
+
+      if (
+        ordenPracticaActivas.length === 0 &&
+        practica.puestoNumero != null &&
+        practica.ordenNumero != null &&
+        Number(practica.puestoNumero) > 0 &&
+        Number(practica.ordenNumero) > 0 &&
+        ordenesLegacyActivasSet.has(`${Number(practica.puestoNumero)}:${Number(practica.ordenNumero)}`)
+      ) {
+        ordenPracticaActivas.push({
+          puestoNumero: Number(practica.puestoNumero),
+          ordenNumero: Number(practica.ordenNumero),
+          item: practica.ordenItem != null ? Number(practica.ordenItem) : 1,
+          numeroAutorizacion: practica.numeroAutorizacion,
+        })
+      }
+
+      return {
+        ...practica,
+        ordenPractica: ordenPracticaActivas,
+        tuvoOrdenGenerada:
+          (practica._count?.ordenPractica ?? 0) > 0 ||
+          (
+            practica.puestoNumero != null &&
+            practica.ordenNumero != null &&
+            Number(practica.puestoNumero) > 0 &&
+            Number(practica.ordenNumero) > 0
+          ),
+      }
+    })
 
     return NextResponse.json({
       data: {

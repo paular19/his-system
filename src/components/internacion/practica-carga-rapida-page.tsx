@@ -129,6 +129,7 @@ type GeneracionOrdenTask = {
     practicaIds: number[]
     imprimirDespues: boolean
     agruparEnUnaOrden: boolean
+    separarPorSubitem?: boolean
     origen: OrigenGeneracionOrden
     titularOrdenAgrupada?: string | null
     firmanteProfesionalId?: string
@@ -1041,17 +1042,24 @@ export function PracticaCargaRapidaPage({
                 })
 
                 const practicasUnicasPorId = new Map<number, PracticaItem>()
-                for (const practica of [...practicasPanelBase, ...practicasCirugiaEspejo]) {
+                for (const practica of practicasCirugiaEspejo) {
                     practicasUnicasPorId.set(practica.id, practica)
                 }
 
+                const practicasNuevas = Array.from(practicasUnicasPorId.values()).filter(
+                    (practica) => !idsPrevios.has(practica.id)
+                )
+                const idsPermitidos = new Set<number>([
+                    ...Array.from(idsInternacionCirugiaObjetivo),
+                    ...practicaIdsCirugiaLocales,
+                    ...practicasNuevas.map((practica) => practica.id),
+                ])
                 const practicasActualizadas = Array.from(practicasUnicasPorId.values())
-                    .filter((practica) => practicaActiva(practica.estado))
+                    .filter((practica) => practicaActiva(practica.estado) && idsPermitidos.has(practica.id))
                     .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
 
                 setPracticas(practicasActualizadas)
 
-                const practicasNuevas = practicasActualizadas.filter((practica) => !idsPrevios.has(practica.id))
                 if (practicasNuevas.length > 0) {
                     setPracticaIdsCirugiaLocales((prev) =>
                         Array.from(new Set([...prev, ...practicasNuevas.map((practica) => practica.id)]))
@@ -1202,6 +1210,7 @@ export function PracticaCargaRapidaPage({
                 practicaIds,
                 clasificacionPorPracticaId: clasificacionPayload,
                 agruparEnUnaOrden: task.agruparEnUnaOrden,
+                separarPorSubitem: Boolean(task.separarPorSubitem),
                 titularOrdenAgrupada: task.agruparEnUnaOrden ? (task.titularOrdenAgrupada ?? null) : undefined,
                 cirujanoFirmanteMatricula: medicoFirmanteMatricula ?? undefined,
             })
@@ -1223,45 +1232,60 @@ export function PracticaCargaRapidaPage({
                 }).ordenesPorGrupo)
                 : []
 
-            const asignacionPorPracticaId = new Map(asignaciones.map((item) => [item.practicaId, item] as const))
-            const asignacionFallbackPorPracticaId = new Map<number, { puestoNumero: number; numero: number; item: number }>()
+            const asignacionesPorPracticaId = new Map<number, Array<{ puestoNumero: number; numero: number; item: number }>>()
+            for (const asignacion of asignaciones) {
+                const prev = asignacionesPorPracticaId.get(asignacion.practicaId) ?? []
+                prev.push({
+                    puestoNumero: asignacion.puestoNumero,
+                    numero: asignacion.numero,
+                    item: asignacion.item,
+                })
+                asignacionesPorPracticaId.set(asignacion.practicaId, prev)
+            }
+
+            const asignacionFallbackPorPracticaId = new Map<number, Array<{ puestoNumero: number; numero: number; item: number }>>()
 
             for (const grupo of grupos) {
                 grupo.practicaIds.forEach((practicaId, idx) => {
-                    if (asignacionFallbackPorPracticaId.has(practicaId)) return
-                    asignacionFallbackPorPracticaId.set(practicaId, {
+                    const prev = asignacionFallbackPorPracticaId.get(practicaId) ?? []
+                    prev.push({
                         puestoNumero: grupo.puestoNumero,
                         numero: grupo.numero,
                         item: idx + 1,
                     })
+                    asignacionFallbackPorPracticaId.set(practicaId, prev)
                 })
             }
 
             setPracticas((prev) => prev.map((practica) => {
-                const asignada =
-                    asignacionPorPracticaId.get(practica.id) ??
-                    asignacionFallbackPorPracticaId.get(practica.id)
-                if (!asignada) return practica
+                const asignadas = [
+                    ...(asignacionesPorPracticaId.get(practica.id) ?? []),
+                    ...(asignacionFallbackPorPracticaId.get(practica.id) ?? []),
+                ]
+                if (asignadas.length === 0) return practica
 
-                const yaVinculada = practica.ordenPractica.some(
-                    (orden) =>
-                        orden.puestoNumero === asignada.puestoNumero &&
-                        orden.ordenNumero === asignada.numero &&
-                        orden.item === asignada.item
+                const ordenesExistentes = new Set(
+                    practica.ordenPractica.map((orden) => `${orden.puestoNumero}-${orden.ordenNumero}-${orden.item}`)
                 )
-                if (yaVinculada) return practica
+                const ordenesNuevas = [...practica.ordenPractica]
+
+                for (const asignada of asignadas) {
+                    const keyOrden = `${asignada.puestoNumero}-${asignada.numero}-${asignada.item}`
+                    if (ordenesExistentes.has(keyOrden)) continue
+                    ordenesExistentes.add(keyOrden)
+                    ordenesNuevas.push({
+                        puestoNumero: asignada.puestoNumero,
+                        ordenNumero: asignada.numero,
+                        item: asignada.item,
+                        numeroAutorizacion: null,
+                    })
+                }
+
+                if (ordenesNuevas.length === practica.ordenPractica.length) return practica
 
                 return {
                     ...practica,
-                    ordenPractica: [
-                        ...practica.ordenPractica,
-                        {
-                            puestoNumero: asignada.puestoNumero,
-                            ordenNumero: asignada.numero,
-                            item: asignada.item,
-                            numeroAutorizacion: null,
-                        },
-                    ],
+                    ordenPractica: ordenesNuevas,
                 }
             }))
 
@@ -1324,11 +1348,13 @@ export function PracticaCargaRapidaPage({
             origen?: OrigenGeneracionOrden
             firmanteProfesionalId?: string
             separarPorPractica?: boolean
+            separarPorSubitem?: boolean
             clasificacionPorPracticaId?: Record<number, string>
             ventanaImpresionPrefijada?: Window | null
         }
     ): boolean => {
         const origen = opciones?.origen ?? 'default'
+        const separarPorSubitem = opciones?.separarPorSubitem ?? (modoCirugia && origen === 'sesion')
         const practicaIdsEntrada = practicaIdsObjetivo ?? idsPendientesSeleccionadas
         const permitirIdsNoSincronizados =
             Array.isArray(practicaIdsObjetivo) && practicaIdsObjetivo.length > 0
@@ -1378,6 +1404,7 @@ export function PracticaCargaRapidaPage({
                     practicaIds: [practicaId],
                     imprimirDespues,
                     agruparEnUnaOrden: false,
+                    separarPorSubitem,
                     origen,
                     titularOrdenAgrupada: opciones?.titularOrdenAgrupada,
                     firmanteProfesionalId: firmanteProfesionalIdFinal,
@@ -1388,6 +1415,7 @@ export function PracticaCargaRapidaPage({
                     practicaIds,
                     imprimirDespues,
                     agruparEnUnaOrden,
+                    separarPorSubitem,
                     origen,
                     titularOrdenAgrupada: opciones?.titularOrdenAgrupada,
                     firmanteProfesionalId: firmanteProfesionalIdFinal,

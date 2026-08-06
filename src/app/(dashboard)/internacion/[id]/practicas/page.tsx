@@ -3,6 +3,7 @@ import { PracticaCargaRapidaPage } from '@/components/internacion/practica-carga
 import { InternacionPracticasFichaTable } from '@/components/internacion/internacion-practicas-ficha-table'
 import { getUsuarioSesion } from '@/lib/auth'
 import { ROLES, tienePermiso } from '@/lib/auth/rbac'
+import { prisma } from '@/lib/db'
 import { obtenerInternacionDetalle } from '@/modules/internacion/service'
 import Link from 'next/link'
 import { ChevronRight, ArrowLeft } from 'lucide-react'
@@ -47,11 +48,106 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             ? (detalle.cirugiasUrgencia.find((cirugia) => cirugia.id === cirugiaId) ?? null)
             : null
 
+    const practicasCirugiaActivas = cirugiaObjetivo
+        ? await prisma.practica.findMany({
+            where: {
+                ingresoId,
+                OR: [{ estado: 'A' }, { estado: null }],
+                usuarioRegistro: 'CIRUGIA',
+            },
+            select: {
+                id: true,
+                ingresoId: true,
+                convenioId: true,
+                codigoPractica: true,
+                fecha: true,
+                cantidad: true,
+                importeTotal: true,
+                numeroAutorizacion: true,
+                numeroProtocoloLab: true,
+                diagnosticoLab: true,
+                matriculaEspecialista: true,
+                matriculaAnestesista: true,
+                puestoNumero: true,
+                ordenNumero: true,
+                ordenItem: true,
+                facturable: true,
+                estado: true,
+                usuarioRegistro: true,
+                ordenPractica: {
+                    where: {
+                        orden: {
+                            estado: { not: 'X' },
+                        },
+                    },
+                    select: {
+                        puestoNumero: true,
+                        ordenNumero: true,
+                        item: true,
+                        numeroAutorizacion: true,
+                    },
+                },
+            },
+            orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+        })
+        : []
+
+    const descripcionCirugiaPorCodigo = new Map<string, string>()
+    for (const practicaCirugia of cirugiaObjetivo?.practicas ?? []) {
+        const codigo = practicaCirugia.codigo.trim().toUpperCase()
+        const descripcion = practicaCirugia.descripcion.trim()
+        if (!codigo || !descripcion) continue
+        if (!descripcionCirugiaPorCodigo.has(codigo)) {
+            descripcionCirugiaPorCodigo.set(codigo, descripcion)
+        }
+    }
+    for (const practica of detalle.practicas) {
+        const codigo = practica.codigoPractica.trim().toUpperCase()
+        const descripcion = practica.descripcionPractica?.trim() ?? ''
+        if (!codigo || !descripcion) continue
+        if (!descripcionCirugiaPorCodigo.has(codigo)) {
+            descripcionCirugiaPorCodigo.set(codigo, descripcion)
+        }
+    }
+
+    const practicasCirugiaParaPagina = practicasCirugiaActivas.map((practica) => {
+        const codigoNormalizado = practica.codigoPractica.trim().toUpperCase()
+        const descripcion = descripcionCirugiaPorCodigo.get(codigoNormalizado) ?? practica.codigoPractica.trim()
+        return {
+            id: practica.id,
+            ingresoId: practica.ingresoId,
+            convenioId: practica.convenioId,
+            codigoPractica: practica.codigoPractica,
+            descripcionPractica: descripcion,
+            numeroProtocoloLaboratorio: practica.numeroProtocoloLab,
+            diagnosticoLaboratorio: practica.diagnosticoLab,
+            fecha: practica.fecha,
+            cantidad: Number(practica.cantidad),
+            importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : null,
+            numeroAutorizacion: practica.numeroAutorizacion,
+            matriculaEspecialista: practica.matriculaEspecialista,
+            matriculaAnestesista: practica.matriculaAnestesista,
+            puestoNumero: practica.puestoNumero,
+            ordenNumero: practica.ordenNumero,
+            ordenItem: practica.ordenItem,
+            facturada: (practica.estado ?? '').trim().toUpperCase() === 'F',
+            ordenPractica: practica.ordenPractica.map((orden) => ({
+                puestoNumero: orden.puestoNumero,
+                ordenNumero: orden.ordenNumero,
+                item: orden.item,
+                numeroAutorizacion: orden.numeroAutorizacion,
+            })),
+            facturable: Boolean(practica.facturable),
+            estado: practica.estado,
+            usuario: practica.usuarioRegistro,
+        }
+    })
+
     const practicaIdsInternacionCirugiaObjetivo = (() => {
         if (!cirugiaObjetivo) return [] as number[]
 
-        const practicasPorCodigo = new Map<string, typeof detalle.practicas>()
-        for (const practica of detalle.practicas) {
+        const practicasPorCodigo = new Map<string, typeof practicasCirugiaParaPagina>()
+        for (const practica of practicasCirugiaParaPagina) {
             const estado = (practica.estado ?? 'A').trim().toUpperCase()
             if (estado === 'X') continue
 
@@ -79,7 +175,6 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                 const usuario = (item.usuario ?? '').trim().toUpperCase()
                 return usuario === 'CIRUGIA'
             })
-                ?? candidatas.find((item) => !usadosPorCodigo.has(item.id))
 
             if (!candidata) continue
             usadosPorCodigo.add(candidata.id)
@@ -102,6 +197,13 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                 practicaIdsInternacion: practicaIdsInternacionCirugiaObjetivo,
             }
             : null
+
+    const practicaIdsCirugiaSet = new Set(practicaIdsInternacionCirugiaObjetivo)
+    const practicasPagina = contextoCirugia
+        ? practicasCirugiaParaPagina
+            .filter((practica) => practicaIdsCirugiaSet.has(practica.id))
+            .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+        : detalle.practicas
 
     return (
         <>
@@ -138,7 +240,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                 </div>
 
                 <InternacionPracticasFichaTable
-                    practicas={detalle.practicas}
+                    practicas={practicasPagina}
                     obraSocialNombre={detalle.obraSocial?.nombre ?? null}
                     pacienteNombre={detalle.nombre ?? detalle.paciente?.nombreCompleto ?? null}
                     pacienteDni={detalle.paciente?.numeroDocumento ?? null}
@@ -150,7 +252,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                     sectorInternacionActual={detalle.cama?.sector ?? null}
                     matriculaTratanteDefault={detalle.profesionalTratante?.matricula ?? null}
                     puedeCrear={puedeCrear}
-                    practicasIniciales={detalle.practicas}
+                    practicasIniciales={practicasPagina}
                     contextoCirugia={contextoCirugia}
                 />
             </div>

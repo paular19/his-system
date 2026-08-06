@@ -55,6 +55,7 @@ const GenerarOrdenesInternacionSchema = z.object({
   clasificacionPorPracticaId: z.record(z.string()).optional().default({}),
   agruparEnUnaOrden: z.boolean().optional().default(false),
   separarPorPractica: z.boolean().optional().default(false),
+  separarPorSubitem: z.boolean().optional().default(false),
   titularOrdenAgrupada: z.string().trim().max(120).optional().nullable(),
   cirujanoFirmanteMatricula: z.number().int().positive().optional().nullable(),
 })
@@ -267,6 +268,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
   clasificacionPorPracticaId?: Record<string, string>
   agruparEnUnaOrden?: boolean
   separarPorPractica?: boolean
+  separarPorSubitem?: boolean
   titularOrdenAgrupada?: string | null
   cirujanoFirmanteMatricula?: number | null
 }) {
@@ -434,58 +436,70 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         matriculaEspecialista: practica.matriculaEspecialista,
         matriculaAnestesista: practica.matriculaAnestesista,
       })
-      const clasificacion = clasificacionDesdeInput ?? clasificacionInferida
+      const clasificacionBase = clasificacionDesdeInput ?? clasificacionInferida
       const esProtocoloBioquimico = practica.codigoPractica.trim() === '66'
-      const key = parsed.data.agruparEnUnaOrden
-        ? '__AGRUPAR_EN_UNA_ORDEN__'
-        : parsed.data.separarPorPractica
-        ? `__PRACTICA_${practica.id}__`
-        : (esProtocoloBioquimico ? '__PROTOCOLO_BIOQUIMICO__' : clasificacion)
-      const esClasificacionSoloGastos =
-        contieneClasificacion(clasificacion, 'GA') &&
-        !contieneClasificacion(clasificacion, 'HE') &&
-        !contieneClasificacion(clasificacion, 'HA') &&
-        !contieneClasificacion(clasificacion, 'HP') &&
-        !contieneClasificacion(clasificacion, 'A1') &&
-        !contieneClasificacion(clasificacion, 'A2') &&
-        !contieneClasificacion(clasificacion, 'A3')
-      const esClasificacionSoloAyudante =
-        (contieneClasificacion(clasificacion, 'A1') ||
-          contieneClasificacion(clasificacion, 'A2') ||
-          contieneClasificacion(clasificacion, 'A3')) &&
-        !contieneClasificacion(clasificacion, 'HE') &&
-        !contieneClasificacion(clasificacion, 'HA') &&
-        !contieneClasificacion(clasificacion, 'GA') &&
-        !contieneClasificacion(clasificacion, 'HP')
+      const componentesSubitem =
+        !parsed.data.agruparEnUnaOrden && parsed.data.separarPorSubitem
+          ? componentesClasificacion(clasificacionBase)
+          : []
+      const clasificacionesObjetivo = componentesSubitem.length > 0
+        ? componentesSubitem
+        : [clasificacionBase]
 
-      const item: CrearOrdenInput['items'][number] = {
-        practicaId: practica.id,
-        convenioId: practica.convenioId,
-        codigoPractica: practica.codigoPractica.trim().slice(0, 8),
-        descripcionPractica,
-        cantidad: Number(practica.cantidad ?? 1),
-        fecha: practica.fecha,
-        tipoFacturacion: 'H',
-        clasificacionAgrupacion: esProtocoloBioquimico ? 'HE' : clasificacion,
-        efectorMatricula:
-          esClasificacionSoloGastos
-            ? ((practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0)
-                ? practica.matriculaEspecialista
-                : MATRICULA_GASTOS_INTERNACION_DEFAULT)
-            : esClasificacionSoloAyudante
-            ? ((practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0)
-                ? practica.matriculaEspecialista
-                : MATRICULA_AYUDANTE_INTERNACION_DEFAULT)
-            : clasificacion === 'HA'
-            ? (practica.matriculaAnestesista ?? null)
-            : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null),
-        numeroAutorizacion: practica.numeroAutorizacion,
-        importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : undefined,
+      for (const [idxClasificacion, clasificacion] of clasificacionesObjetivo.entries()) {
+        const key = parsed.data.agruparEnUnaOrden
+          ? '__AGRUPAR_EN_UNA_ORDEN__'
+          : parsed.data.separarPorPractica
+          ? (clasificacionesObjetivo.length > 1
+              ? `__PRACTICA_${practica.id}_${idxClasificacion}__`
+              : `__PRACTICA_${practica.id}__`)
+          : (esProtocoloBioquimico ? '__PROTOCOLO_BIOQUIMICO__' : clasificacion)
+        const esClasificacionSoloGastos =
+          contieneClasificacion(clasificacion, 'GA') &&
+          !contieneClasificacion(clasificacion, 'HE') &&
+          !contieneClasificacion(clasificacion, 'HA') &&
+          !contieneClasificacion(clasificacion, 'HP') &&
+          !contieneClasificacion(clasificacion, 'A1') &&
+          !contieneClasificacion(clasificacion, 'A2') &&
+          !contieneClasificacion(clasificacion, 'A3')
+        const esClasificacionSoloAyudante =
+          (contieneClasificacion(clasificacion, 'A1') ||
+            contieneClasificacion(clasificacion, 'A2') ||
+            contieneClasificacion(clasificacion, 'A3')) &&
+          !contieneClasificacion(clasificacion, 'HE') &&
+          !contieneClasificacion(clasificacion, 'HA') &&
+          !contieneClasificacion(clasificacion, 'GA') &&
+          !contieneClasificacion(clasificacion, 'HP')
+
+        const item: CrearOrdenInput['items'][number] = {
+          practicaId: practica.id,
+          convenioId: practica.convenioId,
+          codigoPractica: practica.codigoPractica.trim().slice(0, 8),
+          descripcionPractica,
+          cantidad: Number(practica.cantidad ?? 1),
+          fecha: practica.fecha,
+          tipoFacturacion: 'H',
+          clasificacionAgrupacion: esProtocoloBioquimico ? 'HE' : clasificacion,
+          efectorMatricula:
+            esClasificacionSoloGastos
+              ? ((practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0)
+                  ? practica.matriculaEspecialista
+                  : MATRICULA_GASTOS_INTERNACION_DEFAULT)
+              : esClasificacionSoloAyudante
+              ? ((practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0)
+                  ? practica.matriculaEspecialista
+                  : MATRICULA_AYUDANTE_INTERNACION_DEFAULT)
+              : clasificacion === 'HA'
+              ? (practica.matriculaAnestesista ?? null)
+              : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null),
+          numeroAutorizacion: practica.numeroAutorizacion,
+          importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : undefined,
+        }
+
+        const arr = grupos.get(key) ?? []
+        arr.push({ item, practicaId: practica.id })
+        grupos.set(key, arr)
       }
-
-      const arr = grupos.get(key) ?? []
-      arr.push({ item, practicaId: practica.id })
-      grupos.set(key, arr)
     }
 
     const nombrePaciente = (

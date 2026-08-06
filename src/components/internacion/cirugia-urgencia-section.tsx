@@ -269,10 +269,6 @@ export function CirugiaUrgenciaSection({
     const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
 
     const recargarPaginaCompleta = () => {
-        if (typeof window !== 'undefined') {
-            window.location.reload()
-            return
-        }
         refreshInBackground()
     }
 
@@ -406,7 +402,6 @@ export function CirugiaUrgenciaSection({
                     const usuario = (item.usuario ?? '').trim().toUpperCase()
                     return usuario === 'CIRUGIA'
                 })
-                    ?? candidatas.find((item) => !usadosPorCodigo.has(item.id))
 
                 if (!candidata) continue
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, ChevronRight, Trash2, Pencil } from 'lucide-react'
+import { Stethoscope, Search, Plus, Loader2, X, ChevronDown, ChevronUp, ChevronRight, Pencil } from 'lucide-react'
 import type { PracticaItem } from '@/modules/internacion/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { anularOrdenAction, generarOrdenesDesdeInternacionAction } from '@/modules/orden/actions'
@@ -35,7 +35,6 @@ const formatoMoneda = new Intl.NumberFormat('es-AR', {
 
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const PRACTICAS_LISTA_POR_PAGINA = 8
-const TIMEOUT_ELIMINAR_PRACTICA_MS = 45000
 type SectorPracticaFiltro = 'UTI' | 'PISO'
 const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
     HE: 1,
@@ -177,7 +176,6 @@ export function PracticaSection({
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
     const [desagrupandoPracticaId, setDesagrupandoPracticaId] = useState<number | null>(null)
-    const [eliminandoPracticas, setEliminandoPracticas] = useState(false)
     const [generandoOrdenes, setGenerandoOrdenes] = useState(false)
     const [tareasGeneracionPendientes, setTareasGeneracionPendientes] = useState(0)
     const [practicaIdsEnGeneracion, setPracticaIdsEnGeneracion] = useState<number[]>([])
@@ -202,10 +200,6 @@ export function PracticaSection({
     const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
 
     const recargarPaginaCompleta = () => {
-        if (typeof window !== 'undefined') {
-            window.location.reload()
-            return
-        }
         refreshInBackground()
     }
 
@@ -543,84 +537,6 @@ export function PracticaSection({
             ...prev,
             [clasificacion]: !prev[clasificacion],
         }))
-    }
-
-    const handleEliminarPracticasSeleccionadas = async (idsAEliminar?: number[]) => {
-        const seleccionActual = idsAEliminar ? [...idsAEliminar] : [...practicasSeleccionadas]
-        if (seleccionActual.length === 0) return
-
-        setError(null)
-        setEliminandoPracticas(true)
-        try {
-            const resultados = await Promise.all(
-                seleccionActual.map(async (practicaId) => {
-                    let timeoutId: ReturnType<typeof setTimeout> | null = null
-                    try {
-                        const controller = new AbortController()
-                        timeoutId = setTimeout(() => controller.abort(), TIMEOUT_ELIMINAR_PRACTICA_MS)
-                        const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaId}`, {
-                            method: 'DELETE',
-                            signal: controller.signal,
-                            cache: 'no-store',
-                        })
-                        const json = await res.json().catch(() => null)
-                        if (res.status === 404) {
-                            // Si ya no existe en backend (por carrera o estado previo), tratamos como eliminado.
-                            return { practicaId, ok: true as const }
-                        }
-                        if (!res.ok) {
-                            return {
-                                practicaId,
-                                ok: false as const,
-                                error: json?.error ?? 'No se pudo eliminar la práctica',
-                            }
-                        }
-
-                        return { practicaId, ok: true as const }
-                    } catch (err) {
-                        return {
-                            practicaId,
-                            ok: false as const,
-                            error:
-                                err instanceof DOMException && err.name === 'AbortError'
-                                    ? 'Tiempo de espera agotado al eliminar la práctica'
-                                    : 'Error de conexión al eliminar la práctica',
-                        }
-                    } finally {
-                        if (timeoutId) clearTimeout(timeoutId)
-                    }
-                })
-            )
-
-            const exitosas = resultados.filter((r) => r.ok).map((r) => r.practicaId)
-            const fallidas = resultados.filter((r) => !r.ok)
-
-            if (fallidas.length > 0) {
-                const errorPrincipal = fallidas[0]?.error ?? 'No se pudieron eliminar algunas prácticas'
-                setError(
-                    exitosas.length > 0
-                        ? `Se eliminaron ${exitosas.length} prácticas y ${fallidas.length} fallaron. ${errorPrincipal}`
-                        : errorPrincipal
-                )
-            }
-
-            if (exitosas.length > 0) {
-                setPracticas((prev) => prev.filter((p) => !exitosas.includes(p.id)))
-                setPracticasSeleccionadas((prev) => prev.filter((id) => !exitosas.includes(id)))
-                setClasificacionPorPracticaId((prev) => {
-                    const next = { ...prev }
-                    for (const id of exitosas) delete next[id]
-                    return next
-                })
-
-                if (refrescarDespuesCambios) {
-                    recargarPaginaCompleta()
-                }
-            }
-
-        } finally {
-            setEliminandoPracticas(false)
-        }
     }
 
     const ejecutarGeneracionOrdenesTask = async (task: GeneracionOrdenTask) => {
@@ -1133,10 +1049,6 @@ export function PracticaSection({
         }))
     }, [practicasPendientesPaginadas, clasificacionPorPracticaId])
 
-    const idsPendientesFiltradas = practicasPendientesFiltradas.map((p) => p.id)
-    const todasFiltradasSeleccionadas =
-        idsPendientesFiltradas.length > 0 && idsPendientesFiltradas.every((id) => practicasSeleccionadas.includes(id))
-
     const ordenesAutorizadasPaginadas = useMemo(() => {
         const desde = (paginaAutorizadasActual - 1) * PRACTICAS_LISTA_POR_PAGINA
         return ordenesAutorizadasFiltradas.slice(desde, desde + PRACTICAS_LISTA_POR_PAGINA)
@@ -1216,29 +1128,6 @@ export function PracticaSection({
                                 <p className="text-xs text-gray-500">
                                     {ordenesAutorizadasFiltradas.length} orden(es)
                                 </p>
-                            </div>
-                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50/40 px-3 py-2">
-                                <p className="text-[11px] text-red-800">
-                                    Prácticas pendientes sin orden: {idsPendientesFiltradas.length}
-                                </p>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (idsPendientesFiltradas.length === 0) return
-                                        if (typeof window !== 'undefined') {
-                                            const confirmar = window.confirm(
-                                                `Se eliminarán ${idsPendientesFiltradas.length} práctica(s) pendiente(s) sin orden. ¿Desea continuar?`
-                                            )
-                                            if (!confirmar) return
-                                        }
-                                        void handleEliminarPracticasSeleccionadas(idsPendientesFiltradas)
-                                    }}
-                                    disabled={eliminandoPracticas || idsPendientesFiltradas.length === 0}
-                                    className="inline-flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-                                >
-                                    {eliminandoPracticas ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                                    {eliminandoPracticas ? 'Eliminando...' : `Eliminar pendientes (${idsPendientesFiltradas.length})`}
-                                </button>
                             </div>
                             <div className="flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
                                 <span className="text-[11px] font-medium text-gray-700">Mostrar órdenes según sector al cargar la práctica:</span>

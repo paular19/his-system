@@ -150,6 +150,11 @@ const incluirRelacionesDetalle = {
           ordenNumero: true,
           item: true,
           numeroAutorizacion: true,
+          orden: {
+            select: {
+              fechaEmision: true,
+            },
+          },
         },
       },
       nomencladorPractica: { select: { descripcion: true } },
@@ -505,6 +510,11 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
         ordenNumero: true,
         item: true,
         numeroAutorizacion: true,
+        orden: {
+          select: {
+            fechaEmision: true,
+          },
+        },
       },
       orderBy: [{ practicaId: 'asc' }, { item: 'asc' }],
     })
@@ -541,7 +551,13 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
 
   const ordenesPracticaPorId = new Map<
     number,
-    Array<{ puestoNumero: number; ordenNumero: number; item: number; numeroAutorizacion: string | null }>
+    Array<{
+      puestoNumero: number
+      ordenNumero: number
+      item: number
+      numeroAutorizacion: string | null
+      fechaEmision: Date | null
+    }>
   >()
 
   for (const row of ordenesPracticaRows) {
@@ -552,6 +568,7 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
       ordenNumero: row.ordenNumero,
       item: row.item,
       numeroAutorizacion: row.numeroAutorizacion,
+      fechaEmision: row.orden?.fechaEmision ?? null,
     })
     ordenesPracticaPorId.set(row.practicaId, prev)
   }
@@ -666,6 +683,11 @@ export async function obtenerPracticasIngresoPorId(
         ordenNumero: true,
         item: true,
         numeroAutorizacion: true,
+        orden: {
+          select: {
+            fechaEmision: true,
+          },
+        },
       },
       orderBy: [{ practicaId: 'asc' }, { item: 'asc' }],
     })
@@ -702,7 +724,13 @@ export async function obtenerPracticasIngresoPorId(
 
   const ordenesPracticaPorId = new Map<
     number,
-    Array<{ puestoNumero: number; ordenNumero: number; item: number; numeroAutorizacion: string | null }>
+    Array<{
+      puestoNumero: number
+      ordenNumero: number
+      item: number
+      numeroAutorizacion: string | null
+      fechaEmision: Date | null
+    }>
   >()
 
   for (const row of ordenesPracticaRows) {
@@ -713,6 +741,7 @@ export async function obtenerPracticasIngresoPorId(
       ordenNumero: row.ordenNumero,
       item: row.item,
       numeroAutorizacion: row.numeroAutorizacion,
+      fechaEmision: row.orden?.fechaEmision ?? null,
     })
     ordenesPracticaPorId.set(row.practicaId, prev)
   }

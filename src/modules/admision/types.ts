@@ -67,6 +67,7 @@ export type IngresoDetalle = IngresoConRelaciones & {
       ordenNumero: number
       item: number
       numeroAutorizacion: string | null
+      fechaEmision?: Date | null
     }>
     nomencladorPractica: { descripcion: string } | null
   }>

@@ -10,6 +10,7 @@ import { updateIngresoAction } from '@/modules/admision/actions'
 import { ChevronRight, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
+import { claveDiaArgentina, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
 import { AdmisionEditForm } from './admision-edit-form'
 import { FichaAdmisionPrint } from './ficha-admision-print'
 import { PracticaIngresoForm } from './practica-ingreso-form'
@@ -86,6 +87,14 @@ function normalizarTexto(value: string | null | undefined): string {
 function esNombreIPSS(nombre: string | null | undefined): boolean {
     const tokens = normalizarTexto(nombre).toUpperCase().split(' ')
     return tokens.includes('IPSS') || tokens.includes('IPS')
+}
+
+function normalizarFechaInputArgentina(value: Date | string | null | undefined): Date {
+    const clave = claveDiaArgentina(value)
+    if (clave) return fechaDesdeClaveArgentina(clave)
+
+    const parsed = value ? new Date(value) : new Date()
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed
 }
 
 function DataItem({ label, value }: { label: string; value?: string | null }) {
@@ -499,7 +508,7 @@ export function FichaIngresoClient({
                 convenioId: practicaEditando.convenioId,
                 codigoPractica: practicaEditando.codigoPractica.trim(),
                 descripcionPractica: practicaEditando.descripcionPractica,
-                fecha: new Date(practicaEditando.fecha),
+                fecha: normalizarFechaInputArgentina(practicaEditando.fecha),
                 cantidad: Number(practicaEditando.cantidad),
                 numeroAutorizacion,
                 facturable: Boolean(practicaEditando.facturable),

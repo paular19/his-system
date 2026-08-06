@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Save, X, Loader2 } from 'lucide-react'
 import type { IngresoDetalle } from '@/modules/admision/types'
+import { claveDiaArgentina, fechaAInputLocal, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
 
 interface MovimientoIngresoFormProps {
     ingreso: IngresoDetalle
@@ -15,6 +16,17 @@ interface TipoMovimiento {
     descripcion: string
 }
 
+function normalizarFechaInputArgentina(value: string | null | undefined): Date | undefined {
+    if (!value) return undefined
+
+    const clave = claveDiaArgentina(value)
+    if (clave) return fechaDesdeClaveArgentina(clave)
+
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return undefined
+    return parsed
+}
+
 export function MovimientoIngresoForm({ ingreso, onSuccess, onCancel }: MovimientoIngresoFormProps) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -23,7 +35,7 @@ export function MovimientoIngresoForm({ ingreso, onSuccess, onCancel }: Movimien
 
     const [formData, setFormData] = useState({
         tipoMovimientoCodigo: '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: fechaAInputLocal(new Date()),
         concepto: '',
         signo: 1,
         importe: 0,
@@ -59,7 +71,7 @@ export function MovimientoIngresoForm({ ingreso, onSuccess, onCancel }: Movimien
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     tipoMovimientoCodigo: formData.tipoMovimientoCodigo,
-                    fecha: formData.fecha ? new Date(formData.fecha) : undefined,
+                    fecha: normalizarFechaInputArgentina(formData.fecha),
                     concepto: formData.concepto || null,
                     signo: formData.signo,
                     importe: parseFloat(String(formData.importe)),

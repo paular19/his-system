@@ -18,7 +18,7 @@ import {
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 import { formatearFechaCalendario } from '@/lib/utils'
-import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
+import { claveDiaArgentina, fechaDesdeClaveArgentina, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import {
   clasificacionDesdeIncluyeCodigo,
   contieneClasificacion,
@@ -310,6 +310,17 @@ function normalizarPracticasPorCantidad(
       cantidad,
     }
   })
+}
+
+function normalizarFechaPracticaParaOrden(value: Date | string | null | undefined): Date | undefined {
+  if (!value) return undefined
+
+  const clave = claveDiaArgentina(value)
+  if (clave) return fechaDesdeClaveArgentina(clave)
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return undefined
+  return parsed
 }
 
 export function ConsultaForm({
@@ -1103,7 +1114,7 @@ export function ConsultaForm({
           }].map((it) => ({
             ...it,
             practicaId: p.practicaId,
-            fecha: p.fecha ? new Date(p.fecha) : undefined,
+            fecha: normalizarFechaPracticaParaOrden(p.fecha),
             grupoOrden: p.grupoOrden,
             clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
@@ -1271,7 +1282,7 @@ export function ConsultaForm({
           }]).map((it) => ({
             ...it,
             practicaId: p.practicaId,
-            fecha: p.fecha ? new Date(p.fecha) : undefined,
+            fecha: normalizarFechaPracticaParaOrden(p.fecha),
             grupoOrden: p.grupoOrden,
             clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
@@ -1291,7 +1302,7 @@ export function ConsultaForm({
           }].map((it) => ({
             ...it,
             practicaId: p.practicaId,
-            fecha: p.fecha ? new Date(p.fecha) : undefined,
+            fecha: normalizarFechaPracticaParaOrden(p.fecha),
             grupoOrden: p.grupoOrden,
             clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
@@ -1341,7 +1352,7 @@ export function ConsultaForm({
           }].map((it) => ({
             ...it,
             practicaId: p.practicaId,
-            fecha: p.fecha ? new Date(p.fecha) : undefined,
+            fecha: normalizarFechaPracticaParaOrden(p.fecha),
             grupoOrden: p.grupoOrden,
             clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
@@ -1419,7 +1430,7 @@ export function ConsultaForm({
           }].map((it) => ({
             ...it,
             practicaId: p.practicaId,
-            fecha: p.fecha ? new Date(p.fecha) : undefined,
+            fecha: normalizarFechaPracticaParaOrden(p.fecha),
             grupoOrden: p.grupoOrden,
             clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
             titularModular: getTituloAplicadoPractica(p._key),
@@ -1430,7 +1441,7 @@ export function ConsultaForm({
         return componentes.map((it) => ({
           ...it,
           practicaId: p.practicaId,
-          fecha: p.fecha ? new Date(p.fecha) : undefined,
+          fecha: normalizarFechaPracticaParaOrden(p.fecha),
           grupoOrden: p.grupoOrden,
           clasificacionAgrupacion: normalizarClasificacionAgrupacion(p.clasificacionAgrupacion) ?? 'HE',
           titularModular: getTituloAplicadoPractica(p._key),
@@ -1646,7 +1657,11 @@ export function ConsultaForm({
                 <p className="text-xs text-gray-500">
                   {[m.dosis, m.viaAdministracion, m.frecuencia].filter(Boolean).join(' · ') || 'Sin detalle'}
                   {' · '}
-                  {new Date(m.fechaInicio).toLocaleDateString('es-AR')}
+                  {formatearFechaArgentina(m.fechaInicio, {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                  })}
                 </p>
                 <button
                   type="button"

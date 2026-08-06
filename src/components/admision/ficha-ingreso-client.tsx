@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -105,6 +105,22 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
 
 function grupoTieneNumeroAutorizacion(grupo: { numeroAutorizacion: string | null }): boolean {
     return normalizarNumeroAutorizacion(grupo.numeroAutorizacion) != null
+}
+
+function manejarNavegacionCompletaInterna(event: ReactMouseEvent<HTMLAnchorElement>, href: string) {
+    if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+    ) {
+        return
+    }
+
+    event.preventDefault()
+    window.location.assign(href)
 }
 
 function DataItem({ label, value }: { label: string; value?: string | null }) {
@@ -319,6 +335,8 @@ export function FichaIngresoClient({
         ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
             ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
         )
+    const destinoPracticasInternacion = `/dashboard/internacion/${ingreso.id}/practicas`
+    const destinoCirugiaInternacion = `/dashboard/internacion/${ingreso.id}#internacion-cirugia`
     const esCoberturaIPSS = esNombreIPSS(ingreso.obraSocial?.nombre)
     const coberturaSecundariaLabel = esCoberturaIPSS ? 'Coseguro' : 'Plan'
     const coberturaSecundariaValor = esCoberturaIPSS
@@ -1311,13 +1329,17 @@ export function FichaIngresoClient({
                             {puedeModificar && ingreso.tipoIngresoCodigo === 'INT' ? (
                                 <>
                                     <Link
-                                        href={`/dashboard/internacion/${ingreso.id}/practicas`}
+                                        href={destinoPracticasInternacion}
+                                        prefetch={false}
+                                        onClick={(event) => manejarNavegacionCompletaInterna(event, destinoPracticasInternacion)}
                                         className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                                     >
                                         + Agregar práctica
                                     </Link>
                                     <Link
-                                        href={`/dashboard/internacion/${ingreso.id}#internacion-cirugia`}
+                                        href={destinoCirugiaInternacion}
+                                        prefetch={false}
+                                        onClick={(event) => manejarNavegacionCompletaInterna(event, destinoCirugiaInternacion)}
                                         className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
                                     >
                                         + Nueva cirugía

@@ -160,7 +160,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
         }
 
         for (const bucket of practicasPorCodigo.values()) {
-            bucket.sort((a, b) => a.id - b.id)
+            bucket.sort((a, b) => b.id - a.id)
         }
 
         const usadosPorCodigo = new Set<number>()
@@ -198,10 +198,8 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             }
             : null
 
-    const practicaIdsCirugiaSet = new Set(practicaIdsInternacionCirugiaObjetivo)
     const practicasPagina = contextoCirugia
         ? practicasCirugiaParaPagina
-            .filter((practica) => practicaIdsCirugiaSet.has(practica.id))
             .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
         : detalle.practicas
 

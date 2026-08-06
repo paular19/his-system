@@ -243,8 +243,23 @@ function practicaFacturada(practica: PracticaItem): boolean {
 
 function descripcionParaMostrar(practica: Pick<PracticaItem, 'descripcionPractica' | 'codigoPractica'>): string {
     const descripcion = practica.descripcionPractica?.trim()
-    if (descripcion && descripcion.length > 0) return descripcion
+    if (descripcion && descripcion.length > 0) {
+        return descripcion.replace(
+            /\s+·\s+(Honorario Especialista \(HE\)|Honorario Anestesista \(HA\)|Derechos\/Gastos \(GA\)|Ayudante [123] \(A[123]\))$/i,
+            ''
+        )
+    }
     return practica.codigoPractica.trim()
+}
+
+function descripcionParaListaSesion(value: string): string {
+    const limpia = value
+        .replace(/\s*·\s*Honorario\s+Especialista\s*\(HE\)\s*$/i, '')
+        .replace(/\s*·\s*Honorario\s+Anestesista\s*\(HA\)\s*$/i, '')
+        .replace(/\s*·\s*Derechos\/Gastos\s*\(GA\)\s*$/i, '')
+        .replace(/\s*·\s*Ayudante\s+[123]\s*\(A[123]\)\s*$/i, '')
+        .trim()
+    return limpia.length > 0 ? limpia : value
 }
 
 function clasificacionInferidaPractica(
@@ -515,7 +530,10 @@ export function PracticaCargaRapidaPage({
 
     const idsCirugiaObjetivoExtendidos = useMemo(() => {
         if (!modoCirugia) return new Set<number>()
-        return new Set([...(contextoCirugia?.practicaIdsInternacion ?? []), ...practicaIdsCirugiaLocales])
+        if (practicaIdsCirugiaLocales.length > 0) {
+            return new Set(practicaIdsCirugiaLocales)
+        }
+        return new Set(contextoCirugia?.practicaIdsInternacion ?? [])
     }, [modoCirugia, contextoCirugia, practicaIdsCirugiaLocales])
 
     const idsPendientesCirugiaObjetivo = useMemo(() => {
@@ -813,7 +831,7 @@ export function PracticaCargaRapidaPage({
                 id: `${practicaCreada.id}-${Date.now()}-${idx}`,
                 practicaId: practicaCreada.id,
                 codigo: practicaCreada.codigoPractica.trim(),
-                descripcion: descripcionParaMostrar(practicaCreada),
+                descripcion: descripcionParaListaSesion(descripcionParaMostrar(practicaCreada)),
                 cantidad: Number(practicaCreada.cantidad),
                 clasificacion: entrada?.clasificacion ?? 'HE',
                 fecha: formatearFechaArgentina(practicaCreada.fecha, {
@@ -837,7 +855,7 @@ export function PracticaCargaRapidaPage({
             id: `cirugia-${practicaCreada.id}-${Date.now()}-${idx}`,
             practicaId: practicaCreada.id,
             codigo: practicaCreada.codigoPractica.trim(),
-            descripcion: descripcionParaMostrar(practicaCreada),
+            descripcion: descripcionParaListaSesion(descripcionParaMostrar(practicaCreada)),
             cantidad: Number(practicaCreada.cantidad),
             clasificacion:
                 clasificacionPorNuevaPracticaId?.[practicaCreada.id] ??
@@ -1098,7 +1116,7 @@ export function PracticaCargaRapidaPage({
 
                 const practicasNoPrevias = Array.from(practicasUnicasPorId.values())
                     .filter((practica) => !preIdsBackend.has(practica.id))
-                    .sort((a, b) => a.id - b.id)
+                    .sort((a, b) => b.id - a.id)
 
                 const practicasNoPreviasDisponibles = [...practicasNoPrevias]
                 const practicasNuevasDelLote: PracticaItem[] = []
@@ -3009,7 +3027,7 @@ export function PracticaCargaRapidaPage({
                         )}
                     </div>
 
-                    {!modoCirugia && (
+                    {
                     <div className="his-card p-4 space-y-3">
                         <h3 className="text-sm font-semibold text-gray-900">Ordenes generadas</h3>
 
@@ -3107,7 +3125,7 @@ export function PracticaCargaRapidaPage({
                             </div>
                         )}
                     </div>
-                    )}
+                    }
 
                     {puedeCrear && !modoCirugia && (
                         <div className="his-card p-4 space-y-3">
@@ -3217,7 +3235,7 @@ export function PracticaCargaRapidaPage({
                                                 >
                                                     <div className="min-w-0">
                                                         <p className="font-mono text-[10px] text-amber-900">{practica.codigoPractica.trim()}</p>
-                                                        <p className="truncate text-[11px] text-gray-700">{descripcionParaMostrar(practica)}</p>
+                                                        <p className="truncate text-[11px] text-gray-700">{descripcionParaListaSesion(descripcionParaMostrar(practica))}</p>
                                                         <p className="text-[10px] text-gray-500">
                                                             Cant: {practica.cantidad} · Clasif: {clasificacion} · Fecha: {formatearFechaArgentina(practica.fecha, {
                                                                 day: '2-digit',

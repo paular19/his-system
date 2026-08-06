@@ -109,45 +109,61 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                     .print-ficha {
                         display: block !important;
                         visibility: visible !important;
-                        width: 190mm;
-                        max-width: 190mm;
-                        margin: 0 auto;
-                        padding: 6mm;
+                        width: 100%;
+                        max-width: 100%;
+                        margin: 0;
+                        padding: 2.5mm 3mm;
+                        box-sizing: border-box;
                         page-break-after: auto;
                         break-after: auto;
                         font-family: Arial, sans-serif;
-                        font-size: 10pt;
+                        font-size: 9pt;
+                        line-height: 1.15;
                         color: #000;
                     }
                     
-                    .print-ficha h1 { font-size: 16pt; font-weight: bold; margin: 0 0 2px; text-align: center; }
-                    .print-ficha h2 { font-size: 12pt; font-weight: bold; margin: 8px 0 4px; }
+                    .print-ficha h1 { font-size: 14pt; font-weight: bold; margin: 0 0 1px; text-align: center; }
+                    .print-ficha h2 { font-size: 11pt; font-weight: bold; margin: 6px 0 3px; }
                     .print-ficha p { margin: 1px 0; }
 
-                    .print-header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
-                    .print-header-row { display: flex; gap: 12px; align-items: flex-start; }
-                    .print-header-clinica { min-width: 170px; }
+                    .print-header { border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 6px; }
+                    .print-header-row { display: flex; gap: 8px; align-items: flex-start; }
+                    .print-header-clinica { min-width: 135px; }
                     .print-header-clinica-nombre { font-size: 13pt; font-weight: bold; line-height: 1.1; }
-                    .print-header-sub { font-size: 8.5pt; color: #333; line-height: 1.1; }
+                    .print-header-sub { font-size: 7.5pt; color: #333; line-height: 1.05; }
                     .print-header-info { flex: 1; }
-                    .print-header-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-                    .print-header-table td { border: none; padding: 1px 4px 1px 0; }
+                    .print-header-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+                    .print-header-table td { border: none; padding: 1px 3px 1px 0; }
                     .print-label { font-weight: bold; color: #555; white-space: nowrap; }
                     .print-value { color: #000; }
-                    .print-nro-ingreso { font-weight: bold; font-size: 11pt; }
+                    .print-nro-ingreso { font-weight: bold; font-size: 10pt; }
 
                     .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
 
                     .print-section { border: 1px solid #000; padding: 6px; margin-bottom: 6px; page-break-inside: avoid; }
                     .print-section-title { font-weight: bold; font-size: 9pt; border-bottom: 1px solid #000; margin-bottom: 4px; padding-bottom: 3px; }
 
-                    table { width: 100%; border-collapse: collapse; margin: 4px 0; page-break-inside: avoid; }
-                    table td { border: 1px solid #999; padding: 3px 4px; font-size: 8.5pt; }
-                    table th { background: #ddd; border: 1px solid #999; padding: 3px 4px; font-weight: bold; }
+                    table { width: 100%; border-collapse: collapse; margin: 2px 0; page-break-inside: avoid; }
+                    table td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; line-height: 1.12; }
+                    table th { background: #ddd; border: 1px solid #999; padding: 2px 3px; font-weight: bold; font-size: 8pt; }
 
                     .print-item { border-left: 3px solid #0066cc; padding-left: 5px; margin: 3px 0; }
 
-                    @page { size: A4; margin: 5mm; }
+                    .print-ficha img { max-width: 95px !important; margin-bottom: 3px !important; }
+                    .print-ficha .rounded-lg { border-radius: 0 !important; }
+                    .print-ficha .p-4 { padding: 6px !important; }
+                    .print-ficha .p-3 { padding: 5px !important; }
+                    .print-ficha .mb-4 { margin-bottom: 4px !important; }
+                    .print-ficha .mb-3 { margin-bottom: 3px !important; }
+                    .print-ficha .gap-4 { gap: 4px !important; }
+                    .print-ficha .pb-2 { padding-bottom: 2px !important; }
+                    .print-ficha .pb-1 { padding-bottom: 1px !important; }
+                    .print-ficha .space-y-2 > :not([hidden]) ~ :not([hidden]) { margin-top: 2px !important; }
+                    .print-ficha .text-sm { font-size: 8.3pt !important; line-height: 1.15 !important; }
+                    .print-ficha .text-xs { font-size: 7.3pt !important; line-height: 1.1 !important; }
+                    .print-ficha .overflow-x-auto { overflow: visible !important; }
+
+                    @page { size: A4; margin: 4mm; }
                 }
                 @media screen { .print-ficha { display: none !important; } }
             `}</style>

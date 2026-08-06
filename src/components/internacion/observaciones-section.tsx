@@ -8,7 +8,6 @@ import {
   tieneChecklistCompleto,
   type ChecklistDocumental,
 } from '@/modules/internacion/observaciones-meta'
-import { useBackgroundRefresh } from '@/lib/utils/client-mutation'
 
 interface ObservacionesSectionProps {
   ingresoId: number
@@ -21,6 +20,12 @@ interface DepositoRegistroEditable {
   fecha: string
   importe: string
   observaciones: string
+}
+
+interface ObservacionesEditableState {
+  observaciones: string
+  checklistDocumental: ChecklistDocumental
+  depositosRegistros: DepositoRegistroEditable[]
 }
 
 const formatoMoneda = new Intl.NumberFormat('es-AR', {
@@ -51,33 +56,47 @@ function mapearDepositosEditable(
   }))
 }
 
+function construirEstadoEditable(
+  parsed: ReturnType<typeof parseObservacionesInternacion>
+): ObservacionesEditableState {
+  return {
+    observaciones: parsed.observaciones ?? '',
+    checklistDocumental: { ...parsed.checklistDocumental },
+    depositosRegistros: mapearDepositosEditable(parsed.depositosRegistros),
+  }
+}
+
 export function ObservacionesSection({
   ingresoId,
   observacionesIniciales,
   puedeModificar,
 }: ObservacionesSectionProps) {
-  const { refreshInBackground } = useBackgroundRefresh()
   const parsedInicial = useMemo(
     () => parseObservacionesInternacion(observacionesIniciales),
     [observacionesIniciales]
+  )
+  const [estadoGuardado, setEstadoGuardado] = useState<ObservacionesEditableState>(() =>
+    construirEstadoEditable(parsedInicial)
   )
 
   const [editando, setEditando] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [observaciones, setObservaciones] = useState(parsedInicial.observaciones ?? '')
+  const [observaciones, setObservaciones] = useState(estadoGuardado.observaciones)
   const [checklistDocumental, setChecklistDocumental] = useState<ChecklistDocumental>(
-    parsedInicial.checklistDocumental
+    estadoGuardado.checklistDocumental
   )
   const [depositosRegistros, setDepositosRegistros] = useState<DepositoRegistroEditable[]>(
-    mapearDepositosEditable(parsedInicial.depositosRegistros)
+    estadoGuardado.depositosRegistros
   )
 
   useEffect(() => {
     const parsed = parseObservacionesInternacion(observacionesIniciales)
-    setObservaciones(parsed.observaciones ?? '')
-    setChecklistDocumental(parsed.checklistDocumental)
-    setDepositosRegistros(mapearDepositosEditable(parsed.depositosRegistros))
+    const nextState = construirEstadoEditable(parsed)
+    setEstadoGuardado(nextState)
+    setObservaciones(nextState.observaciones)
+    setChecklistDocumental(nextState.checklistDocumental)
+    setDepositosRegistros(nextState.depositosRegistros)
   }, [observacionesIniciales])
 
   const checklistCompleto = useMemo(
@@ -86,12 +105,11 @@ export function ObservacionesSection({
   )
 
   const cancelarEdicion = () => {
-    const parsed = parseObservacionesInternacion(observacionesIniciales)
     setEditando(false)
     setError(null)
-    setObservaciones(parsed.observaciones ?? '')
-    setChecklistDocumental(parsed.checklistDocumental)
-    setDepositosRegistros(mapearDepositosEditable(parsed.depositosRegistros))
+    setObservaciones(estadoGuardado.observaciones)
+    setChecklistDocumental({ ...estadoGuardado.checklistDocumental })
+    setDepositosRegistros(estadoGuardado.depositosRegistros.map((item) => ({ ...item })))
   }
 
   const toggleChecklist = (key: keyof ChecklistDocumental) => {
@@ -174,8 +192,20 @@ export function ObservacionesSection({
         return
       }
 
+      const estadoActualizado =
+        typeof json?.data?.observaciones === 'string'
+          ? construirEstadoEditable(parseObservacionesInternacion(json.data.observaciones))
+          : {
+              observaciones,
+              checklistDocumental: { ...checklistDocumental },
+              depositosRegistros: depositosRegistros.map((item) => ({ ...item })),
+            }
+
+      setEstadoGuardado(estadoActualizado)
+      setObservaciones(estadoActualizado.observaciones)
+      setChecklistDocumental(estadoActualizado.checklistDocumental)
+      setDepositosRegistros(estadoActualizado.depositosRegistros)
       setEditando(false)
-      refreshInBackground()
     } catch {
       setError('Error de conexión al guardar observaciones')
     } finally {
@@ -205,7 +235,7 @@ export function ObservacionesSection({
       {!editando ? (
         <div className="space-y-4">
           <p className="text-sm text-gray-700 whitespace-pre-wrap wrap-break-word">
-            {parsedInicial.observaciones?.trim() ? parsedInicial.observaciones : 'Sin observaciones'}
+            {observaciones.trim() ? observaciones : 'Sin observaciones'}
           </p>
 
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">

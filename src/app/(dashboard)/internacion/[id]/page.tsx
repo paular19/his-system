@@ -11,6 +11,7 @@ import { ObservacionesSection } from '@/components/internacion/observaciones-sec
 import { SoporteRespiratorioSection } from '@/components/internacion/soporte-respiratorio-section'
 import { ViasSection } from '@/components/internacion/vias-section'
 import { InternacionPanelClinicoLazy } from '@/components/internacion/internacion-panel-clinico-lazy'
+import { AsignacionCamaProgramadaCard } from '@/components/internacion/asignacion-cama-programada-card'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import {
@@ -205,6 +206,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
             : null
     const metaObservaciones = parseObservacionesInternacion(detalle.observaciones ?? null)
     const clinicaDerivante = metaObservaciones.clinicaDerivante
+    const mostrarCardAsignacionProgramada =
+        detalle.ingresoSubtipo?.subtipoAdmisionCodigo === 'PRG' && !detalle.cama
 
     logServerPerf('internacion.ficha', {
         ingresoId,
@@ -355,10 +358,19 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             camasDisponibles={camasDisponiblesConOcupante}
                             profesionales={profesionales}
                             esCirugiaProgramada={detalle.ingresoSubtipo?.subtipoAdmisionCodigo === 'PRG'}
+                            ocultarAsignacionInicial={mostrarCardAsignacionProgramada}
                             puedeModificar={puedeCambiarCama}
                             estadoInternacion={detalle.estado}
                             fechaEgresoActual={detalle.fechaEgreso}
                         />
+
+                        {mostrarCardAsignacionProgramada && (
+                            <AsignacionCamaProgramadaCard
+                                ingresoId={ingresoId}
+                                camasDisponibles={camasDisponiblesConOcupante}
+                                puedeModificar={puedeCambiarCama}
+                            />
+                        )}
                     </div>
 
                     {!esVistaAdmision && (

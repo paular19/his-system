@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowRightLeft } from 'lucide-react'
 import type { TransferenciaItem, CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
@@ -55,6 +55,7 @@ interface TransferenciaCamaProps {
     camasDisponibles: CamaConOcupante[]
     profesionales: Array<{ id: number; nombre: string; matricula?: number | null }>
     esCirugiaProgramada?: boolean
+    ocultarAsignacionInicial?: boolean
     puedeModificar: boolean
     estadoInternacion: string | null
     fechaEgresoActual?: Date | string | null
@@ -67,6 +68,7 @@ export function TransferenciaCama({
     camasDisponibles,
     profesionales,
     esCirugiaProgramada = false,
+    ocultarAsignacionInicial = false,
     puedeModificar,
     estadoInternacion,
     fechaEgresoActual,
@@ -112,6 +114,13 @@ export function TransferenciaCama({
 
     const estadoCamaActual = normalizarEstadoCama(cama?.estado)
     const esAsignacionInicial = !cama
+    const asignacionInicialEmbebidaHabilitada = !(ocultarAsignacionInicial && esAsignacionInicial)
+
+    useEffect(() => {
+        if (!asignacionInicialEmbebidaHabilitada) {
+            setMostrarFormulario(false)
+        }
+    }, [asignacionInicialEmbebidaHabilitada])
 
     // Refresh camas disponibles (excluir la cama actual del listado)
     const camasParaTransferir = camasDisponibles.filter((c) => c.id !== cama?.id)
@@ -395,7 +404,7 @@ export function TransferenciaCama({
                     <ArrowRightLeft className="h-4 w-4 text-gray-500" />
                     <h3 className="text-sm font-semibold text-gray-900">Cama Actual</h3>
                 </div>
-                {puedeModificar && (
+                {puedeModificar && asignacionInicialEmbebidaHabilitada && (
                     <button
                         type="button"
                         onClick={() => setMostrarFormulario(!mostrarFormulario)}
@@ -431,7 +440,9 @@ export function TransferenciaCama({
                 )}
                 {puedeModificar && (
                     <p className="mt-2 text-xs text-gray-500">
-                        {esAsignacionInicial
+                        {esAsignacionInicial && !asignacionInicialEmbebidaHabilitada
+                            ? 'Usá la tarjeta "Asignación de cama" para registrar cama, fecha y hora de esta cirugía programada.'
+                            : esAsignacionInicial
                             ? (camasParaTransferir.length > 0
                                 ? `Podés asignar una cama disponible con fecha y hora. Opciones: ${camasParaTransferir.length}`
                                 : 'No hay camas disponibles para asignar en este momento.')
@@ -443,7 +454,7 @@ export function TransferenciaCama({
             </div>
 
             {/* Formulario de transferencia */}
-            {mostrarFormulario && (
+            {mostrarFormulario && asignacionInicialEmbebidaHabilitada && (
                 <form onSubmit={handleSubmit} className="p-4 border-b bg-amber-50/50 space-y-3">
                     <div>
                         <p className="text-xs font-medium text-gray-700 uppercase tracking-wide">

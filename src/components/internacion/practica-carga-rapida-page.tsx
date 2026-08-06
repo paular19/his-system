@@ -1450,6 +1450,24 @@ export function PracticaCargaRapidaPage({
                 })
             }
 
+            const ordenesGeneradasMap = new Map<string, { puestoNumero: number; numero: number }>()
+            for (const grupo of grupos) {
+                const key = `${grupo.puestoNumero}-${grupo.numero}`
+                ordenesGeneradasMap.set(key, {
+                    puestoNumero: grupo.puestoNumero,
+                    numero: grupo.numero,
+                })
+            }
+            for (const asignacion of asignaciones) {
+                const key = `${asignacion.puestoNumero}-${asignacion.numero}`
+                if (ordenesGeneradasMap.has(key)) continue
+                ordenesGeneradasMap.set(key, {
+                    puestoNumero: asignacion.puestoNumero,
+                    numero: asignacion.numero,
+                })
+            }
+            const ordenesGeneradasUnicas = Array.from(ordenesGeneradasMap.values())
+
             setPracticas((prev) => prev.map((practica) => {
                 const asignadas = [
                     ...(asignacionesPorPracticaId.get(practica.id) ?? []),
@@ -1486,27 +1504,17 @@ export function PracticaCargaRapidaPage({
 
             setPracticasSeleccionadas((prev) => prev.filter((id) => !practicaIds.includes(id)))
 
-            if (grupos.length > 0) {
+            if (ordenesGeneradasUnicas.length > 0) {
                 if (task.origen === 'sesion' || task.origen === 'protocolo') {
-                    const nuevasOrdenesSesion = Array.from(
-                        new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
-                    )
+                    const nuevasOrdenesSesion = ordenesGeneradasUnicas.map((orden) => `${orden.puestoNumero}-${orden.numero}`)
                     setOrdenesGeneradasSesion((prev) => Array.from(new Set([...nuevasOrdenesSesion, ...prev])))
                 }
                 const idsGeneradas = new Set(practicaIds)
                 setGuardadasSesion((prev) => prev.filter((item) => !idsGeneradas.has(item.practicaId)))
             }
 
-            if (task.imprimirDespues && grupos.length > 0) {
-                const ordenesUnicas = Array.from(
-                    new Set(grupos.map((grupo) => `${grupo.puestoNumero}-${grupo.numero}`))
-                ).map((clave) => {
-                    const [puestoNumeroRaw, numeroRaw] = clave.split('-')
-                    return {
-                        puestoNumero: Number.parseInt(puestoNumeroRaw ?? '', 10),
-                        numero: Number.parseInt(numeroRaw ?? '', 10),
-                    }
-                }).filter((orden) => Number.isFinite(orden.puestoNumero) && Number.isFinite(orden.numero))
+            if (task.imprimirDespues && ordenesGeneradasUnicas.length > 0) {
+                const ordenesUnicas = ordenesGeneradasUnicas
 
                 if (requierePopupSeleccionImpresionSesion && ordenesUnicas.length > 1) {
                     setPopupImpresionSesion({

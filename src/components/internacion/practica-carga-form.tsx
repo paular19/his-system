@@ -118,6 +118,41 @@ function clasificacionManualDefaultDesdePractica(practica: NomencladorItem): str
     return 'HE'
 }
 
+function alinearClasificacionesPorSubitem(
+    subitemsActuales: SubitemCodigo[],
+    clasificacionesActuales: string[],
+    subitemsBase: SubitemCodigo[]
+): string[] {
+    if (subitemsActuales.length === 0) return []
+
+    const clavesBase = new Map<string, string>()
+    const contadorBase = new Map<string, number>()
+
+    for (let idx = 0; idx < subitemsBase.length; idx += 1) {
+        const subitemBase = subitemsBase[idx]
+        if (!subitemBase) continue
+
+        const ocurrenciaBase = (contadorBase.get(subitemBase) ?? 0) + 1
+        contadorBase.set(subitemBase, ocurrenciaBase)
+
+        const clave = `${subitemBase}#${ocurrenciaBase}`
+        const clasificacionBase =
+            normalizarClasificacionAgrupacion(clasificacionesActuales[idx]) ??
+            clasificacionesActuales[idx]?.trim().toUpperCase() ??
+            ''
+
+        if (clasificacionBase) clavesBase.set(clave, clasificacionBase)
+    }
+
+    const contadorActual = new Map<string, number>()
+    return subitemsActuales.map((subitemActual) => {
+        const ocurrenciaActual = (contadorActual.get(subitemActual) ?? 0) + 1
+        contadorActual.set(subitemActual, ocurrenciaActual)
+        const clave = `${subitemActual}#${ocurrenciaActual}`
+        return clavesBase.get(clave) ?? subitemActual
+    })
+}
+
 export function PracticaCargaForm({
     convenioId,
     matriculaTratanteDefault,
@@ -183,6 +218,16 @@ export function PracticaCargaForm({
         )
     }, [practicaSeleccionada, componenteSeleccion])
 
+    const clasificacionesSubitemsAlineadasForm = useMemo(
+        () =>
+            alinearClasificacionesPorSubitem(
+                subitemsSeleccionadosForm,
+                clasificacionPorSubitemNuevo,
+                subitemsPreviosRef.current
+            ),
+        [subitemsSeleccionadosForm, clasificacionPorSubitemNuevo]
+    )
+
     const clasificacionesPorComponenteForm = useMemo(() => {
         const porComponente: Record<
             keyof ComponenteSeleccion,
@@ -203,7 +248,7 @@ export function PracticaCargaForm({
             const entrada = {
                 index: idx,
                 label: `${subitem}${sufijo}`,
-                value: clasificacionPorSubitemNuevo[idx] ?? subitem,
+                value: clasificacionesSubitemsAlineadasForm[idx] ?? subitem,
             }
 
             if (subitem === 'HE') porComponente.especialista.push(entrada)
@@ -213,15 +258,11 @@ export function PracticaCargaForm({
         }
 
         return porComponente
-    }, [subitemsSeleccionadosForm, clasificacionPorSubitemNuevo])
+    }, [subitemsSeleccionadosForm, clasificacionesSubitemsAlineadasForm])
 
     const clasificacionesActivasForm = useMemo(
-        () =>
-            subitemsSeleccionadosForm.map(
-                (subitem, idx) =>
-                    normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
-            ),
-        [subitemsSeleccionadosForm, clasificacionPorSubitemNuevo]
+        () => clasificacionesSubitemsAlineadasForm,
+        [clasificacionesSubitemsAlineadasForm]
     )
 
     const requiereEspecialistaForm = useMemo(
@@ -536,9 +577,10 @@ export function PracticaCargaForm({
             ? clasificacionManualDefaultDesdePractica(practicaBase)
             : 'HE'
 
-        const clasificacionesSubitems = subitemsSeleccionados.map(
-            (subitem, idx) =>
-                normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
+        const clasificacionesSubitems = alinearClasificacionesPorSubitem(
+            subitemsSeleccionados,
+            clasificacionPorSubitemNuevo,
+            subitemsPreviosRef.current
         )
         const clasificacionesReferencia =
             clasificacionesSubitems.length > 0

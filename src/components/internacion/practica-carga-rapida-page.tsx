@@ -1151,13 +1151,17 @@ export function PracticaCargaRapidaPage({
 
             const practicasNoPrevias = Array.from(practicasUnicasPorId.values())
                 .filter((practica) => !preIdsBackend.has(practica.id))
-                .sort((a, b) => b.id - a.id)
+                // El backend inserta en orden; mantener ASC por id permite alinear
+                // entrada->práctica cuando hay códigos repetidos y el match exacto falla.
+                .sort((a, b) => a.id - b.id)
 
             const practicasNoPreviasDisponibles = [...practicasNoPrevias]
             const practicasNuevasDelLote: PracticaItem[] = []
             const clasificacionPorNuevaPracticaId: Record<number, string> = {}
 
-            for (const entrada of entradasCrear) {
+            const entradasSinMatch: number[] = []
+
+            for (const [idxEntrada, entrada] of entradasCrear.entries()) {
                 const codigoEsperado = entrada.payload.codigoPractica.trim().toUpperCase()
                 const cantidadEsperada = Number(entrada.payload.cantidad ?? 1)
                 const matriculaEspecialistaEsperada = entrada.payload.matriculaEspecialista ?? null
@@ -1176,13 +1180,35 @@ export function PracticaCargaRapidaPage({
                         (practica) => practica.codigoPractica.trim().toUpperCase() === codigoEsperado
                     )
 
-                if (idxCodigo < 0) continue
+                if (idxCodigo < 0) {
+                    entradasSinMatch.push(idxEntrada)
+                    continue
+                }
 
                 const [match] = practicasNoPreviasDisponibles.splice(idxCodigo, 1)
-                if (!match) continue
+                if (!match) {
+                    entradasSinMatch.push(idxEntrada)
+                    continue
+                }
 
                 practicasNuevasDelLote.push(match)
                 clasificacionPorNuevaPracticaId[match.id] = entrada.clasificacion ?? 'HE'
+            }
+
+            if (
+                practicasNoPreviasDisponibles.length > 0 &&
+                entradasSinMatch.length === practicasNoPreviasDisponibles.length
+            ) {
+                for (let i = 0; i < practicasNoPreviasDisponibles.length; i += 1) {
+                    const practica = practicasNoPreviasDisponibles[i]
+                    const idxEntrada = entradasSinMatch[i]
+                    const entrada = idxEntrada != null ? entradasCrear[idxEntrada] : undefined
+                    if (!practica) continue
+
+                    practicasNuevasDelLote.push(practica)
+                    clasificacionPorNuevaPracticaId[practica.id] = entrada?.clasificacion ?? 'HE'
+                }
+                practicasNoPreviasDisponibles.length = 0
             }
 
             const practicasNuevas = practicasNuevasDelLote.length > 0

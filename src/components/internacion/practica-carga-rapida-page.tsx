@@ -658,7 +658,11 @@ export function PracticaCargaRapidaPage({
         }
 
         return practicasPendientesDisponibles
-            .filter((practica) => pendientesObjetivo.has(practica.id) && !idsPendientesSesionSet.has(practica.id))
+            .filter((practica) => {
+                if (idsPendientesSesionSet.has(practica.id)) return false
+                if (modoCirugia) return true
+                return pendientesObjetivo.has(practica.id)
+            })
             .map((practica) => ({
                 practica,
                 clasificacion:
@@ -672,6 +676,7 @@ export function PracticaCargaRapidaPage({
                 return new Date(b.practica.fecha).getTime() - new Date(a.practica.fecha).getTime()
             })
     }, [
+        modoCirugia,
         idsPendientesEditor,
         practicasPendientesDisponibles,
         idsPendientesSesionSet,
@@ -948,7 +953,16 @@ export function PracticaCargaRapidaPage({
             }
 
             try {
-                const idsPrevios = new Set(practicas.map((practica) => practica.id))
+                const prePanel = await fetch(`/api/internacion/${ingresoId}/panel-clinico`, {
+                    cache: 'no-store',
+                })
+                const preJson = await prePanel.json().catch(() => null)
+                const preIdsBackend = new Set<number>(
+                    Array.isArray(preJson?.data?.practicasCirugiaEspejo)
+                        ? (preJson.data.practicasCirugiaEspejo as Array<{ id: number }>).map((practica) => practica.id)
+                        : practicas.map((practica) => practica.id)
+                )
+
                 const practicasExpandida = entradasCrear.map((entrada) => ({
                     convenioId: entrada.payload.convenioId,
                     codigo: entrada.payload.codigoPractica,
@@ -1083,7 +1097,7 @@ export function PracticaCargaRapidaPage({
                 }
 
                 const practicasNoPrevias = Array.from(practicasUnicasPorId.values())
-                    .filter((practica) => !idsPrevios.has(practica.id))
+                    .filter((practica) => !preIdsBackend.has(practica.id))
                     .sort((a, b) => a.id - b.id)
 
                 const practicasNoPreviasDisponibles = [...practicasNoPrevias]
@@ -1122,13 +1136,8 @@ export function PracticaCargaRapidaPage({
                     ? practicasNuevasDelLote
                     : (practicasNoPrevias.length === entradasCrear.length ? practicasNoPrevias : [])
 
-                const idsPermitidos = new Set<number>([
-                    ...Array.from(idsInternacionCirugiaObjetivo),
-                    ...practicaIdsCirugiaLocales,
-                    ...practicasNuevas.map((practica) => practica.id),
-                ])
                 const practicasActualizadas = Array.from(practicasUnicasPorId.values())
-                    .filter((practica) => practicaActiva(practica.estado) && idsPermitidos.has(practica.id))
+                    .filter((practica) => practicaActiva(practica.estado))
                     .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
 
                 setPracticas(practicasActualizadas)

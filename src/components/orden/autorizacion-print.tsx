@@ -27,7 +27,7 @@ export function AutorizacionPrint({
 }: AutorizacionPrintProps) {
   const MATRICULA_PATOLOGIA_DEFAULT = 2675
   const NOMBRE_PATOLOGIA_DEFAULT = 'ANA MARIA VEGA'
-  const MATRICULA_GUARDIA_PRINT = 9092
+  const MATRICULA_GUARDIA_PRINT = 9110
   const esOrdenGuardiaAmbulatoria =
     (orden.ingresoTipoCodigo ?? '').trim().toUpperCase() === 'AMB' &&
     (orden.ingresoSubtipoCodigo ?? '').trim().toUpperCase() === 'GUA'
@@ -98,7 +98,7 @@ export function AutorizacionPrint({
     }
 
     if (esOrdenGuardiaAmbulatoria) {
-      return 'CLINICA SAN RAFAEL · MP 9995'
+      return 'CLINICA SAN RAFAEL · MP 9110'
     }
 
     // Verificar si es HE o HA (incluso en combinaciones como HE+GA)
@@ -151,7 +151,7 @@ export function AutorizacionPrint({
     }
 
     if (esOrdenGuardiaAmbulatoria) {
-      return { nombre: 'GUARDIA', matricula: MATRICULA_GUARDIA_PRINT }
+      return { nombre: 'CLINICA SAN RAFAEL', matricula: MATRICULA_GUARDIA_PRINT }
     }
 
     if (esInternacion && firmanteDesdeOrden) {

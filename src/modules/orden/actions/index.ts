@@ -8,6 +8,7 @@ import { prisma } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { crearPractica as crearPracticaInternacion } from '@/modules/internacion/service'
+import { claveDiaArgentina, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
 import {
   clasificacionDesdeIncluyeCodigo,
   contieneClasificacion,
@@ -19,8 +20,17 @@ type ModoGeneracion = 'MASIVA' | 'INDIVIDUAL' | 'AGRUPADA'
 const MATRICULA_GASTOS_INTERNACION_DEFAULT = 9995
 const MATRICULA_AYUDANTE_INTERNACION_DEFAULT = 995
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
+const MATRICULA_AMBULATORIO_DEFAULT = 9110
 const ORDEN_CLASIFICACION_COMPONENTES = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3'] as const
 type ClasificacionComponente = (typeof ORDEN_CLASIFICACION_COMPONENTES)[number]
+
+function normalizarFechaOrdenArgentina(value: Date | string | null | undefined): Date {
+  const clave = claveDiaArgentina(value)
+  if (clave) return fechaDesdeClaveArgentina(clave)
+
+  const parsed = value ? new Date(value) : new Date()
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+}
 
 async function resolverObraSocialParticularId(): Promise<number> {
   const particular = await prisma.obraSocial.findFirst({
@@ -289,6 +299,11 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       select: {
         id: true,
         tipoIngresoCodigo: true,
+        ingresoSubtipo: {
+          select: {
+            subtipoAdmisionCodigo: true,
+          },
+        },
         pacienteId: true,
         nombre: true,
         numeroAfiliado: true,
@@ -308,6 +323,25 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     })
 
     if (!ingreso) return { error: 'Internación no encontrada' }
+
+    const esGuardiaAmbulatoria =
+      (ingreso.tipoIngresoCodigo ?? '').trim().toUpperCase() === 'AMB' &&
+      (ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '').trim().toUpperCase() === 'GUA'
+
+    const profesionalGuardia9110 = esGuardiaAmbulatoria
+      ? await prisma.profesional.findFirst({
+          where: {
+            matricula: MATRICULA_AMBULATORIO_DEFAULT,
+            estado: 'A',
+          },
+          select: { id: true },
+          orderBy: { id: 'asc' },
+        })
+      : null
+
+    if (esGuardiaAmbulatoria && !profesionalGuardia9110) {
+      return { error: 'No existe un profesional activo con matrícula 9110 para órdenes de guardia.' }
+    }
 
     const obraSocialOrdenId = ingreso.obraSocialId ?? await resolverObraSocialParticularId()
 
@@ -351,7 +385,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
 
     const practicasPendientesPorId = new Map(practicasPendientes.map((practica) => [practica.id, practica] as const))
     const matriculaFirmanteManual =
-      parsed.data.cirujanoFirmanteMatricula != null && parsed.data.cirujanoFirmanteMatricula > 0
+      esGuardiaAmbulatoria
+        ? MATRICULA_AMBULATORIO_DEFAULT
+        : parsed.data.cirujanoFirmanteMatricula != null && parsed.data.cirujanoFirmanteMatricula > 0
         ? parsed.data.cirujanoFirmanteMatricula
         : null
 
@@ -391,8 +427,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       profesionalIdPorMatricula.set(profesional.matricula, profesional.id)
     }
 
-    const profesionalIdManual =
-      matriculaFirmanteManual != null
+    const profesionalIdManual = esGuardiaAmbulatoria
+      ? (profesionalGuardia9110?.id ?? null)
+      : matriculaFirmanteManual != null
         ? (profesionalIdPorMatricula.get(matriculaFirmanteManual) ?? null)
         : null
 
@@ -477,11 +514,13 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           codigoPractica: practica.codigoPractica.trim().slice(0, 8),
           descripcionPractica,
           cantidad: Number(practica.cantidad ?? 1),
-          fecha: practica.fecha,
+          fecha: normalizarFechaOrdenArgentina(practica.fecha),
           tipoFacturacion: 'H',
           clasificacionAgrupacion: esProtocoloBioquimico ? 'HE' : clasificacion,
           efectorMatricula:
-            esClasificacionSoloGastos
+            esGuardiaAmbulatoria
+              ? MATRICULA_AMBULATORIO_DEFAULT
+              : esClasificacionSoloGastos
               ? ((practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0)
                   ? practica.matriculaEspecialista
                   : MATRICULA_GASTOS_INTERNACION_DEFAULT)
@@ -556,7 +595,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         ? 'PROTOCOLO BIOQUIMICO'
         : tituloDesdeClasificacion(clasificacion)
 
-      const matriculaFirmanteGrupo = parsed.data.agruparEnUnaOrden
+      const matriculaFirmanteGrupo = esGuardiaAmbulatoria
+        ? MATRICULA_AMBULATORIO_DEFAULT
+        : parsed.data.agruparEnUnaOrden
         ? null
         : (
             itemsGrupo

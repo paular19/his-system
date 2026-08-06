@@ -9,6 +9,7 @@ import { actualizarNumeroAutorizacionAction, anularOrdenAction } from '@/modules
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import type { OrdenListItem } from '@/modules/orden/types'
 import { PaginationControls } from '@/components/ui/pagination-controls'
+import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
 
 interface OrdenesTabsProps {
     pendientes: OrdenListItem[]
@@ -111,7 +112,7 @@ function FilaOrden({
                 <td className="px-4 py-3 text-gray-600">{orden.obraSocialNombre}</td>
                 <td className="px-4 py-3 text-gray-600">{orden.coseguroNombre}</td>
                 <td className="px-4 py-3 text-gray-500">
-                    {new Date(orden.fechaEmision).toLocaleDateString('es-AR')}
+                    {formatearFechaArgentina(orden.fechaEmision)}
                 </td>
                 <td className="px-4 py-3 text-gray-600">
                     <div className="space-y-1">

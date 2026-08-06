@@ -151,7 +151,7 @@ export function AutorizacionPrint({
     }
 
     if (esOrdenGuardiaAmbulatoria) {
-      return { nombre: 'CLINICA SAN RAFAEL', matricula: MATRICULA_GUARDIA_PRINT }
+      return { nombre: 'GUARDIA', matricula: MATRICULA_GUARDIA_PRINT }
     }
 
     if (esInternacion && firmanteDesdeOrden) {

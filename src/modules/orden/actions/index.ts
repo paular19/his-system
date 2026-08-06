@@ -198,10 +198,55 @@ export async function crearOrdenesDesdeAdmisionAction(
     return { error: parsed.error.errors[0]?.message ?? 'Datos inválidos' }
   }
 
-  const { modoGeneracion, ...ordenData } = parsed.data
+  const { modoGeneracion, ...ordenDataBase } = parsed.data
   const modo = modoGeneracion
 
   try {
+    const ingresoContexto = ordenDataBase.ingresoId
+      ? await prisma.ingreso.findUnique({
+          where: { id: ordenDataBase.ingresoId },
+          select: {
+            tipoIngresoCodigo: true,
+            ingresoSubtipo: {
+              select: { subtipoAdmisionCodigo: true },
+            },
+          },
+        })
+      : null
+
+    const esGuardiaAmbulatoria =
+      (ingresoContexto?.tipoIngresoCodigo ?? '').trim().toUpperCase() === 'AMB' &&
+      (ingresoContexto?.ingresoSubtipo?.subtipoAdmisionCodigo ?? '').trim().toUpperCase() === 'GUA'
+
+    const profesionalGuardia9110 = esGuardiaAmbulatoria
+      ? await prisma.profesional.findFirst({
+          where: {
+            matricula: MATRICULA_AMBULATORIO_DEFAULT,
+            estado: 'A',
+          },
+          select: { id: true },
+          orderBy: { id: 'asc' },
+        })
+      : null
+
+    if (esGuardiaAmbulatoria && !profesionalGuardia9110) {
+      return { error: 'No existe un profesional activo con matrícula 9110 para órdenes de guardia.' }
+    }
+
+    const ordenData = {
+      ...ordenDataBase,
+      profesionalId: esGuardiaAmbulatoria
+        ? (profesionalGuardia9110?.id ?? ordenDataBase.profesionalId)
+        : ordenDataBase.profesionalId,
+      items: ordenDataBase.items.map((item) => ({
+        ...item,
+        fecha: item.fecha ? normalizarFechaOrdenArgentina(item.fecha) : item.fecha,
+        efectorMatricula: esGuardiaAmbulatoria
+          ? MATRICULA_AMBULATORIO_DEFAULT
+          : item.efectorMatricula,
+      })),
+    }
+
     if (modo === 'INDIVIDUAL') {
       const ordenes = await crearOrdenesAmbulatoriasPorPractica(ordenData, usuario.codigoUsuario)
       return { ok: true, modo, ordenes }

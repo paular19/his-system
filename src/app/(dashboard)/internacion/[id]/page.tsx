@@ -354,6 +354,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             transferencias={detalle.transferencias}
                             camasDisponibles={camasDisponiblesConOcupante}
                             profesionales={profesionales}
+                            esCirugiaProgramada={detalle.ingresoSubtipo?.subtipoAdmisionCodigo === 'PRG'}
                             puedeModificar={puedeCambiarCama}
                             estadoInternacion={detalle.estado}
                             fechaEgresoActual={detalle.fechaEgreso}

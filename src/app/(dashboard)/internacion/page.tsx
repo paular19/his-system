@@ -187,6 +187,21 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           fechaReferencia={fechaSeleccionada}
         />
 
+        {/* Mapa visual por sector */}
+        <div className="space-y-4 print:hidden">
+          {sectoresMapa.length === 0 ? (
+            <div className="his-card p-6 text-center text-sm text-gray-500">
+              {q
+                ? 'No hay camas que coincidan con la búsqueda aplicada.'
+                : 'No hay camas ocupadas para la obra social seleccionada.'}
+            </div>
+          ) : (
+            sectoresMapa.map((sector) => (
+              <SeccionSector key={sector.sector} sector={sector} soloOcupadas={mostrarSoloOcupadas} />
+            ))
+          )}
+        </div>
+
         {cirugiasProgramadasPendientes.length > 0 && (
           <div className="his-card p-4 border border-amber-200 bg-amber-50/60 print:hidden">
             <div className="flex items-center gap-2 mb-3">
@@ -236,21 +251,6 @@ export default async function InternacionPage({ searchParams }: PageProps) {
             </div>
           </div>
         )}
-
-        {/* Mapa visual por sector */}
-        <div className="space-y-4 print:hidden">
-          {sectoresMapa.length === 0 ? (
-            <div className="his-card p-6 text-center text-sm text-gray-500">
-              {q
-                ? 'No hay camas que coincidan con la búsqueda aplicada.'
-                : 'No hay camas ocupadas para la obra social seleccionada.'}
-            </div>
-          ) : (
-            sectoresMapa.map((sector) => (
-              <SeccionSector key={sector.sector} sector={sector} soloOcupadas={mostrarSoloOcupadas} />
-            ))
-          )}
-        </div>
 
         {/* Lista de internaciones activas */}
         <div className="ips-print-sheet">

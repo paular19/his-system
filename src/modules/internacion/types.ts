@@ -155,6 +155,7 @@ export interface InternacionDetalle {
   profesionalDerivante: { id: number; nombre: string } | null
   profesionalTratante: { id: number; nombre: string; matricula: number | null } | null
   ingresoSubtipo: {
+    subtipoAdmisionCodigo: string
     profesionalDerivanteNombre: string | null
   } | null
   historialTratantes: Array<{

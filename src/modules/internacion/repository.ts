@@ -641,6 +641,7 @@ export async function obtenerInternacionDetalle(
       profesionalTratante: { select: { id: true, nombre: true, matricula: true } },
       ingresoSubtipo: {
         select: {
+          subtipoAdmisionCodigo: true,
           profesionalDerivanteNombre: true,
         },
       },

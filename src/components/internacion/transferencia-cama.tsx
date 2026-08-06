@@ -54,6 +54,7 @@ interface TransferenciaCamaProps {
     transferencias: TransferenciaItem[]
     camasDisponibles: CamaConOcupante[]
     profesionales: Array<{ id: number; nombre: string; matricula?: number | null }>
+    esCirugiaProgramada?: boolean
     puedeModificar: boolean
     estadoInternacion: string | null
     fechaEgresoActual?: Date | string | null
@@ -65,6 +66,7 @@ export function TransferenciaCama({
     transferencias: transferenciasIniciales,
     camasDisponibles,
     profesionales,
+    esCirugiaProgramada = false,
     puedeModificar,
     estadoInternacion,
     fechaEgresoActual,
@@ -109,6 +111,7 @@ export function TransferenciaCama({
     const [errorEdicionTransferencia, setErrorEdicionTransferencia] = useState<string | null>(null)
 
     const estadoCamaActual = normalizarEstadoCama(cama?.estado)
+    const esAsignacionInicial = !cama
 
     // Refresh camas disponibles (excluir la cama actual del listado)
     const camasParaTransferir = camasDisponibles.filter((c) => c.id !== cama?.id)
@@ -238,7 +241,7 @@ export function TransferenciaCama({
                     fecha: fechaTransferencia || undefined,
                     motivo: motivo || null,
                     profesionalId: profesionalId ? parseInt(profesionalId) : null,
-                    reservarCama: estadoCamaActual === 'RESERVADA',
+                    reservarCama: esAsignacionInicial ? esCirugiaProgramada : estadoCamaActual === 'RESERVADA',
                 }),
             })
             if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Error') }
@@ -400,7 +403,9 @@ export function TransferenciaCama({
                         className="text-xs font-medium text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed flex items-center gap-1"
                     >
                         <ArrowRightLeft className="h-3.5 w-3.5" />
-                        {mostrarFormulario ? 'Ocultar cambio' : 'Modificar cama actual'}
+                        {mostrarFormulario
+                            ? (esAsignacionInicial ? 'Ocultar asignacion' : 'Ocultar cambio')
+                            : (esAsignacionInicial ? 'Asignar cama' : 'Modificar cama actual')}
                     </button>
                 )}
             </div>
@@ -426,9 +431,13 @@ export function TransferenciaCama({
                 )}
                 {puedeModificar && (
                     <p className="mt-2 text-xs text-gray-500">
-                        {camasParaTransferir.length > 0
-                            ? `Podés reemplazar la cama actual por otra disponible. Opciones: ${camasParaTransferir.length}`
-                            : 'No hay camas disponibles para cambio en este momento.'}
+                        {esAsignacionInicial
+                            ? (camasParaTransferir.length > 0
+                                ? `Podés asignar una cama disponible con fecha y hora. Opciones: ${camasParaTransferir.length}`
+                                : 'No hay camas disponibles para asignar en este momento.')
+                            : (camasParaTransferir.length > 0
+                                ? `Podés reemplazar la cama actual por otra disponible. Opciones: ${camasParaTransferir.length}`
+                                : 'No hay camas disponibles para cambio en este momento.')}
                     </p>
                 )}
             </div>
@@ -438,10 +447,12 @@ export function TransferenciaCama({
                 <form onSubmit={handleSubmit} className="p-4 border-b bg-amber-50/50 space-y-3">
                     <div>
                         <p className="text-xs font-medium text-gray-700 uppercase tracking-wide">
-                            Modificar cama actual
+                            {esAsignacionInicial ? 'Asignar cama a internacion' : 'Modificar cama actual'}
                         </p>
                         <p className="mt-1 text-xs text-gray-500">
-                            Seleccioná una nueva cama disponible para asignarla a esta internación.
+                            {esAsignacionInicial
+                                ? 'Seleccioná cama, fecha y hora para registrar la asignación de esta internación.'
+                                : 'Seleccioná una nueva cama disponible para asignarla a esta internación.'}
                         </p>
                     </div>
                     {error && (
@@ -450,7 +461,7 @@ export function TransferenciaCama({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
-                                Cama destino <span className="text-red-500">*</span>
+                                {esAsignacionInicial ? 'Cama a asignar' : 'Cama destino'} <span className="text-red-500">*</span>
                             </label>
                             <select
                                 required value={camaDestinoId}
@@ -477,7 +488,7 @@ export function TransferenciaCama({
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
-                                Fecha y hora del cambio <span className="text-red-500">*</span>
+                                {esAsignacionInicial ? 'Fecha y hora de asignacion' : 'Fecha y hora del cambio'} <span className="text-red-500">*</span>
                             </label>
                             <input
                                 type="datetime-local"
@@ -488,10 +499,12 @@ export function TransferenciaCama({
                             />
                         </div>
                         <div className="sm:col-span-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Motivo de la transferencia</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                {esAsignacionInicial ? 'Observacion de la asignacion' : 'Motivo de la transferencia'}
+                            </label>
                             <input
                                 type="text" value={motivo} onChange={(e) => setMotivo(e.target.value)}
-                                placeholder="Ej: Alta de UTI, cambio de sector..."
+                                placeholder={esAsignacionInicial ? 'Ej: Programada para mañana por cirugia...' : 'Ej: Alta de UTI, cambio de sector...'}
                                 className="w-full border rounded-lg px-3 py-2 text-sm"
                             />
                         </div>
@@ -503,7 +516,9 @@ export function TransferenciaCama({
                         </button>
                         <button type="submit" disabled={guardando}
                             className="px-3 py-1.5 text-xs font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-60">
-                            {guardando ? 'Transfiriendo…' : 'Confirmar transferencia'}
+                            {guardando
+                                ? (esAsignacionInicial ? 'Asignando…' : 'Transfiriendo…')
+                                : (esAsignacionInicial ? 'Confirmar asignacion' : 'Confirmar transferencia')}
                         </button>
                     </div>
                 </form>
@@ -589,9 +604,9 @@ export function TransferenciaCama({
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-2 text-xs text-gray-600 min-w-0">
                                             <span className="text-gray-400">{fmt(t.fecha)}</span>
-                                            <ArrowRightLeft className="h-3 w-3 text-gray-400" />
+                                            {t.camaOrigen ? <ArrowRightLeft className="h-3 w-3 text-gray-400" /> : null}
                                             <span className="min-w-0">
-                                                {t.camaOrigen ? `${t.camaOrigen.identificador} → ` : ''}
+                                                {t.camaOrigen ? `${t.camaOrigen.identificador} → ` : 'Asignacion inicial → '}
                                                 <span className="font-medium">{t.camaDestino.identificador}</span>
                                             </span>
                                             {t.motivo && <span className="text-gray-400">({t.motivo})</span>}

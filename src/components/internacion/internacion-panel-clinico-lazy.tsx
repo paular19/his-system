@@ -25,11 +25,15 @@ type PracticaLite = {
   usuario: string | null
   matriculaEspecialista: number | null
   matriculaAnestesista: number | null
+  puestoNumero: number | null
+  ordenNumero: number | null
+  tuvoOrdenGenerada?: boolean
   ordenPractica: Array<{
     puestoNumero: number
     ordenNumero: number
     item: number
     numeroAutorizacion: string | null
+    fechaEmision?: string | null
   }>
 }
 
@@ -51,11 +55,13 @@ type PracticaApi = {
   ordenNumero?: number | null
   ordenItem?: number | null
   facturada?: boolean
+  tuvoOrdenGenerada?: boolean
   ordenPractica: Array<{
     puestoNumero: number
     ordenNumero: number
     item: number
     numeroAutorizacion: string | null
+    fechaEmision?: string | null
   }>
   facturable: boolean
   estado: string | null
@@ -104,11 +110,13 @@ type PracticaEspejoApi = {
   usuarioRegistro: string
   matriculaEspecialista: number | null
   matriculaAnestesista: number | null
+  tuvoOrdenGenerada?: boolean
   ordenPractica: Array<{
     puestoNumero: number
     ordenNumero: number
     item: number
     numeroAutorizacion: string | null
+    fechaEmision?: string | null
   }>
 }
 
@@ -231,6 +239,12 @@ export function InternacionPanelClinicoLazy({
     const map = new Map<number, PracticaLite>()
 
     for (const practica of practicas) {
+      const tienePunteroOrdenLegacy =
+        practica.puestoNumero != null &&
+        practica.ordenNumero != null &&
+        Number(practica.puestoNumero) > 0 &&
+        Number(practica.ordenNumero) > 0
+
       map.set(practica.id, {
         id: practica.id,
         codigoPractica: practica.codigoPractica,
@@ -243,12 +257,24 @@ export function InternacionPanelClinicoLazy({
         usuario: practica.usuario ?? null,
         matriculaEspecialista: practica.matriculaEspecialista ?? null,
         matriculaAnestesista: practica.matriculaAnestesista ?? null,
+        puestoNumero: practica.puestoNumero ?? null,
+        ordenNumero: practica.ordenNumero ?? null,
+        tuvoOrdenGenerada:
+          Boolean(practica.tuvoOrdenGenerada) ||
+          (Array.isArray(practica.ordenPractica) && practica.ordenPractica.length > 0) ||
+          tienePunteroOrdenLegacy,
         ordenPractica: Array.isArray(practica.ordenPractica) ? practica.ordenPractica : [],
       })
     }
 
     for (const practica of practicasCirugiaEspejo) {
       if (map.has(practica.id)) continue
+
+      const tienePunteroOrdenLegacy =
+        practica.puestoNumero != null &&
+        practica.ordenNumero != null &&
+        Number(practica.puestoNumero) > 0 &&
+        Number(practica.ordenNumero) > 0
 
       map.set(practica.id, {
         id: practica.id,
@@ -267,11 +293,18 @@ export function InternacionPanelClinicoLazy({
         usuario: practica.usuarioRegistro,
         matriculaEspecialista: practica.matriculaEspecialista ?? null,
         matriculaAnestesista: practica.matriculaAnestesista ?? null,
+        puestoNumero: practica.puestoNumero,
+        ordenNumero: practica.ordenNumero,
+        tuvoOrdenGenerada:
+          Boolean(practica.tuvoOrdenGenerada) ||
+          (Array.isArray(practica.ordenPractica) && practica.ordenPractica.length > 0) ||
+          tienePunteroOrdenLegacy,
         ordenPractica: practica.ordenPractica.map((orden) => ({
           puestoNumero: orden.puestoNumero,
           ordenNumero: orden.ordenNumero,
           item: orden.item,
           numeroAutorizacion: orden.numeroAutorizacion,
+          fechaEmision: orden.fechaEmision ?? null,
         })),
       })
     }
@@ -345,6 +378,10 @@ export function InternacionPanelClinicoLazy({
           practicas={practicas.map((item) => ({
             ...item,
             fecha: new Date(item.fecha),
+            ordenPractica: (item.ordenPractica ?? []).map((orden) => ({
+              ...orden,
+              fechaEmision: orden.fechaEmision ? new Date(orden.fechaEmision) : null,
+            })),
           }))}
           puedeCrear={puedeEditarPracticas}
           matriculaTratanteDefault={matriculaTratanteDefault}

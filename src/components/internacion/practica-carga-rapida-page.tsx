@@ -10,6 +10,7 @@ import {
     Loader2,
     Printer,
     Settings2,
+    Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -414,6 +415,7 @@ export function PracticaCargaRapidaPage({
     const [draftPracticaEditando, setDraftPracticaEditando] = useState<PracticaEditDraft | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
+    const [eliminandoPracticaPendienteId, setEliminandoPracticaPendienteId] = useState<number | null>(null)
     const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
     const colaGuardadoBackgroundRef = useRef<Promise<void>>(Promise.resolve())
     const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
@@ -641,6 +643,40 @@ export function PracticaCargaRapidaPage({
             )
         )
     }, [guardadasSesion, practicasPendientesDisponibles])
+
+    const idsPendientesSesionSet = useMemo(
+        () => new Set(idsPendientesSesion),
+        [idsPendientesSesion]
+    )
+
+    const pendientesPrevias = useMemo(() => {
+        const pendientesObjetivo = new Set(idsPendientesEditor)
+
+        const ordenarClasificacion = (clasificacion: string): number => {
+            const codigo = (clasificacion.split('+')[0] ?? '').trim()
+            return ORDEN_CLASIFICACION_LISTA[codigo] ?? 99
+        }
+
+        return practicasPendientesDisponibles
+            .filter((practica) => pendientesObjetivo.has(practica.id) && !idsPendientesSesionSet.has(practica.id))
+            .map((practica) => ({
+                practica,
+                clasificacion:
+                    normalizarClasificacionAgrupacion(clasificacionPorPracticaId[practica.id]) ??
+                    clasificacionInferidaPractica(practica),
+            }))
+            .sort((a, b) => {
+                const ordenA = ordenarClasificacion(a.clasificacion)
+                const ordenB = ordenarClasificacion(b.clasificacion)
+                if (ordenA !== ordenB) return ordenA - ordenB
+                return new Date(b.practica.fecha).getTime() - new Date(a.practica.fecha).getTime()
+            })
+    }, [
+        idsPendientesEditor,
+        practicasPendientesDisponibles,
+        idsPendientesSesionSet,
+        clasificacionPorPracticaId,
+    ])
 
     useEffect(() => {
         const pendientes = new Set(practicasPendientesDisponibles.map((practica) => practica.id))
@@ -1046,9 +1082,46 @@ export function PracticaCargaRapidaPage({
                     practicasUnicasPorId.set(practica.id, practica)
                 }
 
-                const practicasNuevas = Array.from(practicasUnicasPorId.values()).filter(
-                    (practica) => !idsPrevios.has(practica.id)
-                )
+                const practicasNoPrevias = Array.from(practicasUnicasPorId.values())
+                    .filter((practica) => !idsPrevios.has(practica.id))
+                    .sort((a, b) => a.id - b.id)
+
+                const practicasNoPreviasDisponibles = [...practicasNoPrevias]
+                const practicasNuevasDelLote: PracticaItem[] = []
+                const clasificacionPorNuevaPracticaId: Record<number, string> = {}
+
+                for (const entrada of entradasCrear) {
+                    const codigoEsperado = entrada.payload.codigoPractica.trim().toUpperCase()
+                    const cantidadEsperada = Number(entrada.payload.cantidad ?? 1)
+                    const matriculaEspecialistaEsperada = entrada.payload.matriculaEspecialista ?? null
+                    const matriculaAnestesistaEsperada = entrada.payload.matriculaAnestesista ?? null
+
+                    const idxExacta = practicasNoPreviasDisponibles.findIndex((practica) =>
+                        practica.codigoPractica.trim().toUpperCase() === codigoEsperado &&
+                        Number(practica.cantidad ?? 1) === cantidadEsperada &&
+                        (practica.matriculaEspecialista ?? null) === matriculaEspecialistaEsperada &&
+                        (practica.matriculaAnestesista ?? null) === matriculaAnestesistaEsperada
+                    )
+
+                    const idxCodigo = idxExacta >= 0
+                        ? idxExacta
+                        : practicasNoPreviasDisponibles.findIndex(
+                            (practica) => practica.codigoPractica.trim().toUpperCase() === codigoEsperado
+                        )
+
+                    if (idxCodigo < 0) continue
+
+                    const [match] = practicasNoPreviasDisponibles.splice(idxCodigo, 1)
+                    if (!match) continue
+
+                    practicasNuevasDelLote.push(match)
+                    clasificacionPorNuevaPracticaId[match.id] = entrada.clasificacion ?? 'HE'
+                }
+
+                const practicasNuevas = practicasNuevasDelLote.length > 0
+                    ? practicasNuevasDelLote
+                    : (practicasNoPrevias.length === entradasCrear.length ? practicasNoPrevias : [])
+
                 const idsPermitidos = new Set<number>([
                     ...Array.from(idsInternacionCirugiaObjetivo),
                     ...practicaIdsCirugiaLocales,
@@ -1065,25 +1138,9 @@ export function PracticaCargaRapidaPage({
                         Array.from(new Set([...prev, ...practicasNuevas.map((practica) => practica.id)]))
                     )
 
-                    const colaClasificacionPorCodigo = new Map<string, string[]>()
-                    for (const entrada of entradasCrear) {
-                        const codigo = entrada.payload.codigoPractica.trim().toUpperCase()
-                        if (!codigo) continue
-                        const cola = colaClasificacionPorCodigo.get(codigo) ?? []
-                        cola.push(entrada.clasificacion ?? 'HE')
-                        colaClasificacionPorCodigo.set(codigo, cola)
-                    }
-
-                    const clasificacionPorNuevaPracticaId: Record<number, string> = {}
-                    const practicasNuevasOrdenadas = [...practicasNuevas].sort((a, b) => a.id - b.id)
-                    for (const practica of practicasNuevasOrdenadas) {
-                        const codigo = practica.codigoPractica.trim().toUpperCase()
-                        const cola = colaClasificacionPorCodigo.get(codigo)
-                        const clasificacion =
-                            cola && cola.length > 0
-                                ? (cola.shift() ?? 'HE')
-                                : clasificacionInferidaPractica(practica)
-                        clasificacionPorNuevaPracticaId[practica.id] = clasificacion
+                    for (const practica of practicasNuevas) {
+                        if (clasificacionPorNuevaPracticaId[practica.id]) continue
+                        clasificacionPorNuevaPracticaId[practica.id] = clasificacionInferidaPractica(practica)
                     }
 
                     setClasificacionPorPracticaId((prev) => ({
@@ -1152,6 +1209,51 @@ export function PracticaCargaRapidaPage({
 
     const alternarSeleccionTodasPendientes = (checked: boolean) => {
         alternarSeleccionLista(practicasPendientes.map((practica) => practica.id), checked)
+    }
+
+    const eliminarPracticaPendiente = async (practicaId: number) => {
+        const practica = practicas.find((item) => item.id === practicaId)
+        if (!practica) return
+
+        if (!practicaActiva(practica.estado) || (practica.ordenPractica?.length ?? 0) > 0) {
+            setMensajeError('Solo se pueden eliminar practicas pendientes sin orden generada')
+            return
+        }
+
+        if (typeof window !== 'undefined') {
+            const confirmar = window.confirm('Se eliminara la practica seleccionada. Desea continuar?')
+            if (!confirmar) return
+        }
+
+        setMensajeError(null)
+        setEliminandoPracticaPendienteId(practicaId)
+        try {
+            const res = await fetch(`/api/internacion/${ingresoId}/practicas/${practicaId}`, {
+                method: 'DELETE',
+                cache: 'no-store',
+            })
+
+            const json = await res.json().catch(() => null)
+            if (!res.ok) {
+                setMensajeError(json?.error ?? 'No se pudo eliminar la practica pendiente')
+                return
+            }
+
+            setPracticas((prev) => prev.filter((item) => item.id !== practicaId))
+            setGuardadasSesion((prev) => prev.filter((item) => item.practicaId !== practicaId))
+            setPracticasSeleccionadas((prev) => prev.filter((id) => id !== practicaId))
+            setPracticaIdsCirugiaLocales((prev) => prev.filter((id) => id !== practicaId))
+            setClasificacionPorPracticaId((prev) => {
+                if (!(practicaId in prev)) return prev
+                const next = { ...prev }
+                delete next[practicaId]
+                return next
+            })
+        } catch {
+            setMensajeError('Error de conexion al eliminar la practica pendiente')
+        } finally {
+            setEliminandoPracticaPendienteId(null)
+        }
     }
 
     const abrirImpresionOrdenes = (ordenes: OrdenRef[]) => {
@@ -3088,6 +3190,49 @@ export function PracticaCargaRapidaPage({
                                 Pendientes de esta sesión: {idsPendientesSesion.length}
                             </div>
 
+                            {pendientesPrevias.length > 0 && (
+                                <div className="rounded-md border border-amber-200 bg-amber-50/70 p-2">
+                                    <p className="text-[11px] font-semibold text-amber-900">
+                                        Pendientes previas sin orden: {pendientesPrevias.length}
+                                    </p>
+                                    <p className="mt-0.5 text-[10px] text-amber-800">
+                                        Si no las necesitas, puedes eliminarlas antes de cargar nuevas para evitar mezcla.
+                                    </p>
+                                    <div className="mt-2 max-h-44 space-y-1 overflow-y-auto pr-1">
+                                        {pendientesPrevias.map(({ practica, clasificacion }) => {
+                                            const eliminando = eliminandoPracticaPendienteId === practica.id
+                                            return (
+                                                <div
+                                                    key={`previa-${practica.id}`}
+                                                    className="flex items-start justify-between gap-2 rounded border border-amber-200 bg-white px-2 py-1"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <p className="font-mono text-[10px] text-amber-900">{practica.codigoPractica.trim()}</p>
+                                                        <p className="truncate text-[11px] text-gray-700">{descripcionParaMostrar(practica)}</p>
+                                                        <p className="text-[10px] text-gray-500">
+                                                            Cant: {practica.cantidad} · Clasif: {clasificacion} · Fecha: {formatearFechaArgentina(practica.fecha, {
+                                                                day: '2-digit',
+                                                                month: '2-digit',
+                                                                year: 'numeric',
+                                                            })}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void eliminarPracticaPendiente(practica.id)}
+                                                        disabled={eliminando}
+                                                        title="Eliminar practica pendiente"
+                                                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                                    >
+                                                        {eliminando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                                    </button>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
@@ -3128,10 +3273,23 @@ export function PracticaCargaRapidaPage({
                                             <span className="rounded border border-blue-100 bg-white px-2 py-1 font-mono text-xs font-semibold text-blue-700">
                                                 {item.codigo}
                                             </span>
-                                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
-                                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                                Guardada
-                                            </span>
+                                            <div className="inline-flex items-center gap-1.5">
+                                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                    Guardada
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void eliminarPracticaPendiente(item.practicaId)}
+                                                    disabled={eliminandoPracticaPendienteId === item.practicaId}
+                                                    title="Eliminar practica pendiente"
+                                                    className="inline-flex h-6 w-6 items-center justify-center rounded border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                                >
+                                                    {eliminandoPracticaPendienteId === item.practicaId
+                                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                        : <Trash2 className="h-3.5 w-3.5" />}
+                                                </button>
+                                            </div>
                                         </div>
                                         <p className="mt-1 text-xs text-gray-700">{item.descripcion}</p>
                                         <p className="mt-1 text-[11px] text-gray-600">

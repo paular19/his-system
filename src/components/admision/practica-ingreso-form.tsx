@@ -48,6 +48,7 @@ export function PracticaIngresoForm({
         hayResultados: false,
     })
     const permiteNumeroAutorizacionManual = ingreso.tipoIngresoCodigo === 'AMB'
+    const esPacienteParticular = !ingreso.obraSocialId
 
     const subtipoAdmisionCodigo = ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
     const etiquetaBusquedaPractica = subtipoAdmisionCodigo === 'CUR' || subtipoAdmisionCodigo === 'SUT'
@@ -169,9 +170,9 @@ export function PracticaIngresoForm({
     return (
         <form onSubmit={handleSubmit} className="space-y-4 p-4 bg-gray-50 rounded-md border border-gray-200">
             <div className="space-y-4">
-                {!ingreso.obraSocialId && (
+                {esPacienteParticular && (
                     <p className="text-xs text-amber-700">
-                        Asignar obra social a la admision para buscar practicas
+                        Paciente particular: la búsqueda de prácticas se realiza sobre el nomenclador general.
                     </p>
                 )}
 
@@ -181,7 +182,7 @@ export function PracticaIngresoForm({
                     practicas={practicas}
                     setPracticas={setPracticas}
                     obtenerMatriculaDefault={obtenerMatriculaDefault}
-                    disabled={isPending || !ingreso.obraSocialId}
+                    disabled={isPending}
                     onPendingSearchChange={setBusquedaPracticaPendiente}
                 />
 
@@ -214,7 +215,7 @@ export function PracticaIngresoForm({
                     <button
                         type="submit"
                         className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                        disabled={isPending || !ingreso.obraSocialId}
+                        disabled={isPending}
                     >
                         Guardar
                     </button>

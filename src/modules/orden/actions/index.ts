@@ -22,6 +22,23 @@ const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const ORDEN_CLASIFICACION_COMPONENTES = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3'] as const
 type ClasificacionComponente = (typeof ORDEN_CLASIFICACION_COMPONENTES)[number]
 
+async function resolverObraSocialParticularId(): Promise<number> {
+  const particular = await prisma.obraSocial.findFirst({
+    where: {
+      estado: 'A',
+      nombre: { contains: 'PARTICULAR', mode: 'insensitive' },
+    },
+    orderBy: { id: 'asc' },
+    select: { id: true },
+  })
+
+  if (!particular) {
+    throw new Error('No se encontró una obra social activa de tipo PARTICULAR para emitir la orden')
+  }
+
+  return particular.id
+}
+
 const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({
   modoGeneracion: z.enum(['MASIVA', 'INDIVIDUAL', 'AGRUPADA']).optional().default('MASIVA'),
 })
@@ -289,7 +306,8 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     })
 
     if (!ingreso) return { error: 'Internación no encontrada' }
-    if (!ingreso.obraSocialId) return { error: 'La internación no tiene obra social asignada' }
+
+    const obraSocialOrdenId = ingreso.obraSocialId ?? await resolverObraSocialParticularId()
 
     const idsSolicitados = parsed.data.practicaIds
     const practicas = await prisma.practica.findMany({
@@ -553,9 +571,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           pacienteId: ingreso.pacienteId ?? ingreso.paciente?.id ?? undefined,
           nombrePaciente: nombrePaciente.slice(0, 50),
           numeroAfiliado,
-          obraSocialId: ingreso.obraSocialId,
-          obraSocialCoseguroId: ingreso.obraSocialCoseguroId ?? undefined,
-          planCoseguroId: ingreso.planCoseguroId ?? undefined,
+          obraSocialId: obraSocialOrdenId,
+          obraSocialCoseguroId: ingreso.obraSocialId ? (ingreso.obraSocialCoseguroId ?? undefined) : undefined,
+          planCoseguroId: ingreso.obraSocialId ? (ingreso.planCoseguroId ?? undefined) : undefined,
           profesionalId: profesionalIdGrupo,
           tipoOrdenCodigo: 'PRA',
           titularModular,
@@ -658,9 +676,7 @@ export async function crearPedidoLaboratorioAction(input: {
       return { error: 'Admisión no encontrada' }
     }
 
-    if (!ingreso.obraSocialId) {
-      return { error: 'La admisión no tiene obra social asignada' }
-    }
+    const obraSocialOrdenId = ingreso.obraSocialId ?? await resolverObraSocialParticularId()
 
     let profesionalId = ingreso.profesionalTratanteId ?? ingreso.profesionalGuardiaId ?? null
     if (!profesionalId) {
@@ -697,7 +713,7 @@ export async function crearPedidoLaboratorioAction(input: {
     const practicaLaboratorio = await crearPracticaInternacion(
       {
         ingresoId: ingreso.id,
-        convenioId: ingreso.obraSocialId,
+        convenioId: ingreso.obraSocialId ?? obraSocialOrdenId,
         codigoPractica: '66',
         descripcionPractica: 'PROTOCOLO BIOQUIMICO',
         numeroProtocoloLaboratorio: numeroProtocolo,
@@ -719,9 +735,9 @@ export async function crearPedidoLaboratorioAction(input: {
         pacienteId: ingreso.pacienteId ?? ingreso.paciente?.id ?? undefined,
         nombrePaciente: nombrePaciente.slice(0, 50),
         numeroAfiliado,
-        obraSocialId: ingreso.obraSocialId,
-        obraSocialCoseguroId: ingreso.obraSocialCoseguroId ?? undefined,
-        planCoseguroId: ingreso.planCoseguroId ?? undefined,
+        obraSocialId: obraSocialOrdenId,
+        obraSocialCoseguroId: ingreso.obraSocialId ? (ingreso.obraSocialCoseguroId ?? undefined) : undefined,
+        planCoseguroId: ingreso.obraSocialId ? (ingreso.planCoseguroId ?? undefined) : undefined,
         profesionalId,
         tipoOrdenCodigo: 'PRA',
         descripcionPatologia: diagnostico || undefined,
@@ -729,7 +745,7 @@ export async function crearPedidoLaboratorioAction(input: {
         items: [
           {
             practicaId: practicaLaboratorio.id,
-            convenioId: ingreso.obraSocialId,
+            convenioId: ingreso.obraSocialId ?? obraSocialOrdenId,
             codigoPractica: '66',
             descripcionPractica: 'PROTOCOLO BIOQUIMICO',
             cantidad: 1,

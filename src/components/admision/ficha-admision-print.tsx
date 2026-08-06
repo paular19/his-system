@@ -185,7 +185,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                     <tr>
                                         <td className="print-label">Cobertura:</td>
                                         <td className="print-value" colSpan={3}>
-                                            {ingreso.obraSocial?.nombre ?? '—'} - {coberturaSecundariaValor}
+                                            {ingreso.obraSocial?.nombre ?? 'Particular'} - {coberturaSecundariaValor}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -364,7 +364,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                     <dl className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                         <div className="flex justify-between">
                             <dt className="text-gray-600">Obra Social:</dt>
-                            <dd className="font-medium">{ingreso.obraSocial?.nombre ?? '—'}</dd>
+                            <dd className="font-medium">{ingreso.obraSocial?.nombre ?? 'Particular'}</dd>
                         </div>
                         <div className="flex justify-between">
                             <dt className="text-gray-600">{coberturaSecundariaLabel}:</dt>

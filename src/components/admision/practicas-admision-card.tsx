@@ -114,14 +114,10 @@ export function PracticasAdmisionCard({
       return []
     }
 
-    const convenioId = Number.parseInt(String(obraSocialId ?? ''), 10)
-    if (!Number.isFinite(convenioId)) {
-      setResultadosPractica([])
-      setIndiceResultadoActivo(-1)
-      return []
-    }
+    const convenioIdParsed = Number.parseInt(String(obraSocialId ?? ''), 10)
+    const convenioId = Number.isFinite(convenioIdParsed) ? convenioIdParsed : undefined
 
-    const cacheKey = `${convenioId}:${termino.toUpperCase()}:${exactoCodigo ? 'exact' : 'mixed'}:${limit}`
+    const cacheKey = `${convenioId ?? 'ALL'}:${termino.toUpperCase()}:${exactoCodigo ? 'exact' : 'mixed'}:${limit}`
     if (!forzar) {
       const cacheados = cacheBusquedaRef.current.get(cacheKey)
       if (cacheados) {
@@ -137,7 +133,10 @@ export function PracticasAdmisionCard({
 
     setBuscandoPractica(true)
     try {
-      const params = new URLSearchParams({ q: termino.trim(), convenioId: String(convenioId) })
+      const params = new URLSearchParams({ q: termino.trim() })
+      if (typeof convenioId === 'number') {
+        params.set('convenioId', String(convenioId))
+      }
       params.set('lite', '1')
       params.set('fallback', '1')
       params.set('limit', String(limit))

@@ -159,20 +159,15 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         }
 
         const convenioId = ingreso.obraSocialId ?? undefined
-        if (!convenioId) {
-            setResultadosPractica([])
-            setErrorMsg('La admisión no tiene obra social asignada para buscar prácticas')
-            return
-        }
 
         setErrorMsg(null)
         setBuscandoPractica(true)
         setResultadosPractica([])
         try {
-            const params = new URLSearchParams({
-                q: termino.trim(),
-                convenioId: String(convenioId),
-            })
+            const params = new URLSearchParams({ q: termino.trim() })
+            if (convenioId) {
+                params.set('convenioId', String(convenioId))
+            }
             const res = await fetch(`/api/practicas-nomenclador?${params.toString()}`)
             const json = await res.json()
             if (json.ok) {
@@ -187,11 +182,6 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
     }
 
     useEffect(() => {
-        if (!ingreso.obraSocialId) {
-            setResultadosPractica([])
-            return
-        }
-
         const termino = busquedaPractica.trim()
         if (termino.length < 2) {
             setResultadosPractica([])
@@ -232,7 +222,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
         if (!busquedaPractica.trim()) return
         const convenioId = ingreso.obraSocialId ?? null
         if (!convenioId) {
-            setErrorMsg('La admisión no tiene obra social asignada para agregar prácticas manuales')
+            setErrorMsg('Para paciente particular, seleccioná la práctica desde el listado para tomar un convenio válido')
             return
         }
 

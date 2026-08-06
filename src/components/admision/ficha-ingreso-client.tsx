@@ -1106,7 +1106,7 @@ export function FichaIngresoClient({
                         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                             <DataItem
                                 label="Obra Social"
-                                value={ingreso.obraSocial?.nombre ?? (ingreso.obraSocialId ? `ID ${ingreso.obraSocialId}` : null)}
+                                value={ingreso.obraSocial?.nombre ?? (ingreso.obraSocialId ? `ID ${ingreso.obraSocialId}` : 'Particular')}
                             />
                             <DataItem
                                 label={coberturaSecundariaLabel}

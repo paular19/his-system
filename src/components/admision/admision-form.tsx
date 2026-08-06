@@ -122,6 +122,9 @@ export function AdmisionForm({
   const [obraSocialId, setObraSocialId] = useState(
     pacienteInicial?.obraSocialId?.toString() ?? ''
   )
+  const [pacienteParticular, setPacienteParticular] = useState(
+    !pacienteInicial?.obraSocialId
+  )
   const [planId, setPlanId] = useState(
     pacienteInicial?.planId?.toString() ?? ''
   )
@@ -281,10 +284,12 @@ export function AdmisionForm({
     setDescartables((prev) => prev.filter((_, i) => i !== idx))
   }
 
-  const obraSocialSeleccionada = obraSociales.find((os) => String(os.id) === obraSocialId)
-  const nombreObraSocial = obraSocialSeleccionada?.nombre ?? ''
+  const obraSocialSeleccionada = pacienteParticular
+    ? null
+    : obraSociales.find((os) => String(os.id) === obraSocialId)
+  const nombreObraSocial = pacienteParticular ? 'PARTICULAR' : (obraSocialSeleccionada?.nombre ?? '')
   const esIPSS = esNombreIPSS(nombreObraSocial)
-  const esCoberturaConCoseguro = esIPSS
+  const esCoberturaConCoseguro = !pacienteParticular && esIPSS
   const cosegurosDisponibles = esIPSS ? coseguros : []
 
   // Sincronizar cobertura cuando cambia el paciente
@@ -293,13 +298,16 @@ export function AdmisionForm({
     if (p) {
       const obraSocialPaciente = obraSociales.find((os) => os.id === p.obraSocialId)
       const pacienteEsIPSS = esNombreIPSS(obraSocialPaciente?.nombre ?? '')
-      setObraSocialId(p.obraSocialId ? p.obraSocialId.toString() : '')
-      setPlanId(!pacienteEsIPSS && p.planId ? p.planId.toString() : '')
+      const esParticular = !p.obraSocialId
+      setPacienteParticular(esParticular)
+      setObraSocialId(!esParticular && p.obraSocialId ? p.obraSocialId.toString() : '')
+      setPlanId(!esParticular && !pacienteEsIPSS && p.planId ? p.planId.toString() : '')
       setObraSocialCoseguroId(
-        pacienteEsIPSS && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
+        !esParticular && pacienteEsIPSS && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
       )
-      setNumeroAfiliado(p.numeroAfiliado ?? '')
+      setNumeroAfiliado(!esParticular ? (p.numeroAfiliado ?? '') : '')
     } else {
+      setPacienteParticular(true)
       setObraSocialId('')
       setPlanId('')
       setObraSocialCoseguroId('')
@@ -429,13 +437,13 @@ export function AdmisionForm({
         profesionalTratanteId: esIngresoGuardia
           ? null
           : (profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null),
-        obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
-        planId: esCoberturaConCoseguro ? null : (planId ? parseInt(planId, 10) : null),
+        obraSocialId: pacienteParticular ? null : (obraSocialId ? parseInt(obraSocialId, 10) : null),
+        planId: pacienteParticular || esCoberturaConCoseguro ? null : (planId ? parseInt(planId, 10) : null),
         obraSocialCoseguroId:
-          esCoberturaConCoseguro && obraSocialCoseguroId
+          !pacienteParticular && esCoberturaConCoseguro && obraSocialCoseguroId
             ? parseInt(obraSocialCoseguroId, 10)
             : null,
-        numeroAfiliado: numeroAfiliado || null,
+        numeroAfiliado: pacienteParticular ? null : (numeroAfiliado || null),
         nombreTutor: paciente?.nombreTutor?.trim() || null,
         telefonoTutor: paciente?.telefonoTutor?.trim() || null,
         descripcionPatologia: descripcionPatologia || null,
@@ -511,8 +519,11 @@ export function AdmisionForm({
       if (paciente?.numeroDocumento != null) {
         prefetchParams.set('prefetchDocumento', String(paciente.numeroDocumento))
       }
-      if (obraSocialSeleccionada?.nombre) {
-        prefetchParams.set('prefetchObraSocial', obraSocialSeleccionada.nombre)
+      const obraSocialPrefetch = pacienteParticular
+        ? 'Particular'
+        : obraSocialSeleccionada?.nombre
+      if (obraSocialPrefetch) {
+        prefetchParams.set('prefetchObraSocial', obraSocialPrefetch)
       }
       if (requiereOrdenAutomatica) {
         prefetchParams.set('autoGen', '1')
@@ -846,6 +857,31 @@ export function AdmisionForm({
 
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">Cobertura Médica</h3>
+        <div className="mb-3">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={pacienteParticular}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setPacienteParticular(checked)
+                if (checked) {
+                  setObraSocialId('')
+                  setPlanId('')
+                  setObraSocialCoseguroId('')
+                  setNumeroAfiliado('')
+                }
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            Paciente particular
+          </label>
+          {pacienteParticular && (
+            <p className="mt-1 text-xs text-gray-500">
+              No se exigirá obra social para cargar prácticas ni para registrar la admisión.
+            </p>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Obra Social</label>
@@ -856,7 +892,8 @@ export function AdmisionForm({
                 setPlanId('')
                 setObraSocialCoseguroId('')
               }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              disabled={pacienteParticular}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
             >
               <option value="">-- Seleccionar obra social --</option>
               {obraSociales.map((obraSocial) => (
@@ -872,8 +909,9 @@ export function AdmisionForm({
               type="text"
               value={numeroAfiliado}
               onChange={(e) => setNumeroAfiliado(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="123456789"
+              disabled={pacienteParticular}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+              placeholder={pacienteParticular ? 'No aplica para particular' : '123456789'}
             />
           </div>
           {esCoberturaConCoseguro && (
@@ -926,7 +964,7 @@ export function AdmisionForm({
       {mostrarPanelPracticasMeds && (
         <>
           <PracticasAdmisionCard
-            obraSocialId={obraSocialId}
+            obraSocialId={pacienteParticular ? null : obraSocialId}
             etiquetaBusqueda={etiquetaBusquedaPractica}
             practicas={practicas}
             setPracticas={setPracticas}

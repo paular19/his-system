@@ -342,7 +342,7 @@ export function AutorizacionPrint({
                         <tr>
                           <td className="aut-label">O.Soc:</td>
                           <td className="aut-valor" colSpan={3}>
-                            {orden.obraSocial?.nombre ?? '—'}
+                            {orden.obraSocial?.nombre ?? 'Particular'}
                           </td>
                         </tr>
                         <tr>

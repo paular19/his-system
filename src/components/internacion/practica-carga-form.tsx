@@ -358,10 +358,11 @@ export function PracticaCargaForm({
         }
 
         setClasificacionPorSubitemNuevo((prev) => {
+            const subitemsPrevios = subitemsPreviosRef.current
             const clavesPrevias = new Map<string, string>()
             const contadorPrevio = new Map<string, number>()
-            for (let idx = 0; idx < subitemsPreviosRef.current.length; idx += 1) {
-                const subitemPrevio = subitemsPreviosRef.current[idx]
+            for (let idx = 0; idx < subitemsPrevios.length; idx += 1) {
+                const subitemPrevio = subitemsPrevios[idx]
                 if (!subitemPrevio) continue
                 const ocurrenciaPrevia = (contadorPrevio.get(subitemPrevio) ?? 0) + 1
                 contadorPrevio.set(subitemPrevio, ocurrenciaPrevia)
@@ -379,10 +380,10 @@ export function PracticaCargaForm({
                 return clavesPrevias.get(clave) ?? subitem
             })
 
+            // Mantener el ref sincronizado con la misma instantánea que produjo `next`.
+            subitemsPreviosRef.current = subitemsSeleccionadosForm
             return next
         })
-
-        subitemsPreviosRef.current = subitemsSeleccionadosForm
     }, [subitemsSeleccionadosForm])
 
     const buscarPractica = (q: string) => {

@@ -229,10 +229,6 @@ export async function crearOrdenesDesdeAdmisionAction(
         })
       : null
 
-    if (esGuardiaAmbulatoria && !profesionalGuardia9110) {
-      return { error: 'No existe un profesional activo con matrícula 9110 para órdenes de guardia.' }
-    }
-
     const ordenData = {
       ...ordenDataBase,
       profesionalId: esGuardiaAmbulatoria
@@ -383,10 +379,6 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           orderBy: { id: 'asc' },
         })
       : null
-
-    if (esGuardiaAmbulatoria && !profesionalGuardia9110) {
-      return { error: 'No existe un profesional activo con matrícula 9110 para órdenes de guardia.' }
-    }
 
     const obraSocialOrdenId = ingreso.obraSocialId ?? await resolverObraSocialParticularId()
 

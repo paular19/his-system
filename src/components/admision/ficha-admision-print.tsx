@@ -51,6 +51,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
     const coberturaSecundariaValor = esCoberturaIPSS
         ? (ingreso.obraSocialCoseguroNombre ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : '—'))
         : (ingreso.plan?.descripcion ?? '—')
+    const esAlta = ingreso.estado === 'E'
 
     useEffect(() => {
         const originalTitle = document.title
@@ -164,9 +165,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                 <tbody>
                                     <tr>
                                         <td className="print-label">Documento:</td>
-                                        <td className="print-value">FICHA DE ADMISION</td>
-                                        <td className="print-label">Fecha impresion:</td>
-                                        <td className="print-value">{formatearFechaHora(new Date())}</td>
+                                        <td className="print-value" colSpan={3}>FICHA DE ADMISION</td>
                                     </tr>
                                     <tr>
                                         <td className="print-label">Paciente:</td>
@@ -246,7 +245,13 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                 <dt className="text-gray-600">Fecha de Ingreso:</dt>
                                 <dd className="font-medium">{formatearFechaHora(ingreso.fechaIngreso)}</dd>
                             </div>
-                            {!esIngresoAmbulatorio && (
+                            {esAlta && (
+                                <div className="flex justify-between">
+                                    <dt className="text-gray-600">Fecha y Hora de Alta:</dt>
+                                    <dd className="font-medium">{formatearFechaHora(ingreso.fechaEgreso)}</dd>
+                                </div>
+                            )}
+                            {!esIngresoAmbulatorio && !esAlta && (
                                 <div className="flex justify-between">
                                     <dt className="text-gray-600">Fecha de Egreso:</dt>
                                     <dd className="font-medium">{formatearFecha(ingreso.fechaEgreso) ?? '—'}</dd>
@@ -469,11 +474,6 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                     </div>
                 )}
 
-                {/* Pie de página */}
-                <div className="text-center text-xs text-gray-500 mt-4 pt-2 border-t border-gray-300">
-                    <p>Documento generado por el Sistema de Gestión Hospitalaria</p>
-                    <p>Fecha: {formatearFechaHora(new Date())}</p>
-                </div>
             </div>
         </>
     )

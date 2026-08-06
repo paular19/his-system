@@ -1973,26 +1973,26 @@ export async function crearCirugiaUrgencia(
     }
 
     if (practicaIdsSeleccionadas.length === 0) {
-      await Promise.all(
-        practicasParaCirugia.map((p) =>
-          tx.practica.create({
-            data: {
-              ingresoId: data.ingresoId,
-              convenioId: p.convenioId ?? data.obraSocialId ?? 0,
-              codigoPractica: p.codigo.padEnd(8).slice(0, 8),
-              convenioValorId: 0,
-              fecha: new Date(data.fechaCirugia),
-              cantidad: p.cantidad,
-              numeroAutorizacion: null,
-              matriculaEspecialista: p.matriculaEspecialista ?? null,
-              matriculaAnestesista: p.matriculaAnestesista ?? null,
-              facturable: true,
-              importeTotal: p.importeTotal ?? null,
-              usuarioRegistro: USUARIO_REGISTRO_CIRUGIA,
-            },
-          })
-        )
-      )
+      // Importante: conservar el orden de inserción para mantener alineado
+      // el mapeo subitem->práctica en la carga rápida de cirugía.
+      for (const p of practicasParaCirugia) {
+        await tx.practica.create({
+          data: {
+            ingresoId: data.ingresoId,
+            convenioId: p.convenioId ?? data.obraSocialId ?? 0,
+            codigoPractica: p.codigo.padEnd(8).slice(0, 8),
+            convenioValorId: 0,
+            fecha: new Date(data.fechaCirugia),
+            cantidad: p.cantidad,
+            numeroAutorizacion: null,
+            matriculaEspecialista: p.matriculaEspecialista ?? null,
+            matriculaAnestesista: p.matriculaAnestesista ?? null,
+            facturable: true,
+            importeTotal: p.importeTotal ?? null,
+            usuarioRegistro: USUARIO_REGISTRO_CIRUGIA,
+          },
+        })
+      }
     }
 
     const cirugiaObjetivo = await tx.cirugiaProgramada.findUnique({

@@ -422,10 +422,10 @@ export function PacienteForm({
                 const checked = e.target.checked
                 setPacienteParticular(checked)
                 if (checked) {
-                  setValue('obraSocialId', null)
-                  setValue('planId', null)
-                  setValue('obraSocialCoseguroId', null)
-                  setValue('numeroAfiliado', null)
+                  setValue('obraSocialId', undefined)
+                  setValue('planId', undefined)
+                  setValue('obraSocialCoseguroId', undefined)
+                  setValue('numeroAfiliado', '')
                 }
               }}
               className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"

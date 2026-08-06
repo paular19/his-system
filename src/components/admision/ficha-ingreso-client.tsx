@@ -17,6 +17,7 @@ import { PracticaIngresoForm } from './practica-ingreso-form'
 import { generarOrdenesPendientesAdmision } from './ordenes-auto'
 import type { IngresoDetalle } from '@/modules/admision/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
+import { anularOrdenAction } from '@/modules/orden/actions'
 import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 import { agruparPracticasAutorizadasPorOrden, obtenerDestinoGrupoPracticasAutorizadas } from '@/lib/practicas-autorizadas'
 import { ObservacionesSection } from '@/components/internacion/observaciones-section'
@@ -97,6 +98,15 @@ function normalizarFechaInputArgentina(value: Date | string | null | undefined):
     return Number.isNaN(parsed.getTime()) ? new Date() : parsed
 }
 
+function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
+    const normalizada = value?.trim() ?? ''
+    return normalizada.length > 0 ? normalizada : null
+}
+
+function grupoTieneNumeroAutorizacion(grupo: { numeroAutorizacion: string | null }): boolean {
+    return normalizarNumeroAutorizacion(grupo.numeroAutorizacion) != null
+}
+
 function DataItem({ label, value }: { label: string; value?: string | null }) {
     if (!value) return null
     return (
@@ -145,6 +155,7 @@ export function FichaIngresoClient({
     const [errorGenerarOrdenes, setErrorGenerarOrdenes] = useState<string | null>(null)
     const [practicaEditando, setPracticaEditando] = useState<PracticaEditable | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
+    const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
     const [admisionVista, setAdmisionVista] = useState(() => ({
@@ -209,6 +220,16 @@ export function FichaIngresoClient({
     const ordenesAutorizadasFiltradas = useMemo(
         () => agruparPracticasAutorizadasPorOrden(practicasAutorizadas, practicaAutorizadaIdsFiltradas),
         [practicasAutorizadas, practicaAutorizadaIdsFiltradas]
+    )
+
+    const ordenesPendientesAutorizacion = useMemo(
+        () => ordenesAutorizadasFiltradas.filter((grupo) => !grupoTieneNumeroAutorizacion(grupo)).length,
+        [ordenesAutorizadasFiltradas]
+    )
+
+    const ordenesYaAutorizadas = useMemo(
+        () => ordenesAutorizadasFiltradas.filter((grupo) => grupoTieneNumeroAutorizacion(grupo)).length,
+        [ordenesAutorizadasFiltradas]
     )
 
     const totalPaginasPendientes = Math.max(
@@ -458,6 +479,32 @@ export function FichaIngresoClient({
 
     const generarOrdenesSeleccionadas = (imprimirDespues: boolean) => {
         encolarGeneracionOrdenes(imprimirDespues)
+    }
+
+    const handleAnularOrdenDesdeGrupo = async (puestoNumero: number, ordenNumero: number, grupoKey: string) => {
+        if (typeof window !== 'undefined') {
+            const confirmar = window.confirm(
+                `Se anulara la orden ${formatearNumeroOrden(puestoNumero, ordenNumero)}. Desea continuar?`
+            )
+            if (!confirmar) return
+        }
+
+        setErrorGenerarOrdenes(null)
+        setAnulandoOrdenKey(grupoKey)
+
+        try {
+            const result = await anularOrdenAction(puestoNumero, ordenNumero)
+            if ('error' in result && result.error) {
+                setErrorGenerarOrdenes(result.error)
+                return
+            }
+
+            await recargarPracticasIngreso()
+        } catch {
+            setErrorGenerarOrdenes('Error al anular la orden')
+        } finally {
+            setAnulandoOrdenKey(null)
+        }
     }
 
     useEffect(() => {
@@ -1560,14 +1607,17 @@ export function FichaIngresoClient({
                             </div>
 
                             <div>
-                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                                    Ya autorizadas ({ordenesAutorizadasFiltradas.length})
+                                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                    Ordenes generadas ({ordenesAutorizadasFiltradas.length})
+                                </p>
+                                <p className="mb-2 text-[11px] text-gray-600">
+                                    Pendientes de autorizacion: {ordenesPendientesAutorizacion} · Ya autorizadas: {ordenesYaAutorizadas}
                                 </p>
                                 {ordenesAutorizadasFiltradas.length === 0 ? (
                                     <p className="text-sm text-gray-400">
                                         {practicasAutorizadas.length === 0
-                                            ? 'No hay prácticas autorizadas.'
-                                            : 'No hay prácticas autorizadas para este filtro.'}
+                                            ? 'No hay ordenes generadas.'
+                                            : 'No hay ordenes generadas para este filtro.'}
                                     </p>
                                 ) : (
                                     <div className="space-y-2">
@@ -1579,6 +1629,13 @@ export function FichaIngresoClient({
                                                     : null
                                             const destinoAbrir = destinoOrdenImpresion ?? destinoAutorizada
                                             const grupoSinNumeroAutorizacion = !Boolean(grupo.numeroAutorizacion?.trim())
+                                            const grupoYaAutorizado = grupoTieneNumeroAutorizacion(grupo)
+                                            const grupoFacturado = grupo.practicas.some((practica) => Boolean(practica.facturada))
+                                            const puedeAnularGrupo =
+                                                grupo.tipo === 'orden' &&
+                                                Boolean(grupo.puestoNumero && grupo.ordenNumero) &&
+                                                !grupoFacturado
+                                            const grupoAnulandose = anulandoOrdenKey === grupo.key
                                             const limitePracticas = 3
                                             const abierta = ordenesAutorizadasAbiertas[grupo.key] ?? false
                                             const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
@@ -1608,7 +1665,11 @@ export function FichaIngresoClient({
                                             return (
                                                 <div
                                                     key={grupo.key}
-                                                    className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2"
+                                                    className={`rounded-lg p-2 ${
+                                                        grupoYaAutorizado
+                                                            ? 'border border-emerald-200 bg-emerald-50/40'
+                                                            : 'border border-amber-300 bg-amber-100/60'
+                                                    }`}
                                                 >
                                                     <button
                                                         type="button"
@@ -1616,31 +1677,53 @@ export function FichaIngresoClient({
                                                             ...prev,
                                                             [grupo.key]: !(prev[grupo.key] ?? false),
                                                         }))}
-                                                        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0 text-left hover:bg-emerald-100/40"
+                                                        className={`flex w-full items-center justify-between gap-2 rounded-md px-1 py-0 text-left ${
+                                                            grupoYaAutorizado ? 'hover:bg-emerald-100/40' : 'hover:bg-amber-200/50'
+                                                        }`}
                                                     >
-                                                        <span className="flex min-w-0 items-center gap-2 text-emerald-900">
+                                                        <span className={`flex min-w-0 items-center gap-2 ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
                                                             <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
                                                             <span className="shrink-0 text-xs font-semibold">{tituloGrupo}</span>
-                                                            <span className="min-w-0 truncate text-[10px] text-emerald-700">
+                                                            <span className={`min-w-0 truncate text-[10px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
                                                                 Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Fecha: {fechaResumenOrden}
                                                             </span>
                                                         </span>
-                                                        <span className="text-[11px] text-emerald-700">{grupo.practicas.length} práctica(s)</span>
+                                                        <span className={`text-[11px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
+                                                            {grupo.practicas.length} práctica(s)
+                                                        </span>
                                                     </button>
 
                                                     {abierta && (
                                                         <div className="mt-1.5 grid gap-2 md:grid-cols-2">
-                                                            <div className="space-y-1.5 text-xs text-emerald-900">
+                                                            <div className={`space-y-1.5 text-xs ${grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}`}>
                                                                 <div className="flex items-center gap-2 flex-wrap">
                                                                     {destinoAbrir && (
                                                                         <Link
                                                                             href={destinoAbrir}
                                                                             target={destinoOrdenImpresion ? '_blank' : undefined}
                                                                             rel={destinoOrdenImpresion ? 'noopener noreferrer' : undefined}
-                                                                            className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-200"
+                                                                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                                                                grupoYaAutorizado
+                                                                                    ? 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200'
+                                                                                    : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                                                                            }`}
                                                                         >
                                                                             {destinoOrdenImpresion ? 'Abrir orden' : 'Abrir'}
                                                                         </Link>
+                                                                    )}
+                                                                    {puedeModificar && grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => void handleAnularOrdenDesdeGrupo(grupo.puestoNumero as number, grupo.ordenNumero as number, grupo.key)}
+                                                                            disabled={grupoAnulandose || !puedeAnularGrupo}
+                                                                            title={!puedeAnularGrupo
+                                                                                ? 'La orden ya esta facturada'
+                                                                                : 'Anular orden'}
+                                                                            className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                                                        >
+                                                                            {grupoAnulandose && <Loader2 className="h-3 w-3 animate-spin" />}
+                                                                            {grupoAnulandose ? 'Anulando...' : 'Anular orden'}
+                                                                        </button>
                                                                     )}
                                                                     {puedeModificar && (grupoSinNumeroAutorizacion || grupo.practicas.some((practica) => !Boolean(practica.facturada))) && (
                                                                         <button
@@ -1662,19 +1745,26 @@ export function FichaIngresoClient({
                                                                         </button>
                                                                     )}
                                                                 </div>
-                                                                <p className="text-emerald-800">N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
-                                                                <p className="text-emerald-800">Fecha última práctica: {formatearFechaHora(grupo.fechaReferencia)}</p>
-                                                                <p className="text-emerald-800">Cantidad total: {grupo.totalCantidad}</p>
-                                                                <p className="text-emerald-800">
+                                                                <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>N° autorización: {grupo.numeroAutorizacion ?? '-'}</p>
+                                                                <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900 font-semibold'}>
+                                                                    Estado: {grupoYaAutorizado ? 'Ya autorizada' : 'Pendiente de autorización'}
+                                                                </p>
+                                                                <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>Fecha última práctica: {formatearFechaHora(grupo.fechaReferencia)}</p>
+                                                                <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>Cantidad total: {grupo.totalCantidad}</p>
+                                                                <p className={grupoYaAutorizado ? 'text-emerald-800' : 'text-amber-900'}>
                                                                     {grupo.matriculasFirmantes.length > 1
                                                                         ? 'Matrículas firmantes'
                                                                         : 'Matrícula firmante'}: {grupo.matriculasFirmantes.length > 0 ? grupo.matriculasFirmantes.join(', ') : '-'}
                                                                 </p>
                                                             </div>
 
-                                                            <div className="rounded-md border border-emerald-200 bg-white/70 p-1.5">
+                                                            <div className={`rounded-md bg-white/70 p-1.5 ${
+                                                                grupoYaAutorizado ? 'border border-emerald-200' : 'border border-amber-300'
+                                                            }`}>
                                                                 <div className="flex items-center justify-between gap-2">
-                                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                                    <p className={`text-[11px] font-semibold uppercase tracking-wide ${
+                                                                        grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'
+                                                                    }`}>
                                                                         Prácticas de la orden ({grupo.practicas.length})
                                                                     </p>
                                                                     {grupo.practicas.length > limitePracticas && (
@@ -1684,7 +1774,11 @@ export function FichaIngresoClient({
                                                                                 ...prev,
                                                                                 [grupo.key]: !(prev[grupo.key] ?? false),
                                                                             }))}
-                                                                            className="rounded border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50"
+                                                                            className={`rounded px-2 py-0.5 text-[11px] font-medium ${
+                                                                                grupoYaAutorizado
+                                                                                    ? 'border border-emerald-300 text-emerald-800 hover:bg-emerald-50'
+                                                                                    : 'border border-amber-300 text-amber-900 hover:bg-amber-100'
+                                                                            }`}
                                                                         >
                                                                             {expandida ? 'Contraer' : 'Expandir'}
                                                                         </button>
@@ -1695,22 +1789,28 @@ export function FichaIngresoClient({
                                                                     {practicasVisibles.map((practica) => (
                                                                         <div
                                                                             key={`${grupo.key}-${practica.id}`}
-                                                                            className="rounded border border-emerald-100 bg-white px-2 py-1"
+                                                                            className={`rounded bg-white px-2 py-1 ${
+                                                                                grupoYaAutorizado ? 'border border-emerald-100' : 'border border-amber-200'
+                                                                            }`}
                                                                         >
-                                                                            <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                                                            <div className={`flex items-center justify-between gap-2 ${
+                                                                                grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'
+                                                                            }`}>
                                                                                 <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
                                                                                 <span className="font-medium">Cant. {practica.cantidad}</span>
                                                                             </div>
-                                                                            <p className="text-emerald-900">
+                                                                            <p className={grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}>
                                                                                 {practica.descripcionPractica ?? practica.codigoPractica.trim()}
                                                                             </p>
-                                                                            <p className="text-[11px] text-emerald-700">{formatearFechaHora(practica.fecha)}</p>
+                                                                            <p className={grupoYaAutorizado ? 'text-[11px] text-emerald-700' : 'text-[11px] text-amber-800'}>{formatearFechaHora(practica.fecha)}</p>
                                                                         </div>
                                                                     ))}
                                                                 </div>
 
                                                                 {!expandida && restantes > 0 && (
-                                                                    <p className="mt-1 text-[11px] text-emerald-700">+{restantes} práctica(s) más</p>
+                                                                    <p className={`mt-1 text-[11px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
+                                                                        +{restantes} práctica(s) más
+                                                                    </p>
                                                                 )}
                                                             </div>
                                                         </div>

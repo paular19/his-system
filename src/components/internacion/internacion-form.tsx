@@ -145,8 +145,9 @@ export function InternacionForm({
   const [clinicaDerivante, setClinicaDerivante] = useState('')
   const [esCirugiaProgramada, setEsCirugiaProgramada] = useState(false)
   const [bloquearHabitacionCompleta, setBloquearHabitacionCompleta] = useState(false)
-  const [fechaCirugiaProgramada, setFechaCirugiaProgramada] = useState(ahoraLocalDateTimeInput())
+  const [fechaCirugiaProgramada, setFechaCirugiaProgramada] = useState('')
   const [obraSocialId, setObraSocialId] = useState(pacienteInicial?.obraSocialId?.toString() ?? '')
+  const [pacienteParticular, setPacienteParticular] = useState(!pacienteInicial?.obraSocialId)
   const [planId, setPlanId] = useState(pacienteInicial?.planId?.toString() ?? '')
   const [obraSocialCoseguroId, setObraSocialCoseguroId] = useState(
     pacienteInicial?.obraSocialCoseguroId?.toString() ?? ''
@@ -167,6 +168,8 @@ export function InternacionForm({
     hayResultados: false,
   })
   const planesDisponibles = useMemo(() => {
+    if (pacienteParticular) return []
+
     const filtered = obraSocialId
       ? planes.filter((p) => String(p.obraSocialId ?? '') === obraSocialId)
       : planes
@@ -176,7 +179,7 @@ export function InternacionForm({
       seen.add(p.id)
       return true
     })
-  }, [obraSocialId, planes])
+  }, [pacienteParticular, obraSocialId, planes])
 
   const camaSeleccionada = useMemo(
     () => camasDisponibles.find((c) => c.id.toString() === camaId),
@@ -184,11 +187,11 @@ export function InternacionForm({
   )
 
   const obraSocialSeleccionada = useMemo(
-    () => obraSociales.find((os) => String(os.id) === obraSocialId) ?? null,
-    [obraSociales, obraSocialId]
+    () => (pacienteParticular ? null : (obraSociales.find((os) => String(os.id) === obraSocialId) ?? null)),
+    [pacienteParticular, obraSociales, obraSocialId]
   )
 
-  const esIPSS = esNombreIPSS(obraSocialSeleccionada?.nombre ?? '')
+  const esIPSS = !pacienteParticular && esNombreIPSS(obraSocialSeleccionada?.nombre ?? '')
   const cosegurosDisponibles = esIPSS ? coseguros : []
 
   const obtenerMatriculaDefault = () => {
@@ -212,15 +215,18 @@ export function InternacionForm({
     if (p) {
       const obraSocialPaciente = obraSociales.find((os) => os.id === p.obraSocialId)
       const pacienteEsIPSS = esNombreIPSS(obraSocialPaciente?.nombre ?? '')
-      setObraSocialId(p.obraSocialId ? p.obraSocialId.toString() : '')
-      setPlanId(!pacienteEsIPSS && p.planId ? p.planId.toString() : '')
+      const esParticular = !p.obraSocialId
+      setPacienteParticular(esParticular)
+      setObraSocialId(!esParticular && p.obraSocialId ? p.obraSocialId.toString() : '')
+      setPlanId(!esParticular && !pacienteEsIPSS && p.planId ? p.planId.toString() : '')
       setObraSocialCoseguroId(
-        pacienteEsIPSS && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
+        !esParticular && pacienteEsIPSS && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
       )
-      setNumeroAfiliado(p.numeroAfiliado ?? '')
+      setNumeroAfiliado(!esParticular ? (p.numeroAfiliado ?? '') : '')
       setNombreTutor(p.nombreTutor ?? '')
       setTelefonoTutor(p.telefonoTutor ?? '')
     } else {
+      setPacienteParticular(true)
       setObraSocialId('')
       setPlanId('')
       setObraSocialCoseguroId('')
@@ -285,12 +291,6 @@ export function InternacionForm({
       return
     }
 
-    if (esCirugiaProgramada && !camaId) {
-      setError('Para cirugia programada debe seleccionar una cama')
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      return
-    }
-
     if (bloquearHabitacionCompleta && !camaId) {
       setError('Para bloquear la habitacion completa debe seleccionar una cama')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -299,12 +299,6 @@ export function InternacionForm({
 
     if (bloquearHabitacionCompleta && !camaSeleccionada?.habitacion) {
       setError('La cama seleccionada no tiene habitacion asociada para poder bloquearla completa')
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      return
-    }
-
-    if (esCirugiaProgramada && !fechaCirugiaProgramada) {
-      setError('Debe completar fecha y hora de la cirugia programada')
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
@@ -424,17 +418,17 @@ export function InternacionForm({
         subtipoAdmisionCodigo: esCirugiaProgramada ? 'PRG' : null,
         pacienteId: paciente.id,
         fechaIngreso: fechaIngreso || undefined,
-        fechaTurno: esCirugiaProgramada ? fechaCirugiaProgramada : undefined,
+        fechaTurno: esCirugiaProgramada && fechaCirugiaProgramada ? fechaCirugiaProgramada : undefined,
         camaId: camaId ? parseInt(camaId, 10) : null,
         bloquearHabitacionCompleta,
         profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null,
         profesionalDerivanteId: profesionalDerivanteId ? parseInt(profesionalDerivanteId, 10) : null,
         profesionalTratanteId: profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null,
-        obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : null,
-        planId: !esIPSS && planId ? parseInt(planId, 10) : null,
+        obraSocialId: pacienteParticular ? null : (obraSocialId ? parseInt(obraSocialId, 10) : null),
+        planId: pacienteParticular || esIPSS ? null : (planId ? parseInt(planId, 10) : null),
         obraSocialCoseguroId:
-          esIPSS && obraSocialCoseguroId ? parseInt(obraSocialCoseguroId, 10) : null,
-        numeroAfiliado: numeroAfiliado || null,
+          !pacienteParticular && esIPSS && obraSocialCoseguroId ? parseInt(obraSocialCoseguroId, 10) : null,
+        numeroAfiliado: pacienteParticular ? null : (numeroAfiliado || null),
         nombreTutor: nombreTutor.trim() || null,
         telefonoTutor: telefonoTutor.trim() || null,
         descripcionPatologia: descripcionPatologia || null,
@@ -644,12 +638,12 @@ export function InternacionForm({
               onChange={(e) => setEsCirugiaProgramada(e.target.checked)}
               className="h-4 w-4 rounded border-amber-300"
             />
-            Internacion por cirugia programada (reserva de cama)
+            Internacion por cirugia programada (puede quedar sin cama inicial)
           </label>
           {esCirugiaProgramada && (
             <div className="mt-3 max-w-sm">
               <label className="block text-xs font-medium text-amber-900 mb-1">
-                Fecha y hora de la cirugia <span className="text-red-500">*</span>
+                Fecha y hora de la cirugia
               </label>
               <input
                 type="datetime-local"
@@ -658,7 +652,7 @@ export function InternacionForm({
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
               />
               <p className="mt-1 text-xs text-amber-800">
-                La cama quedara en estado reservada para esta internacion.
+                Si no selecciona cama o fecha, el caso quedara pendiente en Internacion para asignarlo despues.
               </p>
             </div>
           )}
@@ -729,6 +723,31 @@ export function InternacionForm({
 
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Cobertura medica</h3>
+        <div className="mb-3">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={pacienteParticular}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setPacienteParticular(checked)
+                if (checked) {
+                  setObraSocialId('')
+                  setPlanId('')
+                  setObraSocialCoseguroId('')
+                  setNumeroAfiliado('')
+                }
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            Paciente particular
+          </label>
+          {pacienteParticular && (
+            <p className="mt-1 text-xs text-gray-500">
+              No se exigira obra social para cargar practicas ni registrar la internacion.
+            </p>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Obra social</label>
@@ -739,7 +758,8 @@ export function InternacionForm({
                 setPlanId('')
                 setObraSocialCoseguroId('')
               }}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+              disabled={pacienteParticular}
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50"
             >
               <option value="">— Sin cobertura —</option>
               {obraSociales.map((os) => (
@@ -747,7 +767,7 @@ export function InternacionForm({
               ))}
             </select>
           </div>
-          {!esIPSS && (
+          {!pacienteParticular && !esIPSS && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Plan</label>
               <select
@@ -763,7 +783,7 @@ export function InternacionForm({
               </select>
             </div>
           )}
-          {esIPSS && (
+          {!pacienteParticular && esIPSS && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Coseguro</label>
               <select
@@ -785,8 +805,9 @@ export function InternacionForm({
               type="text"
               value={numeroAfiliado}
               onChange={(e) => setNumeroAfiliado(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-              placeholder="Numero de afiliado"
+              disabled={pacienteParticular}
+              className="w-full border rounded-lg px-3 py-2 text-sm disabled:bg-gray-50"
+              placeholder={pacienteParticular ? 'No aplica para particular' : 'Numero de afiliado'}
             />
           </div>
         </div>
@@ -915,19 +936,24 @@ export function InternacionForm({
 
       <div className="his-card p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Practicas</h3>
-        {!obraSocialId && (
+        {!pacienteParticular && !obraSocialId && (
           <p className="text-xs text-amber-700 mb-3">
             Asignar obra social para buscar practicas en nomenclador.
           </p>
         )}
+        {pacienteParticular && (
+          <p className="text-xs text-amber-700 mb-3">
+            Paciente particular: la busqueda de practicas se realiza sobre el nomenclador general.
+          </p>
+        )}
 
         <PracticasAdmisionCard
-          obraSocialId={obraSocialId}
+          obraSocialId={pacienteParticular ? null : obraSocialId}
           etiquetaBusqueda="Buscar practica en nomenclador..."
           practicas={practicas}
           setPracticas={setPracticas}
           obtenerMatriculaDefault={obtenerMatriculaDefault}
-          disabled={guardando || !obraSocialId}
+          disabled={guardando || (!pacienteParticular && !obraSocialId)}
           onPendingSearchChange={setBusquedaPracticaPendiente}
         />
 

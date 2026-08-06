@@ -483,11 +483,19 @@ export async function obtenerInternacionesActivas(
   const { pagina, porPagina, q, obraSocialId, sector, fechaReferencia } = params
   const skip = (pagina - 1) * porPagina
   const fecha = resolverFechaReferencia(fechaReferencia)
+  const filtrosAnd: Prisma.IngresoWhereInput[] = [
+    {
+      OR: [
+        { camaId: { not: null } },
+        { ingresoSubtipo: { is: { subtipoAdmisionCodigo: 'PRG' } } },
+      ],
+    },
+  ]
 
   const where: Prisma.IngresoWhereInput = {
     tipoIngresoCodigo: 'INT',
     estado: 'A',
-    camaId: { not: null },
+    AND: filtrosAnd,
   }
 
   if (sector) {
@@ -502,28 +510,32 @@ export async function obtenerInternacionesActivas(
     const esNumerico = /^\d+$/.test(q)
     if (esNumerico) {
       const num = parseInt(q, 10)
-      where.OR = [
-        { numeroIngreso: num },
-        { nombre: { contains: q, mode: 'insensitive' } },
-        { paciente: { numeroDocumento: num } },
-        { paciente: { historiaClinica: num } },
-      ]
+      filtrosAnd.push({
+        OR: [
+          { numeroIngreso: num },
+          { nombre: { contains: q, mode: 'insensitive' } },
+          { paciente: { numeroDocumento: num } },
+          { paciente: { historiaClinica: num } },
+        ],
+      })
     } else {
       const tokensBusqueda = obtenerTokensBusquedaFlexible(q)
       const tokens = tokensBusqueda.length > 0 ? tokensBusqueda : [q.trim()]
 
-      where.OR = [
-        {
-          AND: tokens.map((token) => ({
-            nombre: { contains: token, mode: 'insensitive' },
-          })),
-        },
-        {
-          AND: tokens.map((token) => ({
-            paciente: { nombreCompleto: { contains: token, mode: 'insensitive' } },
-          })),
-        },
-      ]
+      filtrosAnd.push({
+        OR: [
+          {
+            AND: tokens.map((token) => ({
+              nombre: { contains: token, mode: 'insensitive' },
+            })),
+          },
+          {
+            AND: tokens.map((token) => ({
+              paciente: { nombreCompleto: { contains: token, mode: 'insensitive' } },
+            })),
+          },
+        ],
+      })
     }
   }
 
@@ -534,6 +546,12 @@ export async function obtenerInternacionesActivas(
       numeroIngreso: true,
       nombre: true,
       fechaIngreso: true,
+      ingresoSubtipo: {
+        select: {
+          subtipoAdmisionCodigo: true,
+          fechaTurno: true,
+        },
+      },
       fechaEgresoPrevista: true,
       estado: true,
       descripcionPatologia: true,
@@ -558,11 +576,16 @@ export async function obtenerInternacionesActivas(
   const total = itemsFiltrados.length
   const items = itemsFiltrados
     .slice(skip, skip + porPagina)
-    .map((item) => ({
-      ...item,
-      descripcionPatologia: item.descripcionPatologia ?? null,
-      tieneCoseguro: Boolean(item.obraSocialCoseguroId),
-    }))
+    .map((item) => {
+      const { ingresoSubtipo, ...base } = item
+      return {
+        ...base,
+        fechaTurno: ingresoSubtipo?.fechaTurno ?? null,
+        esCirugiaProgramada: ingresoSubtipo?.subtipoAdmisionCodigo === 'PRG',
+        descripcionPatologia: item.descripcionPatologia ?? null,
+        tieneCoseguro: Boolean(item.obraSocialCoseguroId),
+      }
+    })
 
   return {
     items,

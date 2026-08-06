@@ -13,6 +13,7 @@ import {
   User,
   Calendar,
   History,
+  ClipboardList,
 } from 'lucide-react'
 import { InternacionFiltros } from '@/components/internacion/internacion-filtros'
 import { InternacionFechaSelector } from '@/components/internacion/internacion-fecha-selector'
@@ -97,6 +98,9 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   const mostrarSoloOcupadas = Boolean(obraSocialIdFiltro)
   const qNormalizado = normalizarTextoBusquedaFlexible(q)
   const qTokens = obtenerTokensBusquedaFlexible(q)
+  const cirugiasProgramadasPendientes = internaciones.items.filter(
+    (item) => item.esCirugiaProgramada && !item.cama && !item.fechaTurno
+  )
 
   const sectoresFiltradosPorBusqueda = qNormalizado
     ? mapa.sectores
@@ -183,6 +187,56 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           fechaReferencia={fechaSeleccionada}
         />
 
+        {cirugiasProgramadasPendientes.length > 0 && (
+          <div className="his-card p-4 border border-amber-200 bg-amber-50/60 print:hidden">
+            <div className="flex items-center gap-2 mb-3">
+              <ClipboardList className="h-4 w-4 text-amber-700" />
+              <h3 className="text-sm font-semibold text-amber-900">
+                Cirugias programadas pendientes de cama y fecha
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-180 text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-amber-800 border-b border-amber-200">
+                    <th className="py-2 pr-4">Paciente</th>
+                    <th className="py-2 pr-4">Ingreso</th>
+                    <th className="py-2 pr-4">Creada</th>
+                    <th className="py-2 pr-4">Estado</th>
+                    <th className="py-2">Accion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cirugiasProgramadasPendientes.map((item) => (
+                    <tr key={`prg-pendiente-${item.id}`} className="border-b border-amber-100 last:border-b-0">
+                      <td className="py-2 pr-4 text-gray-900 font-medium">
+                        {item.paciente?.nombreCompleto ?? item.nombre ?? '—'}
+                      </td>
+                      <td className="py-2 pr-4 text-gray-700">INT-{item.numeroIngreso}</td>
+                      <td className="py-2 pr-4 text-gray-700">
+                        {item.fechaIngreso ? formatearFechaHoraArgentina(item.fechaIngreso) : '—'}
+                      </td>
+                      <td className="py-2 pr-4">
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          Sin cama y sin fecha de cirugia
+                        </span>
+                      </td>
+                      <td className="py-2">
+                        <Link
+                          href={`/dashboard/internacion/${item.id}`}
+                          className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                        >
+                          Abrir ficha
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Mapa visual por sector */}
         <div className="space-y-4 print:hidden">
           {sectoresMapa.length === 0 ? (
@@ -231,7 +285,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
             </div>
           ) : (
             <div className="his-card overflow-x-auto ips-print-table">
-              <table className="w-full text-sm min-w-[980px]">
+              <table className="w-full text-sm min-w-245">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -286,6 +340,10 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                               <p className="text-xs text-gray-500">Hab. {item.cama.habitacion}</p>
                             )}
                           </div>
+                        ) : item.esCirugiaProgramada ? (
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                            Pendiente de asignacion
+                          </span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
@@ -304,6 +362,19 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                           </div>
                         ) : (
                           <span className="text-gray-400">—</span>
+                        )}
+                        {item.esCirugiaProgramada && (
+                          <p className="text-xs text-amber-700 mt-1">
+                            Cirugia:{' '}
+                            {item.fechaTurno
+                              ? formatearFechaHoraArgentina(item.fechaTurno, {
+                                day: '2-digit',
+                                month: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                              : 'Sin fecha asignada'}
+                          </p>
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-700">

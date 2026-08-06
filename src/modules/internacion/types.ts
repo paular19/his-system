@@ -84,10 +84,12 @@ export interface InternacionListItem {
   numeroIngreso: number
   nombre: string | null
   fechaIngreso: Date | null
+  fechaTurno: Date | null
   fechaEgresoPrevista: Date | null
   estado: string | null
   descripcionPatologia: string | null
   tieneCoseguro: boolean
+  esCirugiaProgramada: boolean
   cama: {
     id: number
     identificador: string

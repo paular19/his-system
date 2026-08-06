@@ -63,6 +63,9 @@ export function PacienteForm({
   const [error, setError] = useState<string | null>(null)
   const [pacienteCreadoId, setPacienteCreadoId] = useState<number | null>(null)
   const [latenciaCreacionMs, setLatenciaCreacionMs] = useState<number | null>(null)
+  const [pacienteParticular, setPacienteParticular] = useState(() =>
+    Boolean(valoresIniciales) && !valoresIniciales?.obraSocialId
+  )
 
   const {
     register,
@@ -78,7 +81,9 @@ export function PacienteForm({
   })
 
   const obraSocialIdRaw = watch('obraSocialId') as number | string | undefined
-  const obraSocialIdSeleccionada = obraSocialIdRaw ? Number(obraSocialIdRaw) : undefined
+  const obraSocialIdSeleccionada = pacienteParticular
+    ? undefined
+    : (obraSocialIdRaw ? Number(obraSocialIdRaw) : undefined)
   const obraSocialSeleccionada = obraSociales.find((os) => os.id === obraSocialIdSeleccionada)
 
   function normalizarNomOS(value: string): string {
@@ -93,7 +98,7 @@ export function PacienteForm({
   const nombreObraSocialNormalizado = normalizarNomOS(obraSocialSeleccionada?.nombre ?? '')
   const tokensObraSocial = nombreObraSocialNormalizado.split(' ')
   const esIPSS = tokensObraSocial.includes('IPSS') || tokensObraSocial.includes('IPS')
-  const esObraSocialConCoseguro = esIPSS
+  const esObraSocialConCoseguro = !pacienteParticular && esIPSS
   const cosegurosDisponibles = esIPSS ? coseguros : []
 
   const obraSocialRegister = register('obraSocialId', {
@@ -116,8 +121,13 @@ export function PacienteForm({
     try {
       const payload = {
         ...data,
+        obraSocialId: pacienteParticular ? null : (data.obraSocialId ?? null),
+        planId: pacienteParticular ? null : (data.planId ?? null),
+        numeroAfiliado: pacienteParticular ? null : (data.numeroAfiliado ?? null),
         obraSocialCoseguroId:
-          esObraSocialConCoseguro
+          pacienteParticular
+            ? null
+            : esObraSocialConCoseguro
             ? (data.obraSocialCoseguroId ?? null)
             : null,
       }
@@ -403,17 +413,38 @@ export function PacienteForm({
         <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
           Cobertura Médica
         </h3>
+        <div className="mb-3">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={pacienteParticular}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setPacienteParticular(checked)
+                if (checked) {
+                  setValue('obraSocialId', null)
+                  setValue('planId', null)
+                  setValue('obraSocialCoseguroId', null)
+                  setValue('numeroAfiliado', null)
+                }
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            Paciente particular
+          </label>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Obra Social</label>
             <select
               {...obraSocialRegister}
+              disabled={pacienteParticular}
               onChange={(e) => {
                 obraSocialRegister.onChange(e)
                 setValue('planId', undefined)
                 setValue('obraSocialCoseguroId', undefined)
               }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
             >
               <option value="">-- Seleccionar obra social --</option>
               {obraSociales.map((obraSocial) => (
@@ -457,8 +488,9 @@ export function PacienteForm({
             </label>
             <input
               {...register('numeroAfiliado')}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="123456789"
+              disabled={pacienteParticular}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+              placeholder={pacienteParticular ? 'No aplica para particular' : '123456789'}
             />
           </div>
         </div>

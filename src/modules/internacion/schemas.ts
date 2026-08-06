@@ -254,6 +254,7 @@ export const CrearCirugiaUrgenciaSchema = z.object({
     convenioId: z.number().int().positive().optional().nullable(),
     codigo: z.string().min(1).max(50),
     descripcion: z.string().min(1).max(500),
+    fecha: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
     cantidad: z.number().int().min(1),
     importeTotal: z.number().min(0).optional().nullable(),
     matriculaEspecialista: z.number().int().positive().optional().nullable(),

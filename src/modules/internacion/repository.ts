@@ -79,6 +79,10 @@ function claveDiaArgentina(fecha: Date): string {
   return `${year}-${month}-${day}`
 }
 
+function fechaDesdeClaveArgentina(clave: string): Date {
+  return new Date(`${clave}T12:00:00-03:00`)
+}
+
 function resolverFechaReferencia(fechaReferencia?: Date): Date {
   return fechaReferencia ?? new Date()
 }
@@ -1439,13 +1443,20 @@ export async function actualizarPractica(
 
       if (ordenActivaLegacy) {
         const codigoLegacy = practicaActual.codigoPractica.padEnd(8).slice(0, 8)
+        const codigoLegacyTrim = codigoLegacy.trim()
         ordenesVinculadas = await tx.ordenPractica.findMany({
           where: {
             puestoNumero: Number(practicaActual.puestoNumero),
             ordenNumero: Number(practicaActual.ordenNumero),
             ...(practicaActual.ordenItem != null
               ? { item: Number(practicaActual.ordenItem) }
-              : { codigoPractica: codigoLegacy }),
+              : {
+                OR: [
+                  { codigoPractica: codigoLegacy },
+                  { codigoPractica: codigoLegacyTrim },
+                  { codigoPractica: { startsWith: codigoLegacyTrim } },
+                ],
+              }),
           },
           select: {
             puestoNumero: true,
@@ -1504,10 +1515,21 @@ export async function actualizarPractica(
             puestoNumero,
             ordenNumero,
           },
-          select: { importeTotal: true },
+          select: {
+            importeTotal: true,
+            fecha: true,
+          },
         })
 
         const total = itemsOrden.reduce((sum, row) => sum + Number(row.importeTotal ?? 0), 0)
+        const fechaOrdenClave = itemsOrden.reduce<string | null>((max, row) => {
+          const fecha = row.fecha instanceof Date ? row.fecha : null
+          if (!fecha) return max
+          const clave = claveDiaArgentina(fecha)
+          if (!max) return clave
+          return clave > max ? clave : max
+        }, null)
+        const fechaOrdenActualizada = fechaOrdenClave ? fechaDesdeClaveArgentina(fechaOrdenClave) : null
 
         await tx.orden.update({
           where: {
@@ -1518,6 +1540,12 @@ export async function actualizarPractica(
           },
           data: {
             importeTotal: total,
+            ...(fechaOrdenActualizada
+              ? {
+                fechaEmision: fechaOrdenActualizada,
+                fechaPedido: fechaOrdenActualizada,
+              }
+              : {}),
           },
         })
       }
@@ -1564,13 +1592,20 @@ export async function actualizarPractica(
 
       if (ordenActivaLegacy) {
         const codigoLegacy = actualizada.codigoPractica.padEnd(8).slice(0, 8)
+        const codigoLegacyTrim = codigoLegacy.trim()
         ordenesPracticaFinal = await tx.ordenPractica.findMany({
           where: {
             puestoNumero: Number(actualizada.puestoNumero),
             ordenNumero: Number(actualizada.ordenNumero),
             ...(actualizada.ordenItem != null
               ? { item: Number(actualizada.ordenItem) }
-              : { codigoPractica: codigoLegacy }),
+              : {
+                OR: [
+                  { codigoPractica: codigoLegacy },
+                  { codigoPractica: codigoLegacyTrim },
+                  { codigoPractica: { startsWith: codigoLegacyTrim } },
+                ],
+              }),
             orden: {
               NOT: { estado: 'X' },
             },
@@ -2005,6 +2040,9 @@ export async function crearCirugiaUrgencia(
   data: CrearCirugiaUrgenciaInput,
   usuario: string
 ): Promise<CirugiaUrgenciaItem> {
+  const claveHoyArgentina = claveDiaArgentina(new Date())
+  const fechaHoyArgentina = fechaDesdeClaveArgentina(claveHoyArgentina)
+
   const observacionesStructured = [
     'Tipo: CIRUGIA',
     data.diagnostico?.trim() ? `Diagnostico: ${data.diagnostico.trim()}` : null,
@@ -2059,6 +2097,7 @@ export async function crearCirugiaUrgencia(
           convenioId: practica.convenioId,
           codigo: practica.codigoPractica.trim(),
           descripcion: (descripcionPayload?.trim() || practica.codigoPractica.trim()),
+          fecha: null,
           cantidad: Number(practica.cantidad),
           importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : null,
           matriculaEspecialista: practica.matriculaEspecialista,
@@ -2144,13 +2183,14 @@ export async function crearCirugiaUrgencia(
       // Importante: conservar el orden de inserción para mantener alineado
       // el mapeo subitem->práctica en la carga rápida de cirugía.
       for (const p of practicasParaCirugia) {
+        const fechaPractica = p.fecha instanceof Date ? p.fecha : fechaHoyArgentina
         await tx.practica.create({
           data: {
             ingresoId: data.ingresoId,
             convenioId: p.convenioId ?? data.obraSocialId ?? 0,
             codigoPractica: p.codigo.padEnd(8).slice(0, 8),
             convenioValorId: 0,
-            fecha: new Date(data.fechaCirugia),
+            fecha: fechaPractica,
             cantidad: p.cantidad,
             numeroAutorizacion: null,
             matriculaEspecialista: p.matriculaEspecialista ?? null,

@@ -108,9 +108,39 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0')
 }
 
+function partesFechaHoraArgentina(fecha: Date): {
+  year: string
+  month: string
+  day: string
+  hour: string
+  minute: string
+} {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ARG_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(fecha)
+
+  return {
+    year: parts.find((p) => p.type === 'year')?.value ?? '0000',
+    month: parts.find((p) => p.type === 'month')?.value ?? '01',
+    day: parts.find((p) => p.type === 'day')?.value ?? '01',
+    hour: parts.find((p) => p.type === 'hour')?.value ?? '00',
+    minute: parts.find((p) => p.type === 'minute')?.value ?? '00',
+  }
+}
+
 export function fechaAInputLocal(value: FechaValor = new Date()): string {
   const fecha = toDate(value)
   if (!fecha) return ''
+
+  const clave = claveDiaArgentina(fecha)
+  if (clave) return clave
+
   const y = fecha.getFullYear()
   const m = pad2(fecha.getMonth() + 1)
   const d = pad2(fecha.getDate())
@@ -120,12 +150,10 @@ export function fechaAInputLocal(value: FechaValor = new Date()): string {
 export function fechaHoraAInputLocal(value: FechaValor = new Date()): string {
   const fecha = toDate(value)
   if (!fecha) return ''
-  const y = fecha.getFullYear()
-  const m = pad2(fecha.getMonth() + 1)
-  const d = pad2(fecha.getDate())
-  const hh = pad2(fecha.getHours())
-  const mm = pad2(fecha.getMinutes())
-  return `${y}-${m}-${d}T${hh}:${mm}`
+
+  const normalizada = normalizarParaVisualizacionArgentina(fecha)
+  const { year, month, day, hour, minute } = partesFechaHoraArgentina(normalizada)
+  return `${year}-${month}-${day}T${hour}:${minute}`
 }
 
 export function periodoAInputLocal(value: FechaValor = new Date()): string {

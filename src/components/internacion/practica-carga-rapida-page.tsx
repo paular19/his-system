@@ -16,7 +16,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PracticaCargaForm, type PracticaCargaEntrada } from '@/components/internacion/practica-carga-form'
 import type { PracticaItem } from '@/modules/internacion/types'
-import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
+import { claveDiaArgentina, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
 import {
     anularOrdenAction,
@@ -311,6 +311,9 @@ function normalizarBusqueda(value: string): string {
 }
 
 function fechaAInputLocalSimple(value: string | Date): string {
+    const clave = claveDiaArgentina(value)
+    if (clave) return clave
+
     const parsed = new Date(value)
     const fecha = Number.isFinite(parsed.getTime()) ? parsed : new Date()
     const year = fecha.getFullYear()
@@ -1002,6 +1005,7 @@ export function PracticaCargaRapidaPage({
                     convenioId: entrada.payload.convenioId,
                     codigo: entrada.payload.codigoPractica,
                     descripcion: entrada.payload.descripcionPractica,
+                    fecha: entrada.payload.fecha,
                     cantidad: entrada.payload.cantidad,
                     importeTotal: entrada.payload.importeBaseUnitario,
                     matriculaEspecialista: entrada.payload.matriculaEspecialista,
@@ -1072,6 +1076,7 @@ export function PracticaCargaRapidaPage({
                             ordenNumero: number
                             item: number
                             numeroAutorizacion: string | null
+                            fechaEmision?: string | Date | null
                         }>
                     }>)
                     : []
@@ -1097,6 +1102,7 @@ export function PracticaCargaRapidaPage({
                             ordenNumero: orden.ordenNumero,
                             item: orden.item,
                             numeroAutorizacion: orden.numeroAutorizacion ?? null,
+                            fechaEmision: orden.fechaEmision ? new Date(orden.fechaEmision) : null,
                         }))
                         : []
 
@@ -1434,6 +1440,7 @@ export function PracticaCargaRapidaPage({
                         ordenNumero: asignada.numero,
                         item: asignada.item,
                         numeroAutorizacion: null,
+                        fechaEmision: practica.fecha,
                     })
                 }
 

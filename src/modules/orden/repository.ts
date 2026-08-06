@@ -236,13 +236,21 @@ export async function crearOrdenInterna(
     const fechasItems = data.items
       .map((item) => item.fecha)
       .filter((fecha): fecha is Date => fecha instanceof Date)
+
+    const claveFechaSeleccionada = fechasItems.reduce<string | null>((max, fecha) => {
+      const clave = claveDiaArgentina(fecha)
+      if (!clave) return max
+      if (!max) return clave
+      return clave > max ? clave : max
+    }, null)
+
     const claveHoyArgentina = claveDiaArgentina(new Date())
-    const fechaEmisionOrden = claveHoyArgentina
+    const fechaEmisionOrden = claveFechaSeleccionada
+      ? fechaDesdeClaveArgentina(claveFechaSeleccionada)
+      : claveHoyArgentina
       ? fechaDesdeClaveArgentina(claveHoyArgentina)
       : new Date()
-    const fechaBaseItem = fechasItems.length > 0
-      ? new Date(Math.min(...fechasItems.map((fecha) => fecha.getTime())))
-      : fechaEmisionOrden
+    const fechaBaseItem = fechaEmisionOrden
 
     const ordenData = {
       puestoNumero: PUESTO_NUMERO,

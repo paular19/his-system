@@ -246,6 +246,7 @@ export interface PracticaItem {
   ordenNumero?: number | null
   ordenItem?: number | null
   facturada?: boolean
+  tuvoOrdenGenerada?: boolean
   ordenPractica: Array<{
     puestoNumero: number
     ordenNumero: number

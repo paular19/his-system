@@ -819,11 +819,15 @@ export async function actualizarNumeroAutorizacionAction(
   const numeroNormalizado = nro.slice(0, 15)
 
   try {
+    let ingresoIdOrden: number | null = null
+
     await prisma.$transaction(async (tx) => {
-      await tx.orden.update({
+      const ordenActualizada = await tx.orden.update({
         where: { puestoNumero_numero: { puestoNumero, numero } },
         data: { numeroAutorizacion: numeroNormalizado },
+        select: { ingresoId: true },
       })
+      ingresoIdOrden = ordenActualizada.ingresoId ?? null
 
       await tx.ordenPractica.updateMany({
         where: { puestoNumero, ordenNumero: numero },
@@ -849,10 +853,25 @@ export async function actualizarNumeroAutorizacionAction(
           data: { numeroAutorizacion: numeroNormalizado },
         })
       }
+
+      // Fallback legacy: prácticas con punteros a orden activa sin vínculo explícito PraID.
+      await tx.practica.updateMany({
+        where: {
+          puestoNumero,
+          ordenNumero: numero,
+          OR: [{ estado: null }, { estado: { not: 'X' } }],
+        },
+        data: { numeroAutorizacion: numeroNormalizado },
+      })
     })
 
     revalidatePath('/dashboard/ambulatorio')
     revalidatePath('/dashboard/cirugia')
+    revalidatePath('/dashboard/internacion')
+    if (ingresoIdOrden != null) {
+      revalidatePath(`/dashboard/internacion/${ingresoIdOrden}`)
+      revalidatePath(`/dashboard/internacion/${ingresoIdOrden}/practicas`)
+    }
     return { ok: true }
   } catch (err) {
     console.error('[ORDEN] Error al actualizar autorización:', err)
@@ -906,6 +925,7 @@ export async function anularOrdenAction(puestoNumero: number, numero: number) {
       revalidatePath('/dashboard/internacion')
       revalidatePath('/dashboard/admision')
       revalidatePath(`/dashboard/internacion/${orden.ingresoId}`)
+      revalidatePath(`/dashboard/internacion/${orden.ingresoId}/practicas`)
       revalidatePath(`/dashboard/admision/${orden.ingresoId}`)
     }
     return { ok: true }

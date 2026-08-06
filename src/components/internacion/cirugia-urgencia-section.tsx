@@ -80,6 +80,9 @@ type PracticaInternacionItem = {
     usuario?: string | null
     matriculaEspecialista?: number | null
     matriculaAnestesista?: number | null
+    puestoNumero?: number | null
+    ordenNumero?: number | null
+    tuvoOrdenGenerada?: boolean
     ordenPractica: Array<{
         puestoNumero: number
         ordenNumero: number
@@ -159,6 +162,18 @@ function grupoTieneNumeroAutorizacion(grupo: GrupoPracticasAutorizadasCirugia): 
 function practicaInternacionFacturada(practica: PracticaInternacionItem | null | undefined): boolean {
     if (!practica) return false
     return Boolean(practica.facturada)
+}
+
+function practicaInternacionTuvoOrdenGenerada(practica: PracticaInternacionItem | null | undefined): boolean {
+    if (!practica) return false
+    if (practica.tuvoOrdenGenerada === true) return true
+    if ((practica.ordenPractica?.length ?? 0) > 0) return true
+    return (
+        practica.puestoNumero != null &&
+        practica.ordenNumero != null &&
+        Number(practica.puestoNumero) > 0 &&
+        Number(practica.ordenNumero) > 0
+    )
 }
 
 function siglasIncluidasDesdeTexto(value: string | null | undefined): string | null {
@@ -256,6 +271,7 @@ export function CirugiaUrgenciaSection({
     const [eliminandoPracticaCirugiaId, setEliminandoPracticaCirugiaId] = useState<number | null>(null)
     const [anulandoCirugiaId, setAnulandoCirugiaId] = useState<number | null>(null)
     const [anulandoOrdenGrupoKey, setAnulandoOrdenGrupoKey] = useState<string | null>(null)
+    const [ordenesAnuladasTemporal, setOrdenesAnuladasTemporal] = useState<string[]>([])
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [practicaEditando, setPracticaEditando] = useState<{
         cirugiaId: number
@@ -370,6 +386,11 @@ export function CirugiaUrgenciaSection({
         return map
     }, [profesionalesFirmantes])
 
+    const ordenesAnuladasTemporalSet = useMemo(
+        () => new Set(ordenesAnuladasTemporal),
+        [ordenesAnuladasTemporal]
+    )
+
     const estadoPracticaCirugiaPorId = useMemo(() => {
         const estadoPorId = new Map<number, EstadoPracticaCirugia>()
         const practicasInternacionPorCodigo = new Map<string, PracticaInternacionItem[]>()
@@ -407,15 +428,19 @@ export function CirugiaUrgenciaSection({
 
                 usadosPorCodigo.add(candidata.id)
 
-                const ordenesGeneradas = (candidata.ordenPractica ?? []).map((orden) => ({
-                    puestoNumero: orden.puestoNumero,
-                    ordenNumero: orden.ordenNumero,
-                    item: orden.item,
-                    numeroAutorizacion: orden.numeroAutorizacion,
-                }))
+                const ordenesGeneradas = (candidata.ordenPractica ?? [])
+                    .map((orden) => ({
+                        puestoNumero: orden.puestoNumero,
+                        ordenNumero: orden.ordenNumero,
+                        item: orden.item,
+                        numeroAutorizacion: orden.numeroAutorizacion,
+                    }))
+                    .filter(
+                        (orden) => !ordenesAnuladasTemporalSet.has(`${orden.puestoNumero}:${orden.ordenNumero}`)
+                    )
 
                 estadoPorId.set(practicaCirugia.id, {
-                    pendiente: ordenesGeneradas.length === 0,
+                    pendiente: ordenesGeneradas.length === 0 && !practicaInternacionTuvoOrdenGenerada(candidata),
                     practicaInternacionId: candidata.id,
                     ordenesGeneradas,
                 })
@@ -423,7 +448,7 @@ export function CirugiaUrgenciaSection({
         }
 
         return estadoPorId
-    }, [cirugias, practicasInternacion])
+    }, [cirugias, practicasInternacion, ordenesAnuladasTemporalSet])
 
     const practicaIdsCirugiaEnGeneracionSet = useMemo(
         () => new Set(practicaIdsCirugiaEnGeneracion),
@@ -812,6 +837,10 @@ export function CirugiaUrgenciaSection({
                 setError(result.error)
                 return
             }
+
+            setOrdenesAnuladasTemporal((prev) =>
+                Array.from(new Set([...prev, `${puestoNumero}:${ordenNumero}`]))
+            )
 
             recargarPaginaCompleta()
         } catch {
@@ -1601,18 +1630,10 @@ export function CirugiaUrgenciaSection({
                                                                                                         Facturada
                                                                                                     </span>
                                                                                                 )}
-                                                                                                <button
-                                                                                                    type="button"
-                                                                                                    onClick={() => abrirEdicionPracticaCirugia(c.id, practica.id)}
-                                                                                                    disabled={guardandoPracticaEditando || estaFacturada}
-                                                                                                    title={estaFacturada
-                                                                                                        ? 'Práctica facturada. Anulá la orden en Facturación para editar.'
-                                                                                                        : 'Editar práctica'}
-                                                                                                    className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                                                                                >
+                                                                                                <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
                                                                                                     <Pencil className="h-3.5 w-3.5" />
-                                                                                                    Editar
-                                                                                                </button>
+                                                                                                    Editar completa en orden
+                                                                                                </span>
                                                                                             </div>
                                                                                         )}
                                                                                     </div>

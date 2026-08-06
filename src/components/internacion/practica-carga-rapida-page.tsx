@@ -241,6 +241,17 @@ function practicaFacturada(practica: PracticaItem): boolean {
     return Boolean(practica.facturada)
 }
 
+function practicaTuvoOrdenGenerada(practica: Pick<PracticaItem, 'tuvoOrdenGenerada' | 'ordenPractica' | 'puestoNumero' | 'ordenNumero'>): boolean {
+    if (practica.tuvoOrdenGenerada === true) return true
+    if ((practica.ordenPractica?.length ?? 0) > 0) return true
+    return (
+        practica.puestoNumero != null &&
+        practica.ordenNumero != null &&
+        Number(practica.puestoNumero) > 0 &&
+        Number(practica.ordenNumero) > 0
+    )
+}
+
 function descripcionParaMostrar(practica: Pick<PracticaItem, 'descripcionPractica' | 'codigoPractica'>): string {
     const descripcion = practica.descripcionPractica?.trim()
     if (descripcion && descripcion.length > 0) {
@@ -430,6 +441,7 @@ export function PracticaCargaRapidaPage({
     const [draftPracticaEditando, setDraftPracticaEditando] = useState<PracticaEditDraft | null>(null)
     const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
     const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
+    const [ordenesAnuladasTemporal, setOrdenesAnuladasTemporal] = useState<string[]>([])
     const [eliminandoPracticaPendienteId, setEliminandoPracticaPendienteId] = useState<number | null>(null)
     const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
     const colaGuardadoBackgroundRef = useRef<Promise<void>>(Promise.resolve())
@@ -509,7 +521,7 @@ export function PracticaCargaRapidaPage({
     )
 
     const practicasPendientes = useMemo(
-        () => practicasVigentes.filter((practica) => (practica.ordenPractica?.length ?? 0) === 0),
+        () => practicasVigentes.filter((practica) => !practicaTuvoOrdenGenerada(practica)),
         [practicasVigentes]
     )
 
@@ -727,6 +739,11 @@ export function PracticaCargaRapidaPage({
     const ordenesGeneradasSesionSet = useMemo(
         () => new Set(ordenesGeneradasSesion),
         [ordenesGeneradasSesion]
+    )
+
+    const ordenesAnuladasTemporalSet = useMemo(
+        () => new Set(ordenesAnuladasTemporal),
+        [ordenesAnuladasTemporal]
     )
 
     const matriculaPorProfesionalId = useMemo(() => {
@@ -1049,6 +1066,7 @@ export function PracticaCargaRapidaPage({
                         usuarioRegistro: string | null
                         matriculaEspecialista: number | null
                         matriculaAnestesista: number | null
+                        tuvoOrdenGenerada?: boolean
                         ordenPractica?: Array<{
                             puestoNumero: number
                             ordenNumero: number
@@ -1106,6 +1124,15 @@ export function PracticaCargaRapidaPage({
                         facturable: Boolean(practica.facturable),
                         estado: practica.estado ?? 'A',
                         usuario: (practica.usuarioRegistro ?? 'CIRUGIA').trim() || 'CIRUGIA',
+                        tuvoOrdenGenerada:
+                            practica.tuvoOrdenGenerada === true ||
+                            ordenPractica.length > 0 ||
+                            (
+                                practica.puestoNumero != null &&
+                                practica.ordenNumero != null &&
+                                Number(practica.puestoNumero) > 0 &&
+                                Number(practica.ordenNumero) > 0
+                            ),
                     }
                 })
 
@@ -1242,7 +1269,7 @@ export function PracticaCargaRapidaPage({
         const practica = practicas.find((item) => item.id === practicaId)
         if (!practica) return
 
-        if (!practicaActiva(practica.estado) || (practica.ordenPractica?.length ?? 0) > 0) {
+        if (!practicaActiva(practica.estado) || practicaTuvoOrdenGenerada(practica)) {
             setMensajeError('Solo se pueden eliminar practicas pendientes sin orden generada')
             return
         }
@@ -1415,6 +1442,7 @@ export function PracticaCargaRapidaPage({
                 return {
                     ...practica,
                     ordenPractica: ordenesNuevas,
+                    tuvoOrdenGenerada: true,
                 }
             }))
 
@@ -1492,7 +1520,7 @@ export function PracticaCargaRapidaPage({
             const practica = practicas.find((item) => item.id === id)
             if (!practica) return permitirIdsNoSincronizados
             if (!practicaActiva(practica.estado)) return false
-            return (practica.ordenPractica?.length ?? 0) === 0
+            return !practicaTuvoOrdenGenerada(practica)
         })
 
         if (practicaIds.length === 0) {
@@ -1882,7 +1910,16 @@ export function PracticaCargaRapidaPage({
 
             const actualizada = (json?.data ?? null) as PracticaItem | null
             if (actualizada) {
-                setPracticas((prev) => prev.map((practica) => (practica.id === actualizada.id ? actualizada : practica)))
+                setPracticas((prev) => prev.map((practica) => {
+                    if (practica.id !== actualizada.id) return practica
+                    return {
+                        ...actualizada,
+                        tuvoOrdenGenerada:
+                            actualizada.tuvoOrdenGenerada ??
+                            practica.tuvoOrdenGenerada ??
+                            practicaTuvoOrdenGenerada(practica),
+                    }
+                }))
                 setClasificacionPorPracticaId((prev) => ({
                     ...prev,
                     [actualizada.id]: clasificacionInferidaPractica(actualizada),
@@ -1928,10 +1965,14 @@ export function PracticaCargaRapidaPage({
                     ...practica,
                     ordenPractica: ordenesRestantes,
                     facturada: false,
+                    tuvoOrdenGenerada: true,
                 }
             }))
 
             const claveOrdenAnulada = `${puestoNumero}-${ordenNumero}`
+            setOrdenesAnuladasTemporal((prev) =>
+                Array.from(new Set([...prev, `${puestoNumero}:${ordenNumero}`]))
+            )
             setOrdenesGeneradasSesion((prev) => prev.filter((clave) => clave !== claveOrdenAnulada))
             setOrdenEditandoAutorizacionKey((prev) => (prev === grupoKey ? null : prev))
             setBorradorNumeroAutorizacion('')
@@ -2267,6 +2308,15 @@ export function PracticaCargaRapidaPage({
         idsPendientesEditor.length > 0 && idsPendientesEditor.every((id) => practicasSeleccionadas.includes(id))
 
     const gruposFiltradosHistoricos = ordenesAutorizadas.filter((grupo) => {
+        if (
+            grupo.tipo === 'orden' &&
+            grupo.puestoNumero != null &&
+            grupo.ordenNumero != null &&
+            ordenesAnuladasTemporalSet.has(`${grupo.puestoNumero}:${grupo.ordenNumero}`)
+        ) {
+            return false
+        }
+
         const yaAutorizada = grupoTieneNumeroAutorizacion(grupo)
         return yaAutorizada ? mostrarOrdenesYaAutorizadas : mostrarOrdenesPendientesAutorizacion
     })
@@ -2574,7 +2624,7 @@ export function PracticaCargaRapidaPage({
                                                     Facturada
                                                 </span>
                                             )}
-                                            {puedeCrear && (
+                                            {puedeCrear && !modoCirugia && (
                                                 <button
                                                     type="button"
                                                     onClick={() => abrirEdicionPractica(practica)}
@@ -2586,6 +2636,11 @@ export function PracticaCargaRapidaPage({
                                                 >
                                                     Editar
                                                 </button>
+                                            )}
+                                            {puedeCrear && modoCirugia && (
+                                                <span className="inline-flex rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                                    Editar completa en orden
+                                                </span>
                                             )}
                                         </div>
                                     </div>

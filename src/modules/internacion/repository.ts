@@ -93,6 +93,18 @@ function normalizarTextoOpcional(value: string | null | undefined): string | nul
   return normalized.length > 0 ? normalized : null
 }
 
+function resolverEfectorMatriculaDesdeClasificacion(
+  clasificacionAgrupacion: string | null | undefined,
+  matriculaEspecialista: number | null,
+  matriculaAnestesista: number | null
+): number | null {
+  const clasificacion = (clasificacionAgrupacion ?? '').toUpperCase()
+  if (clasificacion.includes('HA')) {
+    return matriculaAnestesista ?? matriculaEspecialista ?? null
+  }
+  return matriculaEspecialista ?? matriculaAnestesista ?? null
+}
+
 async function liberarBloqueosHabitacionDeIngreso(
   tx: Prisma.TransactionClient,
   ingresoId: number,
@@ -674,6 +686,11 @@ export async function obtenerInternacionDetalle(
           facturable: true,
           estado: true,
           usuarioRegistro: true,
+          _count: {
+            select: {
+              ordenPractica: true,
+            },
+          },
         },
       })
       : Promise.resolve([]),
@@ -868,50 +885,63 @@ export async function obtenerInternacionDetalle(
       })) as CirugiaUrgenciaItem[]
       : [],
     practicas: incluirPanelClinico
-      ? practicasOrdenadas.map((p) => ({
-        ...p,
-        usuario: p.usuarioRegistro,
-        facturada: (p.estado ?? '').trim().toUpperCase() === 'F',
-        descripcionPractica: (() => {
-          const key = `${p.convenioId}:${p.codigoPractica.trim()}`
-          const descripcionBase = descripcionPorClave.get(key) ?? p.codigoPractica.trim()
-          const componentes = componentesPorClave.get(key) ?? null
-          const cantidad = Number.isFinite(Number(p.cantidad)) && Number(p.cantidad) > 0
-            ? Math.floor(Number(p.cantidad))
-            : 1
-          const importeTotal = p.importeTotal != null ? Number(p.importeTotal) : null
+      ? practicasOrdenadas.map((p) => {
+        const { _count, ...practicaBase } = p
+        const tuvoOrdenGenerada =
+          (_count?.ordenPractica ?? 0) > 0 ||
+          (
+            practicaBase.puestoNumero != null &&
+            practicaBase.ordenNumero != null &&
+            Number(practicaBase.puestoNumero) > 0 &&
+            Number(practicaBase.ordenNumero) > 0
+          )
 
-          return construirDescripcionPractica({
-            descripcionBase,
-            matriculaEspecialista: p.matriculaEspecialista,
-            matriculaAnestesista: p.matriculaAnestesista,
-            importeTotal,
-            cantidad,
-            componentes,
-          })
-        })(),
-        numeroProtocoloLaboratorio: p.numeroProtocoloLab,
-        diagnosticoLaboratorio: p.diagnosticoLab,
-        cantidad: Number(p.cantidad),
-        importeTotal: p.importeTotal != null ? Number(p.importeTotal) : null,
-        ordenPractica:
-          ((ordenesPracticaPorId.get(p.id) ?? []).length > 0
-            ? (ordenesPracticaPorId.get(p.id) ?? [])
-            : null) ??
-          (p.puestoNumero != null &&
-          p.ordenNumero != null &&
-          Number(p.puestoNumero) > 0 &&
-          ordenesActivasSet.has(`${Number(p.puestoNumero)}:${Number(p.ordenNumero)}`)
-            ? [
-              {
-                puestoNumero: Number(p.puestoNumero),
-                ordenNumero: Number(p.ordenNumero),
-                item: p.ordenItem != null ? Number(p.ordenItem) : 1,
-                numeroAutorizacion: p.numeroAutorizacion ?? null,
-              },
-            ]
-            : []),
-      })) as PracticaItem[]
+        return {
+          ...practicaBase,
+          usuario: practicaBase.usuarioRegistro,
+          facturada: (practicaBase.estado ?? '').trim().toUpperCase() === 'F',
+          tuvoOrdenGenerada,
+          descripcionPractica: (() => {
+            const key = `${practicaBase.convenioId}:${practicaBase.codigoPractica.trim()}`
+            const descripcionBase = descripcionPorClave.get(key) ?? practicaBase.codigoPractica.trim()
+            const componentes = componentesPorClave.get(key) ?? null
+            const cantidad = Number.isFinite(Number(practicaBase.cantidad)) && Number(practicaBase.cantidad) > 0
+              ? Math.floor(Number(practicaBase.cantidad))
+              : 1
+            const importeTotal = practicaBase.importeTotal != null ? Number(practicaBase.importeTotal) : null
+
+            return construirDescripcionPractica({
+              descripcionBase,
+              matriculaEspecialista: practicaBase.matriculaEspecialista,
+              matriculaAnestesista: practicaBase.matriculaAnestesista,
+              importeTotal,
+              cantidad,
+              componentes,
+            })
+          })(),
+          numeroProtocoloLaboratorio: practicaBase.numeroProtocoloLab,
+          diagnosticoLaboratorio: practicaBase.diagnosticoLab,
+          cantidad: Number(practicaBase.cantidad),
+          importeTotal: practicaBase.importeTotal != null ? Number(practicaBase.importeTotal) : null,
+          ordenPractica:
+            ((ordenesPracticaPorId.get(practicaBase.id) ?? []).length > 0
+              ? (ordenesPracticaPorId.get(practicaBase.id) ?? [])
+              : null) ??
+            (practicaBase.puestoNumero != null &&
+            practicaBase.ordenNumero != null &&
+            Number(practicaBase.puestoNumero) > 0 &&
+            ordenesActivasSet.has(`${Number(practicaBase.puestoNumero)}:${Number(practicaBase.ordenNumero)}`)
+              ? [
+                {
+                  puestoNumero: Number(practicaBase.puestoNumero),
+                  ordenNumero: Number(practicaBase.ordenNumero),
+                  item: practicaBase.ordenItem != null ? Number(practicaBase.ordenItem) : 1,
+                  numeroAutorizacion: practicaBase.numeroAutorizacion ?? null,
+                },
+              ]
+              : []),
+        }
+      }) as PracticaItem[]
       : [],
     ordenes: [],
   } as InternacionDetalle
@@ -1236,6 +1266,7 @@ export async function actualizarPractica(
             ordenNumero: true,
             item: true,
             numeroAutorizacion: true,
+            clasificacionAgrupacion: true,
           },
         },
       },
@@ -1313,6 +1344,12 @@ export async function actualizarPractica(
       }
     }
 
+    const mantenerMarcaCirugia =
+      (practicaActual.usuarioRegistro ?? '').trim().toUpperCase() === USUARIO_REGISTRO_CIRUGIA
+    const usuarioRegistroPractica = mantenerMarcaCirugia
+      ? USUARIO_REGISTRO_CIRUGIA
+      : usuario.slice(0, 10)
+
     const actualizada = await tx.practica.update({
       where: { id: practicaActual.id },
       data: {
@@ -1327,7 +1364,7 @@ export async function actualizarPractica(
         matriculaAnestesista: data.matriculaAnestesista ?? null,
         facturable: data.facturable,
         importeTotal,
-        usuarioRegistro: usuario.slice(0, 10),
+        usuarioRegistro: usuarioRegistroPractica,
         fechaUsuario: new Date(),
       },
       select: {
@@ -1352,7 +1389,45 @@ export async function actualizarPractica(
       },
     })
 
-    const ordenesVinculadas = practicaActual.ordenPractica ?? []
+    let ordenesVinculadas = practicaActual.ordenPractica ?? []
+    if (
+      ordenesVinculadas.length === 0 &&
+      practicaActual.puestoNumero != null &&
+      practicaActual.ordenNumero != null &&
+      Number(practicaActual.puestoNumero) > 0 &&
+      Number(practicaActual.ordenNumero) > 0
+    ) {
+      const ordenActivaLegacy = await tx.orden.findFirst({
+        where: {
+          ingresoId,
+          puestoNumero: Number(practicaActual.puestoNumero),
+          numero: Number(practicaActual.ordenNumero),
+          NOT: { estado: 'X' },
+        },
+        select: { puestoNumero: true },
+      })
+
+      if (ordenActivaLegacy) {
+        const codigoLegacy = practicaActual.codigoPractica.padEnd(8).slice(0, 8)
+        ordenesVinculadas = await tx.ordenPractica.findMany({
+          where: {
+            puestoNumero: Number(practicaActual.puestoNumero),
+            ordenNumero: Number(practicaActual.ordenNumero),
+            ...(practicaActual.ordenItem != null
+              ? { item: Number(practicaActual.ordenItem) }
+              : { codigoPractica: codigoLegacy }),
+          },
+          select: {
+            puestoNumero: true,
+            ordenNumero: true,
+            item: true,
+            numeroAutorizacion: true,
+            clasificacionAgrupacion: true,
+          },
+        })
+      }
+    }
+
     if (ordenesVinculadas.length > 0) {
       for (const item of ordenesVinculadas) {
         await tx.ordenPractica.update({
@@ -1370,6 +1445,11 @@ export async function actualizarPractica(
             cantidad,
             numeroAutorizacion: numeroAutorizacionOrden,
             importeTotal,
+            efectorMatricula: resolverEfectorMatriculaDesdeClasificacion(
+              item.clasificacionAgrupacion,
+              data.matriculaEspecialista ?? null,
+              data.matriculaAnestesista ?? null
+            ),
           },
         })
       }
@@ -1424,6 +1504,48 @@ export async function actualizarPractica(
       orderBy: [{ item: 'asc' }],
     })
 
+    let ordenesPracticaFinal = ordenesPracticaActualizada
+    if (
+      ordenesPracticaFinal.length === 0 &&
+      actualizada.puestoNumero != null &&
+      actualizada.ordenNumero != null &&
+      Number(actualizada.puestoNumero) > 0 &&
+      Number(actualizada.ordenNumero) > 0
+    ) {
+      const ordenActivaLegacy = await tx.orden.findFirst({
+        where: {
+          ingresoId,
+          puestoNumero: Number(actualizada.puestoNumero),
+          numero: Number(actualizada.ordenNumero),
+          NOT: { estado: 'X' },
+        },
+        select: { puestoNumero: true },
+      })
+
+      if (ordenActivaLegacy) {
+        const codigoLegacy = actualizada.codigoPractica.padEnd(8).slice(0, 8)
+        ordenesPracticaFinal = await tx.ordenPractica.findMany({
+          where: {
+            puestoNumero: Number(actualizada.puestoNumero),
+            ordenNumero: Number(actualizada.ordenNumero),
+            ...(actualizada.ordenItem != null
+              ? { item: Number(actualizada.ordenItem) }
+              : { codigoPractica: codigoLegacy }),
+            orden: {
+              NOT: { estado: 'X' },
+            },
+          },
+          select: {
+            puestoNumero: true,
+            ordenNumero: true,
+            item: true,
+            numeroAutorizacion: true,
+          },
+          orderBy: [{ item: 'asc' }],
+        })
+      }
+    }
+
     const nomenclador = await tx.nomencladorPractica.findFirst({
       where: {
         convenioId: actualizada.convenioId,
@@ -1469,7 +1591,7 @@ export async function actualizarPractica(
       ordenNumero: actualizada.ordenNumero,
       ordenItem: actualizada.ordenItem,
       facturada: false,
-      ordenPractica: ordenesPracticaActualizada.map((op) => ({
+      ordenPractica: ordenesPracticaFinal.map((op) => ({
         puestoNumero: op.puestoNumero,
         ordenNumero: op.ordenNumero,
         item: op.item,

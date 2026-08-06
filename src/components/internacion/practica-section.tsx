@@ -132,6 +132,17 @@ function practicaFacturada(practica: PracticaItem): boolean {
     return Boolean(practica.facturada)
 }
 
+function practicaTuvoOrdenGenerada(practica: Pick<PracticaItem, 'tuvoOrdenGenerada' | 'ordenPractica' | 'puestoNumero' | 'ordenNumero'>): boolean {
+    if (practica.tuvoOrdenGenerada === true) return true
+    if ((practica.ordenPractica?.length ?? 0) > 0) return true
+    return (
+        practica.puestoNumero != null &&
+        practica.ordenNumero != null &&
+        Number(practica.puestoNumero) > 0 &&
+        Number(practica.ordenNumero) > 0
+    )
+}
+
 function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
     const normalizada = value?.trim() ?? ''
     return normalizada.length > 0 ? normalizada : null
@@ -386,7 +397,16 @@ export function PracticaSection({
 
             const actualizada = (json?.data ?? null) as PracticaItem | null
             if (actualizada) {
-                setPracticas((prev) => prev.map((p) => (p.id === actualizada.id ? actualizada : p)))
+                setPracticas((prev) => prev.map((p) => {
+                    if (p.id !== actualizada.id) return p
+                    return {
+                        ...actualizada,
+                        tuvoOrdenGenerada:
+                            actualizada.tuvoOrdenGenerada ??
+                            p.tuvoOrdenGenerada ??
+                            practicaTuvoOrdenGenerada(p),
+                    }
+                }))
                 setClasificacionPorPracticaId((prev) => ({
                     ...prev,
                     [actualizada.id]: clasificacionInferidaPractica(actualizada),
@@ -587,6 +607,7 @@ export function PracticaSection({
                             numeroAutorizacion: null,
                         },
                     ],
+                    tuvoOrdenGenerada: true,
                 }
             }))
 
@@ -634,7 +655,7 @@ export function PracticaSection({
             const practica = practicas.find((item) => item.id === id)
             if (!practica) return false
             if (!practicaActiva(practica.estado)) return false
-            return (practica.ordenPractica?.length ?? 0) === 0
+            return !practicaTuvoOrdenGenerada(practica)
         })
 
         if (practicaIds.length === 0) {
@@ -738,6 +759,7 @@ export function PracticaSection({
                     ...practica,
                     ordenPractica: ordenesRestantes,
                     facturada: false,
+                    tuvoOrdenGenerada: true,
                 }
             }))
 
@@ -776,7 +798,7 @@ export function PracticaSection({
     )
 
     const practicasPendientes = practicasVigentesFiltradasPorSector.filter(
-        (p) => (p.ordenPractica?.length ?? 0) === 0 && !practicaIdsEnGeneracionSet.has(p.id)
+        (p) => !practicaTuvoOrdenGenerada(p) && !practicaIdsEnGeneracionSet.has(p.id)
     )
     const practicasAutorizadas = practicasVigentesFiltradasPorSector.filter(
         (p) => (p.ordenPractica?.length ?? 0) > 0
@@ -951,7 +973,7 @@ export function PracticaSection({
     const puedeGenerarOrdenes = (puedeGenerarAutorizacion ?? puedeCrear)
 
     useEffect(() => {
-        setPracticasSeleccionadas((prev) => prev.filter((id) => practicas.some((p) => p.id === id && (p.ordenPractica?.length ?? 0) === 0)))
+        setPracticasSeleccionadas((prev) => prev.filter((id) => practicas.some((p) => p.id === id && !practicaTuvoOrdenGenerada(p))))
     }, [practicas])
 
     const terminoFiltroLista = useMemo(() => normalizarBusquedaLista(filtroLista), [filtroLista])

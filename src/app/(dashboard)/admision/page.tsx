@@ -10,6 +10,7 @@ import type { Metadata } from 'next'
 import { cache } from 'react'
 import { PaginationControls } from '@/components/ui/pagination-controls'
 import { logServerPerf } from '@/lib/perf/server-perf'
+import { fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
 
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20
@@ -18,6 +19,8 @@ const LIMIT_OPTIONS = [10, 20, 50, 100] as const
 interface SearchParamsInput {
   q?: string
   tipoIngresoCodigo?: string
+  fechaDesde?: string
+  fechaHasta?: string
   page?: string
   limit?: string
   pagina?: string
@@ -35,6 +38,13 @@ function parsePositiveInt(value: string | undefined, fallback: number) {
   return parsed
 }
 
+function normalizarFechaFiltro(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const normalizada = value.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizada)) return undefined
+  return normalizada
+}
+
 function normalizarSearchParams(params: SearchParamsInput) {
   const pageRaw = params.page ?? params.pagina
   const limitRaw = params.limit ?? params.porPagina
@@ -45,9 +55,20 @@ function normalizarSearchParams(params: SearchParamsInput) {
     ? parsedLimit
     : DEFAULT_LIMIT
 
+  let fechaDesde = normalizarFechaFiltro(params.fechaDesde)
+  let fechaHasta = normalizarFechaFiltro(params.fechaHasta)
+
+  if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+    const tmp = fechaDesde
+    fechaDesde = fechaHasta
+    fechaHasta = tmp
+  }
+
   return {
     q: params.q?.trim() || undefined,
     tipoIngresoCodigo: params.tipoIngresoCodigo || undefined,
+    fechaDesde,
+    fechaHasta,
     page,
     limit,
   }
@@ -56,12 +77,16 @@ function normalizarSearchParams(params: SearchParamsInput) {
 function buildQueryString(params: {
   q?: string
   tipoIngresoCodigo?: string
+  fechaDesde?: string
+  fechaHasta?: string
   page: number
   limit: number
 }) {
   const sp = new URLSearchParams()
   if (params.q) sp.set('q', params.q)
   if (params.tipoIngresoCodigo) sp.set('tipoIngresoCodigo', params.tipoIngresoCodigo)
+  if (params.fechaDesde) sp.set('fechaDesde', params.fechaDesde)
+  if (params.fechaHasta) sp.set('fechaHasta', params.fechaHasta)
   sp.set('page', String(params.page))
   sp.set('limit', String(params.limit))
   return sp.toString()
@@ -97,14 +122,7 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
 
   const canonicalQuery = buildQueryString(params)
   const hasLegacyParams = Boolean(rawParams.pagina || rawParams.porPagina)
-  const hasNonCanonicalQuery = buildQueryString({
-    q: rawParams.q?.trim() || undefined,
-    tipoIngresoCodigo: rawParams.tipoIngresoCodigo || undefined,
-    page: parsePositiveInt(rawParams.page ?? rawParams.pagina, DEFAULT_PAGE),
-    limit: LIMIT_OPTIONS.includes(parsePositiveInt(rawParams.limit ?? rawParams.porPagina, DEFAULT_LIMIT) as (typeof LIMIT_OPTIONS)[number])
-      ? parsePositiveInt(rawParams.limit ?? rawParams.porPagina, DEFAULT_LIMIT)
-      : DEFAULT_LIMIT,
-  }) !== canonicalQuery
+  const hasNonCanonicalQuery = buildQueryString(paramsBase) !== canonicalQuery
 
   if (hasLegacyParams || hasNonCanonicalQuery) {
     redirect(`/dashboard/admision?${canonicalQuery}`)
@@ -117,6 +135,8 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
     resultado = await buscarIngresosCached({
       q: params.q,
       tipoIngresoCodigo: params.tipoIngresoCodigo,
+      fechaDesde: params.fechaDesde ? fechaDesdeClaveArgentina(params.fechaDesde) : undefined,
+      fechaHasta: params.fechaHasta ? fechaDesdeClaveArgentina(params.fechaHasta) : undefined,
       pagina: params.page,
       porPagina: params.limit,
     })
@@ -153,7 +173,7 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
       <div className="p-6 space-y-5">
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <form method="GET" className="flex items-center gap-2 w-full sm:w-auto">
+          <form method="GET" className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
             <div className="relative flex-1 sm:w-72">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
@@ -161,6 +181,26 @@ export default async function AdmisionPage({ searchParams }: PageProps) {
                 defaultValue={params.q}
                 placeholder="Buscar por paciente, obra social o nro. ingreso..."
                 className="w-full rounded-md border border-gray-300 pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label htmlFor="fechaDesde" className="text-xs text-gray-500 mb-1">Desde</label>
+              <input
+                id="fechaDesde"
+                name="fechaDesde"
+                type="date"
+                defaultValue={params.fechaDesde}
+                className="rounded-md border border-gray-300 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label htmlFor="fechaHasta" className="text-xs text-gray-500 mb-1">Hasta</label>
+              <input
+                id="fechaHasta"
+                name="fechaHasta"
+                type="date"
+                defaultValue={params.fechaHasta}
+                className="rounded-md border border-gray-300 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <button

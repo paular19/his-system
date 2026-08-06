@@ -12,6 +12,7 @@ import type { IngresoConRelaciones, IngresoDetalle, IngresoListItem } from './ty
 import type { Paciente, IngresoPatologia, MovimientoIngreso, Prisma } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
 import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
+import { claveDiaArgentina } from '@/lib/utils/argentina-date'
 
 // ============================================
 // REPOSITORIO ADMISIÓN
@@ -19,6 +20,29 @@ import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 // ============================================
 
 const MAX_IDS_BUSQUEDA_INGRESO = 250
+
+function construirRangoFechaIngreso(params: {
+  fechaDesde?: Date
+  fechaHasta?: Date
+}): Prisma.DateTimeFilter | null {
+  const claveDesde = params.fechaDesde ? claveDiaArgentina(params.fechaDesde) : null
+  const claveHasta = params.fechaHasta ? claveDiaArgentina(params.fechaHasta) : null
+
+  if (!claveDesde && !claveHasta) return null
+
+  const inicioClave = claveDesde ?? claveHasta
+  const finClave = claveHasta ?? claveDesde
+  if (!inicioClave || !finClave) return null
+
+  const [desdeClave, hastaClave] = inicioClave <= finClave
+    ? [inicioClave, finClave]
+    : [finClave, inicioClave]
+
+  return {
+    gte: new Date(`${desdeClave}T00:00:00-03:00`),
+    lte: new Date(`${hastaClave}T23:59:59.999-03:00`),
+  }
+}
 
 type ComponentesPractica = {
   valorEspecialista: number | null
@@ -830,11 +854,8 @@ export async function buscarIngresos(
 
   if (tipoIngresoCodigo) where.tipoIngresoCodigo = tipoIngresoCodigo
   if (estado) where.estado = estado
-  if (fechaDesde || fechaHasta) {
-    where.fechaIngreso = {}
-    if (fechaDesde) where.fechaIngreso.gte = fechaDesde
-    if (fechaHasta) where.fechaIngreso.lte = fechaHasta
-  }
+  const rangoFechaIngreso = construirRangoFechaIngreso({ fechaDesde, fechaHasta })
+  if (rangoFechaIngreso) where.fechaIngreso = rangoFechaIngreso
 
   if (q) {
     const termino = q.trim()

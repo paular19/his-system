@@ -1578,6 +1578,7 @@ export function FichaIngresoClient({
                                                     ? `/dashboard/ambulatorio/imprimir?ordenes=${encodeURIComponent(`${grupo.puestoNumero}-${grupo.ordenNumero}`)}`
                                                     : null
                                             const destinoAbrir = destinoOrdenImpresion ?? destinoAutorizada
+                                            const grupoSinNumeroAutorizacion = !Boolean(grupo.numeroAutorizacion?.trim())
                                             const limitePracticas = 3
                                             const abierta = ordenesAutorizadasAbiertas[grupo.key] ?? false
                                             const expandida = ordenesAutorizadasExpandidas[grupo.key] ?? false
@@ -1641,11 +1642,13 @@ export function FichaIngresoClient({
                                                                             {destinoOrdenImpresion ? 'Abrir orden' : 'Abrir'}
                                                                         </Link>
                                                                     )}
-                                                                    {puedeModificar && grupo.practicas.some((practica) => !Boolean(practica.facturada)) && (
+                                                                    {puedeModificar && (grupoSinNumeroAutorizacion || grupo.practicas.some((practica) => !Boolean(practica.facturada))) && (
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => {
-                                                                                const editable = grupo.practicas.find((practica) => !Boolean(practica.facturada))
+                                                                                const editable =
+                                                                                    grupo.practicas.find((practica) => !Boolean(practica.facturada)) ??
+                                                                                    grupo.practicas[0]
                                                                                 if (editable) {
                                                                                     setPracticaEditando({
                                                                                         ...editable,
@@ -1655,7 +1658,7 @@ export function FichaIngresoClient({
                                                                             }}
                                                                             className="inline-flex items-center rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50"
                                                                         >
-                                                                            Editar práctica
+                                                                            {grupoSinNumeroAutorizacion ? 'Cargar N° autorización' : 'Editar práctica'}
                                                                         </button>
                                                                     )}
                                                                 </div>

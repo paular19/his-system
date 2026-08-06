@@ -205,6 +205,11 @@ function resolverNumeroAutorizacionOrdenLista(row: OrdenListaRowConItems): strin
   return numeroOrden
 }
 
+function esObraSocialParticular(nombreObraSocial: string | null | undefined): boolean {
+  const normalized = (nombreObraSocial ?? '').trim().toUpperCase()
+  return normalized.includes('PARTICULAR')
+}
+
 // ============================================
 // CREAR ORDEN
 // ============================================
@@ -581,7 +586,9 @@ export async function listarOrdenes(params: {
         }
       })
       .filter((row) => {
-        const esPendiente = row.numeroAutorizacionReal == null
+        const esPendiente =
+          row.numeroAutorizacionReal == null &&
+          !esObraSocialParticular(row.obraSocial?.nombre)
 
         if (estadoTab === 'pendientes' && !esPendiente) return false
         if (estadoTab === 'confirmadas' && esPendiente) return false

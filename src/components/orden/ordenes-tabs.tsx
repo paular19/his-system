@@ -400,8 +400,8 @@ export function OrdenesTabs({
                                     puedeModificar={puedeModificar}
                                     permitirEdicion={tabActual !== 'anuladas'}
                                     onConfirmada={tabActual === 'pendientes' ? handleConfirmada : undefined}
-                                    onAnulada={tabActual === 'pendientes' ? handleAnulada : undefined}
-                                    mostrarAnular={tabActual === 'pendientes'}
+                                    onAnulada={tabActual !== 'anuladas' ? handleAnulada : undefined}
+                                    mostrarAnular={tabActual !== 'anuladas'}
                                 />
                             ))}
                         </tbody>

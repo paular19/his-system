@@ -169,8 +169,8 @@ export function PracticaSection({
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
     const [mostrarUti, setMostrarUti] = useState(true)
     const [mostrarPiso, setMostrarPiso] = useState(true)
-    const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(false)
-    const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(false)
+    const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(true)
+    const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
     const [profesionalesConMatricula, setProfesionalesConMatricula] = useState<ProfesionalConMatricula[]>([])
 
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
@@ -200,6 +200,14 @@ export function PracticaSection({
     const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
 
     const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
+
+    const recargarPaginaCompleta = () => {
+        if (typeof window !== 'undefined') {
+            window.location.reload()
+            return
+        }
+        refreshInBackground()
+    }
 
     useEffect(() => {
         setPracticas(practicasIniciales)
@@ -604,6 +612,10 @@ export function PracticaSection({
                     for (const id of exitosas) delete next[id]
                     return next
                 })
+
+                if (refrescarDespuesCambios) {
+                    recargarPaginaCompleta()
+                }
             }
 
         } finally {
@@ -814,7 +826,7 @@ export function PracticaSection({
             }))
 
             if (refrescarDespuesCambios) {
-                refreshInBackground()
+                recargarPaginaCompleta()
             }
         } catch {
             setError('Error al anular la orden')
@@ -1204,6 +1216,29 @@ export function PracticaSection({
                                 <p className="text-xs text-gray-500">
                                     {ordenesAutorizadasFiltradas.length} orden(es)
                                 </p>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50/40 px-3 py-2">
+                                <p className="text-[11px] text-red-800">
+                                    Prácticas pendientes sin orden: {idsPendientesFiltradas.length}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (idsPendientesFiltradas.length === 0) return
+                                        if (typeof window !== 'undefined') {
+                                            const confirmar = window.confirm(
+                                                `Se eliminarán ${idsPendientesFiltradas.length} práctica(s) pendiente(s) sin orden. ¿Desea continuar?`
+                                            )
+                                            if (!confirmar) return
+                                        }
+                                        void handleEliminarPracticasSeleccionadas(idsPendientesFiltradas)
+                                    }}
+                                    disabled={eliminandoPracticas || idsPendientesFiltradas.length === 0}
+                                    className="inline-flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                >
+                                    {eliminandoPracticas ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                    {eliminandoPracticas ? 'Eliminando...' : `Eliminar pendientes (${idsPendientesFiltradas.length})`}
+                                </button>
                             </div>
                             <div className="flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
                                 <span className="text-[11px] font-medium text-gray-700">Mostrar órdenes según sector al cargar la práctica:</span>

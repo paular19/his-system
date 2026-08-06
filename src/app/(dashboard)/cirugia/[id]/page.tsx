@@ -21,6 +21,22 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
     return normalized.length > 0 ? normalized : null
 }
 
+function normalizarCodigoPractica(value: string | null | undefined): string {
+    const sinParentesis = (value ?? '').trim().toUpperCase().replace(/\([^)]*\)/g, '')
+    return sinParentesis.replace(/[^A-Z0-9]/g, '')
+}
+
+function codigosPracticaCoinciden(codigoInternacion: string | null | undefined, codigoCirugia: string | null | undefined): boolean {
+    const normalizadoInternacion = normalizarCodigoPractica(codigoInternacion)
+    const normalizadoCirugia = normalizarCodigoPractica(codigoCirugia)
+    if (!normalizadoInternacion || !normalizadoCirugia) return false
+    if (normalizadoInternacion === normalizadoCirugia) return true
+
+    const prefijoNumericoInternacion = normalizadoInternacion.match(/^\d+/)?.[0] ?? ''
+    const prefijoNumericoCirugia = normalizadoCirugia.match(/^\d+/)?.[0] ?? ''
+    return Boolean(prefijoNumericoInternacion && prefijoNumericoInternacion === prefijoNumericoCirugia)
+}
+
 function resolverNumeroAutorizacionOrdenItem(
     numeroItem: string | null | undefined,
     numeroOrden: string | null | undefined,
@@ -104,6 +120,8 @@ export default async function CirugiaProgramadaDetallePage({ params }: CirugiaPr
                             puestoNumero: true,
                             ordenNumero: true,
                             ordenItem: true,
+                            estado: true,
+                            usuarioRegistro: true,
                             ordenPractica: {
                                 select: {
                                     puestoNumero: true,
@@ -220,7 +238,7 @@ export default async function CirugiaProgramadaDetallePage({ params }: CirugiaPr
                             cantidad: p.cantidad,
                             numeroAutorizacion: p.numeroAutorizacion,
                             ordenesAutorizacion: (cirugia.internacion?.practicas ?? [])
-                                .filter((pi) => pi.codigoPractica.trim() === p.codigo.trim())
+                                .filter((pi) => codigosPracticaCoinciden(pi.codigoPractica, p.codigo))
                                 .flatMap((pi) => {
                                     if (Array.isArray(pi.ordenPractica) && pi.ordenPractica.length > 0) {
                                         return pi.ordenPractica.map((op) => ({

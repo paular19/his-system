@@ -268,6 +268,14 @@ export function CirugiaUrgenciaSection({
 
     const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
 
+    const recargarPaginaCompleta = () => {
+        if (typeof window !== 'undefined') {
+            window.location.reload()
+            return
+        }
+        refreshInBackground()
+    }
+
     useEffect(() => {
         setCirugias(cirugiasIniciales)
     }, [cirugiasIniciales])
@@ -785,7 +793,7 @@ export function CirugiaUrgenciaSection({
             }
 
             setPracticasSeleccionadasImpresion((prev) => prev.filter((id) => id !== practicaCirugiaId))
-            refreshInBackground()
+            recargarPaginaCompleta()
         } catch {
             setError('Error de conexión al eliminar la práctica de cirugía')
         } finally {
@@ -810,7 +818,7 @@ export function CirugiaUrgenciaSection({
                 return
             }
 
-            refreshInBackground()
+            recargarPaginaCompleta()
         } catch {
             setError('No se pudo anular la orden')
         } finally {
@@ -855,7 +863,7 @@ export function CirugiaUrgenciaSection({
                 return next
             })
 
-            refreshInBackground()
+            recargarPaginaCompleta()
         } catch {
             setError('Error de conexión al anular la ficha quirúrgica')
         } finally {

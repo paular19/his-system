@@ -57,6 +57,22 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
     return normalized.length > 0 ? normalized : null
 }
 
+function normalizarCodigoPractica(value: string | null | undefined): string {
+    const sinParentesis = (value ?? '').trim().toUpperCase().replace(/\([^)]*\)/g, '')
+    return sinParentesis.replace(/[^A-Z0-9]/g, '')
+}
+
+function codigosPracticaCoinciden(codigoInternacion: string | null | undefined, codigoCirugia: string | null | undefined): boolean {
+    const normalizadoInternacion = normalizarCodigoPractica(codigoInternacion)
+    const normalizadoCirugia = normalizarCodigoPractica(codigoCirugia)
+    if (!normalizadoInternacion || !normalizadoCirugia) return false
+    if (normalizadoInternacion === normalizadoCirugia) return true
+
+    const prefijoNumericoInternacion = normalizadoInternacion.match(/^\d+/)?.[0] ?? ''
+    const prefijoNumericoCirugia = normalizadoCirugia.match(/^\d+/)?.[0] ?? ''
+    return Boolean(prefijoNumericoInternacion && prefijoNumericoInternacion === prefijoNumericoCirugia)
+}
+
 function resolverNumeroAutorizacionOrdenItem(
     numeroItem: string | null | undefined,
     numeroOrden: string | null | undefined,
@@ -262,7 +278,6 @@ export async function listarCirugiasProgramadas(
             },
             practicasCantidad: row._count.practicas,
             practicas: row.practicas.map((p) => {
-                const codigoCirugia = p.codigo.trim()
                 const ordenesAutorizacion = new Map<
                     string,
                     {
@@ -277,7 +292,7 @@ export async function listarCirugiasProgramadas(
 
                 const practicasInternacion = row.internacion?.practicas ?? []
                 for (const practicaInternacion of practicasInternacion) {
-                    if (practicaInternacion.codigoPractica.trim() !== codigoCirugia) continue
+                    if (!codigosPracticaCoinciden(practicaInternacion.codigoPractica, p.codigo)) continue
 
                     if (Array.isArray(practicaInternacion.ordenPractica) && practicaInternacion.ordenPractica.length > 0) {
                         for (const ordenItem of practicaInternacion.ordenPractica) {

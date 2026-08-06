@@ -91,6 +91,12 @@ export function PracticasAutorizacionSection({
     practicas,
     onActualizar,
 }: PracticasAutorizacionSectionProps) {
+    const recargarPaginaCompleta = () => {
+        if (typeof window !== 'undefined') {
+            window.location.reload()
+        }
+    }
+
     const entradas = useMemo<EntradaAutorizacion[]>(() => {
         const resultado = new Map<string, EntradaAutorizacion>()
 
@@ -421,6 +427,7 @@ export function PracticasAutorizacionSection({
                 })
                 setPendientesSeleccionadas((prev) => prev.filter((uid) => !exitosas.includes(uid)))
                 onActualizar?.()
+                recargarPaginaCompleta()
             }
 
             if (fallidas.length === 0) {

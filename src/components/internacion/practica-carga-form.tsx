@@ -10,14 +10,12 @@ import {
     type ComponenteValores,
 } from '@/components/ui/componente-selector'
 import {
-    esSubitemAnestesista,
-    esSubitemEspecialista,
     type SubitemCodigo,
     obtenerSubitemsSeleccionados,
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
 import { fechaAInputLocal, fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
-import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
+import { contieneClasificacion, normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 
 interface NomencladorItem {
     convenioId: number
@@ -180,7 +178,8 @@ export function PracticaCargaForm({
                 valorAnestesista: practicaSeleccionada.valorAnestesista,
                 valorGastos: practicaSeleccionada.valorGastos,
             },
-            componenteSeleccion
+            componenteSeleccion,
+            { incluirSinValor: true }
         )
     }, [practicaSeleccionada, componenteSeleccion])
 
@@ -215,6 +214,45 @@ export function PracticaCargaForm({
 
         return porComponente
     }, [subitemsSeleccionadosForm, clasificacionPorSubitemNuevo])
+
+    const clasificacionesActivasForm = useMemo(
+        () =>
+            subitemsSeleccionadosForm.map(
+                (subitem, idx) =>
+                    normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
+            ),
+        [subitemsSeleccionadosForm, clasificacionPorSubitemNuevo]
+    )
+
+    const requiereEspecialistaForm = useMemo(
+        () =>
+            clasificacionesActivasForm.some(
+                (clasificacion) =>
+                    contieneClasificacion(clasificacion, 'HE') || contieneClasificacion(clasificacion, 'HP')
+            ),
+        [clasificacionesActivasForm]
+    )
+
+    const requiereAnestesistaForm = useMemo(
+        () => clasificacionesActivasForm.some((clasificacion) => contieneClasificacion(clasificacion, 'HA')),
+        [clasificacionesActivasForm]
+    )
+
+    const requiereGastosForm = useMemo(
+        () => clasificacionesActivasForm.some((clasificacion) => contieneClasificacion(clasificacion, 'GA')),
+        [clasificacionesActivasForm]
+    )
+
+    const requiereAyudanteForm = useMemo(
+        () =>
+            clasificacionesActivasForm.some(
+                (clasificacion) =>
+                    contieneClasificacion(clasificacion, 'A1') ||
+                    contieneClasificacion(clasificacion, 'A2') ||
+                    contieneClasificacion(clasificacion, 'A3')
+            ),
+        [clasificacionesActivasForm]
+    )
 
     useEffect(() => {
         let cancelled = false
@@ -481,27 +519,70 @@ export function PracticaCargaForm({
             }
         }
 
-        if (practicaBase?.valorEspecialista != null && !matriculaEspecialista.trim()) {
+        const subitemsSeleccionados = practicaBase
+            ? obtenerSubitemsSeleccionados(
+                {
+                    valorEspecialista: practicaBase.valorEspecialista,
+                    valorAyudante: practicaBase.valorAyudante,
+                    valorAnestesista: practicaBase.valorAnestesista,
+                    valorGastos: practicaBase.valorGastos,
+                },
+                componenteSeleccionActual,
+                { incluirSinValor: true }
+            )
+            : []
+
+        const clasificacionManualDefault = practicaBase
+            ? clasificacionManualDefaultDesdePractica(practicaBase)
+            : 'HE'
+
+        const clasificacionesSubitems = subitemsSeleccionados.map(
+            (subitem, idx) =>
+                normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
+        )
+        const clasificacionesReferencia =
+            clasificacionesSubitems.length > 0
+                ? clasificacionesSubitems
+                : [clasificacionManualDefault]
+
+        const requiereEspecialista = clasificacionesReferencia.some(
+            (clasificacion) =>
+                contieneClasificacion(clasificacion, 'HE') || contieneClasificacion(clasificacion, 'HP')
+        )
+        const requiereAnestesista = clasificacionesReferencia.some((clasificacion) => contieneClasificacion(clasificacion, 'HA'))
+        const requiereGastos = clasificacionesReferencia.some((clasificacion) => contieneClasificacion(clasificacion, 'GA'))
+        const requiereAyudante = clasificacionesReferencia.some(
+            (clasificacion) =>
+                contieneClasificacion(clasificacion, 'A1') ||
+                contieneClasificacion(clasificacion, 'A2') ||
+                contieneClasificacion(clasificacion, 'A3')
+        )
+
+        if (requiereEspecialista && !matriculaEspecialista.trim()) {
             setError('Ingrese matricula para honorario especialista')
             return
         }
-        if (practicaBase?.valorAnestesista != null && !matriculaAnestesista.trim()) {
+        if (requiereAnestesista && !matriculaAnestesista.trim()) {
             setError('Ingrese matricula para honorario anestesista')
             return
         }
-        if ((practicaBase?.valorGastos != null) && componenteSeleccionActual.gastos > 0 && !matriculaGastos.trim()) {
+        if (requiereGastos && !matriculaGastos.trim()) {
             setError('Ingrese matricula para derechos/gastos')
             return
         }
-        if ((practicaBase?.valorAyudante != null) && componenteSeleccionActual.ayudante > 0 && !matriculaAyudante.trim()) {
+        if (requiereAyudante && !matriculaAyudante.trim()) {
             setError('Ingrese matricula para ayudante')
             return
         }
 
-        const requiereEspecialista = practicaBase?.valorEspecialista != null
-        const requiereAnestesista = practicaBase?.valorAnestesista != null
-        const requiereGastos = (practicaBase?.valorGastos != null) && componenteSeleccionActual.gastos > 0
-        const requiereAyudante = (practicaBase?.valorAyudante != null) && componenteSeleccionActual.ayudante > 0
+        const matriculaEspecialistaNormalizada =
+            matriculaEspecialista.trim() !== ''
+                ? Number.parseInt(matriculaEspecialista, 10) || null
+                : null
+        const matriculaAnestesistaNormalizada =
+            matriculaAnestesista.trim() !== ''
+                ? Number.parseInt(matriculaAnestesista, 10) || null
+                : null
         const matriculaGastosNormalizada =
             matriculaGastos.trim() !== ''
                 ? Number.parseInt(matriculaGastos, 10) || null
@@ -529,16 +610,16 @@ export function PracticaCargaForm({
             cantidad: cantidadGeneralFinal,
             numeroAutorizacion: numeroAutorizacion.trim() || null,
             matriculaEspecialista:
-                requiereEspecialista && matriculaEspecialista.trim()
-                    ? Number.parseInt(matriculaEspecialista, 10) || null
+                requiereEspecialista
+                    ? matriculaEspecialistaNormalizada
                     : requiereAyudante
                     ? matriculaAyudanteNormalizada
                     : requiereGastos
                     ? matriculaGastosNormalizada
                     : null,
             matriculaAnestesista:
-                requiereAnestesista && matriculaAnestesista.trim()
-                    ? Number.parseInt(matriculaAnestesista, 10) || null
+                requiereAnestesista
+                    ? matriculaAnestesistaNormalizada
                     : null,
             facturable: true,
             importeBaseUnitario: practicaBase
@@ -556,21 +637,30 @@ export function PracticaCargaForm({
                 : null,
         }
 
-        const subitemsSeleccionados = practicaBase
-            ? obtenerSubitemsSeleccionados(
-                {
-                    valorEspecialista: practicaBase.valorEspecialista,
-                    valorAyudante: practicaBase.valorAyudante,
-                    valorAnestesista: practicaBase.valorAnestesista,
-                    valorGastos: practicaBase.valorGastos,
-                },
-                componenteSeleccionActual
-            )
-            : []
+        const resolverMatriculasPorClasificacion = (clasificacion: string): {
+            matriculaEspecialista: number | null
+            matriculaAnestesista: number | null
+        } => {
+            const usaEspecialista =
+                contieneClasificacion(clasificacion, 'HE') || contieneClasificacion(clasificacion, 'HP')
+            const usaAnestesista = contieneClasificacion(clasificacion, 'HA')
+            const usaAyudante =
+                contieneClasificacion(clasificacion, 'A1') ||
+                contieneClasificacion(clasificacion, 'A2') ||
+                contieneClasificacion(clasificacion, 'A3')
+            const usaGastos = contieneClasificacion(clasificacion, 'GA')
 
-        const clasificacionManualDefault = practicaBase
-            ? clasificacionManualDefaultDesdePractica(practicaBase)
-            : 'HE'
+            return {
+                matriculaEspecialista: usaEspecialista
+                    ? matriculaEspecialistaNormalizada
+                    : usaAyudante
+                    ? matriculaAyudanteNormalizada
+                    : usaGastos
+                    ? matriculaGastosNormalizada
+                    : null,
+                matriculaAnestesista: usaAnestesista ? matriculaAnestesistaNormalizada : null,
+            }
+        }
 
         const entradasCrear: PracticaCargaEntrada[] = (() => {
             if (!(subitemsSeleccionados.length > 0 && practicaBase)) {
@@ -578,13 +668,8 @@ export function PracticaCargaForm({
             }
 
             if (crearPracticaTodaJunta) {
-                const clasificacionesSeleccionadas = subitemsSeleccionados.map(
-                    (subitem, idx) =>
-                        normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
-                )
-
                 const clasificacionUnica =
-                    normalizarClasificacionAgrupacion(clasificacionesSeleccionadas.join('+')) ??
+                    normalizarClasificacionAgrupacion(clasificacionesSubitems.join('+')) ??
                     clasificacionManualDefault
 
                 return [
@@ -605,8 +690,8 @@ export function PracticaCargaForm({
                     valorAnestesista: practicaBase.valorAnestesista,
                     valorGastos: practicaBase.valorGastos,
                 })
-                const clasificacionIndividual =
-                    normalizarClasificacionAgrupacion(clasificacionPorSubitemNuevo[idx]) ?? subitem
+                const clasificacionIndividual = clasificacionesSubitems[idx] ?? subitem
+                const matriculasClasificacion = resolverMatriculasPorClasificacion(clasificacionIndividual)
 
                 return {
                     payload: {
@@ -614,16 +699,8 @@ export function PracticaCargaForm({
                         descripcionPractica: `${body.descripcionPractica} · ${etiquetaSubitem(subitem)}`,
                         cantidad: 1,
                         importeBaseUnitario: valorUnitario,
-                        matriculaEspecialista: esSubitemEspecialista(subitem)
-                            ? body.matriculaEspecialista
-                            : subitem === 'A1' || subitem === 'A2' || subitem === 'A3'
-                            ? matriculaAyudanteNormalizada
-                            : subitem === 'GA'
-                            ? matriculaGastosNormalizada
-                            : null,
-                        matriculaAnestesista: esSubitemAnestesista(subitem)
-                            ? body.matriculaAnestesista
-                            : null,
+                        matriculaEspecialista: matriculasClasificacion.matriculaEspecialista,
+                        matriculaAnestesista: matriculasClasificacion.matriculaAnestesista,
                     },
                     clasificacion: clasificacionIndividual,
                 }
@@ -855,7 +932,7 @@ export function PracticaCargaForm({
 
             {practicaSeleccionada && (
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-                    {practicaSeleccionada.valorEspecialista != null && (
+                    {requiereEspecialistaForm && (
                         <div className="space-y-1">
                             <label className="block text-[11px] text-gray-500">Matricula especialista (HE)</label>
                             <select
@@ -880,7 +957,7 @@ export function PracticaCargaForm({
                             />
                         </div>
                     )}
-                    {practicaSeleccionada.valorAnestesista != null && (
+                    {requiereAnestesistaForm && (
                         <div className="space-y-1">
                             <label className="block text-[11px] text-gray-500">Matricula anestesista (HA)</label>
                             <select
@@ -905,7 +982,7 @@ export function PracticaCargaForm({
                             />
                         </div>
                     )}
-                    {practicaSeleccionada.valorGastos != null && (
+                    {requiereGastosForm && (
                         <div className="space-y-1">
                             <label className="block text-[11px] text-gray-500">Matricula derechos/gastos (GA)</label>
                             <select
@@ -930,7 +1007,7 @@ export function PracticaCargaForm({
                             />
                         </div>
                     )}
-                    {practicaSeleccionada.valorAyudante != null && componenteSeleccion.ayudante > 0 && (
+                    {requiereAyudanteForm && (
                         <div className="space-y-1">
                             <label className="block text-[11px] text-gray-500">Matricula ayudante (AY)</label>
                             <select

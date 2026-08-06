@@ -22,26 +22,28 @@ function normalizarCantidadSeleccion(cantidad: number, maximo?: number): number 
 
 export function obtenerSubitemsSeleccionados(
   valores: ComponenteValoresSubitem,
-  seleccion: ComponenteSeleccionSubitem
+  seleccion: ComponenteSeleccionSubitem,
+  options?: { incluirSinValor?: boolean }
 ): SubitemCodigo[] {
   const subitems: SubitemCodigo[] = []
+  const incluirSinValor = options?.incluirSinValor === true
 
-  if (valores.valorGastos != null) {
+  if (incluirSinValor || valores.valorGastos != null) {
     const cantidadGastos = normalizarCantidadSeleccion(seleccion.gastos)
     for (let i = 0; i < cantidadGastos; i += 1) subitems.push('GA')
   }
 
-  if (valores.valorEspecialista != null) {
+  if (incluirSinValor || valores.valorEspecialista != null) {
     const cantidadEspecialista = normalizarCantidadSeleccion(seleccion.especialista)
     for (let i = 0; i < cantidadEspecialista; i += 1) subitems.push('HE')
   }
 
-  if (valores.valorAnestesista != null) {
+  if (incluirSinValor || valores.valorAnestesista != null) {
     const cantidadAnestesista = normalizarCantidadSeleccion(seleccion.anestesista)
     for (let i = 0; i < cantidadAnestesista; i += 1) subitems.push('HA')
   }
 
-  if (seleccion.ayudante > 0 && valores.valorAyudante != null) {
+  if (seleccion.ayudante > 0 && (incluirSinValor || valores.valorAyudante != null)) {
     const cantidadAyudantes = normalizarCantidadSeleccion(seleccion.ayudante, 3)
     for (let i = 1; i <= cantidadAyudantes; i += 1) {
       subitems.push((`A${i}`) as SubitemCodigo)

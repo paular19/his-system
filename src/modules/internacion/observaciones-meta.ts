@@ -65,6 +65,17 @@ function crearChecklistVacio(): ChecklistDocumental {
 }
 
 function normalizarFechaIso(value: unknown): string | null {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    return value.toISOString()
+  }
+
+  if (typeof value === 'number') {
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return null
+    return parsed.toISOString()
+  }
+
   if (typeof value !== 'string') return null
   const raw = value.trim()
   if (!raw) return null

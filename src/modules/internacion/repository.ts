@@ -802,6 +802,11 @@ export async function obtenerInternacionDetalle(
         ordenNumero: true,
         item: true,
         numeroAutorizacion: true,
+        orden: {
+          select: {
+            fechaEmision: true,
+          },
+        },
       },
       orderBy: [{ practicaId: 'asc' }, { item: 'asc' }],
     })
@@ -847,7 +852,13 @@ export async function obtenerInternacionDetalle(
 
   const ordenesPracticaPorId = new Map<
     number,
-    Array<{ puestoNumero: number; ordenNumero: number; item: number; numeroAutorizacion: string | null }>
+    Array<{
+      puestoNumero: number
+      ordenNumero: number
+      item: number
+      numeroAutorizacion: string | null
+      fechaEmision: Date | null
+    }>
   >()
 
   for (const row of ordenesPracticaRows) {
@@ -858,6 +869,7 @@ export async function obtenerInternacionDetalle(
       ordenNumero: row.ordenNumero,
       item: row.item,
       numeroAutorizacion: row.numeroAutorizacion,
+      fechaEmision: row.orden?.fechaEmision ?? null,
     })
     ordenesPracticaPorId.set(row.practicaId, prev)
   }
@@ -865,6 +877,15 @@ export async function obtenerInternacionDetalle(
   const ordenesActivasSet = new Set(
     ordenesPracticaRows.map((row) => `${row.puestoNumero}:${row.ordenNumero}`)
   )
+
+  const fechaEmisionOrdenPorClave = new Map<string, Date>()
+  for (const row of ordenesPracticaRows) {
+    if (!row.orden?.fechaEmision) continue
+    fechaEmisionOrdenPorClave.set(
+      `${row.puestoNumero}:${row.ordenNumero}`,
+      row.orden.fechaEmision
+    )
+  }
 
   return {
     ...ingresoBase,
@@ -937,6 +958,10 @@ export async function obtenerInternacionDetalle(
                   ordenNumero: Number(practicaBase.ordenNumero),
                   item: practicaBase.ordenItem != null ? Number(practicaBase.ordenItem) : 1,
                   numeroAutorizacion: practicaBase.numeroAutorizacion ?? null,
+                  fechaEmision:
+                    fechaEmisionOrdenPorClave.get(
+                      `${Number(practicaBase.puestoNumero)}:${Number(practicaBase.ordenNumero)}`
+                    ) ?? null,
                 },
               ]
               : []),
@@ -1267,6 +1292,11 @@ export async function actualizarPractica(
             item: true,
             numeroAutorizacion: true,
             clasificacionAgrupacion: true,
+            orden: {
+              select: {
+                fechaEmision: true,
+              },
+            },
           },
         },
       },
@@ -1423,6 +1453,11 @@ export async function actualizarPractica(
             item: true,
             numeroAutorizacion: true,
             clasificacionAgrupacion: true,
+            orden: {
+              select: {
+                fechaEmision: true,
+              },
+            },
           },
         })
       }
@@ -1500,6 +1535,11 @@ export async function actualizarPractica(
         ordenNumero: true,
         item: true,
         numeroAutorizacion: true,
+        orden: {
+          select: {
+            fechaEmision: true,
+          },
+        },
       },
       orderBy: [{ item: 'asc' }],
     })
@@ -1540,6 +1580,11 @@ export async function actualizarPractica(
             ordenNumero: true,
             item: true,
             numeroAutorizacion: true,
+            orden: {
+              select: {
+                fechaEmision: true,
+              },
+            },
           },
           orderBy: [{ item: 'asc' }],
         })
@@ -1596,6 +1641,7 @@ export async function actualizarPractica(
         ordenNumero: op.ordenNumero,
         item: op.item,
         numeroAutorizacion: op.numeroAutorizacion,
+        fechaEmision: op.orden?.fechaEmision ?? null,
       })),
     } as PracticaItem
   })

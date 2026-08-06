@@ -88,6 +88,7 @@ type PracticaInternacionItem = {
         ordenNumero: number
         item: number
         numeroAutorizacion: string | null
+        fechaEmision?: string | Date | null
     }>
 }
 
@@ -558,7 +559,20 @@ export function CirugiaUrgenciaSection({
                         const practicaInternacion = estadoPractica
                             ? practicasInternacionPorId.get(estadoPractica.practicaInternacionId)
                             : null
-                        const ms = practicaInternacion ? new Date(practicaInternacion.fecha).getTime() : 0
+
+                        let fechaOrdenGrupo: Date | string | null | undefined = null
+                        if (grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null) {
+                            const ordenPracticaVinculada = practicaInternacion?.ordenPractica.find(
+                                (orden) =>
+                                    orden.puestoNumero === grupo.puestoNumero &&
+                                    orden.ordenNumero === grupo.ordenNumero
+                            )
+                            fechaOrdenGrupo = ordenPracticaVinculada?.fechaEmision
+                        }
+
+                        const ms = fechaOrdenGrupo
+                            ? new Date(fechaOrdenGrupo).getTime()
+                            : (practicaInternacion ? new Date(practicaInternacion.fecha).getTime() : 0)
                         return Math.max(max, Number.isFinite(ms) ? ms : 0)
                     }, 0)
 
@@ -1630,15 +1644,20 @@ export function CirugiaUrgenciaSection({
                                                                                                         Facturada
                                                                                                     </span>
                                                                                                 )}
-                                                                                                {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero && (
-                                                                                                    <Link
-                                                                                                        href={`/dashboard/ambulatorio/${grupo.puestoNumero}/${grupo.ordenNumero}`}
-                                                                                                        className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
-                                                                                                    >
-                                                                                                        <Pencil className="h-3.5 w-3.5" />
-                                                                                                        Abrir orden
-                                                                                                    </Link>
-                                                                                                )}
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    onClick={() => abrirEdicionPracticaCirugia(c.id, practica.id)}
+                                                                                                    disabled={estaFacturada || !practicaInternacion || guardandoPracticaEditando}
+                                                                                                    title={
+                                                                                                        estaFacturada
+                                                                                                            ? 'Practica facturada. Anula la orden en Facturacion para editar.'
+                                                                                                            : 'Editar practica'
+                                                                                                    }
+                                                                                                    className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                                                                                                >
+                                                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                                                    Editar
+                                                                                                </button>
                                                                                             </div>
                                                                                         )}
                                                                                     </div>

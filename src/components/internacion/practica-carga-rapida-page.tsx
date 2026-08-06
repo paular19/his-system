@@ -1927,7 +1927,6 @@ export function PracticaCargaRapidaPage({
             }
 
             cerrarEdicionPractica()
-            router.refresh()
         } catch {
             setMensajeError('Error de conexion al editar la practica')
         } finally {
@@ -2624,7 +2623,7 @@ export function PracticaCargaRapidaPage({
                                                     Facturada
                                                 </span>
                                             )}
-                                            {puedeCrear && !modoCirugia && (
+                                            {puedeCrear && (
                                                 <button
                                                     type="button"
                                                     onClick={() => abrirEdicionPractica(practica)}
@@ -2636,16 +2635,6 @@ export function PracticaCargaRapidaPage({
                                                 >
                                                     Editar
                                                 </button>
-                                            )}
-                                            {puedeCrear && modoCirugia && (
-                                                grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero ? (
-                                                    <Link
-                                                        href={`/dashboard/ambulatorio/${grupo.puestoNumero}/${grupo.ordenNumero}`}
-                                                        className="inline-flex rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
-                                                    >
-                                                        Abrir orden
-                                                    </Link>
-                                                ) : null
                                             )}
                                         </div>
                                     </div>

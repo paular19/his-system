@@ -11,6 +11,7 @@ import type {
 import { generarCodigoBarras } from './types'
 import { normalizarClasificacionAgrupacion } from './clasificacion'
 import { coincideTextoConBusquedaFlexible, obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
+import { claveDiaArgentina, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
 
 const PUESTO_NUMERO = 1 // Número de puesto fijo (configurable a futuro)
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
@@ -235,9 +236,13 @@ export async function crearOrdenInterna(
     const fechasItems = data.items
       .map((item) => item.fecha)
       .filter((fecha): fecha is Date => fecha instanceof Date)
-    const fechaOrden = fechasItems.length > 0
-      ? new Date(Math.min(...fechasItems.map((fecha) => fecha.getTime())))
+    const claveHoyArgentina = claveDiaArgentina(new Date())
+    const fechaEmisionOrden = claveHoyArgentina
+      ? fechaDesdeClaveArgentina(claveHoyArgentina)
       : new Date()
+    const fechaBaseItem = fechasItems.length > 0
+      ? new Date(Math.min(...fechasItems.map((fecha) => fecha.getTime())))
+      : fechaEmisionOrden
 
     const ordenData = {
       puestoNumero: PUESTO_NUMERO,
@@ -256,15 +261,15 @@ export async function crearOrdenInterna(
       descripcionPatologia: data.descripcionPatologia ?? null,
       titularModular: data.titularModular ?? null,
       imprimirPorDuplicado: data.imprimirPorDuplicado ?? false,
-      fechaEmision: fechaOrden,
-      fechaPedido: fechaOrden,
+      fechaEmision: fechaEmisionOrden,
+      fechaPedido: fechaEmisionOrden,
       importeTotal: totalOrden,
       estado: 'A' as const,
       fechaEstado: new Date(),
       usuarioRegistro,
       items: {
         create: data.items.map((item, idx) => {
-          const fechaItem = item.fecha instanceof Date ? item.fecha : fechaOrden
+          const fechaItem = item.fecha instanceof Date ? item.fecha : fechaBaseItem
           return {
             item: idx + 1,
             practicaId: item.practicaId ?? null,

@@ -10,6 +10,7 @@ import {
   normalizarClasificacionAgrupacion,
   tituloDesdeClasificacion,
 } from '@/modules/orden/clasificacion'
+import { ARG_TIME_ZONE, formatearFechaArgentina } from '@/lib/utils/argentina-date'
 
 interface AutorizacionPrintProps {
   orden: OrdenConItems
@@ -260,7 +261,7 @@ export function AutorizacionPrint({
   }, [paginas])
 
   const fechaEmision = new Date(orden.fechaEmision)
-  const fechaFormateada = fechaEmision.toLocaleDateString('es-AR', {
+  const fechaFormateada = formatearFechaArgentina(fechaEmision, {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
@@ -268,6 +269,8 @@ export function AutorizacionPrint({
   const horaFormateada = fechaEmision.toLocaleTimeString('es-AR', {
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
+    timeZone: ARG_TIME_ZONE,
   })
   const ingresoTexto =
     orden.ingresoNumero !== null

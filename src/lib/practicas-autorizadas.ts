@@ -88,6 +88,20 @@ function actualizarGrupoConPractica(grupo: GrupoInterno, practica: PracticaItem,
     }
 }
 
+function actualizarGrupoConPracticaConFechaOrden(
+    grupo: GrupoInterno,
+    practica: PracticaItem,
+    coincideFiltro: boolean,
+    fechaOrden: Date | string | null | undefined
+) {
+    actualizarGrupoConPractica(grupo, practica, coincideFiltro)
+
+    const fechaOrdenMs = toDateMs(fechaOrden)
+    if (fechaOrdenMs > grupo.fechaReferenciaMs) {
+        grupo.fechaReferenciaMs = fechaOrdenMs
+    }
+}
+
 export function agruparPracticasAutorizadasPorOrden(
     practicasAutorizadas: PracticaItem[],
     practicaIdsFiltradas?: Set<number>
@@ -113,7 +127,12 @@ export function agruparPracticasAutorizadasPorOrden(
                         normalizarNumeroAutorizacion(orden.numeroAutorizacion) ?? numeroAutorizacionPractica
                 }
 
-                actualizarGrupoConPractica(grupo, practica, coincideFiltro)
+                actualizarGrupoConPracticaConFechaOrden(
+                    grupo,
+                    practica,
+                    coincideFiltro,
+                    orden.fechaEmision
+                )
             }
             continue
         }

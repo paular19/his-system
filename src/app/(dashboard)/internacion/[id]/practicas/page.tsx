@@ -85,6 +85,11 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                         ordenNumero: true,
                         item: true,
                         numeroAutorizacion: true,
+                        orden: {
+                            select: {
+                                fechaEmision: true,
+                            },
+                        },
                     },
                 },
                 _count: {
@@ -113,27 +118,31 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             .filter((key): key is string => key != null)
     ))
 
+    const ordenesLegacyActivas = clavesOrdenLegacy.length === 0
+        ? []
+        : await prisma.orden.findMany({
+            where: {
+                estado: { not: 'X' },
+                OR: clavesOrdenLegacy.map((key) => {
+                    const [puestoNumeroRaw, ordenNumeroRaw] = key.split(':')
+                    return {
+                        puestoNumero: Number.parseInt(puestoNumeroRaw ?? '', 10),
+                        numero: Number.parseInt(ordenNumeroRaw ?? '', 10),
+                    }
+                }),
+            },
+            select: {
+                puestoNumero: true,
+                numero: true,
+                fechaEmision: true,
+            },
+        })
+
     const ordenesLegacyActivasSet = new Set(
-        clavesOrdenLegacy.length === 0
-            ? []
-            : (
-                await prisma.orden.findMany({
-                    where: {
-                        estado: { not: 'X' },
-                        OR: clavesOrdenLegacy.map((key) => {
-                            const [puestoNumeroRaw, ordenNumeroRaw] = key.split(':')
-                            return {
-                                puestoNumero: Number.parseInt(puestoNumeroRaw ?? '', 10),
-                                numero: Number.parseInt(ordenNumeroRaw ?? '', 10),
-                            }
-                        }),
-                    },
-                    select: {
-                        puestoNumero: true,
-                        numero: true,
-                    },
-                })
-            ).map((orden) => `${orden.puestoNumero}:${orden.numero}`)
+        ordenesLegacyActivas.map((orden) => `${orden.puestoNumero}:${orden.numero}`)
+    )
+    const fechaEmisionOrdenLegacyPorClave = new Map(
+        ordenesLegacyActivas.map((orden) => [`${orden.puestoNumero}:${orden.numero}`, orden.fechaEmision] as const)
     )
 
     const descripcionCirugiaPorCodigo = new Map<string, string>()
@@ -162,6 +171,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             ordenNumero: orden.ordenNumero,
             item: orden.item,
             numeroAutorizacion: orden.numeroAutorizacion,
+            fechaEmision: orden.orden?.fechaEmision ?? null,
         }))
         if (
             ordenPracticaActivas.length === 0 &&
@@ -176,6 +186,10 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                 ordenNumero: Number(practica.ordenNumero),
                 item: practica.ordenItem != null ? Number(practica.ordenItem) : 1,
                 numeroAutorizacion: practica.numeroAutorizacion,
+                fechaEmision:
+                    fechaEmisionOrdenLegacyPorClave.get(
+                        `${Number(practica.puestoNumero)}:${Number(practica.ordenNumero)}`
+                    ) ?? practica.fecha,
             })
         }
 

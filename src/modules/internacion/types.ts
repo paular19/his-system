@@ -252,6 +252,7 @@ export interface PracticaItem {
     ordenNumero: number
     item: number
     numeroAutorizacion: string | null
+    fechaEmision?: Date | null
   }>
   facturable: boolean
   estado: string | null

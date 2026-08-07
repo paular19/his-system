@@ -798,6 +798,31 @@ export function PracticaCargaRapidaPage({
         return map
     }, [profesionalesConMatricula])
 
+    const registrarProfesionalCreado = (profesional: {
+        id: number
+        nombre: string
+        matricula?: number | null
+    }) => {
+        if (!(typeof profesional.matricula === 'number' && profesional.matricula > 0)) return
+        const matricula = profesional.matricula
+
+        setProfesionalesConMatricula((prev) => {
+            if (prev.some((item) => item.id === profesional.id)) return prev
+
+            const next = [
+                ...prev,
+                {
+                    id: profesional.id,
+                    nombre: profesional.nombre,
+                    matricula,
+                },
+            ]
+
+            next.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+            return next
+        })
+    }
+
     const profesionalIdPorMatricula = useMemo(() => {
         const map = new Map<number, number>()
         for (const profesional of profesionalesConMatricula) {
@@ -2882,8 +2907,11 @@ export function PracticaCargaRapidaPage({
                                         setMedicoFirmanteId(nextValue)
                                         setFirmanteEditadoManualmente(true)
                                     }}
+                                    permitirCargaManual
+                                    textoBotonCargaManual="Agregar firmante manual (nombre + matricula)"
+                                    onProfesionalCreado={registrarProfesionalCreado}
                                     autoSelectOnSearch={false}
-                                    disabled={profesionalesConMatricula.length === 0 || procesandoProtocolo}
+                                    disabled={procesandoProtocolo}
                                     placeholderOption="-- Seleccionar firmante --"
                                     searchPlaceholder="Buscar por nombre o matricula"
                                     selectClassName="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 disabled:bg-gray-100 disabled:text-gray-500"
@@ -3010,8 +3038,10 @@ export function PracticaCargaRapidaPage({
                                         setMedicoFirmanteId(nextValue)
                                         setFirmanteEditadoManualmente(true)
                                     }}
+                                    permitirCargaManual
+                                    textoBotonCargaManual="Agregar firmante manual (nombre + matricula)"
+                                    onProfesionalCreado={registrarProfesionalCreado}
                                     autoSelectOnSearch={false}
-                                    disabled={profesionalesConMatricula.length === 0}
                                     placeholderOption="-- Seleccionar firmante --"
                                     searchPlaceholder="Buscar por nombre o matricula"
                                     selectClassName="mt-1 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-900 disabled:bg-emerald-100 disabled:text-emerald-700"
@@ -3185,8 +3215,10 @@ export function PracticaCargaRapidaPage({
                                                     setMedicoFirmanteId(nextValue)
                                                     setFirmanteEditadoManualmente(true)
                                                 }}
+                                                permitirCargaManual
+                                                textoBotonCargaManual="Agregar firmante manual (nombre + matricula)"
+                                                onProfesionalCreado={registrarProfesionalCreado}
                                                 autoSelectOnSearch={false}
-                                                disabled={profesionalesConMatricula.length === 0}
                                                 placeholderOption="-- Seleccionar firmante --"
                                                 searchPlaceholder="Buscar por nombre o matricula"
                                                 selectClassName="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"
@@ -3764,8 +3796,10 @@ export function PracticaCargaRapidaPage({
                                                     : prev
                                             )
                                         }
+                                        permitirCargaManual
+                                        textoBotonCargaManual="Agregar firmante manual (nombre + matricula)"
+                                        onProfesionalCreado={registrarProfesionalCreado}
                                         autoSelectOnSearch={false}
-                                        disabled={profesionalesConMatricula.length === 0}
                                         placeholderOption="-- Seleccionar firmante --"
                                         searchPlaceholder="Buscar por nombre o matricula"
                                         selectClassName="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 disabled:bg-amber-100 disabled:text-amber-700"

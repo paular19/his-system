@@ -246,9 +246,8 @@ function esIngresoInternacion(tipoIngresoCodigo: string | null | undefined): boo
 }
 
 function resolverMatriculaGastoPorTipoIngreso(tipoIngresoCodigo: string | null | undefined): number {
-    return esIngresoInternacion(tipoIngresoCodigo)
-        ? MATRICULA_AYUDANTE_INT_DEFAULT
-        : MATRICULA_AMBULATORIO_DEFAULT
+    void tipoIngresoCodigo
+    return MATRICULA_GASTOS_INTERNACION_DEFAULT
 }
 
 function resolverMatriculaEspecialistaPorPatologia(
@@ -1894,9 +1893,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null) ||
                     esDesgloseSoloGastos(desgloseVinculo)
                 ))
-            const matriculaGastoManualVinculo = it.practica?.matriculaEspecialista ?? it.efectorMatricula ?? null
             const matriculaEspecialistaVinculo = esGastoVinculo
-                ? (matriculaGastoManualVinculo ?? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo))
+                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                 : (esCodigoAnestesistaVinculo
                     ? null
                     : resolverMatriculaEspecialistaPorPatologia(
@@ -1955,7 +1953,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     const incluye = desglosarIncluyeCodigo(it.modulo)
                     const esGasto = esSeleccionSoloGastos(incluye) || (!incluye && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
                     if (esGasto) {
-                        return it.practica?.matriculaEspecialista ?? it.efectorMatricula ?? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                        return resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                     }
                     const incluyeSoloAyudante = Boolean(
                         incluye &&
@@ -2219,7 +2217,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 esDesgloseSoloGastos(desgloseFiltradoPorIncluye ?? desgloseConDiferencial ?? desgloseBase)
             ))
         const matriculaEspecialistaFinal = esGastoPractica
-            ? (matriculaEspecialista ?? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo))
+            ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
             : matriculaEspecialista
         const matriculaAnestesistaFinal = esGastoPractica
             ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
@@ -2398,7 +2396,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         ? MATRICULA_AYUDANTE_INT_DEFAULT
                         : null
             const matriculaEspecialistaItem = esGastoItem
-                ? (it.practica?.matriculaEspecialista ?? it.efectorMatricula ?? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo))
+                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
                 : (incluyeSoloAyudante
                     ? MATRICULA_AYUDANTE_INT_DEFAULT
                     : resolverMatriculaEspecialistaPorPatologia(
@@ -3454,22 +3452,9 @@ export async function actualizarPrestacionFacturacion(
                             }]
                             : [])
 
-                    let tieneItemsBloqueados = false
                     let actualizarImportesOrden = false
 
                     for (const itemObjetivo of itemsObjetivo) {
-                        const ordenBloqueadaPorAutorizacion = tieneAutorizacionBloqueanteOrdenItem(
-                            itemObjetivo.numeroAutorizacion,
-                            ordenCabecera.numeroAutorizacion,
-                            ordenPuestoNumeroObjetivo,
-                            ordenNumeroObjetivo,
-                            itemObjetivo.item
-                        )
-
-                        if (ordenBloqueadaPorAutorizacion) {
-                            tieneItemsBloqueados = true
-                        }
-
                         const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
                             modulo: incluyeCodigoNormalizado,
                             clasificacionAgrupacion: esPatologia ? 'HP' : null,
@@ -3477,17 +3462,14 @@ export async function actualizarPrestacionFacturacion(
                             efectorMatricula: esPatologia
                                 ? MATRICULA_PATOLOGIA_DEFAULT
                                 : (data.matriculaEspecialista ?? undefined),
+                            fecha: data.fecha,
+                            convenioId: resolved.convenioId,
+                            codigoPractica: resolved.codigoPractica.trim(),
+                            cantidad: data.cantidad,
+                            numeroAutorizacion: numeroAutorizacionOrden,
+                            importeTotal: data.importeTotal,
                         }
-
-                        if (!ordenBloqueadaPorAutorizacion) {
-                            dataOrdenPractica.fecha = data.fecha
-                            dataOrdenPractica.convenioId = resolved.convenioId
-                            dataOrdenPractica.codigoPractica = resolved.codigoPractica.trim()
-                            dataOrdenPractica.cantidad = data.cantidad
-                            dataOrdenPractica.numeroAutorizacion = numeroAutorizacionOrden
-                            dataOrdenPractica.importeTotal = data.importeTotal
-                            actualizarImportesOrden = true
-                        }
+                        actualizarImportesOrden = true
 
                         await tx.ordenPractica.update({
                             where: {
@@ -3501,7 +3483,7 @@ export async function actualizarPrestacionFacturacion(
                         })
                     }
 
-                    if (data.matriculaProfesional && !tieneItemsBloqueados) {
+                    if (data.matriculaProfesional) {
                         const profesional = await tx.profesional.findFirst({
                             where: { matricula: data.matriculaProfesional },
                             select: { id: true },
@@ -3651,22 +3633,9 @@ export async function actualizarPrestacionFacturacion(
             })
             : [{ item: data.item, numeroAutorizacion: actualItem.numeroAutorizacion }]
 
-        let tieneItemsBloqueados = false
         let actualizarImportesOrden = false
 
         for (const itemObjetivo of itemsObjetivo) {
-            const ordenBloqueadaPorAutorizacion = tieneAutorizacionBloqueanteOrdenItem(
-                itemObjetivo.numeroAutorizacion,
-                ordenCabecera.numeroAutorizacion,
-                data.puestoNumero,
-                data.ordenNumero,
-                itemObjetivo.item
-            )
-
-            if (ordenBloqueadaPorAutorizacion) {
-                tieneItemsBloqueados = true
-            }
-
             const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
                 modulo: incluyeCodigoNormalizado,
                 clasificacionAgrupacion: esPatologia ? 'HP' : null,
@@ -3674,17 +3643,14 @@ export async function actualizarPrestacionFacturacion(
                 efectorMatricula: esPatologia
                     ? MATRICULA_PATOLOGIA_DEFAULT
                     : (data.matriculaEspecialista ?? undefined),
+                fecha: data.fecha,
+                convenioId: resolved.convenioId,
+                codigoPractica: resolved.codigoPractica.trim(),
+                cantidad: data.cantidad,
+                numeroAutorizacion: data.numeroAutorizacion ?? null,
+                importeTotal: data.importeTotal,
             }
-
-            if (!ordenBloqueadaPorAutorizacion) {
-                dataOrdenPractica.fecha = data.fecha
-                dataOrdenPractica.convenioId = resolved.convenioId
-                dataOrdenPractica.codigoPractica = resolved.codigoPractica.trim()
-                dataOrdenPractica.cantidad = data.cantidad
-                dataOrdenPractica.numeroAutorizacion = data.numeroAutorizacion ?? null
-                dataOrdenPractica.importeTotal = data.importeTotal
-                actualizarImportesOrden = true
-            }
+            actualizarImportesOrden = true
 
             await tx.ordenPractica.update({
                 where: {
@@ -3698,7 +3664,7 @@ export async function actualizarPrestacionFacturacion(
             })
         }
 
-        if (data.matriculaProfesional && !tieneItemsBloqueados) {
+        if (data.matriculaProfesional) {
             const profesional = await tx.profesional.findFirst({
                 where: { matricula: data.matriculaProfesional },
                 select: { id: true },

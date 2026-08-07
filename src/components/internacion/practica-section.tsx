@@ -46,6 +46,7 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
     A3: 7,
 }
 const ORDEN_COMPONENTES_CLASIFICACION = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3'] as const
+const ORDEN_COMPONENTES_VALIDOS = new Set<string>(ORDEN_COMPONENTES_CLASIFICACION)
 
 function normalizarBusquedaLista(value: string): string {
     return value
@@ -87,6 +88,45 @@ function clasificacionInferidaPractica(practica: Pick<PracticaItem, 'codigoPract
     }
 
     return 'HE'
+}
+
+function ordenarSubitems(subitems: string[]): string[] {
+    return Array.from(new Set(subitems)).sort(
+        (a, b) => (ORDEN_CLASIFICACION_LISTA[a] ?? 999) - (ORDEN_CLASIFICACION_LISTA[b] ?? 999)
+    )
+}
+
+function subitemsDesdeClasificacion(clasificacion: string | null | undefined): string[] {
+    const normalizada = normalizarClasificacionAgrupacion(clasificacion)
+    if (!normalizada) return []
+
+    const tokens = normalizada
+        .split('+')
+        .map((token) => token.trim().toUpperCase())
+        .filter((token) => ORDEN_COMPONENTES_VALIDOS.has(token))
+
+    return ordenarSubitems(tokens)
+}
+
+function subitemsPracticaPorGrupo(
+    practica: Pick<PracticaItem, 'codigoPractica' | 'descripcionPractica' | 'matriculaEspecialista' | 'matriculaAnestesista' | 'ordenPractica'>,
+    grupo: Pick<GrupoPracticasAutorizadas, 'tipo' | 'puestoNumero' | 'ordenNumero'>
+): string[] {
+    if (grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null) {
+        const subitemsOrden = (practica.ordenPractica ?? [])
+            .filter(
+                (op) =>
+                    op.puestoNumero === grupo.puestoNumero &&
+                    op.ordenNumero === grupo.ordenNumero
+            )
+            .flatMap((op) => subitemsDesdeClasificacion(op.clasificacionAgrupacion))
+
+        if (subitemsOrden.length > 0) {
+            return ordenarSubitems(subitemsOrden)
+        }
+    }
+
+    return subitemsDesdeClasificacion(clasificacionInferidaPractica(practica))
 }
 
 interface PracticaSectionProps {
@@ -1253,6 +1293,16 @@ export function PracticaSection({
                                         ).map(([codigo, cantidad]) => `${codigo} x${cantidad}`)
                                         const codigosResumen = codigosConCantidad.slice(0, 4).join(', ')
                                         const codigosRestantes = Math.max(0, codigosConCantidad.length - 4)
+                                        const subitemsResumen = ordenarSubitems(
+                                            Array.from(
+                                                grupo.practicas.reduce((set, practica) => {
+                                                    for (const subitem of subitemsPracticaPorGrupo(practica, grupo)) {
+                                                        set.add(subitem)
+                                                    }
+                                                    return set
+                                                }, new Set<string>())
+                                            )
+                                        ).join('+') || '-'
                                         const grupoYaAutorizado = grupoTieneNumeroAutorizacion(grupo)
                                         const fechaResumenOrden = fmtFecha(grupo.fechaReferencia)
                                         const tituloGrupo = grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
@@ -1282,7 +1332,7 @@ export function PracticaSection({
                                                         <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
                                                         <span className="shrink-0 font-semibold">{tituloGrupo}</span>
                                                         <span className={`min-w-0 truncate text-[10px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
-                                                            Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Fecha: {fechaResumenOrden}
+                                                            Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Subitem: {subitemsResumen} · Fecha: {fechaResumenOrden}
                                                         </span>
                                                     </span>
                                                     <span className={`text-[11px] ${grupoYaAutorizado ? 'text-emerald-700' : 'text-amber-800'}`}>
@@ -1360,52 +1410,58 @@ export function PracticaSection({
                                                             </div>
 
                                                             <div className="mt-1.5 space-y-1">
-                                                                {practicasVisibles.map((practica) => (
-                                                                    <div
-                                                                        key={`${grupo.key}-${practica.id}`}
-                                                                        className={`rounded bg-white px-2 py-1 ${
-                                                                            grupoYaAutorizado ? 'border border-emerald-100' : 'border border-amber-200'
-                                                                        }`}
-                                                                    >
-                                                                        <div className={`flex items-center justify-between gap-2 ${
-                                                                            grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'
-                                                                        }`}>
-                                                                            <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
-                                                                            <span className="font-medium">Cant. {practica.cantidad}</span>
-                                                                        </div>
-                                                                        <p className={grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}>
-                                                                            {practica.descripcionPractica ?? practica.codigoPractica.trim()}
-                                                                        </p>
-                                                                        <p className={grupoYaAutorizado ? 'text-[11px] text-emerald-700' : 'text-[11px] text-amber-800'}>{fmtFecha(practica.fecha)}</p>
-                                                                        {esPedidoLaboratorio(practica) && (
-                                                                            <div className="mt-1 text-[11px] text-indigo-700 space-y-0.5">
-                                                                                <p>Protocolo N° {practica.numeroProtocoloLaboratorio?.trim() || '-'}</p>
-                                                                                <p>Diagnóstico: {practica.diagnosticoLaboratorio?.trim() || '-'}</p>
+                                                                {practicasVisibles.map((practica) => {
+                                                                    const subitemsPractica = subitemsPracticaPorGrupo(practica, grupo).join('+') || '-'
+
+                                                                    return (
+                                                                        <div
+                                                                            key={`${grupo.key}-${practica.id}`}
+                                                                            className={`rounded bg-white px-2 py-1 ${
+                                                                                grupoYaAutorizado ? 'border border-emerald-100' : 'border border-amber-200'
+                                                                            }`}
+                                                                        >
+                                                                            <div className={`flex items-center justify-between gap-2 ${
+                                                                                grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'
+                                                                            }`}>
+                                                                                <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
+                                                                                <span className="font-medium">Cant. {practica.cantidad}</span>
                                                                             </div>
-                                                                        )}
-                                                                        <div className="mt-1 flex items-center justify-end gap-2">
-                                                                            {practicaFacturada(practica) && (
-                                                                                <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
-                                                                                    Facturada
-                                                                                </span>
+                                                                            <p className={grupoYaAutorizado ? 'text-emerald-900' : 'text-amber-900'}>
+                                                                                {practica.descripcionPractica ?? practica.codigoPractica.trim()}
+                                                                            </p>
+                                                                            <p className={grupoYaAutorizado ? 'text-[11px] text-emerald-700' : 'text-[11px] text-amber-800'}>
+                                                                                Subitem: {subitemsPractica} · {fmtFecha(practica.fecha)}
+                                                                            </p>
+                                                                            {esPedidoLaboratorio(practica) && (
+                                                                                <div className="mt-1 text-[11px] text-indigo-700 space-y-0.5">
+                                                                                    <p>Protocolo N° {practica.numeroProtocoloLaboratorio?.trim() || '-'}</p>
+                                                                                    <p>Diagnóstico: {practica.diagnosticoLaboratorio?.trim() || '-'}</p>
+                                                                                </div>
                                                                             )}
-                                                                            {puedeCrear && (
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => abrirEdicionPractica(practica)}
-                                                                                    disabled={guardandoPracticaEditando || practicaFacturada(practica)}
-                                                                                    title={practicaFacturada(practica)
-                                                                                        ? 'Práctica facturada. Anulá la orden en Facturación para editar.'
-                                                                                        : 'Editar práctica'}
-                                                                                    className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                                                                >
-                                                                                    <Pencil className="h-3.5 w-3.5" />
-                                                                                    Editar
-                                                                                </button>
-                                                                            )}
+                                                                            <div className="mt-1 flex items-center justify-end gap-2">
+                                                                                {practicaFacturada(practica) && (
+                                                                                    <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                                                                                        Facturada
+                                                                                    </span>
+                                                                                )}
+                                                                                {puedeCrear && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => abrirEdicionPractica(practica)}
+                                                                                        disabled={guardandoPracticaEditando || practicaFacturada(practica)}
+                                                                                        title={practicaFacturada(practica)
+                                                                                            ? 'Práctica facturada. Anulá la orden en Facturación para editar.'
+                                                                                            : 'Editar práctica'}
+                                                                                        className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                                                    >
+                                                                                        <Pencil className="h-3.5 w-3.5" />
+                                                                                        Editar
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                ))}
+                                                                    )
+                                                                })}
                                                             </div>
 
                                                             {!expandida && restantes > 0 && (

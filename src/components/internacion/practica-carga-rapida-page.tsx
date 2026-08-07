@@ -183,6 +183,8 @@ const ORDEN_CLASIFICACION_LISTA: Record<string, number> = {
     A2: 6,
     A3: 7,
 }
+const ORDEN_COMPONENTES_CLASIFICACION = ['HE', 'HA', 'GA', 'HP', 'A1', 'A2', 'A3'] as const
+const ORDEN_COMPONENTES_VALIDOS = new Set<string>(ORDEN_COMPONENTES_CLASIFICACION)
 
 const ORDENES_HISTORICO_POR_PAGINA = 8
 const CONCURRENCIA_GUARDADO_PRACTICAS = 6
@@ -291,6 +293,45 @@ function clasificacionInferidaPractica(
     }
 
     return 'HE'
+}
+
+function ordenarSubitems(subitems: string[]): string[] {
+    return Array.from(new Set(subitems)).sort(
+        (a, b) => (ORDEN_CLASIFICACION_LISTA[a] ?? 999) - (ORDEN_CLASIFICACION_LISTA[b] ?? 999)
+    )
+}
+
+function subitemsDesdeClasificacion(clasificacion: string | null | undefined): string[] {
+    const normalizada = normalizarClasificacionAgrupacion(clasificacion)
+    if (!normalizada) return []
+
+    const tokens = normalizada
+        .split('+')
+        .map((token) => token.trim().toUpperCase())
+        .filter((token) => ORDEN_COMPONENTES_VALIDOS.has(token))
+
+    return ordenarSubitems(tokens)
+}
+
+function subitemsPracticaPorGrupo(
+    practica: Pick<PracticaItem, 'codigoPractica' | 'descripcionPractica' | 'matriculaEspecialista' | 'matriculaAnestesista' | 'ordenPractica'>,
+    grupo: Pick<GrupoPracticasAutorizadas, 'tipo' | 'puestoNumero' | 'ordenNumero'>
+): string[] {
+    if (grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null) {
+        const subitemsOrden = (practica.ordenPractica ?? [])
+            .filter(
+                (op) =>
+                    op.puestoNumero === grupo.puestoNumero &&
+                    op.ordenNumero === grupo.ordenNumero
+            )
+            .flatMap((op) => subitemsDesdeClasificacion(op.clasificacionAgrupacion))
+
+        if (subitemsOrden.length > 0) {
+            return ordenarSubitems(subitemsOrden)
+        }
+    }
+
+    return subitemsDesdeClasificacion(clasificacionInferidaPractica(practica))
 }
 
 function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
@@ -2464,6 +2505,16 @@ export function PracticaCargaRapidaPage({
         ).map(([codigo, cantidad]) => `${codigo} x${cantidad}`)
         const codigosResumen = codigosConCantidad.slice(0, 4).join(', ')
         const codigosRestantes = Math.max(0, codigosConCantidad.length - 4)
+        const subitemsResumen = ordenarSubitems(
+            Array.from(
+                grupo.practicas.reduce((set, practica) => {
+                    for (const subitem of subitemsPracticaPorGrupo(practica, grupo)) {
+                        set.add(subitem)
+                    }
+                    return set
+                }, new Set<string>())
+            )
+        ).join('+') || '-'
         const claveOrdenSesion =
             grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null
                 ? `${grupo.puestoNumero}-${grupo.ordenNumero}`
@@ -2554,7 +2605,7 @@ export function PracticaCargaRapidaPage({
                                 : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
                         </span>
                         <span className={`min-w-0 truncate text-[10px] ${contadorClase}`}>
-                            Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Fecha: {fechaResumenOrden}
+                            Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Subitem: {subitemsResumen} · Fecha: {fechaResumenOrden}
                         </span>
                         {estadoSesionEtiqueta && (
                             <span className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
@@ -2675,42 +2726,46 @@ export function PracticaCargaRapidaPage({
                             </div>
 
                             <div className="mt-1.5 space-y-1">
-                                {practicasVisibles.map((practica) => (
-                                    <div key={`${grupo.key}-${practica.id}`} className={itemClase}>
-                                        <div className={`flex items-center justify-between gap-2 ${itemTextoClase}`}>
-                                            <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
-                                            <span className="font-medium">Cant. {practica.cantidad}</span>
+                                {practicasVisibles.map((practica) => {
+                                    const subitemsPractica = subitemsPracticaPorGrupo(practica, grupo).join('+') || '-'
+
+                                    return (
+                                        <div key={`${grupo.key}-${practica.id}`} className={itemClase}>
+                                            <div className={`flex items-center justify-between gap-2 ${itemTextoClase}`}>
+                                                <span className="font-mono text-[11px]">{practica.codigoPractica.trim()}</span>
+                                                <span className="font-medium">Cant. {practica.cantidad}</span>
+                                            </div>
+                                            <p className={itemTextoClase}>{descripcionParaMostrar(practica)}</p>
+                                            <p className={itemFechaClase}>
+                                                Subitem: {subitemsPractica} · {formatearFechaArgentina(practica.fecha, {
+                                                    day: '2-digit',
+                                                    month: '2-digit',
+                                                    year: 'numeric',
+                                                })}
+                                            </p>
+                                            <div className="mt-1 flex items-center justify-end gap-2">
+                                                {practicaFacturada(practica) && (
+                                                    <span className="inline-flex rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                                                        Facturada
+                                                    </span>
+                                                )}
+                                                {puedeCrear && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => abrirEdicionPractica(practica)}
+                                                        disabled={guardandoPracticaEditando || practicaFacturada(practica)}
+                                                        title={practicaFacturada(practica)
+                                                            ? 'Practica facturada. Anula la orden en Facturacion para editar.'
+                                                            : 'Editar practica'}
+                                                        className="inline-flex items-center rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                    >
+                                                        Editar
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
-                                        <p className={itemTextoClase}>{descripcionParaMostrar(practica)}</p>
-                                        <p className={itemFechaClase}>
-                                            {formatearFechaArgentina(practica.fecha, {
-                                                day: '2-digit',
-                                                month: '2-digit',
-                                                year: 'numeric',
-                                            })}
-                                        </p>
-                                        <div className="mt-1 flex items-center justify-end gap-2">
-                                            {practicaFacturada(practica) && (
-                                                <span className="inline-flex rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
-                                                    Facturada
-                                                </span>
-                                            )}
-                                            {puedeCrear && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => abrirEdicionPractica(practica)}
-                                                    disabled={guardandoPracticaEditando || practicaFacturada(practica)}
-                                                    title={practicaFacturada(practica)
-                                                        ? 'Practica facturada. Anula la orden en Facturacion para editar.'
-                                                        : 'Editar practica'}
-                                                    className="inline-flex items-center rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                                >
-                                                    Editar
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
 
                             {!expandida && restantes > 0 && (

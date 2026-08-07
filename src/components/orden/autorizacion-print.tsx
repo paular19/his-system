@@ -377,7 +377,7 @@ export function AutorizacionPrint({
                 {/* Diagnóstico */}
                 <div className="aut-diagnostico">
                   <span className="aut-label">Diagnóstico:</span>{' '}
-                  <span className="aut-valor">{orden.descripcionPatologia ?? ''}</span>
+                  <span className="aut-valor">{orden.descripcionPatologia?.trim() || '-'}</span>
                   <span className="aut-observ-label">Observ.:</span>
                   <span className="aut-valor">{orden.descripcion ?? ''}</span>
                 </div>

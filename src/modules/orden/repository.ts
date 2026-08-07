@@ -164,6 +164,11 @@ function normalizarNumeroAutorizacion(value: string | null | undefined): string 
   return normalized.length > 0 ? normalized : null
 }
 
+function normalizarTextoNoVacio(value: string | null | undefined): string | null {
+  const normalized = value?.trim() ?? ''
+  return normalized.length > 0 ? normalized : null
+}
+
 type OrdenListaRowConItems = {
   puestoNumero: number
   numero: number
@@ -352,7 +357,13 @@ export async function obtenerOrden(
         select: {
           numeroIngreso: true,
           tipoIngresoCodigo: true,
+          descripcionPatologia: true,
           ingresoSubtipo: { select: { subtipoAdmisionCodigo: true } },
+          ingresoPatologias: {
+            select: { descripcion: true },
+            orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+            take: 1,
+          },
         },
       },
       tipoOrden: { select: { codigo: true, descripcion: true } },
@@ -380,10 +391,22 @@ export async function obtenerOrden(
         select: {
           numeroIngreso: true,
           tipoIngresoCodigo: true,
+          descripcionPatologia: true,
           ingresoSubtipo: { select: { subtipoAdmisionCodigo: true } },
+          ingresoPatologias: {
+            select: { descripcion: true },
+            orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+            take: 1,
+          },
         },
       })
       : null)
+
+  const diagnosticoOrden =
+    normalizarTextoNoVacio(orden.descripcionPatologia) ??
+    normalizarTextoNoVacio(ingresoRelacionado?.descripcionPatologia) ??
+    normalizarTextoNoVacio(ingresoRelacionado?.ingresoPatologias?.[0]?.descripcion) ??
+    null
 
   const matriculasEfectores = Array.from(
     new Set(
@@ -428,7 +451,7 @@ export async function obtenerOrden(
     profesionalId: orden.profesionalId,
     tipoOrdenCodigo: orden.tipoOrdenCodigo,
     descripcion: orden.descripcion,
-    descripcionPatologia: orden.descripcionPatologia,
+    descripcionPatologia: diagnosticoOrden,
     titularModular: orden.titularModular,
     imprimirPorDuplicado: orden.imprimirPorDuplicado,
     fechaEmision: orden.fechaEmision,

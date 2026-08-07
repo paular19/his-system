@@ -830,6 +830,7 @@ export async function obtenerInternacionDetalle(
         ordenNumero: true,
         item: true,
         numeroAutorizacion: true,
+          clasificacionAgrupacion: true,
         orden: {
           select: {
             fechaEmision: true,
@@ -885,6 +886,7 @@ export async function obtenerInternacionDetalle(
       ordenNumero: number
       item: number
       numeroAutorizacion: string | null
+      clasificacionAgrupacion: string | null
       fechaEmision: Date | null
     }>
   >()
@@ -897,6 +899,7 @@ export async function obtenerInternacionDetalle(
       ordenNumero: row.ordenNumero,
       item: row.item,
       numeroAutorizacion: row.numeroAutorizacion,
+      clasificacionAgrupacion: row.clasificacionAgrupacion,
       fechaEmision: row.orden?.fechaEmision ?? null,
     })
     ordenesPracticaPorId.set(row.practicaId, prev)
@@ -986,6 +989,7 @@ export async function obtenerInternacionDetalle(
                   ordenNumero: Number(practicaBase.ordenNumero),
                   item: practicaBase.ordenItem != null ? Number(practicaBase.ordenItem) : 1,
                   numeroAutorizacion: practicaBase.numeroAutorizacion ?? null,
+                  clasificacionAgrupacion: null,
                   fechaEmision:
                     fechaEmisionOrdenPorClave.get(
                       `${Number(practicaBase.puestoNumero)}:${Number(practicaBase.ordenNumero)}`
@@ -1230,6 +1234,7 @@ export async function crearPractica(
           ordenNumero: true,
           item: true,
           numeroAutorizacion: true,
+          clasificacionAgrupacion: true,
         },
       },
     },
@@ -1254,6 +1259,7 @@ export async function crearPractica(
         ordenNumero: op.ordenNumero,
         item: op.item,
         numeroAutorizacion: op.numeroAutorizacion,
+        clasificacionAgrupacion: op.clasificacionAgrupacion ?? null,
       }))
       : [],
   } as PracticaItem
@@ -1587,6 +1593,7 @@ export async function actualizarPractica(
         ordenNumero: true,
         item: true,
         numeroAutorizacion: true,
+        clasificacionAgrupacion: true,
         orden: {
           select: {
             fechaEmision: true,
@@ -1639,6 +1646,7 @@ export async function actualizarPractica(
             ordenNumero: true,
             item: true,
             numeroAutorizacion: true,
+            clasificacionAgrupacion: true,
             orden: {
               select: {
                 fechaEmision: true,
@@ -1700,6 +1708,7 @@ export async function actualizarPractica(
         ordenNumero: op.ordenNumero,
         item: op.item,
         numeroAutorizacion: op.numeroAutorizacion,
+        clasificacionAgrupacion: op.clasificacionAgrupacion ?? null,
         fechaEmision: op.orden?.fechaEmision ?? null,
       })),
     } as PracticaItem
@@ -1845,6 +1854,7 @@ export async function desagruparPracticaNoAutorizada(
             ordenNumero: true,
             item: true,
             numeroAutorizacion: true,
+            clasificacionAgrupacion: true,
           },
         },
       },
@@ -1896,6 +1906,7 @@ export async function desagruparPracticaNoAutorizada(
               ordenNumero: true,
               item: true,
               numeroAutorizacion: true,
+              clasificacionAgrupacion: true,
             },
           },
         },
@@ -1926,6 +1937,7 @@ export async function desagruparPracticaNoAutorizada(
           ordenNumero: op.ordenNumero,
           item: op.item,
           numeroAutorizacion: op.numeroAutorizacion,
+          clasificacionAgrupacion: op.clasificacionAgrupacion ?? null,
         }))
         : [],
     })) as PracticaItem[]

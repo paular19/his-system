@@ -8,10 +8,8 @@ import {
   Users,
   ClipboardList,
   BedDouble,
-  Stethoscope,
   Receipt,
   LayoutDashboard,
-  CalendarClock,
   FilePlus,
   Loader2,
 } from 'lucide-react'
@@ -28,8 +26,6 @@ const NAV_ITEMS_DEFAULT: NavItem[] = [
   { label: 'Pacientes', href: '/dashboard/pacientes', icon: Users },
   { label: 'Admisión', href: '/dashboard/admision', icon: ClipboardList },
   { label: 'Internación', href: '/dashboard/internacion', icon: BedDouble },
-  { label: 'Cirugía', href: '/dashboard/cirugia', icon: Stethoscope },
-  { label: 'Turnos', href: '/dashboard/turnos', icon: CalendarClock },
   { label: 'Autorizaciones', href: '/dashboard/ambulatorio', icon: FilePlus },
   { label: 'Facturación', href: '/dashboard/facturacion', icon: Receipt },
 ]

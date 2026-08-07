@@ -336,20 +336,23 @@ export default async function FichaPacientePage({ params }: PageProps) {
 
   const obraSocialPaciente = paciente.obraSocial ?? null
 
+  function puedeConfirmarReserva(ingreso: {
+    camaId: number | null
+    cama: { estado: string; identificador: string; sector: string; habitacion: string | null } | null
+    estado: string | null
+  }) {
+    return (
+      ingreso.camaId != null
+      && ingreso.cama?.estado === 'RESERVADA'
+      && normalizarCodigo(ingreso.estado) !== 'E'
+    )
+  }
+
   const internaciones = ingresos.filter((ing) => normalizarCodigo(ing.tipoIngresoCodigo) === 'INT')
   const internacionActiva =
     internaciones.find((ing) => normalizarCodigo(ing.estado) === 'A') ?? null
   const internacionReservaPendiente =
     internaciones.find((ing) => puedeConfirmarReserva(ing)) ?? null
-  const puedeConfirmarReserva = (ingreso: {
-    camaId: number | null
-    cama: { estado: string; identificador: string; sector: string; habitacion: string | null } | null
-    estado: string | null
-  }) => (
-    ingreso.camaId != null
-    && ingreso.cama?.estado === 'RESERVADA'
-    && normalizarCodigo(ingreso.estado) !== 'E'
-  )
 
   return (
     <>

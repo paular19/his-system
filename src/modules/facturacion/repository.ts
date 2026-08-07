@@ -579,6 +579,10 @@ function tieneNumeroAutorizacionValido(numeroAutorizacion: string | null | undef
     return typeof numeroAutorizacion === 'string' && numeroAutorizacion.trim().length > 0
 }
 
+function practicaMarcadaComoFacturada(estado: string | null | undefined): boolean {
+    return (estado ?? '').trim().toUpperCase() === 'F'
+}
+
 function resolverNumeroAutorizacion(
     numeroAutorizacionItem: string | null | undefined,
     numeroAutorizacionOrden: string | null | undefined
@@ -1146,10 +1150,15 @@ export async function buscarAdmisionesFacturacion(
 
     if (soloFacturadas) {
         andFilters.push({
-            ordenes: {
+            practicas: {
                 some: {
-                    estado: { not: 'X' },
-                    items: { some: {} },
+                    estado: 'F',
+                    puestoNumero: { not: null },
+                    ordenNumero: { not: null },
+                    AND: [
+                        { numeroAutorizacion: { not: null } },
+                        { numeroAutorizacion: { not: '' } },
+                    ],
                 },
             },
         })
@@ -1306,11 +1315,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         prisma.practica.findMany({
             where: {
                 ingresoId,
-                OR: [{ estado: 'A' }, { estado: null }],
+                OR: [{ estado: 'A' }, { estado: 'F' }, { estado: null }],
             },
             orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
             select: {
                 id: true,
+                estado: true,
                 fecha: true,
                 codigoPractica: true,
                 cantidad: true,
@@ -1578,6 +1588,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         : null
 
     const prestaciones: PrestacionFacturableItem[] = []
+    const practicasConEstadoFacturado = new Set<number>()
     const matriculaPorOrden = new Map<string, number | null>()
     const autorizacionPorOrden = new Map<string, string | null>()
     const autorizacionPorOrdenItem = new Map<string, string | null>()
@@ -2226,6 +2237,29 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         if (diferencialesPractica) {
             diferencialesPorPracticaId.set(p.id, diferencialesPractica)
         }
+
+        const numeroAutorizacionPractica = tieneVinculoExplicitoEnDB
+            ? resolverNumeroAutorizacion(
+                p.numeroAutorizacion,
+                resolverNumeroAutorizacion(
+                    vinculoPorItem?.numeroAutorizacion,
+                    resolverNumeroAutorizacion(
+                        claveOrdenItem ? autorizacionPorOrdenItem.get(claveOrdenItem) : null,
+                        claveOrden ? autorizacionPorOrden.get(claveOrden) : null
+                    )
+                )
+            )
+            : (p.numeroAutorizacion?.trim() || null)
+
+        const practicaFacturada = Boolean(
+            practicaMarcadaComoFacturada(p.estado) &&
+            tieneVinculoExplicitoEnDB &&
+            tieneNumeroAutorizacionValido(numeroAutorizacionPractica)
+        )
+        if (practicaFacturada) {
+            practicasConEstadoFacturado.add(p.id)
+        }
+
         prestaciones.push({
             uid: `PRACTICA:${p.id}`,
             tipo: 'PRACTICA',
@@ -2238,8 +2272,9 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             precioUnitario,
             importeTotal: importeTotalFacturacion,
             importeTotalOriginal: importeFromDb,
-            // Una práctica queda facturada solo con vínculo explícito a orden en la propia tabla.
-            facturada: Boolean(p.ordenNumero),
+            // Una práctica queda facturada solo cuando fue marcada explícitamente
+            // por acción de FACTURAR y conserva vínculo + autorización.
+            facturada: practicaFacturada,
             matriculaProfesional: null,
             matriculaEspecialista: matriculaEspecialistaFinal,
             matriculaAnestesista: matriculaAnestesistaFinal,
@@ -2250,18 +2285,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             incluyeCodigo: incluyeCodigoPractica,
             esPracticaCirugia: Boolean(diferencialCirugia),
             diferenciales: diferencialesPractica,
-            numeroAutorizacion: tieneVinculoExplicitoEnDB
-                ? resolverNumeroAutorizacion(
-                    p.numeroAutorizacion,
-                    resolverNumeroAutorizacion(
-                        vinculoPorItem?.numeroAutorizacion,
-                        resolverNumeroAutorizacion(
-                            claveOrdenItem ? autorizacionPorOrdenItem.get(claveOrdenItem) : null,
-                            claveOrden ? autorizacionPorOrden.get(claveOrden) : null
-                        )
-                    )
-                )
-                : (p.numeroAutorizacion?.trim() || null),
+            numeroAutorizacion: numeroAutorizacionPractica,
             autorizacionesVinculadas: autorizacionesVinculadas.length > 0
                 ? autorizacionesVinculadas
                 : undefined,
@@ -2295,9 +2319,9 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     const itemsOrdenFacturados = new Set<string>()
     const practicasFacturadasIds = new Set<number>()
     for (const p of ingreso.practicas) {
-        if (p.ordenNumero) {
-            practicasFacturadasIds.add(p.id)
-        }
+        if (!practicasConEstadoFacturado.has(p.id)) continue
+
+        practicasFacturadasIds.add(p.id)
         if (!p.ordenNumero || !p.ordenItem) continue
         const puesto = p.puestoNumero ?? (puestoPorNumeroOrden.get(p.ordenNumero) ?? null)
         if (!puesto) continue
@@ -2821,6 +2845,7 @@ export async function cargarOrdenesDesdePrestaciones(
                         puestoNumero: vinculo.puestoNumero,
                         ordenNumero: vinculo.ordenNumero,
                         ordenItem: vinculo.item,
+                        estado: 'F',
                     },
                 }),
             ]
@@ -3956,7 +3981,7 @@ export async function anularOrdenFacturacion(puestoNumero: number, numero: numbe
         // Unlink Practica records that were source of this order
         await tx.practica.updateMany({
             where: { puestoNumero, ordenNumero: numero },
-            data: { puestoNumero: null, ordenNumero: null, ordenItem: null },
+            data: { puestoNumero: null, ordenNumero: null, ordenItem: null, estado: 'A' },
         })
         // Cancel the order
         await tx.orden.update({

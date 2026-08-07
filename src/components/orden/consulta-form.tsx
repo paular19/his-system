@@ -334,6 +334,7 @@ export function ConsultaForm({
 }: ConsultaFormProps) {
   const router = useRouter()
   const esFlujoAdmision = Boolean(admisionInicial)
+  const obraSocialParticularId = obraSociales.find((os) => os.nombre.toUpperCase().includes('PARTICULAR'))?.id
   const profesionalTratanteAdmision = admisionInicial?.profesionalTratante ?? null
   const profesionalTratanteDisponible =
     profesionalTratanteAdmision &&
@@ -346,7 +347,9 @@ export function ConsultaForm({
 
   const [paciente, setPaciente] = useState<PacienteResumen | null>(pacienteInicial ?? null)
   const [obraSocialId, setObraSocialId] = useState<string>(
-    admisionInicial?.obraSocialId?.toString() ?? pacienteInicial?.obraSocialId?.toString() ?? ''
+    admisionInicial?.obraSocialId?.toString() ??
+      pacienteInicial?.obraSocialId?.toString() ??
+      (esFlujoAdmision && obraSocialParticularId ? String(obraSocialParticularId) : '')
   )
   const [profesionalId, setProfesionalId] = useState<string>(
     profesionalTratanteDisponible
@@ -1050,7 +1053,7 @@ export function ConsultaForm({
     setError(null)
 
     if (!paciente) return setError('Seleccioná un paciente')
-    if (!obraSocialId) return setError('Seleccioná una obra social')
+    if (!obraSocialId && !esFlujoAdmision) return setError('Seleccioná una obra social')
     if (!profesionalId) return setError('No hay profesionales disponibles para generar la autorización')
     if (practicas.length === 0) return setError('Agregá al menos una práctica')
     if (requiereDatosPatologiaClasificacion) {
@@ -1490,7 +1493,7 @@ export function ConsultaForm({
           : undefined,
         nombrePaciente: paciente.nombreCompleto.slice(0, 50),
         numeroAfiliado: admisionInicial?.numeroAfiliado ?? paciente.numeroAfiliado ?? '',
-        obraSocialId: parseInt(obraSocialId, 10),
+        obraSocialId: obraSocialId ? parseInt(obraSocialId, 10) : undefined,
         profesionalId: parseInt(profesionalId, 10),
         tipoOrdenCodigo: 'PRA',
         descripcionPatologia: diagnosticoPedidoLaboratorio || diagnostico.trim() || undefined,

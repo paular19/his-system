@@ -50,6 +50,30 @@ async function resolverObraSocialParticularId(): Promise<number> {
 }
 
 const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({
+  obraSocialId: z.preprocess(
+    (value) => (
+      value == null || value === '' || (typeof value === 'number' && Number.isNaN(value))
+        ? undefined
+        : value
+    ),
+    z.number().int().positive().optional()
+  ),
+  obraSocialCoseguroId: z.preprocess(
+    (value) => (
+      value == null || value === '' || (typeof value === 'number' && Number.isNaN(value))
+        ? undefined
+        : value
+    ),
+    z.number().int().positive().optional()
+  ),
+  planCoseguroId: z.preprocess(
+    (value) => (
+      value == null || value === '' || (typeof value === 'number' && Number.isNaN(value))
+        ? undefined
+        : value
+    ),
+    z.number().int().positive().optional()
+  ),
   modoGeneracion: z.enum(['MASIVA', 'INDIVIDUAL', 'AGRUPADA']).optional().default('MASIVA'),
 })
 
@@ -185,7 +209,12 @@ export async function crearOrdenAction(input: CrearOrdenInput) {
 }
 
 export async function crearOrdenesDesdeAdmisionAction(
-  input: CrearOrdenInput & { modoGeneracion?: ModoGeneracion }
+  input: Omit<CrearOrdenInput, 'obraSocialId' | 'obraSocialCoseguroId' | 'planCoseguroId'> & {
+    obraSocialId?: number
+    obraSocialCoseguroId?: number
+    planCoseguroId?: number
+    modoGeneracion?: ModoGeneracion
+  }
 ) {
   const usuario = await getUsuarioSesion()
 
@@ -207,12 +236,23 @@ export async function crearOrdenesDesdeAdmisionAction(
           where: { id: ordenDataBase.ingresoId },
           select: {
             tipoIngresoCodigo: true,
+            obraSocialId: true,
+            obraSocialCoseguroId: true,
+            planCoseguroId: true,
             ingresoSubtipo: {
               select: { subtipoAdmisionCodigo: true },
             },
           },
         })
       : null
+
+    const obraSocialOrdenId =
+      ordenDataBase.obraSocialId ??
+      ingresoContexto?.obraSocialId ??
+      await resolverObraSocialParticularId()
+
+    const tieneObraSocialEnIngreso =
+      (ingresoContexto?.obraSocialId ?? ordenDataBase.obraSocialId ?? null) != null
 
     const esGuardiaAmbulatoria =
       (ingresoContexto?.tipoIngresoCodigo ?? '').trim().toUpperCase() === 'AMB' &&
@@ -231,6 +271,13 @@ export async function crearOrdenesDesdeAdmisionAction(
 
     const ordenData = {
       ...ordenDataBase,
+      obraSocialId: obraSocialOrdenId,
+      obraSocialCoseguroId: tieneObraSocialEnIngreso
+        ? (ordenDataBase.obraSocialCoseguroId ?? ingresoContexto?.obraSocialCoseguroId ?? undefined)
+        : undefined,
+      planCoseguroId: tieneObraSocialEnIngreso
+        ? (ordenDataBase.planCoseguroId ?? ingresoContexto?.planCoseguroId ?? undefined)
+        : undefined,
       profesionalId: esGuardiaAmbulatoria
         ? (profesionalGuardia9110?.id ?? ordenDataBase.profesionalId)
         : ordenDataBase.profesionalId,

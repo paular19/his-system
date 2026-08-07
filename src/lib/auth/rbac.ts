@@ -101,7 +101,8 @@ export const MATRIZ_PERMISOS: MatrizPermisos = {
   FACTURACION: {
     PACIENTES: ['LEER'],
     ADMISION: ['LEER'],
-    INTERNACION: ['LEER'],
+    INTERNACION: ['LEER', 'CREAR'],
+    AMBULATORIO: ['LEER', 'CREAR'],
     FACTURACION: ['LEER', 'CREAR', 'MODIFICAR'],
     REPORTES: ['LEER'],
     COTIZADOR: ['LEER', 'CREAR'],

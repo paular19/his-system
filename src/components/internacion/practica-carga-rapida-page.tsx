@@ -2403,6 +2403,7 @@ export function PracticaCargaRapidaPage({
             const okGeneracion = encolarGeneracionOrdenes(imprimirDespues, practicaIds, false, {
                 origen: 'protocolo',
                 clasificacionPorPracticaId,
+                firmanteProfesionalId: medicoFirmanteId,
                 ventanaImpresionPrefijada: ventanaImpresionProtocolo,
             })
 
@@ -2812,7 +2813,7 @@ export function PracticaCargaRapidaPage({
                             </div>
 
                             <p className="text-xs text-gray-600">
-                                Selecciona un protocolo, precarga los codigos y ajusta matricula tratante. La cantidad se aplica igual para todos los codigos del protocolo.
+                                Selecciona un protocolo, precarga los codigos, ajusta matricula tratante y el medico firmante. La cantidad se aplica igual para todos los codigos del protocolo.
                             </p>
 
                             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
@@ -2871,6 +2872,27 @@ export function PracticaCargaRapidaPage({
                                     Precargar codigos del protocolo
                                 </button>
                             </div>
+
+                            <label className="block w-full text-[11px] text-gray-700">
+                                Medico firmante del protocolo
+                                <ProfesionalSelect
+                                    profesionales={profesionalesConMatricula}
+                                    value={medicoFirmanteId}
+                                    onChange={(nextValue) => {
+                                        setMedicoFirmanteId(nextValue)
+                                        setFirmanteEditadoManualmente(true)
+                                    }}
+                                    autoSelectOnSearch={false}
+                                    disabled={profesionalesConMatricula.length === 0 || procesandoProtocolo}
+                                    placeholderOption="-- Seleccionar firmante --"
+                                    searchPlaceholder="Buscar por nombre o matricula"
+                                    selectClassName="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 disabled:bg-gray-100 disabled:text-gray-500"
+                                    searchClassName="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-900 disabled:bg-gray-100 disabled:text-gray-500"
+                                />
+                                <span className="mt-1 block text-[10px] text-gray-600">
+                                    Firma prevista: {firmaPrevistaTexto}
+                                </span>
+                            </label>
 
                             {protocoloItems.length > 0 && (
                                 <div className="max-h-[40vh] space-y-2 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2">

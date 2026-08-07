@@ -24,6 +24,28 @@ type PrefetchFichaData = {
   obraSocial: string | null
 }
 
+function serializarSeguroParaCliente<T>(data: T): T {
+  return JSON.parse(
+    JSON.stringify(data, (_key, value) => {
+      if (typeof value === 'bigint') return value.toString()
+
+      if (
+        value &&
+        typeof value === 'object' &&
+        typeof (value as { toNumber?: unknown }).toNumber === 'function' &&
+        (value as { constructor?: { name?: string } }).constructor?.name === 'Decimal'
+      ) {
+        const asNumber = (value as { toNumber: () => number }).toNumber()
+        return Number.isFinite(asNumber)
+          ? asNumber
+          : (value as { toString: () => string }).toString()
+      }
+
+      return value
+    })
+  ) as T
+}
+
 function resolverQueryString(value: string | string[] | undefined): string | null {
   if (Array.isArray(value)) return value[0]?.trim() || null
   if (typeof value === 'string') return value.trim() || null
@@ -108,18 +130,9 @@ async function FichaIngresoContenido({
   }
   const msIngreso = Date.now() - tIngresoInicio
 
-  // Serializar campos Decimal → tipos planos para Client Components
+  // Evita fallos de SSR en producción por campos Decimal/BigInt no serializables.
   const tSerializacionInicio = Date.now()
-  const ingresoSerializado = {
-    ...ingreso,
-    paciente: ingreso.paciente
-      ? { ...ingreso.paciente, cuil: ingreso.paciente.cuil?.toNumber() ?? null }
-      : ingreso.paciente,
-    practicas: ingreso.practicas.map((p) => ({
-      ...p,
-      cantidad: Number(String(p.cantidad)),
-    })),
-  }
+  const ingresoSerializado = serializarSeguroParaCliente(ingreso)
   const msSerializacion = Date.now() - tSerializacionInicio
 
   logServerPerf('admision.ficha', {

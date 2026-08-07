@@ -29,7 +29,6 @@ const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
   'lautarouti@gmail.com': ROLES.ORDENES,
   'internacionsanar@gmail.com': ROLES.ORDENES,
   'altamirano97.leandro@gmail.com': ROLES.ORDENES,
-  'ramospaula1996@gmail.com': ROLES.ORDENES,
 
   // ADMISION
   'ficacode@gmail.com': ROLES.ADMISION,
@@ -47,6 +46,7 @@ const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
   'marianacanaza24@gmail.com': ROLES.FACTURACION,
   'kmontano137@gmail.com': ROLES.FACTURACION,
   'serapiogabriela40@gmail.com': ROLES.FACTURACION,
+  'ramospaula1996@gmail.com': ROLES.FACTURACION,
 
   // OPERADOR
   'tarosaicha1812@gmail.com': ROLES.OPERADOR,

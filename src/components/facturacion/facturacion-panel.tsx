@@ -104,6 +104,7 @@ type BusquedaFacturacionState = {
     usarFiltroTipoIngreso: boolean
     tipoIngresoCodigo: string
     obraSocialId: string
+    numeroIngreso: string
     numeroOrden: string
     codigoPractica: string
 }
@@ -225,6 +226,7 @@ function resolverEstadoBusquedaDesdeQuery(searchParams: { get(name: string): str
             Boolean(searchParams.get('tipoIngresoCodigo')),
         tipoIngresoCodigo: (searchParams.get('tipoIngresoCodigo') ?? '').trim().toUpperCase(),
         obraSocialId: (searchParams.get('obraSocialId') ?? '').trim(),
+        numeroIngreso: (searchParams.get('numeroIngreso') ?? '').trim(),
         numeroOrden: (searchParams.get('numeroOrden') ?? '').trim(),
         codigoPractica: (searchParams.get('codigoPractica') ?? '').trim().toUpperCase(),
     }
@@ -240,6 +242,7 @@ function buildBusquedaStateKey(state: BusquedaFacturacionState): string {
         state.usarFiltroTipoIngreso ? '1' : '0',
         state.tipoIngresoCodigo,
         state.obraSocialId,
+        state.numeroIngreso,
         state.numeroOrden,
         state.codigoPractica,
     ].join('|')
@@ -1026,6 +1029,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const [usarFiltroTipoIngreso, setUsarFiltroTipoIngreso] = useState(estadoBusquedaInicial.usarFiltroTipoIngreso)
     const [tipoIngresoCodigo, setTipoIngresoCodigo] = useState(estadoBusquedaInicial.tipoIngresoCodigo)
     const [obraSocialId, setObraSocialId] = useState(estadoBusquedaInicial.obraSocialId)
+    const [numeroIngreso, setNumeroIngreso] = useState(estadoBusquedaInicial.numeroIngreso)
     const [numeroOrden, setNumeroOrden] = useState(estadoBusquedaInicial.numeroOrden)
     const [codigoPractica, setCodigoPractica] = useState(estadoBusquedaInicial.codigoPractica)
 
@@ -1559,6 +1563,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             usarFiltroTipoIngreso: overrides?.usarFiltroTipoIngreso ?? usarFiltroTipoIngreso,
             tipoIngresoCodigo: overrides?.tipoIngresoCodigo ?? tipoIngresoCodigo,
             obraSocialId: overrides?.obraSocialId ?? obraSocialId,
+            numeroIngreso: overrides?.numeroIngreso ?? numeroIngreso,
             numeroOrden: overrides?.numeroOrden ?? numeroOrden,
             codigoPractica: overrides?.codigoPractica ?? codigoPractica,
         }
@@ -1573,6 +1578,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         const terminoPaciente = state.busquedaPaciente.trim()
         const codigoTipo = state.tipoIngresoCodigo.trim().toUpperCase()
         const obraSocialIdFiltro = state.obraSocialId.trim()
+        const numeroIngresoFiltro = state.numeroIngreso.trim()
         const numeroOrdenFiltro = state.numeroOrden.trim()
         const codigoPracticaFiltro = state.codigoPractica.trim().toUpperCase()
 
@@ -1593,6 +1599,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
 
         if (obraSocialIdFiltro) urlParams.set('obraSocialId', obraSocialIdFiltro)
+        if (numeroIngresoFiltro) urlParams.set('numeroIngreso', numeroIngresoFiltro)
         if (numeroOrdenFiltro) urlParams.set('numeroOrden', numeroOrdenFiltro)
         if (codigoPracticaFiltro) urlParams.set('codigoPractica', codigoPracticaFiltro)
         if (ingresoId) urlParams.set('ingresoId', String(ingresoId))
@@ -1615,6 +1622,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             usarFiltroTipoIngreso: false,
             tipoIngresoCodigo: '',
             obraSocialId: '',
+            numeroIngreso: '',
             numeroOrden: '',
             codigoPractica: '',
         }
@@ -1627,6 +1635,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setUsarFiltroTipoIngreso(stateLimpio.usarFiltroTipoIngreso)
         setTipoIngresoCodigo(stateLimpio.tipoIngresoCodigo)
         setObraSocialId(stateLimpio.obraSocialId)
+        setNumeroIngreso(stateLimpio.numeroIngreso)
         setNumeroOrden(stateLimpio.numeroOrden)
         setCodigoPractica(stateLimpio.codigoPractica)
         setAutoSeleccionBusquedaDirecta(false)
@@ -1659,6 +1668,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             const terminoPaciente = snapshot.busquedaPaciente.trim()
             const codigoTipo = snapshot.tipoIngresoCodigo.trim().toUpperCase()
             const obraSocialIdFiltro = snapshot.obraSocialId.trim()
+            const numeroIngresoFiltro = snapshot.numeroIngreso.trim()
             const numeroOrdenFiltro = snapshot.numeroOrden.trim()
             const codigoPracticaFiltro = snapshot.codigoPractica.trim().toUpperCase()
             const params = new URLSearchParams()
@@ -1692,6 +1702,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             }
             if (obraSocialIdNumerico) {
                 params.set('obraSocialId', String(obraSocialIdNumerico))
+            }
+
+            const numeroIngresoNumerico = parseEnteroPositivo(numeroIngresoFiltro)
+            if (numeroIngresoFiltro && !numeroIngresoNumerico) {
+                throw new Error('El número de ingreso debe ser numérico y mayor a 0.')
+            }
+            if (numeroIngresoNumerico) {
+                params.set('numeroIngreso', String(numeroIngresoNumerico))
             }
 
             const numeroOrdenNumerico = parseEnteroPositivo(numeroOrdenFiltro)
@@ -2578,6 +2596,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setUsarFiltroTipoIngreso(estadoDesdeUrl.usarFiltroTipoIngreso)
         setTipoIngresoCodigo(estadoDesdeUrl.tipoIngresoCodigo)
         setObraSocialId(estadoDesdeUrl.obraSocialId)
+        setNumeroIngreso(estadoDesdeUrl.numeroIngreso)
         setNumeroOrden(estadoDesdeUrl.numeroOrden)
         setCodigoPractica(estadoDesdeUrl.codigoPractica)
         setSelectedIngresoId(ingresoIdDesdeUrl)
@@ -2629,7 +2648,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
                             <Search className="h-3.5 w-3.5" /> Buscar admisión
                         </div>
-                        <p className="mt-2 text-sm text-gray-600">Buscá admisiones por paciente, documento, tipo de ingreso, número de orden o código de práctica.</p>
+                        <p className="mt-2 text-sm text-gray-600">Buscá admisiones por paciente, documento, tipo o número de ingreso, número de orden o código de práctica.</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
                         <Link
@@ -2813,6 +2832,24 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         {cargandoObraSociales && (
                             <span className="text-[11px] text-gray-500">Cargando obras sociales...</span>
                         )}
+                    </label>
+
+                    <label className="space-y-1 xl:col-span-3">
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Número de ingreso (opcional)</span>
+                        <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={numeroIngreso}
+                            onChange={(e) => setNumeroIngreso(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    void buscarAdmisiones(undefined, { pagina: 1 })
+                                }
+                            }}
+                            placeholder="Ej: 12345"
+                            className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 text-xs text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        />
                     </label>
 
                     <label className="space-y-1 xl:col-span-3">

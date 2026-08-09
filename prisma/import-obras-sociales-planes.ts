@@ -17,6 +17,7 @@ const OBRAS_SOCIALES_REGLAS: readonly ObraSocialCsvRow[] = [
     { id: 213, nombre: 'RED ARGENTINA SALUD - Cod.213', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
     { id: 235, nombre: 'MEDIFE', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
     { id: 346, nombre: 'ACIDSAL - Cod.346', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 358, nombre: 'PREVENCION SALUD', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
     { id: 511, nombre: 'OSECAC CONV DIRECT - Cod.511', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
     { id: 1520, nombre: 'OSUTHGRA - Cod.1520', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
     { id: 1526, nombre: 'OSUNSA - Cod.1526', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },

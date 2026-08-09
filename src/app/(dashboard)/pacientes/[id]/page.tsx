@@ -372,9 +372,9 @@ export default async function FichaPacientePage({ params }: PageProps) {
           <div>
             <h2 className="text-xl font-bold text-gray-900">{paciente.nombreCompleto}</h2>
             <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
-              {paciente.historiaClinica && (
-                <span className="font-medium text-blue-600">HC: {paciente.historiaClinica}</span>
-              )}
+              <span className="font-mono font-semibold text-blue-700">
+                HC {paciente.historiaClinica ?? '—'}
+              </span>
               {paciente.tipoDocumento && paciente.numeroDocumento && (
                 <span>
                   {paciente.tipoDocumento.trim()} {paciente.numeroDocumento}

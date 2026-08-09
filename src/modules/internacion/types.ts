@@ -136,6 +136,7 @@ export interface InternacionDetalle {
   paciente: {
     id: number
     nombreCompleto: string
+    historiaClinica: number | null
     numeroDocumento: number | null
     tipoDocumento: string | null
     fechaNacimiento: Date | null

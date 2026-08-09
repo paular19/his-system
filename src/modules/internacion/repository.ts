@@ -626,6 +626,7 @@ export async function obtenerInternacionDetalle(
         select: {
           id: true,
           nombreCompleto: true,
+          historiaClinica: true,
           numeroDocumento: true,
           tipoDocumento: true,
           fechaNacimiento: true,

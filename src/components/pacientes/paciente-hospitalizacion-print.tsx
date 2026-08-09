@@ -200,6 +200,7 @@ export function PacienteHospitalizacionPrint({ paciente, ingresos }: PacienteHos
                         </div>
                         <div style={{ textAlign: 'right' }}>
                             <div style={{ fontSize: 18, fontWeight: 700 }}>INFORME DE HOSPITALIZACIÓN</div>
+                            <div style={{ fontSize: 16, fontWeight: 700 }}>HC {paciente.historiaClinica ?? '-'}</div>
                             <div style={{ fontSize: 12 }}>Fecha impresión: {fmtFechaHora(new Date())}</div>
                         </div>
                     </div>

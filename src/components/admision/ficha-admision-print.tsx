@@ -194,8 +194,14 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                         <td className="print-value print-nro-ingreso">
                                             {ingreso.tipoIngresoCodigo}-{ingreso.numeroIngreso}
                                         </td>
+                                        <td className="print-label">Historia clínica:</td>
+                                        <td className="print-value print-nro-ingreso">
+                                            {ingreso.paciente?.historiaClinica ?? '—'}
+                                        </td>
+                                    </tr>
+                                    <tr>
                                         <td className="print-label">Fecha ingreso:</td>
-                                        <td className="print-value">{formatearFechaHora(ingreso.fechaIngreso)}</td>
+                                        <td className="print-value" colSpan={3}>{formatearFechaHora(ingreso.fechaIngreso)}</td>
                                     </tr>
                                     <tr>
                                         <td className="print-label">Cobertura:</td>

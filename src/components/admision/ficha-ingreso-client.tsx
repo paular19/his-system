@@ -721,6 +721,9 @@ export function FichaIngresoClient({
                             <span className="font-mono font-medium text-blue-600">
                                 {ingreso.tipoIngresoCodigo}-{ingreso.numeroIngreso}
                             </span>
+                            <span className="font-mono font-semibold text-gray-800">
+                                HC {ingreso.paciente?.historiaClinica ?? '—'}
+                            </span>
                             {ingreso.fechaIngreso && (
                                 <span>Ingresado: {formatearFechaHora(ingreso.fechaIngreso)}</span>
                             )}
@@ -769,6 +772,10 @@ export function FichaIngresoClient({
                         <DataItem
                             label="Nombre"
                             value={ingreso.nombre ?? ingreso.paciente?.nombreCompleto}
+                        />
+                        <DataItem
+                            label="Historia Clínica"
+                            value={ingreso.paciente?.historiaClinica?.toString() ?? '—'}
                         />
                         <DataItem
                             label="Fecha de Nacimiento"

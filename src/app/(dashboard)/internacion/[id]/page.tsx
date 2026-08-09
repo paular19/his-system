@@ -240,6 +240,10 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     {detalle.nombre ?? detalle.paciente?.nombreCompleto ?? 'Sin nombre'}
                                 </h1>
                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-gray-500">
+                                    <span className="font-mono font-medium text-blue-700">INT-{detalle.numeroIngreso}</span>
+                                    <span className="font-mono font-semibold text-gray-800">
+                                        HC {detalle.paciente?.historiaClinica ?? '—'}
+                                    </span>
                                     {detalle.paciente?.tipoDocumento && detalle.paciente.numeroDocumento && (
                                         <span>{detalle.paciente.tipoDocumento} {detalle.paciente.numeroDocumento.toLocaleString('es-AR')}</span>
                                     )}
@@ -295,6 +299,8 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                 <h3 className="text-sm font-semibold text-gray-900">Datos de internación</h3>
                             </div>
                             <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+                                <DataItem label="Número de ingreso" value={`INT-${detalle.numeroIngreso}`} />
+                                <DataItem label="Historia clínica" value={detalle.paciente?.historiaClinica?.toString() ?? '—'} />
                                 <DataItem label="Ingreso" value={fmtDateTime(detalle.fechaIngreso)} />
                                 <DataItem label="Estancia" value={diasEstancia()} />
                                 {detalle.fechaEgreso && <DataItem label="Alta real" value={fmtDate(detalle.fechaEgreso)} />}

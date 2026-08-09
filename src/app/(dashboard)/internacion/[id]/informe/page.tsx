@@ -182,6 +182,10 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
             <div className="text-right">
               <p className="text-3xl font-mono font-bold text-blue-700 print:text-2xl">INT-{ingreso.numeroIngreso}</p>
               <p className="text-xs text-gray-500 print:text-[10px]">Número de ingreso</p>
+              <p className="mt-1 text-xl font-mono font-bold text-gray-900 print:text-lg">
+                HC {ingreso.paciente?.historiaClinica ?? '—'}
+              </p>
+              <p className="text-xs text-gray-500 print:text-[10px]">Historia clínica</p>
             </div>
           </div>
         </div>

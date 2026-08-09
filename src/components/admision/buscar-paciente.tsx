@@ -44,11 +44,6 @@ function normalizarTexto(value: string): string {
     .trim()
 }
 
-function esNombreIPSS(nombre: string | null | undefined): boolean {
-  const tokens = normalizarTexto(nombre ?? '').split(' ')
-  return tokens.includes('IPSS') || tokens.includes('IPS')
-}
-
 export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPacienteProps) {
   const [busqueda, setBusqueda] = useState('')
   const [resultados, setResultados] = useState<ApiPaciente[]>([])
@@ -187,12 +182,10 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
                 <> · HC: {pacienteSeleccionado.historiaClinica}</>
               )}
             </p>
-            {(pacienteSeleccionado.obraSocialNombre || pacienteSeleccionado.obraSocialCoseguroNombre || pacienteSeleccionado.planDescripcion) && (
+            {(pacienteSeleccionado.obraSocialNombre || pacienteSeleccionado.obraSocialCoseguroNombre) && (
               <p className="text-[11px] text-green-700">
                 Cobertura:{' '}
-                {esNombreIPSS(pacienteSeleccionado.obraSocialNombre)
-                  ? `${pacienteSeleccionado.obraSocialNombre ?? '—'} · Coseguro: ${pacienteSeleccionado.obraSocialCoseguroNombre ?? 'Sin coseguro'}`
-                  : `${pacienteSeleccionado.obraSocialNombre ?? '—'}${pacienteSeleccionado.planDescripcion ? ` · Plan: ${pacienteSeleccionado.planDescripcion}` : ''}`}
+                {`${pacienteSeleccionado.obraSocialNombre ?? '—'} · Coseguro: ${pacienteSeleccionado.obraSocialCoseguroNombre ?? 'Sin coseguro'}`}
               </p>
             )}
           </div>
@@ -290,11 +283,9 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
                 {paciente.tipoDocumento?.trim()} {paciente.numeroDocumento ?? '-'}
                 {paciente.historiaClinica && ` · HC: ${paciente.historiaClinica}`}
               </p>
-              {(paciente.obraSocialNombre || paciente.obraSocialCoseguroNombre || paciente.planDescripcion) && (
+              {(paciente.obraSocialNombre || paciente.obraSocialCoseguroNombre) && (
                 <p className="text-[11px] text-gray-500 mt-0.5">
-                  {esNombreIPSS(paciente.obraSocialNombre)
-                    ? `${paciente.obraSocialNombre ?? '—'} · Coseguro: ${paciente.obraSocialCoseguroNombre ?? 'Sin coseguro'}`
-                    : `${paciente.obraSocialNombre ?? '—'}${paciente.planDescripcion ? ` · Plan: ${paciente.planDescripcion}` : ''}`}
+                  {`${paciente.obraSocialNombre ?? '—'} · Coseguro: ${paciente.obraSocialCoseguroNombre ?? 'Sin coseguro'}`}
                 </p>
               )}
             </button>

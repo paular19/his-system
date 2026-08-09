@@ -327,7 +327,7 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                             </div>
                             <dl className="grid grid-cols-1 gap-y-2.5 text-sm">
                                 <DataItem label="Cobertura" value={detalle.obraSocial?.nombre ?? null} />
-                                <DataItem label="Plan" value={detalle.plan?.descripcion ?? null} />
+                                <DataItem label="Coseguro" value={detalle.obraSocialCoseguroNombre} />
                                 <DataItem label="Nro. afiliado" value={detalle.numeroAfiliado} />
                             </dl>
                         </div>

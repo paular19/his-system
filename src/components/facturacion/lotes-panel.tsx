@@ -335,9 +335,6 @@ export function LotesPanel() {
                                             <td className="px-4 py-3">{TIPO_LABEL[lote.tipo] ?? lote.tipo}</td>
                                             <td className="px-4 py-3">
                                                 {lote.obraSocial?.nombre ?? <span className="text-gray-400">Particular</span>}
-                                                {lote.plan && (
-                                                    <span className="block text-xs text-gray-500">{lote.plan.descripcion}</span>
-                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-gray-600">{lote.concepto ?? '-'}</td>
                                             <td className="px-4 py-3 text-gray-600">{lote.descripcion ?? '-'}</td>

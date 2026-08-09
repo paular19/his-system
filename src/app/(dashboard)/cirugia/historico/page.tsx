@@ -148,7 +148,7 @@ export default async function HistoricoCirugiaPage({ searchParams }: PageProps) 
                                             <td className="px-4 py-3 text-gray-600 text-xs">
                                                 <Link href={`/dashboard/cirugia/${item.id}`} className="hover:underline">
                                                     {item.paciente.obraSocial ?? 'Sin cobertura'}
-                                                    {item.paciente.plan ? ` · ${item.paciente.plan}` : ''}
+                                                    {item.paciente.coseguro ? ` · Coseguro: ${item.paciente.coseguro}` : ''}
                                                 </Link>
                                             </td>
                                             <td className="px-4 py-3 text-gray-700">

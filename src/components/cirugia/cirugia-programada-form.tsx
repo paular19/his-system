@@ -78,19 +78,8 @@ interface CirugiaProgramadaFormProps {
     coseguros: CoseguroOption[]
 }
 
-function normalizarNombreObraSocial(value: string): string {
-    return value
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toUpperCase()
-        .replace(/[^A-Z0-9]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-}
-
 export function CirugiaProgramadaForm({
     obraSociales,
-    planes,
     coseguros,
 }: CirugiaProgramadaFormProps) {
     const router = useRouter()
@@ -101,7 +90,6 @@ export function CirugiaProgramadaForm({
     const [fechaCirugia, setFechaCirugia] = useState(fechaAInputLocal())
 
     const [obraSocialId, setObraSocialId] = useState('')
-    const [planId, setPlanId] = useState('')
     const [obraSocialCoseguroId, setObraSocialCoseguroId] = useState('')
     const [numeroAfiliado, setNumeroAfiliado] = useState('')
 
@@ -129,14 +117,8 @@ export function CirugiaProgramadaForm({
 
     const obraSocialIdNumero = obraSocialId ? Number.parseInt(obraSocialId, 10) : null
     const obraSocialSeleccionada = obraSociales.find((o) => o.id === obraSocialIdNumero)
-    const nombreObraSocialNormalizado = normalizarNombreObraSocial(obraSocialSeleccionada?.nombre ?? '')
-    const tokensObraSocial = nombreObraSocialNormalizado.split(' ')
-    const esIPSS = tokensObraSocial.includes('IPSS') || tokensObraSocial.includes('IPS')
-    const esCoberturaConCoseguro = esIPSS
-    const cosegurosDisponibles = esIPSS ? coseguros : []
-    const planesFiltrados = planes.filter(
-        (p) => !obraSocialIdNumero || p.obraSocialId === obraSocialIdNumero
-    )
+    const esCoberturaConCoseguro = Boolean(obraSocialSeleccionada)
+    const cosegurosDisponibles = coseguros
 
     const puedeGenerarAutorizacion = useMemo(() => {
         return Boolean(paciente && fechaCirugia && practicas.length > 0)
@@ -145,7 +127,6 @@ export function CirugiaProgramadaForm({
     const handleSeleccionarPaciente = (p: PacienteResumen | null) => {
         setPaciente(p)
         setObraSocialId(p?.obraSocialId?.toString() ?? '')
-        setPlanId(p?.planId?.toString() ?? '')
         setObraSocialCoseguroId(p?.obraSocialCoseguroId?.toString() ?? '')
         setNumeroAfiliado(p?.numeroAfiliado ?? '')
     }
@@ -356,7 +337,7 @@ export function CirugiaProgramadaForm({
                 fechaCirugia,
                 horaCirugia: null,
                 obraSocialId: obraSocialId ? Number.parseInt(obraSocialId, 10) : null,
-                planId: planId ? Number.parseInt(planId, 10) : null,
+                planId: null,
                 obraSocialCoseguroId: obraSocialCoseguroId
                     && esCoberturaConCoseguro
                     ? Number.parseInt(obraSocialCoseguroId, 10)
@@ -461,7 +442,6 @@ export function CirugiaProgramadaForm({
                             value={obraSocialId}
                             onChange={(e) => {
                                 setObraSocialId(e.target.value)
-                                setPlanId('')
                                 setObraSocialCoseguroId('')
                             }}
                             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -470,22 +450,6 @@ export function CirugiaProgramadaForm({
                             {obraSociales.map((os, idx) => (
                                 <option key={`${os.id}-${idx}`} value={String(os.id)}>
                                     {os.nombre}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Plan</label>
-                        <select
-                            value={planId}
-                            onChange={(e) => setPlanId(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">-- Seleccionar plan --</option>
-                            {planesFiltrados.map((plan, idx) => (
-                                <option key={`${plan.id}-${idx}`} value={String(plan.id)}>
-                                    {plan.nombre}
                                 </option>
                             ))}
                         </select>

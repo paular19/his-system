@@ -45,6 +45,7 @@ export interface PacienteBusqueda {
   obraSocialCoseguroId: number | null
   obraSocialNombre: string | null
   planDescripcion: string | null
+  obraSocialCoseguroNombre: string | null
   numeroAfiliado: string | null
   fechaAlta: Date
 }

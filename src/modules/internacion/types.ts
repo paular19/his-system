@@ -171,6 +171,7 @@ export interface InternacionDetalle {
   obraSocial: { id: number; nombre: string } | null
   plan: { id: number; descripcion: string } | null
   obraSocialCoseguroId: number | null
+  obraSocialCoseguroNombre: string | null
   numeroAfiliado: string | null
 
   ingresoPatologias: Array<{

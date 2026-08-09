@@ -560,7 +560,6 @@ export function LoteDetallePage({ loteId }: Props) {
                         </div>
                         <div className="text-sm text-gray-600">
                             Cliente: <strong>{lote.obraSocial?.nombre ?? 'Particular'}</strong>
-                            {lote.plan && <span className="text-gray-500"> — {lote.plan.descripcion}</span>}
                         </div>
                         {lote.tipoIngresoCodigo && (
                             <div className="text-sm text-gray-500">
@@ -682,7 +681,6 @@ export function LoteDetallePage({ loteId }: Props) {
                                 <h1 className="text-lg font-bold text-gray-900">Informe de Planilla IPS</h1>
                                 <p className="text-[11px] text-gray-600 mt-0.5">
                                     Obra Social: {lote.obraSocial?.nombre ?? 'Particular'}
-                                    {lote.plan?.descripcion ? ` - ${lote.plan.descripcion}` : ''}
                                 </p>
                                 <p className="text-[11px] text-gray-600">Período: {formatPeriodo(lote.periodo)}</p>
                             </div>

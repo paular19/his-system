@@ -86,20 +86,8 @@ export function PacienteForm({
     : (obraSocialIdRaw ? Number(obraSocialIdRaw) : undefined)
   const obraSocialSeleccionada = obraSociales.find((os) => os.id === obraSocialIdSeleccionada)
 
-  function normalizarNomOS(value: string): string {
-    return value
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
-  const nombreObraSocialNormalizado = normalizarNomOS(obraSocialSeleccionada?.nombre ?? '')
-  const tokensObraSocial = nombreObraSocialNormalizado.split(' ')
-  const esIPSS = tokensObraSocial.includes('IPSS') || tokensObraSocial.includes('IPS')
-  const esObraSocialConCoseguro = !pacienteParticular && esIPSS
-  const cosegurosDisponibles = esIPSS ? coseguros : []
+  const esObraSocialConCoseguro = !pacienteParticular && Boolean(obraSocialSeleccionada)
+  const cosegurosDisponibles = coseguros
 
   const obraSocialRegister = register('obraSocialId', {
     setValueAs: (value) => (value === '' ? undefined : Number(value)),
@@ -122,14 +110,12 @@ export function PacienteForm({
       const payload = {
         ...data,
         obraSocialId: pacienteParticular ? null : (data.obraSocialId ?? null),
-        planId: pacienteParticular ? null : (data.planId ?? null),
+        planId: null,
         numeroAfiliado: pacienteParticular ? null : (data.numeroAfiliado ?? null),
         obraSocialCoseguroId:
           pacienteParticular
             ? null
-            : esObraSocialConCoseguro
-            ? (data.obraSocialCoseguroId ?? null)
-            : null,
+            : (data.obraSocialCoseguroId ?? null),
       }
 
       const url = pacienteId ? `/api/pacientes/${pacienteId}` : '/api/pacientes'
@@ -496,7 +482,7 @@ export function PacienteForm({
         </div>
         {esObraSocialConCoseguro && (
           <p className="mt-3 text-xs text-amber-700">
-            Para IPSS, seleccione coseguro solo si corresponde.
+            Seleccione coseguro solo si corresponde.
           </p>
         )}
       </div>

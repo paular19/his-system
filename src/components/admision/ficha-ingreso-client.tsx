@@ -85,11 +85,6 @@ function normalizarTexto(value: string | null | undefined): string {
         .trim()
 }
 
-function esNombreIPSS(nombre: string | null | undefined): boolean {
-    const tokens = normalizarTexto(nombre).toUpperCase().split(' ')
-    return tokens.includes('IPSS') || tokens.includes('IPS')
-}
-
 function normalizarFechaInputArgentina(value: Date | string | null | undefined): Date {
     const clave = claveDiaArgentina(value)
     if (clave) return fechaDesdeClaveArgentina(clave)
@@ -337,11 +332,8 @@ export function FichaIngresoClient({
         )
     const destinoPracticasInternacion = `/dashboard/internacion/${ingreso.id}/practicas`
     const destinoCirugiaInternacion = `/dashboard/internacion/${ingreso.id}#internacion-cirugia`
-    const esCoberturaIPSS = esNombreIPSS(ingreso.obraSocial?.nombre)
-    const coberturaSecundariaLabel = esCoberturaIPSS ? 'Coseguro' : 'Plan'
-    const coberturaSecundariaValor = esCoberturaIPSS
-        ? (ingreso.obraSocialCoseguroNombre ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : null))
-        : (ingreso.plan?.descripcion ?? (ingreso.planId ? `ID ${ingreso.planId}` : null))
+    const coberturaSecundariaValor = ingreso.obraSocialCoseguroNombre
+        ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : null)
     const ocultarEgresoPrevisto =
         esPracticaAmbulatoria ||
         ['GUA', 'DER', 'IND'].includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
@@ -1124,9 +1116,7 @@ export function FichaIngresoClient({
                                     setEditingCard('cobertura');
                                     setCardValues({
                                         obraSocial: ingreso.obraSocial?.nombre || '',
-                                            plan: esCoberturaIPSS
-                                                ? (ingreso.obraSocialCoseguroNombre || '')
-                                                : (ingreso.plan?.descripcion || ''),
+                                        plan: ingreso.obraSocialCoseguroNombre || '',
                                         numeroAfiliado: ingreso.numeroAfiliado || '',
                                     });
                                 }}
@@ -1169,14 +1159,14 @@ export function FichaIngresoClient({
                                 </dd>
                             </div>
                             <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{coberturaSecundariaLabel}</dt>
+                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Coseguro</dt>
                                 <dd className="text-sm text-gray-900">
                                     <input
                                         type="text"
                                         className="border rounded px-2 py-1 w-full"
                                         value={cardValues.plan}
                                         onChange={e => setCardValues((v: any) => ({ ...v, plan: e.target.value }))}
-                                        disabled={cardLoading || esCoberturaIPSS}
+                                        disabled
                                     />
                                 </dd>
                             </div>
@@ -1205,7 +1195,7 @@ export function FichaIngresoClient({
                                 value={ingreso.obraSocial?.nombre ?? (ingreso.obraSocialId ? `ID ${ingreso.obraSocialId}` : 'Particular')}
                             />
                             <DataItem
-                                label={coberturaSecundariaLabel}
+                                label="Coseguro"
                                 value={coberturaSecundariaValor}
                             />
                             <DataItem label="Número de Afiliado" value={ingreso.numeroAfiliado} />

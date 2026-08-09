@@ -76,11 +76,6 @@ function normalizarTexto(value: string): string {
     .trim()
 }
 
-function esNombreIPSS(nombre: string): boolean {
-  const tokens = normalizarTexto(nombre).split(' ')
-  return tokens.includes('IPSS') || tokens.includes('IPS')
-}
-
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 
 function ahoraLocalDateTimeInput(): string {
@@ -287,23 +282,19 @@ export function AdmisionForm({
   const obraSocialSeleccionada = pacienteParticular
     ? null
     : obraSociales.find((os) => String(os.id) === obraSocialId)
-  const nombreObraSocial = pacienteParticular ? 'PARTICULAR' : (obraSocialSeleccionada?.nombre ?? '')
-  const esIPSS = esNombreIPSS(nombreObraSocial)
-  const esCoberturaConCoseguro = !pacienteParticular && esIPSS
-  const cosegurosDisponibles = esIPSS ? coseguros : []
+  const esCoberturaConCoseguro = !pacienteParticular && Boolean(obraSocialSeleccionada)
+  const cosegurosDisponibles = coseguros
 
   // Sincronizar cobertura cuando cambia el paciente
   const handleSeleccionarPaciente = (p: PacienteResumen | null) => {
     setPaciente(p)
     if (p) {
-      const obraSocialPaciente = obraSociales.find((os) => os.id === p.obraSocialId)
-      const pacienteEsIPSS = esNombreIPSS(obraSocialPaciente?.nombre ?? '')
       const esParticular = !p.obraSocialId
       setPacienteParticular(esParticular)
       setObraSocialId(!esParticular && p.obraSocialId ? p.obraSocialId.toString() : '')
-      setPlanId(!esParticular && !pacienteEsIPSS && p.planId ? p.planId.toString() : '')
+      setPlanId('')
       setObraSocialCoseguroId(
-        !esParticular && pacienteEsIPSS && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
+        !esParticular && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
       )
       setNumeroAfiliado(!esParticular ? (p.numeroAfiliado ?? '') : '')
     } else {
@@ -438,7 +429,7 @@ export function AdmisionForm({
           ? null
           : (profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null),
         obraSocialId: pacienteParticular ? null : (obraSocialId ? parseInt(obraSocialId, 10) : null),
-        planId: pacienteParticular || esCoberturaConCoseguro ? null : (planId ? parseInt(planId, 10) : null),
+        planId: null,
         obraSocialCoseguroId:
           !pacienteParticular && esCoberturaConCoseguro && obraSocialCoseguroId
             ? parseInt(obraSocialCoseguroId, 10)

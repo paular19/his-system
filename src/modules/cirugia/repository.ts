@@ -202,8 +202,8 @@ export async function listarCirugiasProgramadas(
                         nombreCompleto: true,
                         numeroDocumento: true,
                         historiaClinica: true,
+                        obraSocialCoseguroId: true,
                         obraSocial: { select: { nombre: true } },
-                        plan: { select: { descripcion: true } },
                     },
                 },
                 internacion: {
@@ -257,6 +257,17 @@ export async function listarCirugiasProgramadas(
         prisma.cirugiaProgramada.count({ where }),
     ])
 
+    const idsCoseguro = Array.from(
+        new Set(rows.map((row) => row.paciente.obraSocialCoseguroId).filter((id): id is number => id != null))
+    )
+    const coseguros = idsCoseguro.length > 0
+        ? await prisma.obraSocial.findMany({
+            where: { id: { in: idsCoseguro } },
+            select: { id: true, nombre: true },
+        })
+        : []
+    const coseguroPorId = new Map(coseguros.map((item) => [item.id, item.nombre]))
+
     return {
         total,
         items: rows.map((row) => ({
@@ -274,7 +285,9 @@ export async function listarCirugiasProgramadas(
                 numeroDocumento: row.paciente.numeroDocumento,
                 historiaClinica: row.paciente.historiaClinica,
                 obraSocial: row.paciente.obraSocial?.nombre ?? null,
-                plan: row.paciente.plan?.descripcion ?? null,
+                coseguro: row.paciente.obraSocialCoseguroId
+                    ? (coseguroPorId.get(row.paciente.obraSocialCoseguroId) ?? null)
+                    : null,
             },
             practicasCantidad: row._count.practicas,
             practicas: row.practicas.map((p) => {

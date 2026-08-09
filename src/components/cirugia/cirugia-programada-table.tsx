@@ -294,7 +294,7 @@ export function CirugiaProgramadaTable({ items }: CirugiaProgramadaTableProps) {
                                 </td>
                                 <td className="px-4 py-3 text-gray-600 text-xs">
                                     {item.paciente.obraSocial ?? 'Sin cobertura'}
-                                    {item.paciente.plan ? ` · ${item.paciente.plan}` : ''}
+                                    {item.paciente.coseguro ? ` · Coseguro: ${item.paciente.coseguro}` : ''}
                                 </td>
                                 <td className="px-4 py-3 text-gray-700">{item.practicasCantidad}</td>
                                 <td className="px-4 py-3 text-gray-700">{item.numeroAutorizacion?.trim() || '-'}</td>

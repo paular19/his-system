@@ -25,21 +25,6 @@ const BusquedaRapidaSchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(10),
 })
 
-function normalizarTexto(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function esNombreIPSS(nombre: string | null | undefined): boolean {
-  const tokens = normalizarTexto(nombre ?? '').split(' ')
-  return tokens.includes('IPSS') || tokens.includes('IPS')
-}
-
 export async function GET(request: NextRequest) {
   try {
     const usuario = await getUsuarioSesion()
@@ -134,7 +119,6 @@ export async function GET(request: NextRequest) {
 
       return rows.map((paciente) => {
         const obraSocialNombre = paciente.obraSocial?.nombre ?? null
-        const esIps = esNombreIPSS(obraSocialNombre)
         return {
           id: paciente.id,
           historiaClinica: paciente.historiaClinica,
@@ -158,7 +142,7 @@ export async function GET(request: NextRequest) {
           obraSocialNombre,
           planDescripcion: paciente.plan?.descripcion ?? null,
           obraSocialCoseguroNombre:
-            esIps && paciente.obraSocialCoseguroId
+            paciente.obraSocialCoseguroId
               ? (coseguroPorId.get(paciente.obraSocialCoseguroId) ?? null)
               : null,
         }

@@ -103,7 +103,7 @@ export function LoteResumenPrint({ lote, totalIncluido, detalleIngresos = [] }: 
                     <p><strong>Nro de Resumen:</strong> {lote.numero}</p>
                     <p><strong>Concepto:</strong> {lote.concepto || '-'}</p>
                     <p><strong>Cliente:</strong> {lote.obraSocial?.nombre ?? 'Particular'}</p>
-                    <p><strong>Obra Social:</strong> {lote.obraSocial?.nombre ?? 'Particular'}{lote.plan ? ` — ${lote.plan.descripcion}` : ''}</p>
+                    <p><strong>Obra Social:</strong> {lote.obraSocial?.nombre ?? 'Particular'}</p>
                     {lote.tipoIngresoCodigo && (
                         <p><strong>Tipo Ingreso:</strong> {lote.tipoIngresoCodigo}</p>
                     )}

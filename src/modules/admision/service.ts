@@ -24,11 +24,6 @@ function normalizarNombreObraSocial(nombre: string): string {
     .trim()
 }
 
-function esNombreIPSS(nombre: string | null | undefined): boolean {
-  const tokens = normalizarNombreObraSocial(nombre ?? '').split(' ')
-  return tokens.includes('IPSS') || tokens.includes('IPS')
-}
-
 async function obtenerNombreObraSocial(obraSocialId: number | null | undefined): Promise<string | null> {
   if (!obraSocialId) return null
   const obraSocial = await prisma.obraSocial.findUnique({
@@ -40,18 +35,15 @@ async function obtenerNombreObraSocial(obraSocialId: number | null | undefined):
 
 function normalizarCoseguroPorObraSocial<
   T extends {
+    planId?: number | null
     obraSocialCoseguroId?: number | null
     planCoseguroId?: number | null
     numeroAfiliadoCoseguro?: string | null
   },
->(data: T, obraSocialNombre: string | null): T {
-  if (esNombreIPSS(obraSocialNombre)) return data
-
+>(data: T, _obraSocialNombre: string | null): T {
   return {
     ...data,
-    obraSocialCoseguroId: null,
-    planCoseguroId: null,
-    numeroAfiliadoCoseguro: null,
+    planId: null,
   }
 }
 

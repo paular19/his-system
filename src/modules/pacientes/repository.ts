@@ -4,7 +4,6 @@ import { generarNombreCompleto } from '@/lib/utils'
 import type { CrearPacienteInput, ActualizarPacienteInput, BusquedaPacienteInput } from './schemas'
 import type { ResultadoPaginado } from '@/types'
 import type { PacienteConRelaciones, PacienteBusqueda } from './types'
-import { normalizarNombreObraSocial } from '@/lib/utils/coseguros'
 import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 
 // Selección de campos para incluir en relaciones
@@ -33,31 +32,13 @@ export type PacienteCreadoMinimo = {
 // Única capa de acceso a datos. Sin SQL directo.
 // ============================================
 
-async function obraSocialEsIPSS(obraSocialId: number | null | undefined): Promise<boolean> {
-  if (!obraSocialId) return false
-
-  const obraSocial = await prisma.obraSocial.findUnique({
-    where: { id: obraSocialId },
-    select: { nombre: true },
-  })
-
-  const tokens = normalizarNombreObraSocial(obraSocial?.nombre ?? '').split(' ')
-  return tokens.includes('IPSS') || tokens.includes('IPS')
-}
-
 async function construirDatosCreacionPaciente(
   data: CrearPacienteInput,
   usuarioAlta: string
 ): Promise<PacienteCreateData> {
   const nombreCompleto = generarNombreCompleto(data.apellido, data.nombre)
   const ahora = new Date()
-  let obraSocialCoseguroId: number | null = null
-
-  // Evita una consulta extra a ObraSocial cuando no se intenta guardar coseguro.
-  if (data.obraSocialCoseguroId != null) {
-    const esIPSS = await obraSocialEsIPSS(data.obraSocialId ?? null)
-    obraSocialCoseguroId = esIPSS ? data.obraSocialCoseguroId : null
-  }
+  const obraSocialCoseguroId = data.obraSocialId ? (data.obraSocialCoseguroId ?? null) : null
 
   return {
     apellido: data.apellido.toUpperCase(),
@@ -81,7 +62,7 @@ async function construirDatosCreacionPaciente(
     celular2: data.celular2 ?? null,
     email: data.email ?? null,
     obraSocialId: data.obraSocialId ?? null,
-    planId: data.planId ?? null,
+    planId: null,
     numeroAfiliado: data.numeroAfiliado ?? null,
     obraSocialCoseguroId,
     nombreTutor: data.nombreTutor ?? null,
@@ -207,11 +188,11 @@ export async function actualizarPaciente(
       ? (data.obraSocialCoseguroId ?? null)
       : pacienteActual.obraSocialCoseguroId
 
-  const esIPSSFinal = await obraSocialEsIPSS(obraSocialIdFinal)
-  const obraSocialCoseguroFinal = esIPSSFinal ? obraSocialCoseguroFinalInput : null
+  const obraSocialCoseguroFinal = obraSocialIdFinal ? obraSocialCoseguroFinalInput : null
 
   const updateData: Record<string, unknown> = {
     fechaModificacion: new Date(),
+    planId: null,
   }
 
   if (data.apellido !== undefined) updateData.apellido = data.apellido.toUpperCase()
@@ -226,7 +207,7 @@ export async function actualizarPaciente(
     'tipoDocumento', 'numeroDocumento', 'cuil', 'fechaNacimiento', 'sexo',
     'estadoCivil', 'paisId', 'profesionId', 'domicilio', 'provinciaId',
     'localidadId', 'barrioId', 'telefonoFijo', 'telefonoLaboral', 'celular1',
-    'celular2', 'email', 'obraSocialId', 'planId', 'numeroAfiliado',
+    'celular2', 'email', 'obraSocialId', 'numeroAfiliado',
     'nombreTutor', 'telefonoTutor', 'empleoTutor',
     'observaciones',
   ] as const
@@ -360,6 +341,17 @@ export async function buscarPacientes(
     }),
   ])
 
+  const idsCoseguro = Array.from(
+    new Set(items.map((item) => item.obraSocialCoseguroId).filter((id): id is number => id != null))
+  )
+  const coseguros = idsCoseguro.length > 0
+    ? await prisma.obraSocial.findMany({
+      where: { id: { in: idsCoseguro } },
+      select: { id: true, nombre: true },
+    })
+    : []
+  const coseguroPorId = new Map(coseguros.map((item) => [item.id, item.nombre]))
+
   return {
     items: items.map((item) => ({
       id: item.id,
@@ -380,6 +372,9 @@ export async function buscarPacientes(
       obraSocialCoseguroId: item.obraSocialCoseguroId,
       obraSocialNombre: item.obraSocial?.nombre ?? null,
       planDescripcion: item.plan?.descripcion ?? null,
+      obraSocialCoseguroNombre: item.obraSocialCoseguroId
+        ? (coseguroPorId.get(item.obraSocialCoseguroId) ?? null)
+        : null,
       numeroAfiliado: item.numeroAfiliado,
       fechaAlta: item.fechaAlta,
     })),

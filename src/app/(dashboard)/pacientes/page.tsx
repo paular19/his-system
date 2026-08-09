@@ -193,8 +193,8 @@ export default async function PacientesPage({ searchParams }: PageProps) {
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                       <span className="text-gray-400">Obra social</span>
                       <span className="text-gray-700">{paciente.obraSocialNombre ?? '-'}</span>
-                      <span className="text-gray-400">Plan</span>
-                      <span className="text-gray-700">{paciente.planDescripcion ?? '-'}</span>
+                      <span className="text-gray-400">Coseguro</span>
+                      <span className="text-gray-700">{paciente.obraSocialCoseguroNombre ?? '-'}</span>
                       <span className="text-gray-400">Afiliado</span>
                       <span className="text-gray-700">{paciente.numeroAfiliado ?? '-'}</span>
                       <span className="text-gray-400">Contacto</span>
@@ -221,7 +221,7 @@ export default async function PacientesPage({ searchParams }: PageProps) {
               <thead>
                 <tr className="border-b bg-gray-50 text-left">
                   <th className="pl-3 pr-1 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[22%]">Paciente</th>
-                  <th className="pl-1 pr-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[30%]">Obra Social / Plan</th>
+                  <th className="pl-1 pr-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[30%]">Obra Social / Coseguro</th>
                   <th className="px-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[28%]">Contacto / Domicilio</th>
                   <th className="px-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[12%]">Nacimiento / HC</th>
                   <th className="px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[8%]"></th>
@@ -257,7 +257,7 @@ export default async function PacientesPage({ searchParams }: PageProps) {
                         </td>
                         <td className="pl-1 pr-2 py-2.5 text-gray-600 align-top">
                           <div>{paciente.obraSocialNombre ?? '-'}</div>
-                          <div className="text-xs text-gray-400">Plan: {paciente.planDescripcion ?? '-'}</div>
+                          <div className="text-xs text-gray-400">Coseguro: {paciente.obraSocialCoseguroNombre ?? '-'}</div>
                           <div className="text-xs text-gray-400">Afiliado: {paciente.numeroAfiliado ?? '-'}</div>
                         </td>
                         <td className="px-2 py-2.5 text-gray-600 align-top">

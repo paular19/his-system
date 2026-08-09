@@ -654,6 +654,13 @@ export async function obtenerInternacionDetalle(
 
   if (!ingresoBase) return null
 
+  const obraSocialCoseguro = ingresoBase.obraSocialCoseguroId
+    ? await prisma.obraSocial.findUnique({
+      where: { id: ingresoBase.obraSocialCoseguroId },
+      select: { nombre: true },
+    })
+    : null
+
   const [
     profesionalDerivante,
     ingresoPatologias,
@@ -921,6 +928,7 @@ export async function obtenerInternacionDetalle(
 
   return {
     ...ingresoBase,
+    obraSocialCoseguroNombre: obraSocialCoseguro?.nombre ?? null,
     profesionalDerivante,
     ingresoPatologias,
     historialTratantes: mapHistorial,

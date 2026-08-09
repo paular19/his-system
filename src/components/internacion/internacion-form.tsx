@@ -105,25 +105,9 @@ function crearIdTemporalDeposito(): string {
   return `dep-${Date.now()}-${Math.floor(Math.random() * 1000)}`
 }
 
-function normalizarTexto(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function esNombreIPSS(nombre: string): boolean {
-  const tokens = normalizarTexto(nombre).split(' ')
-  return tokens.includes('IPSS') || tokens.includes('IPS')
-}
-
 export function InternacionForm({
   profesionales,
   obraSociales,
-  planes,
   coseguros,
   camasDisponibles,
   pacienteInicial,
@@ -148,7 +132,6 @@ export function InternacionForm({
   const [fechaCirugiaProgramada, setFechaCirugiaProgramada] = useState('')
   const [obraSocialId, setObraSocialId] = useState(pacienteInicial?.obraSocialId?.toString() ?? '')
   const [pacienteParticular, setPacienteParticular] = useState(!pacienteInicial?.obraSocialId)
-  const [planId, setPlanId] = useState(pacienteInicial?.planId?.toString() ?? '')
   const [obraSocialCoseguroId, setObraSocialCoseguroId] = useState(
     pacienteInicial?.obraSocialCoseguroId?.toString() ?? ''
   )
@@ -167,32 +150,12 @@ export function InternacionForm({
     termino: '',
     hayResultados: false,
   })
-  const planesDisponibles = useMemo(() => {
-    if (pacienteParticular) return []
-
-    const filtered = obraSocialId
-      ? planes.filter((p) => String(p.obraSocialId ?? '') === obraSocialId)
-      : planes
-    const seen = new Set<number>()
-    return filtered.filter((p) => {
-      if (seen.has(p.id)) return false
-      seen.add(p.id)
-      return true
-    })
-  }, [pacienteParticular, obraSocialId, planes])
-
   const camaSeleccionada = useMemo(
     () => camasDisponibles.find((c) => c.id.toString() === camaId),
     [camasDisponibles, camaId]
   )
 
-  const obraSocialSeleccionada = useMemo(
-    () => (pacienteParticular ? null : (obraSociales.find((os) => String(os.id) === obraSocialId) ?? null)),
-    [pacienteParticular, obraSociales, obraSocialId]
-  )
-
-  const esIPSS = !pacienteParticular && esNombreIPSS(obraSocialSeleccionada?.nombre ?? '')
-  const cosegurosDisponibles = esIPSS ? coseguros : []
+  const cosegurosDisponibles = coseguros
 
   const obtenerMatriculaDefault = () => {
     const profesionalTratante = Number.parseInt(profesionalTratanteId, 10)
@@ -213,14 +176,11 @@ export function InternacionForm({
   const handleSeleccionarPaciente = (p: PacienteResumen | null) => {
     setPaciente(p)
     if (p) {
-      const obraSocialPaciente = obraSociales.find((os) => os.id === p.obraSocialId)
-      const pacienteEsIPSS = esNombreIPSS(obraSocialPaciente?.nombre ?? '')
       const esParticular = !p.obraSocialId
       setPacienteParticular(esParticular)
       setObraSocialId(!esParticular && p.obraSocialId ? p.obraSocialId.toString() : '')
-      setPlanId(!esParticular && !pacienteEsIPSS && p.planId ? p.planId.toString() : '')
       setObraSocialCoseguroId(
-        !esParticular && pacienteEsIPSS && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
+        !esParticular && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
       )
       setNumeroAfiliado(!esParticular ? (p.numeroAfiliado ?? '') : '')
       setNombreTutor(p.nombreTutor ?? '')
@@ -228,7 +188,6 @@ export function InternacionForm({
     } else {
       setPacienteParticular(true)
       setObraSocialId('')
-      setPlanId('')
       setObraSocialCoseguroId('')
       setNumeroAfiliado('')
       setNombreTutor('')
@@ -425,9 +384,9 @@ export function InternacionForm({
         profesionalDerivanteId: profesionalDerivanteId ? parseInt(profesionalDerivanteId, 10) : null,
         profesionalTratanteId: profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null,
         obraSocialId: pacienteParticular ? null : (obraSocialId ? parseInt(obraSocialId, 10) : null),
-        planId: pacienteParticular || esIPSS ? null : (planId ? parseInt(planId, 10) : null),
+        planId: null,
         obraSocialCoseguroId:
-          !pacienteParticular && esIPSS && obraSocialCoseguroId ? parseInt(obraSocialCoseguroId, 10) : null,
+          !pacienteParticular && obraSocialCoseguroId ? parseInt(obraSocialCoseguroId, 10) : null,
         numeroAfiliado: pacienteParticular ? null : (numeroAfiliado || null),
         nombreTutor: nombreTutor.trim() || null,
         telefonoTutor: telefonoTutor.trim() || null,
@@ -733,7 +692,6 @@ export function InternacionForm({
                 setPacienteParticular(checked)
                 if (checked) {
                   setObraSocialId('')
-                  setPlanId('')
                   setObraSocialCoseguroId('')
                   setNumeroAfiliado('')
                 }
@@ -755,7 +713,6 @@ export function InternacionForm({
               value={obraSocialId}
               onChange={(e) => {
                 setObraSocialId(e.target.value)
-                setPlanId('')
                 setObraSocialCoseguroId('')
               }}
               disabled={pacienteParticular}
@@ -767,23 +724,7 @@ export function InternacionForm({
               ))}
             </select>
           </div>
-          {!pacienteParticular && !esIPSS && (
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Plan</label>
-              <select
-                value={planId}
-                onChange={(e) => setPlanId(e.target.value)}
-                disabled={!obraSocialId}
-                className="w-full border rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50"
-              >
-                <option value="">— Seleccionar plan —</option>
-                {planesDisponibles.map((p) => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          {!pacienteParticular && esIPSS && (
+          {!pacienteParticular && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Coseguro</label>
               <select

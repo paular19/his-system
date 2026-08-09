@@ -58,7 +58,7 @@ export interface CirugiaProgramadaListItem {
         numeroDocumento: number | null
         historiaClinica: number | null
         obraSocial: string | null
-        plan: string | null
+        coseguro: string | null
     }
     practicasCantidad: number
     practicas: Array<{

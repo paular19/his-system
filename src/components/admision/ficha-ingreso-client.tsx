@@ -946,6 +946,11 @@ export function FichaIngresoClient({
                         {ingreso.pacienteId && (
                             <Link
                                 href={`/dashboard/pacientes/${ingreso.pacienteId}`}
+                                prefetch={false}
+                                onClick={(event) => manejarNavegacionCompletaInterna(
+                                    event,
+                                    `/dashboard/pacientes/${ingreso.pacienteId}`
+                                )}
                                 className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
                             >
                                 <User className="h-3 w-3" />

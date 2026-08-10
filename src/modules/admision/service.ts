@@ -160,7 +160,7 @@ function normalizarCoseguroPorObraSocial<
   }
 }
 
-const SUBTIPOS_PRACTICA_AMBULATORIA = new Set(['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'])
+const SUBTIPOS_PRACTICA_AMBULATORIA = new Set(['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'QAM', 'PAM'])
 const SUBTIPOS_SIN_EGRESO_PREVISTO = new Set(['GUA', 'DER', 'IND'])
 
 function esSubtipoPracticaAmbulatoria(subtipo: string | null | undefined): boolean {
@@ -250,6 +250,7 @@ export async function crearIngreso(
     'SUT',
     'ECG',
     'ECO',
+    'QAM',
     'DER',
     'TUR',
     // Compatibilidad con códigos anteriores

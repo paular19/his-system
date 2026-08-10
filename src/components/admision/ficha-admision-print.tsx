@@ -25,7 +25,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
     const esGuardia = ingreso.ingresoSubtipo?.subtipoAdmisionCodigo === 'GUA'
     const esPracticaAmbulatoria =
         ingreso.tipoIngresoCodigo === 'AMB' &&
-        ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
+        ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'QAM', 'PAM'].includes(
             ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
         )
     const ocultarEgresoPrevisto =

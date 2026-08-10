@@ -164,8 +164,8 @@ export function AdmisionForm({
   const [cargandoInsumosUti, setCargandoInsumosUti] = useState(false)
   const insumosUtiCargadosRef = useRef(false)
 
-  const subtiposConPracticasMeds = ['GUA', 'DER', 'TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'IND', 'PAM']
-  const subtiposTurnoPractica = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM']
+  const subtiposConPracticasMeds = ['GUA', 'DER', 'TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'QAM', 'IND', 'PAM']
+  const subtiposTurnoPractica = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'QAM', 'PAM']
   const esIngresoGuardia = subtipoAdmisionCodigo === 'GUA'
   const esAtencionAmbulatoria = subtiposTurnoPractica.includes(subtipoAdmisionCodigo)
   const mostrarPanelPracticasMeds = subtiposConPracticasMeds.includes(subtipoAdmisionCodigo)

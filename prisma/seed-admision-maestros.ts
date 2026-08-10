@@ -22,6 +22,7 @@ const SUBTIPOS_ADMISION_ACTIVOS = [
     { codigo: 'PRG', descripcion: 'Cirugia Programada' },
     { codigo: 'ECG', descripcion: 'Electrocardiogramas' },
     { codigo: 'ECO', descripcion: 'Ecografias' },
+    { codigo: 'QAM', descripcion: 'Práctica ambulatoria en quirófano' },
     { codigo: 'DER', descripcion: 'Derivacion' },
 ] as const
 

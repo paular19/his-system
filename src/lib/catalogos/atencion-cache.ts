@@ -32,7 +32,7 @@ export type CatalogoSubtipoAdmision = {
     descripcion: string
 }
 
-const CODIGOS_SUBTIPO_ADMISION = ['RAY', 'GUA', 'CUR', 'SUT', 'ECG', 'ECO', 'DER', 'TUR'] as const
+const CODIGOS_SUBTIPO_ADMISION = ['RAY', 'GUA', 'CUR', 'SUT', 'ECG', 'ECO', 'QAM', 'DER', 'TUR'] as const
 const MATRICULA_GUARDIA_RODOLFO_SABIO = 9092
 const NOMBRE_GUARDIA_RODOLFO_SABIO = 'DR RODOLFO SABIO'
 
@@ -186,7 +186,7 @@ const getSubtiposAdmisionCached = unstable_cache(
             return []
         }
     },
-    ['catalogo-subtipos-admision-v1'],
+    ['catalogo-subtipos-admision-v2'],
     { revalidate: 300, tags: ['catalogo-subtipos-admision'] }
 )
 

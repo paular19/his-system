@@ -347,7 +347,7 @@ export function FichaIngresoClient({
     const esGuardia = ingreso.ingresoSubtipo?.subtipoAdmisionCodigo === 'GUA'
     const esPracticaAmbulatoria =
         ingreso.tipoIngresoCodigo === 'AMB' &&
-        ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM'].includes(
+        ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'QAM', 'PAM'].includes(
             ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? ''
         )
     const destinoPracticasInternacion = `/dashboard/internacion/${ingreso.id}/practicas`

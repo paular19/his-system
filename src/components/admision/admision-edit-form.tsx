@@ -57,7 +57,7 @@ export function AdmisionEditForm({ ingreso, onSuccess }: AdmisionEditFormProps) 
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
     const esAmbulatorio = ingreso.tipoIngresoCodigo === 'AMB'
     const esGuardia = ingreso.ingresoSubtipo?.subtipoAdmisionCodigo === 'GUA'
-    const subtiposPracticaAmbulatoria = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'PAM']
+    const subtiposPracticaAmbulatoria = ['TUR', 'RAY', 'CUR', 'SUT', 'ECG', 'ECO', 'QAM', 'PAM']
     const subtiposSinEgresoPrevisto = ['GUA', 'DER', 'IND']
     const esPracticaAmbulatoria =
         esAmbulatorio &&

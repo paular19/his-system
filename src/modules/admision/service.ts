@@ -366,7 +366,7 @@ export async function crearIngreso(
             convenioId: (p.convenioId ?? dataParaCrear.obraSocialId) as number,
             codigoPractica: p.codigo.trim().slice(0, 8).padEnd(8, ' '),
             convenioValorId: 0,
-            fecha: ahora,
+            fecha: dataParaCrear.fechaIngreso ?? ahora,
             cantidad: p.cantidad,
             numeroAutorizacion: normalizarNumeroAutorizacion(p.numeroAutorizacion),
             matriculaEspecialista: p.matriculaEspecialista ?? null,

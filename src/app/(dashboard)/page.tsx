@@ -5,6 +5,7 @@ import { getUsuarioSesion } from '@/lib/auth'
 import { ROLES } from '@/lib/auth/rbac'
 import { prisma } from '@/lib/db'
 import { Users, BedDouble, ClipboardList, Activity } from 'lucide-react'
+import { redirect } from 'next/navigation'
 
 function inicioYFinDelDia() {
   const inicio = new Date()
@@ -18,6 +19,8 @@ function inicioYFinDelDia() {
 
 export default async function DashboardPage() {
   const usuario = await getUsuarioSesion()
+  if (usuario.rol === ROLES.INTERNACION) redirect('/dashboard/internacion')
+
   const esAdmision = usuario.rol === ROLES.ADMISION
 
   const { inicio, fin } = inicioYFinDelDia()

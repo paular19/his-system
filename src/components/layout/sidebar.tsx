@@ -48,6 +48,10 @@ const NAV_ITEMS_ORDENES: NavItem[] = [
   { label: 'Presupuesto', href: '/dashboard/cotizador', icon: Receipt },
 ]
 
+const NAV_ITEMS_INTERNACION: NavItem[] = [
+  { label: 'Internación', href: '/dashboard/internacion', icon: BedDouble },
+]
+
 interface SidebarProps {
   rol: RolHIS
 }
@@ -56,7 +60,9 @@ export function Sidebar({ rol }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const navItems =
-    rol === ROLES.ADMISION
+    rol === ROLES.INTERNACION
+      ? NAV_ITEMS_INTERNACION
+      : rol === ROLES.ADMISION
       ? NAV_ITEMS_ADMISION
       : rol === ROLES.ORDENES
         ? NAV_ITEMS_ORDENES

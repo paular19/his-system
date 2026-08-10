@@ -46,7 +46,13 @@ export async function POST(request: NextRequest) {
   try {
     const usuario = await getUsuarioSesionLectura()
     const despuesAuth = performance.now()
-    if (!tienePermiso(usuario.rol, 'ADMISION', 'CREAR')) {
+    const body: unknown = await request.json()
+    const data = CrearIngresoSchema.parse(body)
+    const puedeCrear =
+      tienePermiso(usuario.rol, 'ADMISION', 'CREAR') ||
+      (data.tipoIngresoCodigo === 'INT' && tienePermiso(usuario.rol, 'INTERNACION', 'CREAR'))
+
+    if (!puedeCrear) {
       await registrarAudit({
         usuario: usuario.clerkId,
         accion: 'ACCESO_NEGADO',
@@ -57,8 +63,6 @@ export async function POST(request: NextRequest) {
       return apiForbidden()
     }
 
-    const body: unknown = await request.json()
-    const data = CrearIngresoSchema.parse(body)
     const despuesParse = performance.now()
 
     const ingreso = await admisionService.crearIngreso(

@@ -10,6 +10,7 @@
  *   OPERADOR    → acceso a todos los módulos excepto facturación
  *   ADMIN       → acceso a todos los módulos incluyendo facturación
  *   FACTURACION → acceso únicamente al módulo de facturación
+ *   INTERNACION → acceso únicamente al módulo de internación
  */
 
 import { readFileSync } from 'fs'
@@ -47,6 +48,9 @@ if (!CLERK_SECRET_KEY) {
 
 // Asignación de roles por email
 const ROLES_POR_EMAIL = {
+  // INTERNACION
+  'cirugiaclinicasr@gmail.com': 'INTERNACION',
+
   // ADMISION
   'ficacode@gmail.com': 'ADMISION',
   'barrionuevodamarisbelen@gmail.com': 'ADMISION',

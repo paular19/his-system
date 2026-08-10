@@ -21,7 +21,14 @@ type SessionClaimsLike = {
   metadata?: unknown
 }
 
+const ROLES_POR_EMAIL_FORZADOS: Record<string, RolHIS> = {
+  'cirugiaclinicasr@gmail.com': ROLES.INTERNACION,
+}
+
 const ROLES_POR_EMAIL_FALLBACK: Record<string, RolHIS> = {
+  // INTERNACION
+  'cirugiaclinicasr@gmail.com': ROLES.INTERNACION,
+
   // ORDENES
   'natividaddelvallelopez@gmail.com': ROLES.ORDENES,
   'ivictoria123@hotmail.com': ROLES.ORDENES,
@@ -85,6 +92,11 @@ function resolverRolFallbackPorEmail(email: string | undefined): RolHIS {
 }
 
 function resolverRolDesdeClaims(claims: unknown): RolHIS {
+  const email = resolverEmailDesdeClaims(claims).trim().toLowerCase()
+  if (ROLES_POR_EMAIL_FORZADOS[email]) {
+    return ROLES_POR_EMAIL_FORZADOS[email]
+  }
+
   const metadata = resolverMetadataDesdeClaims(claims)
   const rolMetadata = asString(metadata.rol)
   const rolesValidos = Object.values(ROLES) as string[]
@@ -115,12 +127,17 @@ function resolverNombreDesdeClaims(claims: unknown): string {
 }
 
 function resolverRolDesdeMetadata(user: Awaited<ReturnType<typeof currentUser>>): RolHIS {
+  const emailPrincipal = user?.emailAddresses?.[0]?.emailAddress
+  const emailNormalizado = emailPrincipal?.trim().toLowerCase() ?? ''
+  if (ROLES_POR_EMAIL_FORZADOS[emailNormalizado]) {
+    return ROLES_POR_EMAIL_FORZADOS[emailNormalizado]
+  }
+
   const rolMetadata = user?.publicMetadata?.rol as string | undefined
   const rolesValidos = Object.values(ROLES) as string[]
   if (rolMetadata && rolesValidos.includes(rolMetadata)) {
     return rolMetadata as RolHIS
   }
-  const emailPrincipal = user?.emailAddresses?.[0]?.emailAddress
   return resolverRolFallbackPorEmail(emailPrincipal)
 }
 

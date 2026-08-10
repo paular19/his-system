@@ -372,7 +372,10 @@ export async function generarOrdenesDesdeInternacionAction(input: {
 }) {
   const usuario = await getUsuarioSesion()
 
-  if (!tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')) {
+  const puedeCrearOrden =
+    tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR') ||
+    tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+  if (!puedeCrearOrden) {
     return { error: 'Sin permiso para crear órdenes' }
   }
 

@@ -28,7 +28,10 @@ const BusquedaRapidaSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const usuario = await getUsuarioSesion()
-    if (!tienePermiso(usuario.rol, 'PACIENTES', 'LEER')) {
+    const puedeBuscarPacientes =
+      tienePermiso(usuario.rol, 'PACIENTES', 'LEER') ||
+      tienePermiso(usuario.rol, 'INTERNACION', 'LEER')
+    if (!puedeBuscarPacientes) {
       return apiForbidden()
     }
 

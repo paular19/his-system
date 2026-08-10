@@ -177,6 +177,25 @@ export async function actualizarObservacionesInternacion(
   return resultado
 }
 
+export async function bloquearHabitacionDeIngreso(
+  ingresoId: number,
+  usuario: string,
+  ip?: string
+) {
+  const resultado = await repo.bloquearHabitacionDeIngreso(ingresoId, usuario)
+
+  await registrarAudit({
+    usuario,
+    accion: 'MODIFICAR',
+    entidad: 'Ingreso',
+    registroId: ingresoId,
+    detalle: `Habitacion ${resultado.habitacion} bloqueada. Camas: ${resultado.camasBloqueadas.join(', ')}`,
+    direccionIp: ip,
+  })
+
+  return resultado
+}
+
 // ============================================
 // EVOLUCIÓN CLÍNICA
 // ============================================

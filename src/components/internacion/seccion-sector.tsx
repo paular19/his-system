@@ -9,9 +9,14 @@ import type { DisponibilidadSector, CamaConOcupante } from '@/modules/internacio
 interface SeccionSectorProps {
   sector: DisponibilidadSector
   soloOcupadas?: boolean
+  puedeBloquearHabitacion?: boolean
 }
 
-export function SeccionSector({ sector, soloOcupadas = false }: SeccionSectorProps) {
+export function SeccionSector({
+  sector,
+  soloOcupadas = false,
+  puedeBloquearHabitacion = false,
+}: SeccionSectorProps) {
   const [expandido, setExpandido] = useState(true)
   const [camaEditando, setCamaEditando] = useState<CamaConOcupante | null>(null)
 
@@ -86,7 +91,13 @@ export function SeccionSector({ sector, soloOcupadas = false }: SeccionSectorPro
                     }
                   }}
                 >
-                  <TarjetaCama cama={cama} />
+                  <TarjetaCama
+                    cama={cama}
+                    camasHabitacion={sector.camas.filter(
+                      (item) => Boolean(cama.habitacion) && item.habitacion === cama.habitacion
+                    )}
+                    puedeBloquearHabitacion={puedeBloquearHabitacion}
+                  />
                 </div>
               ))}
             </div>

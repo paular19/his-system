@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import type { Cama, Prisma } from '@prisma/client'
 import { calcularImporteFacturable, resolverReglaFacturacion } from '@/modules/facturacion/cobertura'
 import { obtenerValorPractica } from '@/modules/facturacion/repository'
+import { construirObservacionBloqueoHabitacion } from '@/lib/internacion/bloqueo-habitacion'
 import { prefijoBloqueoHabitacionPorIngreso } from '@/lib/internacion/bloqueo-habitacion'
 import { parseObservacionBloqueoHabitacion } from '@/lib/internacion/bloqueo-habitacion'
 import {
@@ -130,6 +131,80 @@ async function liberarBloqueosHabitacionDeIngreso(
       usuario: usuario.slice(0, 10),
       fechaEstado,
     },
+  })
+}
+
+export async function bloquearHabitacionDeIngreso(
+  ingresoId: number,
+  usuario: string
+): Promise<{ habitacion: string; camasBloqueadas: string[] }> {
+  return prisma.$transaction(async (tx) => {
+    const ingreso = await tx.ingreso.findFirst({
+      where: {
+        id: ingresoId,
+        estado: 'A',
+        tipoIngresoCodigo: 'INT',
+      },
+      select: {
+        camaId: true,
+        cama: {
+          select: {
+            habitacion: true,
+          },
+        },
+      },
+    })
+
+    if (!ingreso?.camaId || !ingreso.cama?.habitacion?.trim()) {
+      throw new Error('La internacion activa no tiene una cama con habitacion asignada')
+    }
+
+    const habitacion = ingreso.cama.habitacion.trim()
+    const otrasCamas = await tx.cama.findMany({
+      where: {
+        habitacion,
+        id: { not: ingreso.camaId },
+      },
+      select: {
+        id: true,
+        identificador: true,
+        estado: true,
+      },
+      orderBy: { identificador: 'asc' },
+    })
+
+    if (otrasCamas.length === 0) {
+      throw new Error(`La habitacion ${habitacion} no tiene otras camas para bloquear`)
+    }
+
+    const camasNoDisponibles = otrasCamas.filter((cama) => cama.estado !== 'DISPONIBLE')
+    if (camasNoDisponibles.length > 0) {
+      const identificadores = camasNoDisponibles.map((cama) => cama.identificador).join(', ')
+      throw new Error(`No se puede bloquear la habitacion porque estas camas no estan disponibles: ${identificadores}`)
+    }
+
+    const ahora = new Date()
+    const resultado = await tx.cama.updateMany({
+      where: {
+        id: { in: otrasCamas.map((cama) => cama.id) },
+        estado: 'DISPONIBLE',
+      },
+      data: {
+        estado: 'OCUPADA',
+        observaciones: construirObservacionBloqueoHabitacion(ingresoId, habitacion),
+        usuario: usuario.slice(0, 10),
+        fechaEstado: ahora,
+      },
+    })
+
+    if (resultado.count !== otrasCamas.length) {
+      throw new Error('No se pudo bloquear la habitacion por un cambio concurrente de camas')
+    }
+
+    return {
+      habitacion,
+      camasBloqueadas: otrasCamas.map((cama) => cama.identificador),
+    }
   })
 }
 
@@ -2975,6 +3050,7 @@ export async function actualizarObservacionesInternacion(
       id?: string | null
       fecha: Date
       importe: number
+      cubreCoseguro?: boolean
       observaciones?: string | null
     }>
   },
@@ -3024,6 +3100,7 @@ export async function actualizarObservacionesInternacion(
           id: item.id ?? null,
           fecha: item.fecha,
           importe: item.importe,
+          cubreCoseguro: item.cubreCoseguro ?? false,
           observaciones: item.observaciones ?? null,
         })) ?? actual.depositosRegistros,
     })

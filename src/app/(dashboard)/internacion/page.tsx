@@ -148,6 +148,11 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   const obrasSociales = filtrarObrasSocialesPrincipales(obrasSocialesRaw)
 
   const puedeCrear = tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+  const puedeBloquearHabitacion =
+    tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+    puedeCrear ||
+    tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
   const hayFiltros = Boolean(q || obraSocialIdFiltro)
   const mostrarSoloOcupadas = Boolean(obraSocialIdFiltro)
   const qNormalizado = normalizarTextoBusquedaFlexible(q)
@@ -313,7 +318,12 @@ export default async function InternacionPage({ searchParams }: PageProps) {
             </div>
           ) : (
             sectoresMapa.map((sector) => (
-              <SeccionSector key={sector.sector} sector={sector} soloOcupadas={mostrarSoloOcupadas} />
+              <SeccionSector
+                key={sector.sector}
+                sector={sector}
+                soloOcupadas={mostrarSoloOcupadas}
+                puedeBloquearHabitacion={puedeBloquearHabitacion && fechaSeleccionada === fechaHoyKey}
+              />
             ))
           )}
         </div>

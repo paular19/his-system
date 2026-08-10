@@ -2,9 +2,12 @@ import Link from 'next/link'
 import { BedDouble, User, Clock, Wrench } from 'lucide-react'
 import type { CamaConOcupante } from '@/modules/internacion/types'
 import { formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
+import { BloquearHabitacionButton } from './bloquear-habitacion-button'
 
 interface TarjetaCamaProps {
   cama: CamaConOcupante
+  camasHabitacion: CamaConOcupante[]
+  puedeBloquearHabitacion?: boolean
 }
 
 const ESTADO_STYLES: Record<string, string> = {
@@ -47,16 +50,33 @@ function esOcupacionPorBloqueo(cama: CamaConOcupante): boolean {
   )
 }
 
-export function TarjetaCama({ cama }: TarjetaCamaProps) {
+export function TarjetaCama({
+  cama,
+  camasHabitacion,
+  puedeBloquearHabitacion = false,
+}: TarjetaCamaProps) {
   const estiloCard = ESTADO_STYLES[cama.estado] ?? 'bg-white border-gray-200'
   const estiloTexto = ESTADO_TEXT[cama.estado] ?? 'text-gray-700'
   const estiloDot = ESTADO_DOT[cama.estado] ?? 'bg-gray-400'
   const ocupacionPorBloqueo = esOcupacionPorBloqueo(cama)
+  const otrasCamas = camasHabitacion.filter((item) => item.id !== cama.id)
+  const habitacionYaBloqueada = otrasCamas.some(
+    (item) => item.bloqueada && item.ocupante?.ingresoId === cama.ocupante?.ingresoId
+  )
+  const mostrarBloqueo =
+    puedeBloquearHabitacion &&
+    cama.estado === 'OCUPADA' &&
+    Boolean(cama.ocupante) &&
+    !ocupacionPorBloqueo &&
+    Boolean(cama.habitacion) &&
+    otrasCamas.length > 0 &&
+    !habitacionYaBloqueada
 
   const contenido = (
     <div
       className={`
         relative border rounded-lg px-3 py-2 cursor-pointer transition-colors
+        ${mostrarBloqueo ? 'pb-10' : ''}
         ${estiloCard}
       `}
     >
@@ -161,9 +181,20 @@ export function TarjetaCama({ cama }: TarjetaCamaProps) {
   // Ocupada/Reservada con ingreso asociado → link al ingreso
   if ((cama.estado === 'OCUPADA' || cama.estado === 'RESERVADA') && cama.ocupante) {
     return (
-      <Link href={`/dashboard/internacion/${cama.ocupante.ingresoId}`}>
-        {contenido}
-      </Link>
+      <div className="relative">
+        <Link href={`/dashboard/internacion/${cama.ocupante.ingresoId}`}>
+          {contenido}
+        </Link>
+        {mostrarBloqueo && (
+          <div className="absolute bottom-2 right-2">
+            <BloquearHabitacionButton
+              ingresoId={cama.ocupante.ingresoId}
+              habitacion={cama.habitacion as string}
+              camas={otrasCamas.map((item) => item.identificador)}
+            />
+          </div>
+        )}
+      </div>
     )
   }
 

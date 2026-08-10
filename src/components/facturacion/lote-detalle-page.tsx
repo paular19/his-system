@@ -806,7 +806,7 @@ export function LoteDetallePage({ loteId }: Props) {
                         <div className="col-span-7 space-y-2">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-sm font-semibold text-gray-700">
-                                    Órdenes Autorizadas —{' '}
+                                    Órdenes Facturadas —{' '}
                                     {lote.items.find((i) => i.ingresoId === selectedIngresoId)?.paciente?.nombreCompleto ?? 'Paciente'}
                                 </h3>
                                 <button
@@ -821,7 +821,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                 <div className="p-4 text-center text-gray-400 text-sm">Cargando órdenes...</div>
                             ) : ordenes.length === 0 ? (
                                 <div className="p-4 text-center text-gray-400 text-sm rounded border bg-gray-50">
-                                    Sin órdenes autorizadas para este ingreso
+                                    Sin órdenes facturadas para este ingreso
                                 </div>
                             ) : (
                                 <div className="space-y-3">

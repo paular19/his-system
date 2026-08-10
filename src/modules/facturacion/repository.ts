@@ -1002,6 +1002,38 @@ function buildOrdenAutorizadaWhere(): Prisma.OrdenWhereInput {
     }
 }
 
+function buildOrdenFacturadaWhere(): Prisma.OrdenWhereInput {
+    const practicaFacturada: Prisma.PracticaWhereInput = {
+        estado: 'F',
+        puestoNumero: { not: null },
+        ordenNumero: { not: null },
+        ordenItem: { not: null },
+    }
+
+    return {
+        OR: [
+            {
+                AND: [
+                    { numeroAutorizacion: { not: null } },
+                    { numeroAutorizacion: { not: '' } },
+                    { items: { some: { practica: { is: practicaFacturada } } } },
+                ],
+            },
+            {
+                items: {
+                    some: {
+                        AND: [
+                            { numeroAutorizacion: { not: null } },
+                            { numeroAutorizacion: { not: '' } },
+                            { practica: { is: practicaFacturada } },
+                        ],
+                    },
+                },
+            },
+        ],
+    }
+}
+
 function periodoToDateRange(periodo: string): { desde: Date; hasta: Date } {
     const [yearStr, monthStr] = periodo.split('-')
     const year = Number(yearStr)
@@ -4511,26 +4543,22 @@ export async function obtenerLote(
     })
 
     const [desde, hasta] = [periodoToDateRange(lote.periodo).desde, periodoToDateRange(lote.periodo).hasta]
-    const whereIngresoFiltro: Prisma.IngresoWhereInput =
-        filtros?.medico || filtros?.matricula
-            ? {
-                ordenes: {
-                    some: {
-                        AND: [
-                            { estado: { not: 'X' } },
-                            { fechaEmision: { gte: desde, lt: hasta } },
-                            buildOrdenAutorizadaWhere(),
-                            especialistaWhere,
-                        ],
-                    },
-                },
-            }
-            : {}
+    const ordenFacturadaWhere: Prisma.OrdenWhereInput = {
+        AND: [
+            { estado: { not: 'X' } },
+            { fechaEmision: { gte: desde, lt: hasta } },
+            buildOrdenFacturadaWhere(),
+            especialistaWhere,
+        ],
+    }
+    const whereIngresoFiltro: Prisma.IngresoWhereInput = {
+        ordenes: { some: ordenFacturadaWhere },
+    }
 
     const itemsLote = await prisma.loteFacturacionItem.findMany({
         where: {
             loteId: id,
-            ...(filtros?.medico || filtros?.matricula ? { ingreso: whereIngresoFiltro } : {}),
+            ingreso: whereIngresoFiltro,
         },
         orderBy: [{ ingreso: { fechaIngreso: 'asc' } }, { id: 'asc' }],
         select: {
@@ -4551,18 +4579,60 @@ export async function obtenerLote(
                     numeroAfiliado: true,
                     descripcionPatologia: true,
                     paciente: { select: { id: true, nombreCompleto: true, numeroDocumento: true } },
+                    ordenes: {
+                        where: ordenFacturadaWhere,
+                        select: {
+                            numeroAutorizacion: true,
+                            items: {
+                                select: {
+                                    importeTotal: true,
+                                    numeroAutorizacion: true,
+                                    practica: {
+                                        select: {
+                                            estado: true,
+                                            puestoNumero: true,
+                                            ordenNumero: true,
+                                            ordenItem: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
             },
         },
     })
 
+    const items = itemsLote.map((item) => {
+        const { ordenes, ...ingreso } = item.ingreso
+        const importeTotal = ordenes.flatMap((orden) => {
+            const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
+            return orden.items.filter((ordenItem) =>
+                practicaMarcadaComoFacturada(ordenItem.practica?.estado) &&
+                Boolean(
+                    ordenItem.practica?.puestoNumero &&
+                    ordenItem.practica.ordenNumero &&
+                    ordenItem.practica.ordenItem
+                ) &&
+                (ordenConAutorizacion || tieneNumeroAutorizacionValido(ordenItem.numeroAutorizacion))
+            )
+        }).reduce((total, ordenItem) => total + Number(ordenItem.importeTotal ?? 0), 0)
+
+        return {
+            ...item,
+            ingreso,
+            importeTotal,
+            paciente: ingreso.paciente,
+        }
+    }) as LoteFacturacionItemDetalle[]
+
     return {
         ...mapLoteRow(lote),
-        items: itemsLote.map((item) => ({
-            ...item,
-            importeTotal: Number(item.importeTotal),
-            paciente: item.ingreso.paciente,
-        })) as LoteFacturacionItemDetalle[],
+        importeTotal: items
+            .filter((item) => item.incluido)
+            .reduce((total, item) => total + item.importeTotal, 0),
+        items,
         itemsIPSTxt: lote.itemsIPSTxt.map((it) => ({
             ...it,
             impEsp: Number(it.impEsp),
@@ -4619,30 +4689,13 @@ export async function crearLote(
     }
     // If no obraSocialId, could be particular (no OS). If obraSocialId is set, filter by it.
 
-    // Filter ingresos that have at least one authorized prestacion of the right type
+    // Filter ingresos that have at least one billed prestacion of the right type
     if (data.tipo === 'PRACTICAS') {
         whereIngreso.ordenes = {
             some: {
                 estado: { not: 'X' },
                 fechaEmision: { gte: desde, lt: hasta },
-                OR: [
-                    {
-                        AND: [
-                            { numeroAutorizacion: { not: null } },
-                            { numeroAutorizacion: { not: '' } },
-                        ],
-                    },
-                    {
-                        items: {
-                            some: {
-                                AND: [
-                                    { numeroAutorizacion: { not: null } },
-                                    { numeroAutorizacion: { not: '' } },
-                                ],
-                            },
-                        },
-                    },
-                ],
+                ...buildOrdenFacturadaWhere(),
             },
         }
     } else {
@@ -4664,7 +4717,18 @@ export async function crearLote(
                     select: {
                         numeroAutorizacion: true,
                         items: {
-                            select: { importeTotal: true, numeroAutorizacion: true },
+                            select: {
+                                importeTotal: true,
+                                numeroAutorizacion: true,
+                                practica: {
+                                    select: {
+                                        estado: true,
+                                        puestoNumero: true,
+                                        ordenNumero: true,
+                                        ordenItem: true,
+                                    },
+                                },
+                            },
                         },
                     },
                 }
@@ -4684,17 +4748,32 @@ export async function crearLote(
         if (data.tipo === 'PRACTICAS' && ing.ordenes) {
             const ordenes = ing.ordenes as unknown as Array<{
                 numeroAutorizacion: string | null
-                items: Array<{ importeTotal: unknown; numeroAutorizacion: string | null }>
+                items: Array<{
+                    importeTotal: unknown
+                    numeroAutorizacion: string | null
+                    practica: {
+                        estado: string | null
+                        puestoNumero: number | null
+                        ordenNumero: number | null
+                        ordenItem: number | null
+                    } | null
+                }>
             }>
 
-            const itemsAutorizados = ordenes.flatMap((o) => {
+            const itemsFacturados = ordenes.flatMap((o) => {
                 const ordenConAutorizacion = tieneNumeroAutorizacionValido(o.numeroAutorizacion)
                 return o.items.filter((it) =>
-                    ordenConAutorizacion || tieneNumeroAutorizacionValido(it.numeroAutorizacion)
+                    practicaMarcadaComoFacturada(it.practica?.estado) &&
+                    Boolean(
+                        it.practica?.puestoNumero &&
+                        it.practica.ordenNumero &&
+                        it.practica.ordenItem
+                    ) &&
+                    (ordenConAutorizacion || tieneNumeroAutorizacionValido(it.numeroAutorizacion))
                 )
             })
 
-            importe += itemsAutorizados
+            importe += itemsFacturados
                 .reduce((s: number, i) => s + Number(i.importeTotal ?? 0), 0)
         }
         if (data.tipo === 'MEDICAMENTOS' && ing.medicaciones) {
@@ -4905,7 +4984,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
             ingresoId,
             estado: { not: 'X' },
             AND: [
-                buildOrdenAutorizadaWhere(),
+                buildOrdenFacturadaWhere(),
                 especialistaWhere,
                 periodoWhere,
             ],
@@ -4935,6 +5014,14 @@ export async function obtenerOrdenesAutorizadasIngreso(
                     cantidad: true,
                     numeroAutorizacion: true,
                     importeTotal: true,
+                    practica: {
+                        select: {
+                            estado: true,
+                            puestoNumero: true,
+                            ordenNumero: true,
+                            ordenItem: true,
+                        },
+                    },
                     nomencladorPractica: { select: { descripcion: true } },
                 },
             },
@@ -4946,6 +5033,12 @@ export async function obtenerOrdenesAutorizadasIngreso(
             const itemsConEfector = o.items
                 .filter(
                     (it) =>
+                        practicaMarcadaComoFacturada(it.practica?.estado) &&
+                        Boolean(
+                            it.practica?.puestoNumero &&
+                            it.practica.ordenNumero &&
+                            it.practica.ordenItem
+                        ) &&
                         tieneNumeroAutorizacionValido(
                             resolverNumeroAutorizacion(it.numeroAutorizacion, o.numeroAutorizacion)
                         )

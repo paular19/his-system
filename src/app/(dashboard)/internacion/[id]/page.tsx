@@ -10,6 +10,7 @@ import { TratanteSection } from '@/components/internacion/tratante-section'
 import { ObservacionesSection } from '@/components/internacion/observaciones-section'
 import { SoporteRespiratorioSection } from '@/components/internacion/soporte-respiratorio-section'
 import { ViasSection } from '@/components/internacion/vias-section'
+import { ElectrocardiogramasSection } from '@/components/internacion/electrocardiogramas-section'
 import { InternacionPanelClinicoLazy } from '@/components/internacion/internacion-panel-clinico-lazy'
 import { AsignacionCamaProgramadaCard } from '@/components/internacion/asignacion-cama-programada-card'
 import Link from 'next/link'
@@ -334,6 +335,11 @@ export default async function InternacionDetallePage({ params }: PageProps) {
 
                         {esVistaAdmision && (
                             <>
+                                <ElectrocardiogramasSection
+                                    ingresoId={ingresoId}
+                                    puedeModificar={puedeModificar}
+                                />
+
                                 <SoporteRespiratorioSection
                                     ingresoId={ingresoId}
                                     observacionesIniciales={detalle.observaciones ?? null}
@@ -405,6 +411,11 @@ export default async function InternacionDetallePage({ params }: PageProps) {
                                     numeroIngreso={detalle.numeroIngreso}
                                     profesionales={profesionales}
                                     puedeCrear={puedeCrear}
+                                />
+
+                                <ElectrocardiogramasSection
+                                    ingresoId={ingresoId}
+                                    puedeModificar={puedeModificar}
                                 />
 
                                 <SoporteRespiratorioSection

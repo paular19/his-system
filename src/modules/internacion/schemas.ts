@@ -163,6 +163,22 @@ export const CrearDescartableSchema = z.object({
 
 export type CrearDescartableInput = z.infer<typeof CrearDescartableSchema>
 
+export const CrearElectrocardiogramaSchema = z.object({
+  ingresoId: z.number().int().positive(),
+  fecha: z.preprocess(parseFechaArgentina, z.date()),
+  hora: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida').optional().nullable(),
+  orden: z.object({
+    puestoNumero: z.number().int().positive(),
+    ordenNumero: z.number().int().positive(),
+    item: z.number().int().positive(),
+  }).optional().nullable(),
+})
+
+export const BuscarOrdenesElectrocardiogramaSchema = z.object({
+  ingresoId: z.number().int().positive(),
+  q: z.string().trim().max(80).default(''),
+})
+
 export const ActualizarDescartableSchema = z.object({
   estado: z.enum(['A', 'S', 'F']),
   fechaFin: z.string().datetime().or(z.date()).transform((v) => new Date(v)).optional().nullable(),

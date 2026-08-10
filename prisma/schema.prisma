@@ -277,6 +277,7 @@ model Ingreso {
   transferencias      TransferenciaIngreso[]
   medicaciones        MedicacionIngreso[]
   descartables        DescartableIngreso[]
+  electrocardiogramas ElectrocardiogramaIngreso[]
   lotesItems          LoteFacturacionItem[]    @relation("IngresoLotes")
 
   @@unique([tipoIngresoCodigo, numeroIngreso])
@@ -1138,10 +1139,30 @@ model OrdenPractica {
   orden               Orden                @relation(fields: [puestoNumero, ordenNumero], references: [puestoNumero, numero], onDelete: Cascade, onUpdate: Cascade)
   practica            Practica?            @relation(fields: [practicaId], references: [id])
   nomencladorPractica NomencladorPractica? @relation(fields: [convenioId, codigoPractica], references: [convenioId, codigo])
+  electrocardiogramas ElectrocardiogramaIngreso[]
 
   @@id([puestoNumero, ordenNumero, item])
   @@index([practicaId])
   @@map("OrdenPrac")
+}
+
+model ElectrocardiogramaIngreso {
+  id            Int      @id @default(autoincrement()) @map("EcgID")
+  ingresoId     Int      @map("IngID")
+  fecha         DateTime @map("EcgFecha") @db.Date
+  hora          String?  @map("EcgHora") @db.VarChar(5)
+  puestoNumero  Int?     @map("PueNum")
+  ordenNumero   Int?     @map("OrdNum")
+  ordenItem     Int?     @map("OprItem")
+  fechaRegistro DateTime @default(now()) @map("EcgFchRegistro") @db.Timestamp(6)
+  usuario       String   @map("UsuCodig") @db.VarChar(10)
+
+  ingreso   Ingreso        @relation(fields: [ingresoId], references: [id], onDelete: Cascade)
+  ordenItemRelacion OrdenPractica? @relation(fields: [puestoNumero, ordenNumero, ordenItem], references: [puestoNumero, ordenNumero, item], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([ingresoId, fecha])
+  @@index([puestoNumero, ordenNumero, ordenItem])
+  @@map("IngresoElectrocardiograma")
 }
 
 model Practica {

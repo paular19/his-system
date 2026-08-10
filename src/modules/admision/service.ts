@@ -11,8 +11,121 @@ import type {
   MovimientoIngresoInput,
 } from './schemas'
 import type { IngresoConRelaciones, IngresoDetalle, IngresoListItem } from './types'
-import type { IngresoPatologia, MovimientoIngreso, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import type { IngresoPatologia, MovimientoIngreso } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
+
+export interface VerificacionEliminacionIngreso {
+  existe: boolean
+  puedeEliminar: boolean
+  motivos: string[]
+}
+
+async function consultarVinculosParaEliminar(
+  cliente: Prisma.TransactionClient,
+  id: number
+): Promise<VerificacionEliminacionIngreso> {
+  const [ingreso, comprobante] = await Promise.all([
+    cliente.ingreso.findUnique({
+      where: { id },
+      select: {
+        tipoIngresoCodigo: true,
+        tipoInternacionCodigo: true,
+        camaId: true,
+        turnos: { select: { profesionalId: true }, take: 1 },
+        ingresoPatologias: { select: { id: true }, take: 1 },
+        movimientosIngreso: { select: { id: true }, take: 1 },
+        ordenes: { select: { puestoNumero: true }, take: 1 },
+        practicas: { select: { id: true }, take: 1 },
+        informes: { select: { id: true }, take: 1 },
+        cirugiasProgramadas: { select: { id: true }, take: 1 },
+        informeAmbulatorio: { select: { id: true } },
+        evoluciones: { select: { id: true }, take: 1 },
+        transferencias: { select: { id: true }, take: 1 },
+        medicaciones: { select: { id: true }, take: 1 },
+        descartables: { select: { id: true }, take: 1 },
+        electrocardiogramas: { select: { id: true }, take: 1 },
+        lotesItems: { select: { id: true }, take: 1 },
+      },
+    }),
+    cliente.comprobante.findFirst({
+      where: { ingresoId: id },
+      select: { id: true },
+    }),
+  ])
+
+  if (!ingreso) {
+    return { existe: false, puedeEliminar: false, motivos: [] }
+  }
+
+  const motivos: string[] = []
+  if (ingreso.tipoIngresoCodigo.trim() === 'INT' || ingreso.tipoInternacionCodigo || ingreso.camaId) {
+    motivos.push('una internación')
+  }
+  if (ingreso.ordenes.length > 0) motivos.push('una orden')
+  if (ingreso.practicas.length > 0) motivos.push('prácticas')
+  if (ingreso.ingresoPatologias.length > 0) motivos.push('diagnósticos')
+  if (ingreso.movimientosIngreso.length > 0) motivos.push('movimientos')
+  if (ingreso.turnos.length > 0) motivos.push('turnos')
+  if (ingreso.informes.length > 0 || ingreso.informeAmbulatorio) motivos.push('informes')
+  if (ingreso.cirugiasProgramadas.length > 0) motivos.push('cirugías programadas')
+  if (ingreso.evoluciones.length > 0) motivos.push('evoluciones')
+  if (ingreso.transferencias.length > 0) motivos.push('transferencias')
+  if (ingreso.medicaciones.length > 0) motivos.push('medicación')
+  if (ingreso.descartables.length > 0) motivos.push('descartables')
+  if (ingreso.electrocardiogramas.length > 0) motivos.push('electrocardiogramas')
+  if (ingreso.lotesItems.length > 0) motivos.push('lotes de facturación')
+  if (comprobante) motivos.push('comprobantes')
+
+  return {
+    existe: true,
+    puedeEliminar: motivos.length === 0,
+    motivos,
+  }
+}
+
+export async function verificarEliminacionIngreso(id: number): Promise<VerificacionEliminacionIngreso> {
+  return consultarVinculosParaEliminar(prisma, id)
+}
+
+export async function eliminarIngreso(
+  id: number,
+  usuario: string,
+  ip?: string
+): Promise<VerificacionEliminacionIngreso> {
+  let resultado: VerificacionEliminacionIngreso
+  try {
+    resultado = await prisma.$transaction(async (tx) => {
+      const verificacion = await consultarVinculosParaEliminar(tx, id)
+      if (!verificacion.existe || !verificacion.puedeEliminar) return verificacion
+
+      await tx.ingresoHistorial.deleteMany({ where: { ingresoId: id } })
+      await tx.ingreso.delete({ where: { id } })
+      return verificacion
+    })
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      ['P2003', 'P2014', 'P2025'].includes(error.code)
+    ) {
+      return verificarEliminacionIngreso(id)
+    }
+    throw error
+  }
+
+  if (resultado.existe && resultado.puedeEliminar) {
+    await registrarAudit({
+      usuario,
+      accion: 'ELIMINAR',
+      entidad: 'Ingreso',
+      registroId: id,
+      detalle: `Ingreso ${id} eliminado de forma irreversible`,
+      direccionIp: ip,
+    })
+  }
+
+  return resultado
+}
 
 function normalizarNombreObraSocial(nombre: string): string {
   return nombre

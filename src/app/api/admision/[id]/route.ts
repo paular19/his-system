@@ -4,6 +4,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { extraerIP } from '@/lib/security/audit'
 import {
   apiOk,
+  apiError,
   apiForbidden,
   apiNotFound,
   apiValidationError,
@@ -31,6 +32,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return apiNotFound('Ingreso')
     }
 
+    if (request.nextUrl.searchParams.get('verificarEliminacion') === '1') {
+      if (!tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')) {
+        return apiForbidden()
+      }
+
+      const verificacion = await admisionService.verificarEliminacionIngreso(ingresoId)
+      if (!verificacion.existe) return apiNotFound('Ingreso')
+      return apiOk(verificacion)
+    }
+
     const ingreso = await admisionService.obtenerIngreso(
       ingresoId,
       usuario.clerkId,
@@ -38,6 +49,40 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     )
 
     return apiOk(ingreso)
+  } catch (error) {
+    return manejarErrorApi(error)
+  }
+}
+
+// DELETE /api/admision/[id]
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  try {
+    const usuario = await getUsuarioSesion()
+    if (!tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR')) {
+      return apiForbidden()
+    }
+
+    const { id } = await params
+    const ingresoId = parseInt(id, 10)
+    if (isNaN(ingresoId) || ingresoId <= 0) {
+      return apiNotFound('Ingreso')
+    }
+
+    const resultado = await admisionService.eliminarIngreso(
+      ingresoId,
+      usuario.codigoUsuario,
+      extraerIP(request)
+    )
+
+    if (!resultado.existe) return apiNotFound('Ingreso')
+    if (!resultado.puedeEliminar) {
+      return apiError(
+        `No se puede eliminar la admisión porque tiene elementos vinculados: ${resultado.motivos.join(', ')}.`,
+        409
+      )
+    }
+
+    return apiOk({ eliminado: true })
   } catch (error) {
     return manejarErrorApi(error)
   }

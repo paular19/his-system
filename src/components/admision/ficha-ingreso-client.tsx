@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ActualizarPracticaSchema } from '@/modules/internacion/schemas'
 import type { ActualizarIngresoInput } from '@/modules/admision/schemas'
 import { updateIngresoAction } from '@/modules/admision/actions'
-import { ChevronRight, ChevronDown, ChevronUp, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle } from 'lucide-react'
+import { ChevronRight, ChevronDown, ChevronUp, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle, Ban, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import { claveDiaArgentina, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
@@ -59,6 +59,17 @@ type GeneracionOrdenTask = {
     imprimirDespues: boolean
     separarPorPractica?: boolean
     ventanaImpresionInicial?: Window | null
+}
+
+type ModalEliminarAdmision = {
+    tipo: 'confirmar' | 'bloqueada'
+    mensaje: string
+}
+
+type VerificacionEliminacionAdmision = {
+    existe: boolean
+    puedeEliminar: boolean
+    motivos: string[]
 }
 
 const LABEL_ESTADO: Record<string, string> = {
@@ -153,7 +164,12 @@ export function FichaIngresoClient({
     const [cardSuccess, setCardSuccess] = useState<string | null>(null)
     const [cardValues, setCardValues] = useState<any>({})
     const [practicasIngreso, setPracticasIngreso] = useState(ingreso.practicas)
-    const estadoIngreso = (ingreso.estado ?? '').trim().toUpperCase()
+    const [estadoIngreso, setEstadoIngreso] = useState((ingreso.estado ?? '').trim().toUpperCase())
+    const [anulandoAdmision, setAnulandoAdmision] = useState(false)
+    const [errorAnularAdmision, setErrorAnularAdmision] = useState<string | null>(null)
+    const [verificandoEliminacionAdmision, setVerificandoEliminacionAdmision] = useState(false)
+    const [eliminandoAdmision, setEliminandoAdmision] = useState(false)
+    const [modalEliminarAdmision, setModalEliminarAdmision] = useState<ModalEliminarAdmision | null>(null)
     const [filtroPracticas, setFiltroPracticas] = useState('')
     const [paginaPendientes, setPaginaPendientes] = useState(1)
     const [paginaAutorizadas, setPaginaAutorizadas] = useState(1)
@@ -288,6 +304,10 @@ export function FichaIngresoClient({
     }, [ingreso.practicas])
 
     useEffect(() => {
+        setEstadoIngreso((ingreso.estado ?? '').trim().toUpperCase())
+    }, [ingreso.estado])
+
+    useEffect(() => {
         setAdmisionVista({
             fechaIngreso: ingreso.fechaIngreso,
             fechaEgreso: ingreso.fechaEgreso,
@@ -379,6 +399,95 @@ export function FichaIngresoClient({
             setCardSuccess(null)
             cardSuccessTimeoutRef.current = null
         }, 4000)
+    }
+
+    const anularAdmision = async () => {
+        const confirmar = window.confirm(
+            `Se anulará la admisión ${ingreso.tipoIngresoCodigo}-${ingreso.numeroIngreso}. ¿Desea continuar?`
+        )
+        if (!confirmar) return
+
+        setAnulandoAdmision(true)
+        setErrorAnularAdmision(null)
+        try {
+            await updateIngresoAction(ingreso.id, { estado: 'X' })
+            setEstadoIngreso('X')
+            setIsEditing(false)
+            setEditingCard(null)
+            router.refresh()
+        } catch (error) {
+            setErrorAnularAdmision(
+                error instanceof Error && error.message.trim().length > 0
+                    ? error.message
+                    : 'No se pudo anular la admisión'
+            )
+        } finally {
+            setAnulandoAdmision(false)
+        }
+    }
+
+    const abrirEliminacionAdmision = async () => {
+        setVerificandoEliminacionAdmision(true)
+        try {
+            const response = await fetch(`/api/admision/${ingreso.id}?verificarEliminacion=1`, {
+                cache: 'no-store',
+            })
+            const resultado = await response.json() as {
+                data?: VerificacionEliminacionAdmision
+                error?: string
+            }
+
+            if (!response.ok || !resultado.data) {
+                throw new Error(resultado.error ?? 'No se pudo verificar la admisión')
+            }
+
+            if (resultado.data.puedeEliminar) {
+                setModalEliminarAdmision({
+                    tipo: 'confirmar',
+                    mensaje: 'Esta acción es irreversible. La admisión se eliminará definitivamente.',
+                })
+                return
+            }
+
+            setModalEliminarAdmision({
+                tipo: 'bloqueada',
+                mensaje: `No se puede eliminar la admisión porque tiene elementos vinculados: ${resultado.data.motivos.join(', ')}.`,
+            })
+        } catch (error) {
+            setModalEliminarAdmision({
+                tipo: 'bloqueada',
+                mensaje: error instanceof Error ? error.message : 'No se pudo verificar la admisión.',
+            })
+        } finally {
+            setVerificandoEliminacionAdmision(false)
+        }
+    }
+
+    const confirmarEliminacionAdmision = async () => {
+        setEliminandoAdmision(true)
+        try {
+            const response = await fetch(`/api/admision/${ingreso.id}`, { method: 'DELETE' })
+            const resultado = await response.json() as { error?: string }
+
+            if (!response.ok) {
+                setModalEliminarAdmision({
+                    tipo: 'bloqueada',
+                    mensaje: resultado.error ?? 'No se pudo eliminar la admisión.',
+                })
+                return
+            }
+
+            setModalEliminarAdmision(null)
+            router.push('/dashboard/admision')
+            router.refresh()
+        } catch {
+            setModalEliminarAdmision({
+                tipo: 'bloqueada',
+                mensaje: 'No se pudo eliminar la admisión. Intentá nuevamente.',
+            })
+        } finally {
+            setEliminandoAdmision(false)
+        }
     }
 
     const idsPendientesFiltradas = practicasPendientesFiltradas.map((p) => p.id)
@@ -719,14 +828,14 @@ export function FichaIngresoClient({
                             {ingreso.fechaIngreso && (
                                 <span>Ingresado: {formatearFechaHora(ingreso.fechaIngreso)}</span>
                             )}
-                            {ingreso.estado && (
-                                <span className={BADGE_ESTADO[ingreso.estado] ?? 'his-badge-inactivo'}>
-                                    {LABEL_ESTADO[ingreso.estado] ?? ingreso.estado}
+                            {estadoIngreso && (
+                                <span className={BADGE_ESTADO[estadoIngreso] ?? 'his-badge-inactivo'}>
+                                    {LABEL_ESTADO[estadoIngreso] ?? estadoIngreso}
                                 </span>
                             )}
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 print:hidden">
+                    <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 print:hidden">
                         <button
                             onClick={() => window.print()}
                             className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -743,8 +852,92 @@ export function FichaIngresoClient({
                                 Informe
                             </Link>
                         )}
+                        {puedeModificar && estadoIngreso !== 'X' && (
+                            <button
+                                type="button"
+                                onClick={anularAdmision}
+                                disabled={anulandoAdmision}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {anulandoAdmision ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Ban className="h-4 w-4" />
+                                )}
+                                {anulandoAdmision ? 'Anulando...' : 'Anular admisión'}
+                            </button>
+                        )}
+                        {puedeModificar && (
+                            <button
+                                type="button"
+                                onClick={abrirEliminacionAdmision}
+                                disabled={verificandoEliminacionAdmision || eliminandoAdmision}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {verificandoEliminacionAdmision ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                )}
+                                {verificandoEliminacionAdmision ? 'Verificando...' : 'Eliminar'}
+                            </button>
+                        )}
                     </div>
                 </div>
+
+                {errorAnularAdmision && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {errorAnularAdmision}
+                    </div>
+                )}
+
+                {modalEliminarAdmision && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="eliminar-admision-titulo"
+                    >
+                        <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+                            <div className="flex items-center gap-2 border-b px-4 py-3">
+                                <AlertTriangle className="h-5 w-5 text-red-600" />
+                                <h3 id="eliminar-admision-titulo" className="text-sm font-semibold text-gray-900">
+                                    {modalEliminarAdmision.tipo === 'confirmar'
+                                        ? 'Eliminar admisión'
+                                        : 'No se puede eliminar'}
+                                </h3>
+                            </div>
+                            <div className="px-4 py-4 text-sm text-gray-700">
+                                <p>{modalEliminarAdmision.mensaje}</p>
+                            </div>
+                            <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setModalEliminarAdmision(null)}
+                                    disabled={eliminandoAdmision}
+                                    className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    {modalEliminarAdmision.tipo === 'confirmar' ? 'Cancelar' : 'Cerrar'}
+                                </button>
+                                {modalEliminarAdmision.tipo === 'confirmar' && (
+                                    <button
+                                        type="button"
+                                        onClick={confirmarEliminacionAdmision}
+                                        disabled={eliminandoAdmision}
+                                        className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                    >
+                                        {eliminandoAdmision ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Trash2 className="h-4 w-4" />
+                                        )}
+                                        {eliminandoAdmision ? 'Eliminando...' : 'Eliminar definitivamente'}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Datos del paciente */}
                 <div className="his-card p-5">

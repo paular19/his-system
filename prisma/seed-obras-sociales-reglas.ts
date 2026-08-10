@@ -38,6 +38,7 @@ const OBRAS_SOCIALES = [
     { id: 213, nombre: 'RED ARGENTINA SALUD - Cod.213', requiereCoseguro: 'N' },
     { id: 235, nombre: 'MEDIFE', requiereCoseguro: 'N' },
     { id: 346, nombre: 'ACIDSAL - Cod.346', requiereCoseguro: 'N' },
+    { id: 352, nombre: 'NOBIS SA - COD.352', requiereCoseguro: 'N' },
     { id: 358, nombre: 'PREVENCION SALUD', requiereCoseguro: 'N' },
     { id: 511, nombre: 'OSECAC CONV DIRECT - Cod.511', requiereCoseguro: 'N' },
     { id: 1520, nombre: 'OSUTHGRA - Cod.1520', requiereCoseguro: 'N' },

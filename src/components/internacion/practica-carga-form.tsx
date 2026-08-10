@@ -186,7 +186,7 @@ export function PracticaCargaForm({
     const [fecha, setFecha] = useState(() => (soloFechaPractica ? fechaAInputLocal() : fechaHoraAInputLocal()))
     const [numeroAutorizacion, setNumeroAutorizacion] = useState('')
     const [cantidadGeneralPractica, setCantidadGeneralPractica] = useState('1')
-    const [crearPracticaTodaJunta, setCrearPracticaTodaJunta] = useState(true)
+    const [crearPracticaTodaJunta, setCrearPracticaTodaJunta] = useState(false)
     const [matriculaEspecialista, setMatriculaEspecialista] = useState(
         matriculaTratanteDefault ? String(matriculaTratanteDefault) : ''
     )
@@ -455,7 +455,7 @@ export function PracticaCargaForm({
         setFecha(soloFechaPractica ? fechaAInputLocal() : fechaHoraAInputLocal())
         setNumeroAutorizacion('')
         setCantidadGeneralPractica('1')
-        setCrearPracticaTodaJunta(true)
+        setCrearPracticaTodaJunta(false)
         setMatriculaEspecialista(matriculaTratanteDefault ? String(matriculaTratanteDefault) : '')
         setMatriculaAnestesista(String(MATRICULA_ANESTESISTA_DEFAULT))
         setMatriculaGastos(String(MATRICULA_GASTOS_INTERNACION_DEFAULT))
@@ -635,11 +635,9 @@ export function PracticaCargaForm({
                 ? Number.parseInt(matriculaAyudante, 10) || null
                 : null
         const cantidadGeneral = Number.parseInt(cantidadGeneralPractica, 10)
-        const cantidadGeneralFinal = crearPracticaTodaJunta ? cantidadGeneral : 1
 
         if (
-            crearPracticaTodaJunta &&
-            (!Number.isFinite(cantidadGeneralFinal) || cantidadGeneralFinal <= 0 || cantidadGeneralFinal > 999)
+            !Number.isFinite(cantidadGeneral) || cantidadGeneral <= 0 || cantidadGeneral > 999
         ) {
             setError('La cantidad general debe estar entre 1 y 999')
             return
@@ -650,7 +648,7 @@ export function PracticaCargaForm({
             codigoPractica: practicaBase?.codigo ?? busqueda.trim().slice(0, 8).toUpperCase(),
             descripcionPractica: practicaBase?.descripcion ?? busqueda.trim(),
             fecha: fechaPracticaAISOString(fecha, soloFechaPractica),
-            cantidad: cantidadGeneralFinal,
+            cantidad: cantidadGeneral,
             numeroAutorizacion: numeroAutorizacion.trim() || null,
             matriculaEspecialista:
                 requiereEspecialista
@@ -740,7 +738,6 @@ export function PracticaCargaForm({
                     payload: {
                         ...body,
                         descripcionPractica: `${body.descripcionPractica} · ${etiquetaSubitem(subitem)}`,
-                        cantidad: 1,
                         importeBaseUnitario: valorUnitario,
                         matriculaEspecialista: matriculasClasificacion.matriculaEspecialista,
                         matriculaAnestesista: matriculasClasificacion.matriculaAnestesista,
@@ -931,20 +928,18 @@ export function PracticaCargaForm({
                         />
                         Cargar practica toda junta (un solo registro con subitems)
                     </label>
-                    {crearPracticaTodaJunta && (
-                        <div>
-                            <label className="mb-0.5 block text-xs text-gray-500">Cantidad general</label>
-                            <input
-                                type="number"
-                                min={1}
-                                max={999}
-                                step={1}
-                                value={cantidadGeneralPractica}
-                                onChange={(e) => setCantidadGeneralPractica(e.target.value)}
-                                className="his-input text-sm w-full"
-                            />
-                        </div>
-                    )}
+                    <div>
+                        <label className="mb-0.5 block text-xs text-gray-500">Cantidad general</label>
+                        <input
+                            type="number"
+                            min={1}
+                            max={999}
+                            step={1}
+                            value={cantidadGeneralPractica}
+                            onChange={(e) => setCantidadGeneralPractica(e.target.value)}
+                            className="his-input text-sm w-full"
+                        />
+                    </div>
                 </div>
             )}
 

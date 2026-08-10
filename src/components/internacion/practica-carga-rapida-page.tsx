@@ -2612,6 +2612,21 @@ export function PracticaCargaRapidaPage({
             month: '2-digit',
             year: 'numeric',
         })
+        const matriculasEjecutantes = grupo.tipo === 'orden'
+            ? Array.from(new Set(
+                grupo.practicas.flatMap((practica) =>
+                    practica.ordenPractica
+                        .filter((orden) =>
+                            orden.puestoNumero === grupo.puestoNumero &&
+                            orden.ordenNumero === grupo.ordenNumero
+                        )
+                        .map((orden) => orden.efectorMatricula)
+                        .filter((matricula): matricula is number =>
+                            typeof matricula === 'number' && Number.isFinite(matricula) && matricula > 0
+                        )
+                )
+            )).sort((a, b) => a - b)
+            : []
 
         return (
             <div
@@ -2632,6 +2647,7 @@ export function PracticaCargaRapidaPage({
                             {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                 ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                 : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
+                            {grupo.tipo === 'orden' && ` · Matricula ejecutante: ${matriculasEjecutantes.join(', ') || '-'}`}
                         </span>
                         <span className={`min-w-0 truncate text-[10px] ${contadorClase}`}>
                             Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Subitem: {subitemsResumen} · Fecha: {fechaResumenOrden}

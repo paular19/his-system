@@ -85,6 +85,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                         ordenNumero: true,
                         item: true,
                         numeroAutorizacion: true,
+                        efectorMatricula: true,
                         orden: {
                             select: {
                                 fechaEmision: true,
@@ -171,6 +172,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             ordenNumero: orden.ordenNumero,
             item: orden.item,
             numeroAutorizacion: orden.numeroAutorizacion,
+            efectorMatricula: orden.efectorMatricula,
             fechaEmision: orden.orden?.fechaEmision ?? null,
         }))
         if (
@@ -186,6 +188,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                 ordenNumero: Number(practica.ordenNumero),
                 item: practica.ordenItem != null ? Number(practica.ordenItem) : 1,
                 numeroAutorizacion: practica.numeroAutorizacion,
+                efectorMatricula: practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null,
                 fechaEmision:
                     fechaEmisionOrdenLegacyPorClave.get(
                         `${Number(practica.puestoNumero)}:${Number(practica.ordenNumero)}`

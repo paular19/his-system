@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getUsuarioSesionLectura } from '@/lib/auth'
+import { getUsuarioSesion } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { apiForbidden, apiOk, manejarErrorApi } from '@/lib/utils/response'
 import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
@@ -15,7 +15,7 @@ function buildCacheKey(q: string | undefined, porPagina: number): string {
 
 export async function GET(request: NextRequest) {
     try {
-        const usuario = await getUsuarioSesionLectura()
+        const usuario = await getUsuarioSesion()
         if (!tienePermiso(usuario.rol, 'FACTURACION', 'LEER')) return apiForbidden()
 
         const { searchParams } = request.nextUrl

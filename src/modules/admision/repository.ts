@@ -208,23 +208,25 @@ export async function crearIngreso(
     // Serializa por paciente para evitar dobles altas concurrentes
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${paciente.id})`
 
-    const internacionActivaExistente = await tx.ingreso.findFirst({
-      where: {
-        pacienteId: paciente.id,
-        estado: 'A',
-        tipoIngresoCodigo: 'INT',
-      },
-      select: {
-        id: true,
-        tipoIngresoCodigo: true,
-        numeroIngreso: true,
-      },
-    })
+    if (data.tipoIngresoCodigo === 'INT') {
+      const internacionActivaExistente = await tx.ingreso.findFirst({
+        where: {
+          pacienteId: paciente.id,
+          estado: 'A',
+          tipoIngresoCodigo: 'INT',
+        },
+        select: {
+          id: true,
+          tipoIngresoCodigo: true,
+          numeroIngreso: true,
+        },
+      })
 
-    if (internacionActivaExistente) {
-      throw new Error(
-        `Ya existe una internacion activa para este paciente (ID ${internacionActivaExistente.id}, ${internacionActivaExistente.tipoIngresoCodigo}-${internacionActivaExistente.numeroIngreso}).`
-      )
+      if (internacionActivaExistente) {
+        throw new Error(
+          `Ya existe una internacion activa para este paciente (ID ${internacionActivaExistente.id}, ${internacionActivaExistente.tipoIngresoCodigo}-${internacionActivaExistente.numeroIngreso}).`
+        )
+      }
     }
 
     // Incrementar el contador atómicamente; el valor devuelto es el NUEVO valor

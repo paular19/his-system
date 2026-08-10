@@ -20,6 +20,7 @@ type OrdenFila = {
     fechaCarga: Date
     numeroAutorizacion: string | null
     codigos: string[]
+    matriculasEjecutantes: number[]
     usuarios: string[]
     regOrden: number
 }
@@ -68,6 +69,7 @@ export function InternacionPracticasFichaTable({
             fechaCarga: Date
             numeroAutorizacion: string | null
             codigos: Set<string>
+            matriculasEjecutantes: Set<number>
             usuarios: Set<string>
         }>()
 
@@ -94,6 +96,7 @@ export function InternacionPracticasFichaTable({
                         fechaCarga: fechaPractica,
                         numeroAutorizacion,
                         codigos: new Set(codigo ? [codigo] : []),
+                        matriculasEjecutantes: new Set(orden.efectorMatricula ? [orden.efectorMatricula] : []),
                         usuarios: new Set(usuario ? [usuario] : []),
                     })
                     continue
@@ -106,6 +109,7 @@ export function InternacionPracticasFichaTable({
                     existente.numeroAutorizacion = numeroAutorizacion
                 }
                 if (codigo) existente.codigos.add(codigo)
+                if (orden.efectorMatricula) existente.matriculasEjecutantes.add(orden.efectorMatricula)
                 if (usuario) existente.usuarios.add(usuario)
             }
         }
@@ -118,6 +122,7 @@ export function InternacionPracticasFichaTable({
                 fechaCarga: item.fechaCarga,
                 numeroAutorizacion: item.numeroAutorizacion,
                 codigos: Array.from(item.codigos),
+                matriculasEjecutantes: Array.from(item.matriculasEjecutantes).sort((a, b) => a - b),
                 usuarios: Array.from(item.usuarios).sort((a, b) => a.localeCompare(b, 'es')),
             }))
             .sort((a, b) => {
@@ -218,6 +223,7 @@ export function InternacionPracticasFichaTable({
                 }))
                 const numeroAut = escapeHtml(fila.numeroAutorizacion?.trim() || '-')
                 const codigos = escapeHtml(fila.codigos.join(', ') || '-')
+                const matriculasEjecutantes = escapeHtml(fila.matriculasEjecutantes.join(', ') || '-')
                 const regSistema = escapeHtml(formatearNumeroOrden(fila.puestoNumero, fila.numeroOrden))
                 const regOrden = escapeHtml(String(fila.regOrden))
 
@@ -226,6 +232,7 @@ export function InternacionPracticasFichaTable({
                         <td>${fecha}</td>
                         <td>${numeroAut}</td>
                         <td>${codigos}</td>
+                        <td>${matriculasEjecutantes}</td>
                         <td>${regSistema}</td>
                         <td>${regOrden}</td>
                     </tr>
@@ -262,6 +269,7 @@ export function InternacionPracticasFichaTable({
                             <th>FECHA</th>
                             <th>N° ORDEN</th>
                             <th>CODIGOS AUTORIZADOS POR O.S o RESPONSABLE</th>
+                            <th>MATRICULA EJECUTANTE</th>
                             <th>REG. SISTEMA</th>
                             <th>REG. ORDEN</th>
                         </tr>
@@ -400,6 +408,7 @@ export function InternacionPracticasFichaTable({
                                 <th className="px-2 py-1 text-left">Fecha</th>
                                 <th className="px-2 py-1 text-left">N° orden (autorizacion)</th>
                                 <th className="px-2 py-1 text-left">Codigos autorizados</th>
+                                <th className="px-2 py-1 text-left">Matricula ejecutante</th>
                                 <th className="px-2 py-1 text-left">Reg. sistema</th>
                                 <th className="px-2 py-1 text-left">Reg. orden</th>
                                 <th className="px-2 py-1 text-left">Usuario</th>
@@ -408,7 +417,7 @@ export function InternacionPracticasFichaTable({
                         <tbody>
                             {filasFiltradas.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-3 py-3 text-center text-gray-500">
+                                    <td colSpan={8} className="px-3 py-3 text-center text-gray-500">
                                         No hay ordenes para los filtros seleccionados.
                                     </td>
                                 </tr>
@@ -432,6 +441,7 @@ export function InternacionPracticasFichaTable({
                                         </td>
                                         <td className="px-2 py-1.5">{fila.numeroAutorizacion?.trim() || '-'}</td>
                                         <td className="px-2 py-1.5">{fila.codigos.join(', ') || '-'}</td>
+                                        <td className="px-2 py-1.5">{fila.matriculasEjecutantes.join(', ') || '-'}</td>
                                         <td className="px-2 py-1.5">{formatearNumeroOrden(fila.puestoNumero, fila.numeroOrden)}</td>
                                         <td className="px-2 py-1.5">{fila.regOrden}</td>
                                         <td className="px-2 py-1.5">{fila.usuarios.join(', ') || '-'}</td>

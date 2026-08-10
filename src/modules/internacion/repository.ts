@@ -953,7 +953,8 @@ export async function obtenerInternacionDetalle(
         ordenNumero: true,
         item: true,
         numeroAutorizacion: true,
-          clasificacionAgrupacion: true,
+        clasificacionAgrupacion: true,
+        efectorMatricula: true,
         orden: {
           select: {
             fechaEmision: true,
@@ -1010,6 +1011,7 @@ export async function obtenerInternacionDetalle(
       item: number
       numeroAutorizacion: string | null
       clasificacionAgrupacion: string | null
+      efectorMatricula: number | null
       fechaEmision: Date | null
     }>
   >()
@@ -1023,6 +1025,7 @@ export async function obtenerInternacionDetalle(
       item: row.item,
       numeroAutorizacion: row.numeroAutorizacion,
       clasificacionAgrupacion: row.clasificacionAgrupacion,
+      efectorMatricula: row.efectorMatricula,
       fechaEmision: row.orden?.fechaEmision ?? null,
     })
     ordenesPracticaPorId.set(row.practicaId, prev)

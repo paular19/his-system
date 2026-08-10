@@ -269,6 +269,7 @@ export interface PracticaItem {
     item: number
     numeroAutorizacion: string | null
     clasificacionAgrupacion?: string | null
+    efectorMatricula?: number | null
     fechaEmision?: Date | null
   }>
   facturable: boolean

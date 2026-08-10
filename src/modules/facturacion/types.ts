@@ -241,6 +241,7 @@ export interface OrdenAutorizadaLote {
         fecha: Date
         codigoPractica: string
         modulo: string | null
+        efectorMatricula: number | null
         descripcion: string | null
         cantidad: number
         numeroAutorizacion: string | null

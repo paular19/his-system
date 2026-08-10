@@ -170,6 +170,16 @@ export type ActualizarAutorizacionInput = z.infer<typeof ActualizarAutorizacionS
 
 export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo', [
     z.object({
+        tipo: z.literal('ORDEN'),
+        loteId: z.number().int().positive().optional(),
+        puestoNumero: z.number().int().positive(),
+        ordenNumero: z.number().int().positive(),
+        fechaEmision: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
+        descripcion: z.string().trim().max(255).optional().nullable(),
+        numeroAutorizacion: z.string().trim().max(15).optional().nullable(),
+        matriculaEjecutante: z.number().int().positive().optional().nullable(),
+    }),
+    z.object({
         tipo: z.literal('PRACTICA'),
         practicaId: z.number().int().positive(),
         aplicarOrdenCompleta: z.boolean().optional(),
@@ -193,6 +203,7 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
     }),
     z.object({
         tipo: z.literal('ORDEN_ITEM'),
+        loteId: z.number().int().positive().optional(),
         aplicarOrdenCompleta: z.boolean().optional(),
         puestoNumero: z.number().int().positive(),
         ordenNumero: z.number().int().positive(),
@@ -209,6 +220,8 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
             .nullable(),
         numeroAutorizacion: z.string().trim().max(15).optional().nullable(),
         importeTotal: z.coerce.number().min(0),
+        modulo: z.string().trim().max(8).optional().nullable(),
+        matriculaEjecutante: z.number().int().positive().optional().nullable(),
         matriculaProfesional: z.number().int().positive().optional().nullable(),
         matriculaEspecialista: z.number().int().positive().optional().nullable(),
         matriculaAnestesista: z.number().int().positive().optional().nullable(),

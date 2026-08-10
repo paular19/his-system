@@ -3275,6 +3275,75 @@ async function resolverPracticaDesdeInput(
 export async function actualizarPrestacionFacturacion(
     data: ActualizarPrestacionFacturacionInput
 ): Promise<void> {
+    if ((data.tipo === 'ORDEN' || data.tipo === 'ORDEN_ITEM') && data.loteId) {
+        const orden = await prisma.orden.findUnique({
+            where: {
+                puestoNumero_numero: {
+                    puestoNumero: data.puestoNumero,
+                    numero: data.ordenNumero,
+                },
+            },
+            select: { ingresoId: true },
+        })
+        const itemLote = orden?.ingresoId
+            ? await prisma.loteFacturacionItem.findFirst({
+                where: {
+                    loteId: data.loteId,
+                    ingresoId: orden.ingresoId,
+                    lote: { estado: 'PEN' },
+                },
+                select: { id: true },
+            })
+            : null
+        if (!itemLote) {
+            throw new Error('Sólo se pueden editar órdenes de un lote pendiente')
+        }
+    }
+
+    if (data.tipo === 'ORDEN') {
+        const orden = await prisma.orden.findUnique({
+            where: {
+                puestoNumero_numero: {
+                    puestoNumero: data.puestoNumero,
+                    numero: data.ordenNumero,
+                },
+            },
+            select: { ingresoId: true },
+        })
+        if (!orden) throw new Error('Orden no encontrada')
+
+        await prisma.$transaction(async (tx) => {
+            await tx.orden.update({
+                where: {
+                    puestoNumero_numero: {
+                        puestoNumero: data.puestoNumero,
+                        numero: data.ordenNumero,
+                    },
+                },
+                data: {
+                    fechaEmision: data.fechaEmision,
+                    descripcion: data.descripcion ?? null,
+                    numeroAutorizacion: data.numeroAutorizacion ?? null,
+                },
+            })
+
+            if (data.matriculaEjecutante !== undefined) {
+                await tx.ordenPractica.updateMany({
+                    where: {
+                        puestoNumero: data.puestoNumero,
+                        ordenNumero: data.ordenNumero,
+                    },
+                    data: { efectorMatricula: data.matriculaEjecutante },
+                })
+            }
+        })
+
+        if (orden.ingresoId) {
+            await recalcularTotalesLotesPendientesPracticasPorIngreso(orden.ingresoId)
+        }
+        return
+    }
+
     const incluyeCodigoNormalizado = normalizarIncluyeCodigo(data.incluyeCodigo)
     const incluyeSeleccion = desglosarIncluyeCodigo(incluyeCodigoNormalizado)
     const esPatologia = Boolean(
@@ -3674,12 +3743,14 @@ export async function actualizarPrestacionFacturacion(
 
         for (const itemObjetivo of itemsObjetivo) {
             const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
-                modulo: incluyeCodigoNormalizado,
+                modulo: data.modulo ?? incluyeCodigoNormalizado,
                 clasificacionAgrupacion: esPatologia ? 'HP' : null,
                 titularModular: esPatologia ? 'HONORARIO PATOLOGO' : null,
                 efectorMatricula: esPatologia
                     ? MATRICULA_PATOLOGIA_DEFAULT
-                    : (data.matriculaEspecialista ?? undefined),
+                    : (data.matriculaEjecutante !== undefined
+                        ? data.matriculaEjecutante
+                        : (data.matriculaEspecialista ?? undefined)),
                 fecha: data.fecha,
                 convenioId: resolved.convenioId,
                 codigoPractica: resolved.codigoPractica.trim(),
@@ -5028,6 +5099,22 @@ export async function obtenerOrdenesAutorizadasIngreso(
         },
     })
 
+    const matriculasEjecutantes = Array.from(new Set(
+        ordenes.flatMap((orden) => orden.items.map((item) => item.efectorMatricula))
+            .filter((matricula): matricula is number => typeof matricula === 'number' && matricula > 0)
+    ))
+    const profesionalesEjecutantes = matriculasEjecutantes.length > 0
+        ? await prisma.profesional.findMany({
+            where: { matricula: { in: matriculasEjecutantes } },
+            select: { id: true, nombre: true, matricula: true },
+        })
+        : []
+    const profesionalPorMatricula = new Map(
+        profesionalesEjecutantes
+            .filter((profesional) => profesional.matricula !== null)
+            .map((profesional) => [profesional.matricula as number, profesional])
+    )
+
     return ordenes
         .map((o) => {
             const itemsConEfector = o.items
@@ -5090,19 +5177,20 @@ export async function obtenerOrdenesAutorizadasIngreso(
                     importeTotal: Number(it.importeTotal ?? 0),
                 }))
 
-            const profesionalLote = resolverProfesionalLote({
-                tipoIngresoCodigo: ingreso?.tipoIngresoCodigo,
-                profesional: o.profesional
-                    ? {
-                        id: o.profesional.id,
-                        nombre: o.profesional.nombre,
-                        matricula: o.profesional.matricula,
-                    }
-                    : null,
-                efectorMatriculas: itemsConEfector.map((it) => it.efectorMatricula),
-            })
+            const matriculaEjecutante = itemsConEfector.find((it) => it.efectorMatricula)?.efectorMatricula ?? null
+            const profesionalEjecutante = matriculaEjecutante
+                ? profesionalPorMatricula.get(matriculaEjecutante) ?? {
+                    id: -matriculaEjecutante,
+                    nombre: resolverNombreEfectorFallback({
+                        titularModular: null,
+                        descripcionPatologia: null,
+                        matricula: matriculaEjecutante,
+                    }),
+                    matricula: matriculaEjecutante,
+                }
+                : null
 
-            const items = itemsConEfector.map(({ efectorMatricula: _efectorMatricula, ...it }) => it)
+            const items = itemsConEfector
             const esCirugia = items.some((it) => Boolean(it.esPracticaCirugia))
             const esCirugiaMultiple = items.some((it) => Boolean(it.esCirugiaMultiple))
             const etiquetasCirugia = Array.from(
@@ -5119,7 +5207,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
                 esCirugia,
                 esCirugiaMultiple,
                 etiquetasCirugia,
-                profesional: profesionalLote,
+                profesional: profesionalEjecutante,
                 items,
             }
         })

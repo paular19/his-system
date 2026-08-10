@@ -142,6 +142,15 @@ type OrdenItemEditState = {
     cantidad: string
     numeroAutorizacion: string
     importeTotal: string
+    modulo: string
+    matriculaEjecutante: string
+}
+
+type OrdenEditState = {
+    fechaEmision: string
+    descripcion: string
+    numeroAutorizacion: string
+    matriculaEjecutante: string
 }
 
 function toDateTimeInput(value: Date | string | null | undefined): string {
@@ -163,6 +172,17 @@ function buildOrdenItemEditState(item: OrdenAutorizadaLote['items'][number]): Or
         cantidad: String(item.cantidad ?? 1),
         numeroAutorizacion: item.numeroAutorizacion ?? '',
         importeTotal: String(item.importeTotal ?? 0),
+        modulo: item.modulo ?? '',
+        matriculaEjecutante: item.efectorMatricula ? String(item.efectorMatricula) : '',
+    }
+}
+
+function buildOrdenEditState(orden: OrdenAutorizadaLote): OrdenEditState {
+    return {
+        fechaEmision: toDateTimeInput(orden.fechaEmision),
+        descripcion: orden.descripcion ?? '',
+        numeroAutorizacion: orden.numeroAutorizacion ?? '',
+        matriculaEjecutante: orden.profesional?.matricula ? String(orden.profesional.matricula) : '',
     }
 }
 
@@ -219,7 +239,9 @@ export function LoteDetallePage({ loteId }: Props) {
     const [procesando, setProcesando] = useState(false)
     const [editandoPracticas, setEditandoPracticas] = useState(false)
     const [editItems, setEditItems] = useState<Record<string, OrdenItemEditState>>({})
+    const [editOrdenes, setEditOrdenes] = useState<Record<string, OrdenEditState>>({})
     const [guardandoItemKey, setGuardandoItemKey] = useState<string | null>(null)
+    const [guardandoOrdenKey, setGuardandoOrdenKey] = useState<string | null>(null)
     const [ordenesAbiertas, setOrdenesAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesExpandidas, setOrdenesExpandidas] = useState<Record<string, boolean>>({})
     const [mostrarConfirmPromedi, setMostrarConfirmPromedi] = useState(false)
@@ -264,15 +286,19 @@ export function LoteDetallePage({ loteId }: Props) {
             setOrdenes(ordenesData)
 
             const nextEditItems: Record<string, OrdenItemEditState> = {}
+            const nextEditOrdenes: Record<string, OrdenEditState> = {}
             for (const orden of ordenesData) {
+                nextEditOrdenes[`${orden.puestoNumero}:${orden.numero}`] = buildOrdenEditState(orden)
                 for (const item of orden.items) {
                     nextEditItems[keyOrdenItem(orden.puestoNumero, orden.numero, item.item)] = buildOrdenItemEditState(item)
                 }
             }
             setEditItems(nextEditItems)
+            setEditOrdenes(nextEditOrdenes)
         } catch {
             setOrdenes([])
             setEditItems({})
+            setEditOrdenes({})
         } finally {
             setLoadingOrdenes(false)
         }
@@ -365,6 +391,7 @@ export function LoteDetallePage({ loteId }: Props) {
         try {
             const payload = {
                 tipo: 'ORDEN_ITEM' as const,
+                loteId,
                 puestoNumero: orden.puestoNumero,
                 ordenNumero: orden.numero,
                 item: item.item,
@@ -374,6 +401,8 @@ export function LoteDetallePage({ loteId }: Props) {
                 cantidad: Number(draft.cantidad || item.cantidad || 1),
                 numeroAutorizacion: draft.numeroAutorizacion.trim() || null,
                 importeTotal: Number(draft.importeTotal || item.importeTotal || 0),
+                modulo: draft.modulo.trim() || null,
+                matriculaEjecutante: draft.matriculaEjecutante ? Number(draft.matriculaEjecutante) : null,
                 matriculaProfesional: null,
                 matriculaEspecialista: null,
                 matriculaAnestesista: null,
@@ -408,6 +437,42 @@ export function LoteDetallePage({ loteId }: Props) {
             ...prev,
             [key]: buildOrdenItemEditState(item),
         }))
+    }
+
+    async function guardarOrden(orden: OrdenAutorizadaLote) {
+        const key = `${orden.puestoNumero}:${orden.numero}`
+        const draft = editOrdenes[key]
+        if (!draft) return
+
+        setGuardandoOrdenKey(key)
+        setError('')
+        try {
+            const res = await fetch('/api/facturacion/prestaciones/editar', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tipo: 'ORDEN',
+                    loteId,
+                    puestoNumero: orden.puestoNumero,
+                    ordenNumero: orden.numero,
+                    fechaEmision: new Date(draft.fechaEmision || orden.fechaEmision).toISOString(),
+                    descripcion: draft.descripcion.trim() || null,
+                    numeroAutorizacion: draft.numeroAutorizacion.trim() || null,
+                    matriculaEjecutante: draft.matriculaEjecutante ? Number(draft.matriculaEjecutante) : null,
+                }),
+            })
+            const json = await res.json()
+            if (!res.ok || !json.ok) {
+                setError(json.error ?? 'No se pudo guardar la orden')
+                return
+            }
+            await cargar()
+            if (selectedIngresoId !== null) await cargarOrdenes(selectedIngresoId)
+        } catch {
+            setError('Error al guardar la orden')
+        } finally {
+            setGuardandoOrdenKey(null)
+        }
     }
 
     async function aplicarPromedi() {
@@ -598,7 +663,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                     onClick={() => setEditandoPracticas((prev) => !prev)}
                                     className="border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
                                 >
-                                    {editandoPracticas ? 'Finalizar edición de prácticas' : '✏️ Editar prácticas'}
+                                    {editandoPracticas ? 'Finalizar edición de órdenes' : 'Editar órdenes'}
                                 </button>
                                 <button
                                     onClick={() => cambiarEstado('ANU')}
@@ -838,6 +903,8 @@ export function LoteDetallePage({ loteId }: Props) {
 
                                         return ordenesOrdenadas.map((orden, index) => {
                                             const keyOrden = `${orden.puestoNumero}-${orden.numero}`
+                                            const keyOrdenEdicion = `${orden.puestoNumero}:${orden.numero}`
+                                            const draftOrden = editOrdenes[keyOrdenEdicion] ?? buildOrdenEditState(orden)
                                             const itemsTabla = agruparItemsOrdenParaTabla(orden.items)
                                             const totalCantidadOrden = orden.items.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)
                                             const limitePracticas = 4
@@ -901,12 +968,30 @@ export function LoteDetallePage({ loteId }: Props) {
                                                 {abierta && (
                                                     <div className="grid gap-3 p-3 md:grid-cols-2">
                                                         <div className="rounded-md border border-gray-200 bg-gray-50/70 p-3 text-xs text-gray-700 space-y-1.5">
-                                                            <p>Fecha emisión: {new Date(orden.fechaEmision).toLocaleDateString('es-AR')}</p>
+                                                            {esPendiente && editandoPracticas ? (
+                                                                <div className="space-y-2">
+                                                                    <label className="block">Fecha emisión
+                                                                        <input type="datetime-local" value={draftOrden.fechaEmision} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, fechaEmision: e.target.value } }))} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1" />
+                                                                    </label>
+                                                                    <label className="block">Descripción
+                                                                        <input value={draftOrden.descripcion} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, descripcion: e.target.value } }))} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1" />
+                                                                    </label>
+                                                                    <label className="block">N° autorización
+                                                                        <input value={draftOrden.numeroAutorizacion} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, numeroAutorizacion: e.target.value } }))} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1" />
+                                                                    </label>
+                                                                    <label className="block">Matrícula ejecutante
+                                                                        <input type="number" min={1} value={draftOrden.matriculaEjecutante} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, matriculaEjecutante: e.target.value } }))} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1" />
+                                                                    </label>
+                                                                    <button type="button" onClick={() => guardarOrden(orden)} disabled={guardandoOrdenKey === keyOrdenEdicion} className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-blue-700 hover:bg-blue-100 disabled:opacity-60">
+                                                                        {guardandoOrdenKey === keyOrdenEdicion ? 'Guardando...' : 'Guardar orden'}
+                                                                    </button>
+                                                                </div>
+                                                            ) : <p>Fecha emisión: {new Date(orden.fechaEmision).toLocaleDateString('es-AR')}</p>}
                                                             <p>Importe total: <span className="font-semibold">{formatMonto(orden.importeTotal)}</span></p>
                                                             <p>N° autorización: <span className="text-blue-700">{orden.numeroAutorizacion ?? '-'}</span></p>
                                                             <p>Cantidad total: {totalCantidadOrden}</p>
-                                                            <p>Médico firmante: {orden.profesional?.nombre ?? '-'}</p>
-                                                            <p>Matrícula firmante: {orden.profesional?.matricula ?? '-'}</p>
+                                                            <p>Ejecutante: {orden.profesional?.nombre ?? '-'}</p>
+                                                            <p>Matrícula ejecutante: {orden.profesional?.matricula ?? '-'}</p>
                                                             {esOrdenCirugia && (orden.etiquetasCirugia?.length ?? 0) > 0 && (
                                                                 <p>
                                                                     Reglas cirugía: <span className="font-medium text-amber-800">{(orden.etiquetasCirugia ?? []).join(' · ')}</span>
@@ -945,6 +1030,8 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                                 <th className="px-2 py-1.5 text-left">Descripción</th>
                                                                                 <th className="px-2 py-1.5 text-center">Cant.</th>
                                                                                 <th className="px-2 py-1.5 text-left">Nro. Aut.</th>
+                                                                                <th className="px-2 py-1.5 text-left">Módulo</th>
+                                                                                <th className="px-2 py-1.5 text-left">Matrícula ejecutante</th>
                                                                                 <th className="px-2 py-1.5 text-right">Importe</th>
                                                                                 <th className="px-2 py-1.5 text-right">Acción</th>
                                                                             </tr>
@@ -995,6 +1082,12 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                                                 onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, numeroAutorizacion: e.target.value } }))}
                                                                                                 className="w-32 rounded border border-gray-300 px-2 py-1 text-gray-700"
                                                                                             />
+                                                                                        </td>
+                                                                                        <td className="px-2 py-1.5">
+                                                                                            <input value={draft.modulo} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, modulo: e.target.value } }))} className="w-20 rounded border border-gray-300 px-2 py-1" />
+                                                                                        </td>
+                                                                                        <td className="px-2 py-1.5">
+                                                                                            <input type="number" min={1} value={draft.matriculaEjecutante} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, matriculaEjecutante: e.target.value } }))} className="w-28 rounded border border-gray-300 px-2 py-1" />
                                                                                         </td>
                                                                                         <td className="px-2 py-1.5 text-right">
                                                                                             <input

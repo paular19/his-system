@@ -115,6 +115,13 @@ export function TransferenciaCama({
     const estadoCamaActual = normalizarEstadoCama(cama?.estado)
     const esAsignacionInicial = !cama
     const asignacionInicialEmbebidaHabilitada = !(ocultarAsignacionInicial && esAsignacionInicial)
+    const transferenciasVisibles = useMemo(
+        () => transferencias.filter((item) => {
+            if (!item.camaOrigen) return true
+            return !item.camaOrigen.sector.startsWith('PISO') || !item.camaDestino.sector.startsWith('PISO')
+        }),
+        [transferencias]
+    )
 
     useEffect(() => {
         if (!asignacionInicialEmbebidaHabilitada) {
@@ -536,11 +543,11 @@ export function TransferenciaCama({
             )}
 
             {/* Historial de transferencias */}
-            {transferencias.length > 0 && (
+            {transferenciasVisibles.length > 0 && (
                 <div className="p-4">
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Historial de camas</p>
                     <div className="space-y-2">
-                        {transferencias.map((t) => (
+                        {transferenciasVisibles.map((t) => (
                             <div key={t.id} className="rounded-md border border-gray-200 p-2 text-xs text-gray-600">
                                 {transferenciaEditandoId === t.id ? (
                                     <div className="space-y-2">

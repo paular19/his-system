@@ -94,6 +94,7 @@ const RegistroDepositoSchema = z.object({
   id: z.string().max(80).trim().optional().nullable(),
   fecha: z.preprocess(parseFechaArgentina, z.date()),
   importe: z.coerce.number().min(0),
+  cubreCoseguro: z.boolean().optional().default(false),
   observaciones: z.string().max(500).trim().optional().nullable(),
 })
 

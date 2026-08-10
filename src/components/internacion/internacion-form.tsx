@@ -68,6 +68,7 @@ interface DepositoRegistroEditable {
   id: string
   fecha: string
   importe: string
+  cubreCoseguro: boolean
   observaciones: string
 }
 
@@ -210,6 +211,7 @@ export function InternacionForm({
         id: crearIdTemporalDeposito(),
         fecha: '',
         importe: '',
+        cubreCoseguro: false,
         observaciones: '',
       },
     ])
@@ -218,7 +220,7 @@ export function InternacionForm({
   const actualizarDeposito = (
     id: string,
     field: keyof DepositoRegistroEditable,
-    value: string
+    value: string | boolean
   ) => {
     setDepositosRegistros((prev) =>
       prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
@@ -366,6 +368,7 @@ export function InternacionForm({
         id: item.id,
         fecha: item.fecha,
         importe: Number(item.importe),
+        cubreCoseguro: item.cubreCoseguro,
         observaciones: item.observaciones.trim() || null,
       })),
     })
@@ -807,6 +810,7 @@ export function InternacionForm({
                 <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                   <th className="px-2 py-2">Fecha</th>
                   <th className="px-2 py-2">Importe</th>
+                  <th className="px-2 py-2 text-center">Cubre coseguro</th>
                   <th className="px-2 py-2">Observaciones</th>
                   <th className="px-2 py-2 w-12"></th>
                 </tr>
@@ -814,7 +818,7 @@ export function InternacionForm({
               <tbody className="divide-y divide-gray-100">
                 {depositosRegistros.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-2 py-3 text-xs text-gray-500">
+                    <td colSpan={5} className="px-2 py-3 text-xs text-gray-500">
                       Sin depositos registrados.
                     </td>
                   </tr>
@@ -839,6 +843,16 @@ export function InternacionForm({
                           onChange={(e) => actualizarDeposito(item.id, 'importe', e.target.value)}
                           className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
                           disabled={guardando}
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={item.cubreCoseguro}
+                          onChange={(e) => actualizarDeposito(item.id, 'cubreCoseguro', e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          disabled={guardando}
+                          aria-label="El deposito cubre coseguro"
                         />
                       </td>
                       <td className="px-2 py-2">

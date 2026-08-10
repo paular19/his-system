@@ -19,6 +19,7 @@ interface DepositoRegistroEditable {
   id: string
   fecha: string
   importe: string
+  cubreCoseguro: boolean
   observaciones: string
 }
 
@@ -46,12 +47,13 @@ function toDateInput(value: string | null | undefined): string {
 }
 
 function mapearDepositosEditable(
-  depositos: Array<{ id: string; fecha: string; importe: number; observaciones: string | null }>
+  depositos: Array<{ id: string; fecha: string; importe: number; cubreCoseguro: boolean; observaciones: string | null }>
 ): DepositoRegistroEditable[] {
   return depositos.map((item, index) => ({
     id: item.id || `dep-${index + 1}`,
     fecha: toDateInput(item.fecha),
     importe: Number.isFinite(Number(item.importe)) ? String(Number(item.importe)) : '',
+    cubreCoseguro: item.cubreCoseguro,
     observaciones: item.observaciones ?? '',
   }))
 }
@@ -123,6 +125,7 @@ export function ObservacionesSection({
         id: crearIdTemporalDeposito(),
         fecha: '',
         importe: '',
+        cubreCoseguro: false,
         observaciones: '',
       },
     ])
@@ -131,7 +134,7 @@ export function ObservacionesSection({
   const actualizarDeposito = (
     id: string,
     field: keyof DepositoRegistroEditable,
-    value: string
+    value: string | boolean
   ) => {
     setDepositosRegistros((prev) =>
       prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
@@ -181,6 +184,7 @@ export function ObservacionesSection({
             id: item.id,
             fecha: item.fecha,
             importe: Number(item.importe),
+            cubreCoseguro: item.cubreCoseguro,
             observaciones: item.observaciones.trim() || null,
           })),
         }),
@@ -283,6 +287,7 @@ export function ObservacionesSection({
                     <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                       <th className="px-2 py-2">Fecha</th>
                       <th className="px-2 py-2">Importe</th>
+                      <th className="px-2 py-2 text-center">Cubre coseguro</th>
                       <th className="px-2 py-2">Observaciones</th>
                     </tr>
                   </thead>
@@ -295,6 +300,7 @@ export function ObservacionesSection({
                             ? formatoMoneda.format(Number(item.importe))
                             : '—'}
                         </td>
+                        <td className="px-2 py-2 text-center">{item.cubreCoseguro ? 'Si' : 'No'}</td>
                         <td className="px-2 py-2">{item.observaciones.trim() || '—'}</td>
                       </tr>
                     ))}
@@ -355,7 +361,7 @@ export function ObservacionesSection({
               <div className="space-y-2">
                 {depositosRegistros.map((item) => (
                   <div key={item.id} className="rounded-md border border-gray-200 p-2">
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
                       <div>
                         <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">
                           Fecha
@@ -379,6 +385,20 @@ export function ObservacionesSection({
                           onChange={(e) => actualizarDeposito(item.id, 'importe', e.target.value)}
                           className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
                         />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                          Coseguro
+                        </label>
+                        <label className="flex min-h-8 items-center gap-2 text-xs text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={item.cubreCoseguro}
+                            onChange={(e) => actualizarDeposito(item.id, 'cubreCoseguro', e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          Cubre coseguro
+                        </label>
                       </div>
                       <div>
                         <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">

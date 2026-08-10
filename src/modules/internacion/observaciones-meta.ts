@@ -33,6 +33,7 @@ export interface DepositoRegistroMeta {
   id: string
   fecha: string
   importe: number
+  cubreCoseguro: boolean
   observaciones: string | null
 }
 
@@ -172,6 +173,7 @@ function normalizarRegistroDeposito(
         : `dep-${index + 1}`,
     fecha,
     importe: Number(importeRaw),
+    cubreCoseguro: row.cubreCoseguro === true,
     observaciones,
   }
 }
@@ -314,6 +316,7 @@ export function serializarObservacionesInternacion(data: {
     id?: string | null
     fecha: Date | string
     importe: number
+    cubreCoseguro?: boolean
     observaciones?: string | null
   }> | null
 }): string | null {
@@ -361,6 +364,7 @@ export function serializarObservacionesInternacion(data: {
           id: item.id,
           fecha: item.fecha,
           importe: item.importe,
+          cubreCoseguro: item.cubreCoseguro,
           observaciones: item.observaciones,
         },
         index

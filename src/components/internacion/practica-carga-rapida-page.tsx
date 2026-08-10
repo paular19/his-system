@@ -479,6 +479,7 @@ export function PracticaCargaRapidaPage({
     const [errorProtocolo, setErrorProtocolo] = useState<string | null>(null)
     const [mostrarPedidoLaboratorio, setMostrarPedidoLaboratorio] = useState(false)
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
+    const [fechaPedidoLaboratorio, setFechaPedidoLaboratorio] = useState(() => fechaAInputLocalSimple(new Date()))
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
     const [practicaEditando, setPracticaEditando] = useState<PracticaItem | null>(null)
@@ -1937,6 +1938,7 @@ export function PracticaCargaRapidaPage({
     }
 
     const limpiarPedidoLaboratorio = () => {
+        setFechaPedidoLaboratorio(fechaAInputLocalSimple(new Date()))
         setNumeroProtocoloLaboratorio('')
         setDiagnosticoLaboratorio('')
     }
@@ -2135,6 +2137,7 @@ export function PracticaCargaRapidaPage({
         try {
             const result = await crearPedidoLaboratorioAction({
                 ingresoId,
+                fecha: fechaSoloPracticaAISOString(fechaPedidoLaboratorio),
                 numeroProtocolo,
                 diagnostico,
             })
@@ -3380,7 +3383,17 @@ export function PracticaCargaRapidaPage({
                             </p>
 
                             {mostrarPedidoLaboratorio && (
-                                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                                    <label className="text-xs text-gray-700">
+                                        Fecha
+                                        <input
+                                            type="date"
+                                            value={fechaPedidoLaboratorio}
+                                            onChange={(e) => setFechaPedidoLaboratorio(e.target.value)}
+                                            className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
+                                        />
+                                    </label>
+
                                     <label className="text-xs text-gray-700">
                                         Numero de protocolo
                                         <input
@@ -3403,7 +3416,7 @@ export function PracticaCargaRapidaPage({
                                         />
                                     </label>
 
-                                    <div className="md:col-span-2 flex flex-wrap gap-2">
+                                    <div className="md:col-span-3 flex flex-wrap gap-2">
                                         <button
                                             type="button"
                                             onClick={() => void crearPedidoLaboratorio()}

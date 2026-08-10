@@ -79,6 +79,7 @@ const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({
 
 const CrearPedidoLaboratorioSchema = z.object({
   ingresoId: z.number().int().positive(),
+  fecha: z.string().datetime().optional(),
   numeroProtocolo: z.string().trim().min(1, 'Ingresá el número de protocolo').max(50),
   diagnostico: z.string().trim().max(300).optional().default(''),
 })
@@ -777,6 +778,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
 
 export async function crearPedidoLaboratorioAction(input: {
   ingresoId: number
+  fecha?: string
   numeroProtocolo: string
   diagnostico: string
 }) {
@@ -851,6 +853,7 @@ export async function crearPedidoLaboratorioAction(input: {
 
     const numeroProtocolo = parsed.data.numeroProtocolo.trim()
     const diagnostico = parsed.data.diagnostico.trim()
+    const fechaPedido = parsed.data.fecha ? new Date(parsed.data.fecha) : new Date()
 
     const practicaLaboratorio = await crearPracticaInternacion(
       {
@@ -860,7 +863,7 @@ export async function crearPedidoLaboratorioAction(input: {
         descripcionPractica: 'PROTOCOLO BIOQUIMICO',
         numeroProtocoloLaboratorio: numeroProtocolo,
         diagnosticoLaboratorio: diagnostico || null,
-        fecha: new Date(),
+        fecha: fechaPedido,
         cantidad: 1,
         numeroAutorizacion: null,
         matriculaEspecialista: null,
@@ -891,7 +894,7 @@ export async function crearPedidoLaboratorioAction(input: {
             codigoPractica: '66',
             descripcionPractica: 'PROTOCOLO BIOQUIMICO',
             cantidad: 1,
-            fecha: new Date(),
+            fecha: fechaPedido,
             tipoFacturacion: 'H',
             clasificacionAgrupacion: 'HE',
             titularModular: 'PROTOCOLO BIOQUIMICO',

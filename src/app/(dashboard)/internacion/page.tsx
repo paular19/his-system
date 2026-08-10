@@ -250,30 +250,30 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           <h3 id="disponibilidad-total-titulo" className="mb-2 text-sm font-semibold text-gray-800">
             Disponibilidad total · Todos los pisos y UTI
           </h3>
-          <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-6">
-            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-gray-200 border-l-3 border-l-gray-500 bg-white px-2 py-1">
-              <span className="truncate text-[11px] font-medium text-gray-600">Total</span>
-              <span className="text-sm font-bold text-gray-900">{mapaGlobal.totales.total}</span>
+          <div className="flex min-w-0 flex-wrap gap-1">
+            <div className="inline-flex items-center gap-0.5 rounded border border-gray-200 border-l-2 border-l-gray-500 bg-white px-1.5 py-0.5">
+              <span className="text-[10px] font-medium text-gray-600">Total</span>
+              <span className="text-[11px] font-bold text-gray-900">{mapaGlobal.totales.total}</span>
             </div>
-            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-red-200 border-l-3 border-l-red-500 bg-red-50/60 px-2 py-1">
-              <span className="truncate text-[11px] font-medium text-red-700">Ocupadas</span>
-              <span className="text-sm font-bold text-red-900">{mapaGlobal.totales.ocupadas}</span>
+            <div className="inline-flex items-center gap-0.5 rounded border border-red-200 border-l-2 border-l-red-500 bg-red-50/60 px-1.5 py-0.5">
+              <span className="text-[10px] font-medium text-red-700">Ocupadas</span>
+              <span className="text-[11px] font-bold text-red-900">{mapaGlobal.totales.ocupadas}</span>
             </div>
-            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-zinc-300 border-l-3 border-l-zinc-700 bg-zinc-50 px-2 py-1">
-              <span className="truncate text-[11px] font-medium text-zinc-700">Bloqueadas</span>
-              <span className="text-sm font-bold text-zinc-900">{mapaGlobal.totales.bloqueadas}</span>
+            <div className="inline-flex items-center gap-0.5 rounded border border-zinc-300 border-l-2 border-l-zinc-700 bg-zinc-50 px-1.5 py-0.5">
+              <span className="text-[10px] font-medium text-zinc-700">Bloqueadas</span>
+              <span className="text-[11px] font-bold text-zinc-900">{mapaGlobal.totales.bloqueadas}</span>
             </div>
-            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-amber-200 border-l-3 border-l-amber-500 bg-amber-50/60 px-2 py-1">
-              <span className="truncate text-[11px] font-medium text-amber-700">Reservadas</span>
-              <span className="text-sm font-bold text-amber-900">{mapaGlobal.totales.reservadas}</span>
+            <div className="inline-flex items-center gap-0.5 rounded border border-amber-200 border-l-2 border-l-amber-500 bg-amber-50/60 px-1.5 py-0.5">
+              <span className="text-[10px] font-medium text-amber-700">Reservadas</span>
+              <span className="text-[11px] font-bold text-amber-900">{mapaGlobal.totales.reservadas}</span>
             </div>
-            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-slate-300 border-l-3 border-l-slate-500 bg-slate-50 px-2 py-1">
-              <span className="truncate text-[11px] font-medium text-slate-700">Mantenimiento</span>
-              <span className="text-sm font-bold text-slate-900">{mapaGlobal.totales.mantenimiento}</span>
+            <div className="inline-flex items-center gap-0.5 rounded border border-slate-300 border-l-2 border-l-slate-500 bg-slate-50 px-1.5 py-0.5">
+              <span className="text-[10px] font-medium text-slate-700">Mantenimiento</span>
+              <span className="text-[11px] font-bold text-slate-900">{mapaGlobal.totales.mantenimiento}</span>
             </div>
-            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-emerald-200 border-l-3 border-l-emerald-500 bg-emerald-50/60 px-2 py-1">
-              <span className="truncate text-[11px] font-medium text-emerald-700">Disponibles</span>
-              <span className="text-sm font-bold text-emerald-900">{mapaGlobal.totales.disponibles}</span>
+            <div className="inline-flex items-center gap-0.5 rounded border border-emerald-200 border-l-2 border-l-emerald-500 bg-emerald-50/60 px-1.5 py-0.5">
+              <span className="text-[10px] font-medium text-emerald-700">Disponibles</span>
+              <span className="text-[11px] font-bold text-emerald-900">{mapaGlobal.totales.disponibles}</span>
             </div>
           </div>
         </section>

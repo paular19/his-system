@@ -125,7 +125,9 @@ export function InternacionForm({
   const [camaId, setCamaId] = useState(camaInicial?.toString() ?? '')
   const [profesionalGuardiaId, setProfesionalGuardiaId] = useState('')
   const [profesionalDerivanteId, setProfesionalDerivanteId] = useState('')
-  const [profesionalTratanteId, setProfesionalTratanteId] = useState('')
+  const [profesionalTratanteId, setProfesionalTratanteId] = useState(
+    pacienteInicial?.profesionalCabeceraId?.toString() ?? ''
+  )
   const [clinicaDerivante, setClinicaDerivante] = useState('')
   const [esCirugiaProgramada, setEsCirugiaProgramada] = useState(false)
   const [bloquearHabitacionCompleta, setBloquearHabitacionCompleta] = useState(false)
@@ -185,6 +187,7 @@ export function InternacionForm({
       setNumeroAfiliado(!esParticular ? (p.numeroAfiliado ?? '') : '')
       setNombreTutor(p.nombreTutor ?? '')
       setTelefonoTutor(p.telefonoTutor ?? '')
+      setProfesionalTratanteId(p.profesionalCabeceraId?.toString() ?? '')
     } else {
       setPacienteParticular(true)
       setObraSocialId('')
@@ -192,6 +195,7 @@ export function InternacionForm({
       setNumeroAfiliado('')
       setNombreTutor('')
       setTelefonoTutor('')
+      setProfesionalTratanteId('')
     }
   }
 

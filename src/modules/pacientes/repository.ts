@@ -52,6 +52,7 @@ async function construirDatosCreacionPaciente(
     estadoCivil: data.estadoCivil ?? null,
     paisId: data.paisId ?? null,
     profesionId: data.profesionId ?? null,
+    profesionalCabeceraId: data.profesionalCabeceraId ?? null,
     domicilio: data.domicilio ?? null,
     provinciaId: data.provinciaId ?? null,
     localidadId: data.localidadId ?? null,
@@ -205,7 +206,7 @@ export async function actualizarPaciente(
 
   const camposDirectos = [
     'tipoDocumento', 'numeroDocumento', 'cuil', 'fechaNacimiento', 'sexo',
-    'estadoCivil', 'paisId', 'profesionId', 'domicilio', 'provinciaId',
+    'estadoCivil', 'paisId', 'profesionId', 'profesionalCabeceraId', 'domicilio', 'provinciaId',
     'localidadId', 'barrioId', 'telefonoFijo', 'telefonoLaboral', 'celular1',
     'celular2', 'email', 'obraSocialId', 'numeroAfiliado',
     'nombreTutor', 'telefonoTutor', 'empleoTutor',

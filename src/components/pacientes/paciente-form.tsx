@@ -1,11 +1,12 @@
 'use client'
 
-import { useForm } from 'react-hook-form'
+import { useController, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import Link from 'next/link'
 import { ActualizarPacienteSchema, CrearPacienteSchema } from '@/modules/pacientes/schemas'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 
 // Tipo flexible para valores iniciales del formulario.
 // Las fechas llegan como strings YYYY-MM-DD desde el servidor,
@@ -17,6 +18,7 @@ type PacienteFormDefaults = {
   numeroDocumento?: number | null
   fechaNacimiento?: string | null
   sexo?: string | null
+  profesionalCabeceraId?: number | null
   domicilio?: string | null
   telefonoFijo?: string | null
   telefonoLaboral?: string | null
@@ -38,6 +40,7 @@ interface PacienteFormProps {
   valoresIniciales?: PacienteFormDefaults
   obraSociales: ObraSocialOption[]
   coseguros: CoseguroOption[]
+  profesionales: ProfesionalOption[]
 }
 
 interface ObraSocialOption {
@@ -51,11 +54,18 @@ interface CoseguroOption {
   nombre: string
 }
 
+interface ProfesionalOption {
+  id: number
+  nombre: string
+  matricula: number | null
+}
+
 export function PacienteForm({
   pacienteId,
   valoresIniciales,
   obraSociales,
   coseguros,
+  profesionales,
 }: PacienteFormProps) {
   const esEdicion = Boolean(pacienteId)
   const router = useRouter()
@@ -73,11 +83,17 @@ export function PacienteForm({
     watch,
     setValue,
     reset,
+    control,
     formState: { errors },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<any>({
     resolver: zodResolver(esEdicion ? ActualizarPacienteSchema : CrearPacienteSchema),
     defaultValues: valoresIniciales ?? {},
+  })
+
+  const { field: profesionalCabeceraField } = useController({
+    name: 'profesionalCabeceraId',
+    control,
   })
 
   const obraSocialIdRaw = watch('obraSocialId') as number | string | undefined
@@ -326,6 +342,26 @@ export function PacienteForm({
             )}
           </div>
 
+        </div>
+      </div>
+
+      <div className="his-card p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
+          Médico de cabecera
+          <span className="ml-2 text-xs font-normal text-gray-400">(opcional)</span>
+        </h3>
+        <div className="max-w-md">
+          <ProfesionalSelect
+            profesionales={profesionales}
+            value={profesionalCabeceraField.value ? String(profesionalCabeceraField.value) : ''}
+            onChange={(value) => profesionalCabeceraField.onChange(value ? Number(value) : null)}
+            placeholderOption="-- Sin médico de cabecera --"
+          />
+          {errors.profesionalCabeceraId && (
+            <p className="text-xs text-red-500 mt-1">
+              {String(errors.profesionalCabeceraId.message)}
+            </p>
+          )}
         </div>
       </div>
 

@@ -109,6 +109,7 @@ export interface PacienteResumen {
   telefonoFijo?: string | null
   celular1?: string | null
   email?: string | null
+  profesionalCabeceraId?: number | null
   obraSocialId: number | null
   planId?: number | null
   obraSocialCoseguroId?: number | null

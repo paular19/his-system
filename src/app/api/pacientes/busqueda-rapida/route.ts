@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
       telefonoFijo: true,
       celular1: true,
       email: true,
+      profesionalCabeceraId: true,
       obraSocialId: true,
       planId: true,
       obraSocialCoseguroId: true,
@@ -94,6 +95,7 @@ export async function GET(request: NextRequest) {
         telefonoFijo: string | null
         celular1: string | null
         email: string | null
+        profesionalCabeceraId: number | null
         obraSocialId: number | null
         planId: number | null
         obraSocialCoseguroId: number | null
@@ -133,6 +135,7 @@ export async function GET(request: NextRequest) {
           telefonoFijo: paciente.telefonoFijo,
           celular1: paciente.celular1,
           email: paciente.email,
+          profesionalCabeceraId: paciente.profesionalCabeceraId,
           obraSocialId: paciente.obraSocialId,
           planId: paciente.planId,
           obraSocialCoseguroId: paciente.obraSocialCoseguroId,

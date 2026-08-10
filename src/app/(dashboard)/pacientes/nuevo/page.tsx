@@ -4,6 +4,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
 import { PacienteForm } from '@/components/pacientes/paciente-form'
 import { getCatalogoPacienteForm } from '@/lib/catalogos/pacientes-cache'
+import { getProfesionalesActivosCatalogo } from '@/lib/catalogos/atencion-cache'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -11,9 +12,10 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = { title: 'Nuevo Paciente' }
 
 export default async function NuevoPacientePage() {
-  const [usuario, catalogo] = await Promise.all([
+  const [usuario, catalogo, profesionales] = await Promise.all([
     getUsuarioSesion(),
     getCatalogoPacienteForm(),
+    getProfesionalesActivosCatalogo(),
   ])
 
   if (!tienePermiso(usuario.rol, 'PACIENTES', 'CREAR')) {
@@ -38,6 +40,7 @@ export default async function NuevoPacientePage() {
         <PacienteForm
           obraSociales={obraSociales}
           coseguros={coseguros}
+          profesionales={profesionales}
         />
       </div>
     </>

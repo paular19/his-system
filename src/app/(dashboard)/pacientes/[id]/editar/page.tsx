@@ -5,6 +5,7 @@ import { redirect, notFound } from 'next/navigation'
 import { obtenerPaciente } from '@/modules/pacientes/service'
 import { PacienteForm } from '@/components/pacientes/paciente-form'
 import { getCatalogoPacienteForm } from '@/lib/catalogos/pacientes-cache'
+import { getProfesionalesActivosCatalogo } from '@/lib/catalogos/atencion-cache'
 import { fechaCalendarioAInput } from '@/lib/utils'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
@@ -37,7 +38,11 @@ export default async function EditarPacientePage({ params }: PageProps) {
     notFound()
   }
 
-  const { obraSociales, coseguros } = await getCatalogoPacienteForm()
+  const [catalogo, profesionales] = await Promise.all([
+    getCatalogoPacienteForm(),
+    getProfesionalesActivosCatalogo(),
+  ])
+  const { obraSociales, coseguros } = catalogo
 
   // Convertir tipos Prisma a valores compatibles con inputs HTML
   const valoresIniciales = {
@@ -50,6 +55,7 @@ export default async function EditarPacientePage({ params }: PageProps) {
       ? fechaCalendarioAInput(paciente.fechaNacimiento)
       : undefined,
     sexo: paciente.sexo ?? undefined,
+    profesionalCabeceraId: paciente.profesionalCabeceraId ?? undefined,
     paisId: paciente.paisId ?? undefined,
     profesionId: paciente.profesionId ?? undefined,
     domicilio: paciente.domicilio ?? undefined,
@@ -95,6 +101,7 @@ export default async function EditarPacientePage({ params }: PageProps) {
           valoresIniciales={valoresIniciales}
           obraSociales={obraSociales}
           coseguros={coseguros}
+          profesionales={profesionales}
         />
       </div>
     </>

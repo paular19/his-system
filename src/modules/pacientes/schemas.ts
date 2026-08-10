@@ -71,6 +71,7 @@ const BasePacienteSchema = z.object({
   ),
   paisId: z.number().int().positive().optional().nullable(),
   profesionId: z.number().int().positive().optional().nullable(),
+  profesionalCabeceraId: z.number().int().positive().optional().nullable(),
 
   // Ubicación
   domicilio: campoTextoOpcional(200),

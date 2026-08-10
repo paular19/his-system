@@ -113,7 +113,9 @@ export function AdmisionForm({
   const [fechaEgresoPrevista, setFechaEgresoPrevista] = useState('')
   const [subtipoAdmisionCodigo, setSubtipoAdmisionCodigo] = useState('')
   const [profesionalGuardiaId, setProfesionalGuardiaId] = useState('')
-  const [profesionalTratanteId, setProfesionalTratanteId] = useState('')
+  const [profesionalTratanteId, setProfesionalTratanteId] = useState(
+    pacienteInicial?.profesionalCabeceraId?.toString() ?? ''
+  )
   const [obraSocialId, setObraSocialId] = useState(
     pacienteInicial?.obraSocialId?.toString() ?? ''
   )
@@ -133,7 +135,9 @@ export function AdmisionForm({
   const [observaciones, setObservaciones] = useState('')
 
   // Campos específicos por subtipo
-  const [profesionalIdTurno, setProfesionalIdTurno] = useState('')
+  const [profesionalIdTurno, setProfesionalIdTurno] = useState(
+    pacienteInicial?.profesionalCabeceraId?.toString() ?? ''
+  )
   const [centroDerivante, setCentroDerivante] = useState('')
   const [profesionalDerivanteNombre, setProfesionalDerivanteNombre] = useState('')
   const [motivoDerivacion, setMotivoDerivacion] = useState('')
@@ -297,12 +301,16 @@ export function AdmisionForm({
         !esParticular && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
       )
       setNumeroAfiliado(!esParticular ? (p.numeroAfiliado ?? '') : '')
+      setProfesionalTratanteId(p.profesionalCabeceraId?.toString() ?? '')
+      setProfesionalIdTurno(p.profesionalCabeceraId?.toString() ?? '')
     } else {
       setPacienteParticular(true)
       setObraSocialId('')
       setPlanId('')
       setObraSocialCoseguroId('')
       setNumeroAfiliado('')
+      setProfesionalTratanteId('')
+      setProfesionalIdTurno('')
     }
   }
 
@@ -425,9 +433,7 @@ export function AdmisionForm({
         fechaIngreso,
         fechaEgresoPrevista: ocultarEgresoPrevisto ? null : (fechaEgresoPrevista || null),
         profesionalGuardiaId: profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null,
-        profesionalTratanteId: esIngresoGuardia
-          ? null
-          : (profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null),
+        profesionalTratanteId: profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null,
         obraSocialId: pacienteParticular ? null : (obraSocialId ? parseInt(obraSocialId, 10) : null),
         planId: null,
         obraSocialCoseguroId:
@@ -458,7 +464,7 @@ export function AdmisionForm({
       // Agregar campos específicos según el subtipo
       if (subtipoAdmisionCodigo === 'GUA') {
         body.profesionalGuardiaId = profesionalGuardiaId ? parseInt(profesionalGuardiaId, 10) : null
-        body.profesionalTratanteId = null
+        body.profesionalTratanteId = profesionalTratanteId ? parseInt(profesionalTratanteId, 10) : null
       } else if (subtiposTurnoPractica.includes(subtipoAdmisionCodigo)) {
         body.profesionalGuardiaId = null
         body.profesionalTratanteId = profesionalIdTurno ? parseInt(profesionalIdTurno, 10) : null
@@ -728,6 +734,17 @@ export function AdmisionForm({
                 profesionales={profesionales}
                 value={profesionalGuardiaId}
                 onChange={setProfesionalGuardiaId}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Médico de cabecera <span className="font-normal text-gray-400">(opcional)</span>
+              </label>
+              <ProfesionalSelect
+                profesionales={profesionales}
+                value={profesionalTratanteId}
+                onChange={setProfesionalTratanteId}
+                placeholderOption="-- Sin médico de cabecera --"
               />
             </div>
           </div>

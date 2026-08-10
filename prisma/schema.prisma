@@ -36,6 +36,7 @@ model Paciente {
   estadoCivil String? @map("PacEstCiv") @db.Char(1)
   paisId      Int?    @map("PaiID")
   profesionId Int?    @map("PfeID")
+  profesionalCabeceraId Int? @map("PrfIDCabecera")
 
   // Ubicación
   domicilio   String? @map("PacDomic") @db.VarChar(200)
@@ -74,6 +75,7 @@ model Paciente {
   localidad           Localidad?          @relation("PacienteLocalidad", fields: [provinciaId, localidadId], references: [provinciaId, id])
   barrio              Barrio?             @relation("PacienteBarrio", fields: [provinciaId, localidadId, barrioId], references: [provinciaId, localidadId, id])
   profesion           Profesion?          @relation(fields: [profesionId], references: [id])
+  profesionalCabecera Profesional?        @relation("PacienteProfesionalCabecera", fields: [profesionalCabeceraId], references: [id], onDelete: SetNull)
   obraSocial          ObraSocial?         @relation(fields: [obraSocialId], references: [id])
   plan                PlanObraSocial?     @relation(fields: [obraSocialId, planId], references: [obraSocialId, id])
   turnos              Turno[]
@@ -84,6 +86,7 @@ model Paciente {
 
   @@index([numeroDocumento])
   @@index([apellido, nombre])
+  @@index([profesionalCabeceraId])
   @@map("Paciente")
 }
 
@@ -363,6 +366,7 @@ model Profesional {
   turnosExtra             TurnoExtra[]
   ingresosComoGuardia     Ingreso[]                @relation("IngresoGuardia")
   ingresosComoTratante    Ingreso[]                @relation("IngresoTratante")
+  pacientesComoCabecera   Paciente[]               @relation("PacienteProfesionalCabecera")
   ordenesComoPrescritor   Orden[]                  @relation("OrdenPrescriptor")
   informesComoEfector     InformeHospitalizacion[] @relation("InformeEfector")
   informesComoPrescriptor InformeHospitalizacion[] @relation("InformePrescriptor")

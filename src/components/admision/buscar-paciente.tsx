@@ -23,6 +23,7 @@ interface ApiPaciente {
   telefonoFijo: string | null
   celular1: string | null
   email: string | null
+  profesionalCabeceraId: number | null
   obraSocialId: number | null
   planId: number | null
   obraSocialCoseguroId: number | null
@@ -148,6 +149,7 @@ export function BuscarPaciente({ onSeleccionar, pacienteSeleccionado }: BuscarPa
       telefonoFijo: paciente.telefonoFijo,
       celular1: paciente.celular1,
       email: paciente.email,
+      profesionalCabeceraId: paciente.profesionalCabeceraId,
       obraSocialId: paciente.obraSocialId,
       planId: paciente.planId,
       obraSocialCoseguroId: paciente.obraSocialCoseguroId,

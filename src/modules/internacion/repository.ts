@@ -328,6 +328,7 @@ async function mapearCamaConOcupante(
   return {
     ...cama,
     estado: estadoVisual,
+    bloqueada: Boolean(bloqueoHabitacion),
     ocupante: ingresoParaMostrar
       ? {
         ingresoId: ingresoParaMostrar.id,
@@ -383,7 +384,8 @@ export async function obtenerMapaCamas(fechaReferencia?: Date, obraSocialIdFiltr
       label: SECTOR_LABEL[sectorValue] ?? sectorValue,
       total: camasDelSector.length,
       disponibles: camasDelSector.filter((c) => c.estado === 'DISPONIBLE').length,
-      ocupadas: camasDelSector.filter((c) => c.estado === 'OCUPADA').length,
+      ocupadas: camasDelSector.filter((c) => c.estado === 'OCUPADA' && !c.bloqueada).length,
+      bloqueadas: camasDelSector.filter((c) => c.estado === 'OCUPADA' && c.bloqueada).length,
       reservadas: camasDelSector.filter((c) => c.estado === 'RESERVADA').length,
       mantenimiento: camasDelSector.filter((c) => c.estado === 'MANTENIMIENTO').length,
       camas: camasDelSector,
@@ -393,7 +395,8 @@ export async function obtenerMapaCamas(fechaReferencia?: Date, obraSocialIdFiltr
   const totales = {
     total: todasLasCamas.length,
     disponibles: todasLasCamas.filter((c) => c.estado === 'DISPONIBLE').length,
-    ocupadas: todasLasCamas.filter((c) => c.estado === 'OCUPADA').length,
+    ocupadas: todasLasCamas.filter((c) => c.estado === 'OCUPADA' && !c.bloqueada).length,
+    bloqueadas: todasLasCamas.filter((c) => c.estado === 'OCUPADA' && c.bloqueada).length,
     reservadas: todasLasCamas.filter((c) => c.estado === 'RESERVADA').length,
     mantenimiento: todasLasCamas.filter((c) => c.estado === 'MANTENIMIENTO').length,
   }

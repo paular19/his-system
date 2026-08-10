@@ -55,6 +55,7 @@ export interface OcupanteCama {
 
 export interface CamaConOcupante extends Cama {
   ocupante: OcupanteCama | null
+  bloqueada: boolean
 }
 
 export interface DisponibilidadSector {
@@ -63,6 +64,7 @@ export interface DisponibilidadSector {
   total: number
   disponibles: number
   ocupadas: number
+  bloqueadas: number
   reservadas: number
   mantenimiento: number
   camas: CamaConOcupante[]
@@ -74,6 +76,7 @@ export interface MapaCamas {
     total: number
     disponibles: number
     ocupadas: number
+    bloqueadas: number
     reservadas: number
     mantenimiento: number
   }

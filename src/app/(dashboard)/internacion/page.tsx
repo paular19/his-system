@@ -13,6 +13,10 @@ import {
   Plus,
   History,
   ClipboardList,
+  LockKeyhole,
+  Bookmark,
+  Wrench,
+  CircleCheck,
 } from 'lucide-react'
 import { InternacionFiltros } from '@/components/internacion/internacion-filtros'
 import { InternacionFechaSelector } from '@/components/internacion/internacion-fecha-selector'
@@ -98,8 +102,12 @@ export default async function InternacionPage({ searchParams }: PageProps) {
     fechasDisponibles.find((f) => f.key === fechaSeleccionada)?.labelLarga ??
     formatearFechaArgentina(fechaReferencia)
 
-  const [mapa, internaciones, obrasSocialesRaw, cirugiasProgramadasPendientes] = await Promise.all([
-    obtenerMapaCamas(fechaReferencia, obraSocialIdFiltro),
+  const mapaGlobalPromise = obtenerMapaCamas(fechaReferencia)
+  const mapaVisiblePromise = obraSocialIdFiltro
+    ? obtenerMapaCamas(fechaReferencia, obraSocialIdFiltro)
+    : mapaGlobalPromise
+  const [mapa, internaciones, obrasSocialesRaw, cirugiasProgramadasPendientes, mapaGlobal] = await Promise.all([
+    mapaVisiblePromise,
     obtenerInternacionesActivas(
       {
         pagina: 1,
@@ -135,6 +143,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
       },
       orderBy: { fechaIngreso: 'desc' },
     }),
+    mapaGlobalPromise,
   ])
   const obrasSociales = filtrarObrasSocialesPrincipales(obrasSocialesRaw)
 
@@ -186,7 +195,8 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           ...sector,
           total: camasFiltradas.length,
           disponibles: camasFiltradas.filter((c) => c.estado === 'DISPONIBLE').length,
-          ocupadas: camasFiltradas.filter((c) => c.estado === 'OCUPADA').length,
+          ocupadas: camasFiltradas.filter((c) => c.estado === 'OCUPADA' && !c.bloqueada).length,
+          bloqueadas: camasFiltradas.filter((c) => c.estado === 'OCUPADA' && c.bloqueada).length,
           reservadas: camasFiltradas.filter((c) => c.estado === 'RESERVADA').length,
           mantenimiento: camasFiltradas.filter((c) => c.estado === 'MANTENIMIENTO').length,
           camas: camasFiltradas,
@@ -234,6 +244,56 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           obraSocialIdFiltro={obraSocialIdFiltro}
         />
         <p className="-mt-3 text-xs text-gray-500 print:hidden">Fecha seleccionada: {fechaLabel}</p>
+
+        <section className="print:hidden" aria-labelledby="disponibilidad-total-titulo">
+          <h3 id="disponibilidad-total-titulo" className="mb-2 text-sm font-semibold text-gray-800">
+            Disponibilidad total · Todos los pisos y UTI
+          </h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+            <div className="rounded-md border border-gray-200 border-l-gray-500 border-l-4 bg-white px-3 py-2">
+              <div className="flex items-center gap-2 text-gray-500">
+                <BedDouble className="h-4 w-4" />
+                <span className="text-xs font-medium">Total</span>
+              </div>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{mapaGlobal.totales.total}</p>
+            </div>
+            <div className="rounded-md border border-red-200 border-l-red-500 border-l-4 bg-red-50/60 px-3 py-2">
+              <div className="flex items-center gap-2 text-red-700">
+                <BedDouble className="h-4 w-4" />
+                <span className="text-xs font-medium">Ocupadas</span>
+              </div>
+              <p className="mt-1 text-xl font-semibold text-red-900">{mapaGlobal.totales.ocupadas}</p>
+            </div>
+            <div className="rounded-md border border-zinc-300 border-l-zinc-700 border-l-4 bg-zinc-50 px-3 py-2">
+              <div className="flex items-center gap-2 text-zinc-700">
+                <LockKeyhole className="h-4 w-4" />
+                <span className="text-xs font-medium">Bloqueadas</span>
+              </div>
+              <p className="mt-1 text-xl font-semibold text-zinc-900">{mapaGlobal.totales.bloqueadas}</p>
+            </div>
+            <div className="rounded-md border border-amber-200 border-l-amber-500 border-l-4 bg-amber-50/60 px-3 py-2">
+              <div className="flex items-center gap-2 text-amber-700">
+                <Bookmark className="h-4 w-4" />
+                <span className="text-xs font-medium">Reservadas</span>
+              </div>
+              <p className="mt-1 text-xl font-semibold text-amber-900">{mapaGlobal.totales.reservadas}</p>
+            </div>
+            <div className="rounded-md border border-slate-300 border-l-slate-500 border-l-4 bg-slate-50 px-3 py-2">
+              <div className="flex items-center gap-2 text-slate-700">
+                <Wrench className="h-4 w-4" />
+                <span className="text-xs font-medium">Mantenimiento</span>
+              </div>
+              <p className="mt-1 text-xl font-semibold text-slate-900">{mapaGlobal.totales.mantenimiento}</p>
+            </div>
+            <div className="rounded-md border border-emerald-200 border-l-emerald-500 border-l-4 bg-emerald-50/60 px-3 py-2">
+              <div className="flex items-center gap-2 text-emerald-700">
+                <CircleCheck className="h-4 w-4" />
+                <span className="text-xs font-medium">Disponibles</span>
+              </div>
+              <p className="mt-1 text-xl font-semibold text-emerald-900">{mapaGlobal.totales.disponibles}</p>
+            </div>
+          </div>
+        </section>
 
         <InternacionFiltros
           q={q}

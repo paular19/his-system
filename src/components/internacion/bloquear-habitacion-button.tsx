@@ -53,10 +53,10 @@ export function BloquearHabitacionButton({
           setError(null)
           setAbierto(true)
         }}
-        className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-white px-2 py-1 text-[11px] font-semibold text-red-700 shadow-sm hover:bg-red-50"
+        className="inline-flex h-5 items-center gap-1 rounded border border-red-300 bg-white px-1.5 text-[10px] font-semibold leading-none text-red-700 hover:bg-red-50"
       >
-        <LockKeyhole className="h-3.5 w-3.5" />
-        Bloquear habitacion
+        <LockKeyhole className="h-3 w-3" />
+        Bloquear habitación
       </button>
 
       {abierto && (

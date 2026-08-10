@@ -75,8 +75,8 @@ export function TarjetaCama({
   const contenido = (
     <div
       className={`
-        relative border rounded-lg px-3 py-2 cursor-pointer transition-colors
-        ${mostrarBloqueo ? 'pb-10' : ''}
+        relative border rounded-lg px-3 py-1.5 cursor-pointer transition-colors
+        ${mostrarBloqueo ? 'pb-7' : ''}
         ${estiloCard}
       `}
     >
@@ -186,7 +186,7 @@ export function TarjetaCama({
           {contenido}
         </Link>
         {mostrarBloqueo && (
-          <div className="absolute bottom-2 right-2">
+          <div className="absolute bottom-1 right-2">
             <BloquearHabitacionButton
               ingresoId={cama.ocupante.ingresoId}
               habitacion={cama.habitacion as string}

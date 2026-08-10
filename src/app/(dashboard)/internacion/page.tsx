@@ -13,10 +13,6 @@ import {
   Plus,
   History,
   ClipboardList,
-  LockKeyhole,
-  Bookmark,
-  Wrench,
-  CircleCheck,
 } from 'lucide-react'
 import { InternacionFiltros } from '@/components/internacion/internacion-filtros'
 import { InternacionFechaSelector } from '@/components/internacion/internacion-fecha-selector'
@@ -254,48 +250,30 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           <h3 id="disponibilidad-total-titulo" className="mb-2 text-sm font-semibold text-gray-800">
             Disponibilidad total · Todos los pisos y UTI
           </h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-            <div className="rounded-md border border-gray-200 border-l-gray-500 border-l-4 bg-white px-3 py-2">
-              <div className="flex items-center gap-2 text-gray-500">
-                <BedDouble className="h-4 w-4" />
-                <span className="text-xs font-medium">Total</span>
-              </div>
-              <p className="mt-1 text-xl font-semibold text-gray-900">{mapaGlobal.totales.total}</p>
+          <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-6">
+            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-gray-200 border-l-3 border-l-gray-500 bg-white px-2 py-1">
+              <span className="truncate text-[11px] font-medium text-gray-600">Total</span>
+              <span className="text-sm font-bold text-gray-900">{mapaGlobal.totales.total}</span>
             </div>
-            <div className="rounded-md border border-red-200 border-l-red-500 border-l-4 bg-red-50/60 px-3 py-2">
-              <div className="flex items-center gap-2 text-red-700">
-                <BedDouble className="h-4 w-4" />
-                <span className="text-xs font-medium">Ocupadas</span>
-              </div>
-              <p className="mt-1 text-xl font-semibold text-red-900">{mapaGlobal.totales.ocupadas}</p>
+            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-red-200 border-l-3 border-l-red-500 bg-red-50/60 px-2 py-1">
+              <span className="truncate text-[11px] font-medium text-red-700">Ocupadas</span>
+              <span className="text-sm font-bold text-red-900">{mapaGlobal.totales.ocupadas}</span>
             </div>
-            <div className="rounded-md border border-zinc-300 border-l-zinc-700 border-l-4 bg-zinc-50 px-3 py-2">
-              <div className="flex items-center gap-2 text-zinc-700">
-                <LockKeyhole className="h-4 w-4" />
-                <span className="text-xs font-medium">Bloqueadas</span>
-              </div>
-              <p className="mt-1 text-xl font-semibold text-zinc-900">{mapaGlobal.totales.bloqueadas}</p>
+            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-zinc-300 border-l-3 border-l-zinc-700 bg-zinc-50 px-2 py-1">
+              <span className="truncate text-[11px] font-medium text-zinc-700">Bloqueadas</span>
+              <span className="text-sm font-bold text-zinc-900">{mapaGlobal.totales.bloqueadas}</span>
             </div>
-            <div className="rounded-md border border-amber-200 border-l-amber-500 border-l-4 bg-amber-50/60 px-3 py-2">
-              <div className="flex items-center gap-2 text-amber-700">
-                <Bookmark className="h-4 w-4" />
-                <span className="text-xs font-medium">Reservadas</span>
-              </div>
-              <p className="mt-1 text-xl font-semibold text-amber-900">{mapaGlobal.totales.reservadas}</p>
+            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-amber-200 border-l-3 border-l-amber-500 bg-amber-50/60 px-2 py-1">
+              <span className="truncate text-[11px] font-medium text-amber-700">Reservadas</span>
+              <span className="text-sm font-bold text-amber-900">{mapaGlobal.totales.reservadas}</span>
             </div>
-            <div className="rounded-md border border-slate-300 border-l-slate-500 border-l-4 bg-slate-50 px-3 py-2">
-              <div className="flex items-center gap-2 text-slate-700">
-                <Wrench className="h-4 w-4" />
-                <span className="text-xs font-medium">Mantenimiento</span>
-              </div>
-              <p className="mt-1 text-xl font-semibold text-slate-900">{mapaGlobal.totales.mantenimiento}</p>
+            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-slate-300 border-l-3 border-l-slate-500 bg-slate-50 px-2 py-1">
+              <span className="truncate text-[11px] font-medium text-slate-700">Mantenimiento</span>
+              <span className="text-sm font-bold text-slate-900">{mapaGlobal.totales.mantenimiento}</span>
             </div>
-            <div className="rounded-md border border-emerald-200 border-l-emerald-500 border-l-4 bg-emerald-50/60 px-3 py-2">
-              <div className="flex items-center gap-2 text-emerald-700">
-                <CircleCheck className="h-4 w-4" />
-                <span className="text-xs font-medium">Disponibles</span>
-              </div>
-              <p className="mt-1 text-xl font-semibold text-emerald-900">{mapaGlobal.totales.disponibles}</p>
+            <div className="flex min-w-0 items-center justify-between gap-1 rounded border border-emerald-200 border-l-3 border-l-emerald-500 bg-emerald-50/60 px-2 py-1">
+              <span className="truncate text-[11px] font-medium text-emerald-700">Disponibles</span>
+              <span className="text-sm font-bold text-emerald-900">{mapaGlobal.totales.disponibles}</span>
             </div>
           </div>
         </section>
@@ -382,9 +360,16 @@ export default async function InternacionPage({ searchParams }: PageProps) {
         <div className="ips-print-sheet">
           <div className="hidden print:flex items-center justify-between border-b border-gray-400 pb-3 mb-3">
             <div className="flex items-center gap-4">
-              <Image src="/logo-clinica.png" alt="Logo de la clínica" width={104} height={72} className="h-auto w-26" />
+              <Image
+                src="/logo-clinica.png"
+                alt="Logo de Clínica San Rafael"
+                width={208}
+                height={144}
+                className="h-auto w-26"
+                priority
+              />
               <div>
-                <h1 className="text-lg font-bold text-gray-900">Clínica Sanar</h1>
+                <h1 className="text-lg font-bold text-gray-900">CLINICA SAN RAFAEL</h1>
                 <p className="text-xs text-gray-700">Email: admisionsanar@gmail.com</p>
                 <p className="text-xs text-gray-700">Tel. 0387 431-8111</p>
                 <p className="text-xs text-gray-700">Av. Sarmiento 566</p>

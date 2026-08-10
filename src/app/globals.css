@@ -118,6 +118,10 @@
     color: #111827;
   }
 
+  .censo-print-table table {
+    min-width: 0 !important;
+  }
+
   .ips-print-table thead th {
     background: #f9fafb !important;
     color: #111827 !important;

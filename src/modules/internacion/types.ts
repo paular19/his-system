@@ -83,13 +83,18 @@ export interface InternacionListItem {
   id: number
   numeroIngreso: number
   nombre: string | null
+  edad: number | null
   fechaIngreso: Date | null
+  fechaEgreso: Date | null
   fechaTurno: Date | null
   fechaEgresoPrevista: Date | null
+  numeroAfiliado: string | null
   estado: string | null
   descripcionPatologia: string | null
   tieneCoseguro: boolean
+  coseguroNombre: string | null
   esCirugiaProgramada: boolean
+  habitacionBloqueada: boolean
   cama: {
     id: number
     identificador: string
@@ -100,11 +105,14 @@ export interface InternacionListItem {
   paciente: {
     id: number
     nombreCompleto: string
+    historiaClinica: number | null
     numeroDocumento: number | null
+    fechaNacimiento: Date | null
   } | null
   profesionalTratante: {
     id: number
     nombre: string
+    matricula: number | null
   } | null
   obraSocial: {
     id: number

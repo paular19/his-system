@@ -484,12 +484,7 @@ export async function obtenerInternacionesActivas(
   const skip = (pagina - 1) * porPagina
   const fecha = resolverFechaReferencia(fechaReferencia)
   const filtrosAnd: Prisma.IngresoWhereInput[] = [
-    {
-      OR: [
-        { camaId: { not: null } },
-        { ingresoSubtipo: { is: { subtipoAdmisionCodigo: 'PRG' } } },
-      ],
-    },
+    { camaId: { not: null } },
   ]
 
   const where: Prisma.IngresoWhereInput = {
@@ -545,7 +540,9 @@ export async function obtenerInternacionesActivas(
       id: true,
       numeroIngreso: true,
       nombre: true,
+      edad: true,
       fechaIngreso: true,
+      fechaEgreso: true,
       ingresoSubtipo: {
         select: {
           subtipoAdmisionCodigo: true,
@@ -553,6 +550,7 @@ export async function obtenerInternacionesActivas(
         },
       },
       fechaEgresoPrevista: true,
+      numeroAfiliado: true,
       estado: true,
       descripcionPatologia: true,
       obraSocialCoseguroId: true,
@@ -560,10 +558,16 @@ export async function obtenerInternacionesActivas(
         select: { id: true, identificador: true, sector: true, habitacion: true, estado: true },
       },
       paciente: {
-        select: { id: true, nombreCompleto: true, numeroDocumento: true },
+        select: {
+          id: true,
+          nombreCompleto: true,
+          historiaClinica: true,
+          numeroDocumento: true,
+          fechaNacimiento: true,
+        },
       },
       profesionalTratante: {
-        select: { id: true, nombre: true },
+        select: { id: true, nombre: true, matricula: true },
       },
       obraSocial: {
         select: { id: true, nombre: true },
@@ -573,6 +577,35 @@ export async function obtenerInternacionesActivas(
   })
 
   const itemsFiltrados = itemsBase.filter((item) => ingresoActivoParaMapa(item.fechaIngreso, fecha))
+  const coseguroIds = Array.from(new Set(
+    itemsFiltrados
+      .map((item) => item.obraSocialCoseguroId)
+      .filter((id): id is number => id != null)
+  ))
+  const [coseguros, camasBloqueadas] = await Promise.all([
+    coseguroIds.length > 0
+      ? prisma.obraSocial.findMany({
+        where: { id: { in: coseguroIds } },
+        select: { id: true, nombre: true },
+      })
+      : [],
+    itemsFiltrados.length > 0
+      ? prisma.cama.findMany({
+        where: {
+          OR: itemsFiltrados.map((item) => ({
+            observaciones: { startsWith: prefijoBloqueoHabitacionPorIngreso(item.id) },
+          })),
+        },
+        select: { observaciones: true },
+      })
+      : [],
+  ])
+  const coseguroNombrePorId = new Map(coseguros.map((item) => [item.id, item.nombre]))
+  const ingresosConHabitacionBloqueada = new Set(
+    camasBloqueadas
+      .map((cama) => parseObservacionBloqueoHabitacion(cama.observaciones)?.ingresoId)
+      .filter((id): id is number => id != null)
+  )
   const total = itemsFiltrados.length
   const items = itemsFiltrados
     .slice(skip, skip + porPagina)
@@ -584,6 +617,10 @@ export async function obtenerInternacionesActivas(
         esCirugiaProgramada: ingresoSubtipo?.subtipoAdmisionCodigo === 'PRG',
         descripcionPatologia: item.descripcionPatologia ?? null,
         tieneCoseguro: Boolean(item.obraSocialCoseguroId),
+        coseguroNombre: item.obraSocialCoseguroId
+          ? (coseguroNombrePorId.get(item.obraSocialCoseguroId) ?? null)
+          : null,
+        habitacionBloqueada: ingresosConHabitacionBloqueada.has(item.id),
       }
     })
 

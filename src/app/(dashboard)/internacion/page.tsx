@@ -7,11 +7,10 @@ import { SeccionSector } from '@/components/internacion/seccion-sector'
 import { PrintButton } from '@/components/ui/print-button'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   BedDouble,
   Plus,
-  User,
-  Calendar,
   History,
   ClipboardList,
 } from 'lucide-react'
@@ -35,6 +34,31 @@ interface PageProps {
     obraSocialId?: string
     fecha?: string
   }>
+}
+
+function calcularDiasInternacion(fechaIngreso: Date | null, fechaCorte: Date): number {
+  if (!fechaIngreso) return 0
+
+  const ingresoKey = claveDiaArgentina(fechaIngreso)
+  const corteKey = claveDiaArgentina(fechaCorte)
+  if (!ingresoKey || !corteKey) return 0
+
+  const ingresoUtc = Date.parse(`${ingresoKey}T00:00:00Z`)
+  const corteUtc = Date.parse(`${corteKey}T00:00:00Z`)
+  return Math.max(0, Math.floor((corteUtc - ingresoUtc) / 86_400_000))
+}
+
+function calcularEdad(
+  fechaNacimiento: Date | null | undefined,
+  edadRegistrada: number | null,
+  fechaCorte: Date
+): number | null {
+  if (!fechaNacimiento) return edadRegistrada
+
+  let edad = fechaCorte.getFullYear() - fechaNacimiento.getFullYear()
+  const mes = fechaCorte.getMonth() - fechaNacimiento.getMonth()
+  if (mes < 0 || (mes === 0 && fechaCorte.getDate() < fechaNacimiento.getDate())) edad -= 1
+  return edad >= 0 ? edad : edadRegistrada
 }
 
 export default async function InternacionPage({ searchParams }: PageProps) {
@@ -74,7 +98,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
     fechasDisponibles.find((f) => f.key === fechaSeleccionada)?.labelLarga ??
     formatearFechaArgentina(fechaReferencia)
 
-  const [mapa, internaciones, obrasSocialesRaw] = await Promise.all([
+  const [mapa, internaciones, obrasSocialesRaw, cirugiasProgramadasPendientes] = await Promise.all([
     obtenerMapaCamas(fechaReferencia, obraSocialIdFiltro),
     obtenerInternacionesActivas(
       {
@@ -90,6 +114,27 @@ export default async function InternacionPage({ searchParams }: PageProps) {
       select: { id: true, nombre: true },
       orderBy: { nombre: 'asc' },
     }),
+    prisma.ingreso.findMany({
+      where: {
+        tipoIngresoCodigo: 'INT',
+        estado: 'A',
+        camaId: null,
+        ingresoSubtipo: {
+          is: {
+            subtipoAdmisionCodigo: 'PRG',
+            fechaTurno: null,
+          },
+        },
+      },
+      select: {
+        id: true,
+        numeroIngreso: true,
+        nombre: true,
+        fechaIngreso: true,
+        paciente: { select: { nombreCompleto: true } },
+      },
+      orderBy: { fechaIngreso: 'desc' },
+    }),
   ])
   const obrasSociales = filtrarObrasSocialesPrincipales(obrasSocialesRaw)
 
@@ -98,9 +143,20 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   const mostrarSoloOcupadas = Boolean(obraSocialIdFiltro)
   const qNormalizado = normalizarTextoBusquedaFlexible(q)
   const qTokens = obtenerTokensBusquedaFlexible(q)
-  const cirugiasProgramadasPendientes = internaciones.items.filter(
-    (item) => item.esCirugiaProgramada && !item.cama && !item.fechaTurno
-  )
+  const internacionesConDias = internaciones.items.map((item) => ({
+    ...item,
+    diasInternacion: calcularDiasInternacion(item.fechaIngreso, fechaReferencia),
+  }))
+  const resumenPorObraSocial = Array.from(
+    internacionesConDias.reduce((resumen, item) => {
+      const nombre = item.obraSocial?.nombre?.trim() || 'Sin obra social'
+      const actual = resumen.get(nombre) ?? { nombre, internados: 0, dias: 0 }
+      actual.internados += 1
+      actual.dias += item.diasInternacion
+      resumen.set(nombre, actual)
+      return resumen
+    }, new Map<string, { nombre: string; internados: number; dias: number }>()).values()
+  ).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 
   const sectoresFiltradosPorBusqueda = qNormalizado
     ? mapa.sectores
@@ -254,6 +310,21 @@ export default async function InternacionPage({ searchParams }: PageProps) {
 
         {/* Lista de internaciones activas */}
         <div className="ips-print-sheet">
+          <div className="hidden print:flex items-center justify-between border-b border-gray-400 pb-3 mb-3">
+            <div className="flex items-center gap-4">
+              <Image src="/logo-clinica.png" alt="Logo de la clínica" width={104} height={72} className="h-auto w-26" />
+              <div>
+                <h1 className="text-lg font-bold text-gray-900">Clínica Sanar</h1>
+                <p className="text-xs text-gray-700">Email: admisionsanar@gmail.com</p>
+                <p className="text-xs text-gray-700">Tel. 0387 431-8111</p>
+                <p className="text-xs text-gray-700">Av. Sarmiento 566</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-base font-semibold text-gray-900">Censo de internación</p>
+              <p className="text-xs text-gray-700">Fecha: {fechaLabel}</p>
+            </div>
+          </div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-semibold text-gray-900">
               Internaciones activas
@@ -262,7 +333,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
               </span>
             </h2>
             <PrintButton
-              label="Imprimir resultado"
+              label="Imprimir censo"
               className="print:hidden flex items-center gap-2 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2"
             />
           </div>
@@ -284,126 +355,120 @@ export default async function InternacionPage({ searchParams }: PageProps) {
               <p className="text-sm text-gray-500">No hay internaciones activas</p>
             </div>
           ) : (
-            <div className="his-card overflow-x-auto ips-print-table">
-              <table className="w-full text-sm min-w-245">
+            <div className="space-y-4">
+              <div className="his-card overflow-x-auto ips-print-table censo-print-table">
+              <table className="w-full text-sm min-w-300">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Ingreso
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      HC
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Paciente
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Cama
+                      DNI / Edad / Afiliado
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Ingreso
+                      Cobertura
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Habitación
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Médico tratante
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Diagnóstico
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Coseguro
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Obra social
+                      Días / Egreso
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {internaciones.items.map((item) => (
+                  {internacionesConDias.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <Link
                           href={`/dashboard/internacion/${item.id}`}
-                          className="flex items-center gap-2 hover:text-blue-600"
+                          className="font-medium text-blue-700 hover:text-blue-900 print:text-gray-900"
                         >
-                          <User className="h-4 w-4 text-gray-400 shrink-0" />
-                          <div>
-                            <p className="font-medium text-gray-900 leading-tight">
-                              {item.paciente?.nombreCompleto ?? item.nombre ?? '—'}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Ingreso #{item.numeroIngreso}
-                            </p>
-                          </div>
+                          #{item.numeroIngreso}
                         </Link>
-                      </td>
-                      <td className="px-4 py-3">
-                        {item.cama ? (
-                          <div>
-                            <span className="font-medium text-gray-900">
-                              {item.cama.identificador}
-                            </span>
-                            {item.cama.habitacion && (
-                              <p className="text-xs text-gray-500">Hab. {item.cama.habitacion}</p>
-                            )}
-                          </div>
-                        ) : item.esCirugiaProgramada ? (
-                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                            Pendiente de asignacion
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {item.fechaIngreso ? (
-                          <div className="flex items-center gap-1 text-gray-600">
-                            <Calendar className="h-3.5 w-3.5" />
-                            {formatearFechaHoraArgentina(item.fechaIngreso, {
-                              weekday: 'short',
-                              day: '2-digit',
-                              month: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                        {item.esCirugiaProgramada && (
-                          <p className="text-xs text-amber-700 mt-1">
-                            Cirugia:{' '}
-                            {item.fechaTurno
-                              ? formatearFechaHoraArgentina(item.fechaTurno, {
-                                day: '2-digit',
-                                month: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                              : 'Sin fecha asignada'}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {item.profesionalTratante?.nombre ?? (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 max-w-[320px]">
-                        <p className="line-clamp-2 leading-tight">
-                          {item.descripcionPatologia?.trim() || '—'}
+                        <p className="text-xs text-gray-500">
+                          {item.fechaIngreso ? formatearFechaHoraArgentina(item.fechaIngreso) : '—'}
                         </p>
                       </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${item.tieneCoseguro
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-gray-100 text-gray-700'
-                            }`}
-                        >
-                          {item.tieneCoseguro ? 'Si' : 'No'}
-                        </span>
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        {item.paciente?.historiaClinica ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        {item.paciente?.nombreCompleto ?? item.nombre ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-gray-700">
-                        {item.obraSocial?.nombre ?? <span className="text-gray-400">—</span>}
+                        <p>DNI {item.paciente?.numeroDocumento ?? '—'}</p>
+                        <p>Edad {calcularEdad(item.paciente?.fechaNacimiento, item.edad, fechaReferencia) ?? '—'}</p>
+                        <p>Af. {item.numeroAfiliado?.trim() || '—'}</p>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">
+                        <p className="font-medium text-gray-900">{item.obraSocial?.nombre ?? '—'}</p>
+                        <p className="text-xs text-gray-500">Coseguro: {item.coseguroNombre ?? 'No'}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-900">{item.cama?.sector ?? '—'}</p>
+                        <p className="text-xs text-gray-500">
+                          Hab. {item.cama?.habitacion ?? '—'} · Cama {item.cama?.identificador ?? '—'}
+                        </p>
+                        <p className={`text-xs font-medium ${item.habitacionBloqueada ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {item.habitacionBloqueada ? 'Habitación bloqueada' : 'Habitación no bloqueada'}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">
+                        <p>{item.profesionalTratante?.nombre ?? '—'}</p>
+                        <p className="text-xs text-gray-500">MP {item.profesionalTratante?.matricula ?? '—'}</p>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">
+                        <p className="font-medium text-gray-900">{item.diasInternacion} días</p>
+                        <p className="text-xs text-gray-500">
+                          Egreso: {item.fechaEgreso ? formatearFechaHoraArgentina(item.fechaEgreso) : '—'}
+                        </p>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
+
+              <div className="his-card overflow-hidden ips-print-table">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Obra social</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Internados</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Días totales</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {resumenPorObraSocial.map((fila) => (
+                      <tr key={fila.nombre}>
+                        <td className="px-4 py-3 font-medium text-gray-900">{fila.nombre}</td>
+                        <td className="px-4 py-3 text-right text-gray-700">{fila.internados}</td>
+                        <td className="px-4 py-3 text-right text-gray-700">{fila.dias}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td className="px-4 py-3">Total general</td>
+                      <td className="px-4 py-3 text-right">{internacionesConDias.length}</td>
+                      <td className="px-4 py-3 text-right">
+                        {internacionesConDias.reduce((total, item) => total + item.diasInternacion, 0)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           )}
         </div>

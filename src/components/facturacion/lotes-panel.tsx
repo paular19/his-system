@@ -476,7 +476,6 @@ function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
         tipoIngresoCodigo: '',
         rangoDesde: '',
         rangoHasta: '',
-        sedeId: '',
         descripcion: '',
         concepto: '',
     })
@@ -512,7 +511,6 @@ function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
                 tipoIngresoCodigo: form.tipoIngresoCodigo || null,
                 rangoDesde: form.rangoDesde ? Number(form.rangoDesde) : null,
                 rangoHasta: form.rangoHasta ? Number(form.rangoHasta) : null,
-                sedeId: form.sedeId ? Number(form.sedeId) : null,
                 descripcion: form.descripcion || null,
                 concepto: form.concepto || null,
             }
@@ -604,17 +602,6 @@ function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
                                 </option>
                             ))}
                         </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Sede (ID)</label>
-                        <input
-                            type="number"
-                            value={form.sedeId}
-                            onChange={(e) => set('sedeId', e.target.value)}
-                            className="w-full border rounded px-3 py-1.5 text-sm"
-                            placeholder="Opcional"
-                        />
                     </div>
 
                     <div>

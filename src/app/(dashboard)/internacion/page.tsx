@@ -4,11 +4,8 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
 import { obtenerMapaCamas, obtenerInternacionesActivas } from '@/modules/internacion/service'
 import { SeccionSector } from '@/components/internacion/seccion-sector'
-import { PrintButton } from '@/components/ui/print-button'
-import { PdfDownloadButton } from '@/components/ui/pdf-download-button'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
-import Image from 'next/image'
 import {
   BedDouble,
   Plus,
@@ -17,7 +14,7 @@ import {
 } from 'lucide-react'
 import { InternacionFiltros } from '@/components/internacion/internacion-filtros'
 import { InternacionFechaSelector } from '@/components/internacion/internacion-fecha-selector'
-import { InternacionRangoFechas } from '@/components/internacion/internacion-rango-fechas'
+import { CensoInternacion, type CensoInternacionRow } from '@/components/internacion/censo-internacion'
 import type { Metadata } from 'next'
 import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 import {
@@ -125,8 +122,6 @@ export default async function InternacionPage({ searchParams }: PageProps) {
         q: q || undefined,
         obraSocialId: obraSocialIdFiltro,
         fechaReferencia,
-        fechaIngresoDesde: ingresoDesdeFiltro ? fechaDesdeClaveArgentina(ingresoDesdeFiltro) : undefined,
-        fechaIngresoHasta: ingresoHastaFiltro ? fechaDesdeClaveArgentina(ingresoHastaFiltro) : undefined,
       },
       usuario.codigoUsuario
     ),
@@ -173,16 +168,30 @@ export default async function InternacionPage({ searchParams }: PageProps) {
     ...item,
     diasInternacion: calcularDiasInternacion(item.fechaIngreso, fechaReferencia),
   }))
-  const resumenPorObraSocial = Array.from(
-    internacionesConDias.reduce((resumen, item) => {
-      const nombre = item.obraSocial?.nombre?.trim() || 'Sin obra social'
-      const actual = resumen.get(nombre) ?? { nombre, internados: 0, dias: 0 }
-      actual.internados += 1
-      actual.dias += item.diasInternacion
-      resumen.set(nombre, actual)
-      return resumen
-    }, new Map<string, { nombre: string; internados: number; dias: number }>()).values()
-  ).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+  const censoRows: CensoInternacionRow[] = internacionesConDias.map((item) => ({
+    id: item.id,
+    fechaIngresoKey: claveDiaArgentina(item.fechaIngreso) ?? '',
+    ingreso: `#${item.numeroIngreso}`,
+    fechaIngreso: item.fechaIngreso ? formatearFechaHoraArgentina(item.fechaIngreso) : '—',
+    historiaClinica: String(item.paciente?.historiaClinica ?? '—'),
+    paciente: item.paciente?.nombreCompleto ?? item.nombre ?? '—',
+    documentoEdadAfiliado: [
+      `DNI ${item.paciente?.numeroDocumento ?? '—'}`,
+      `Edad ${calcularEdad(item.paciente?.fechaNacimiento, item.edad, fechaReferencia) ?? '—'}`,
+      `Af. ${item.numeroAfiliado?.trim() || '—'}`,
+    ],
+    cobertura: item.obraSocial?.nombre ?? 'Sin obra social',
+    coseguro: item.coseguroNombre ?? 'No',
+    sector: item.cama?.sector ?? '—',
+    habitacionCama: `Hab. ${item.cama?.habitacion ?? '—'} · Cama ${item.cama?.identificador ?? '—'}`,
+    estadoHabitacion: item.habitacionBloqueada ? 'Habitación bloqueada' : 'Habitación no bloqueada',
+    habitacionBloqueada: item.habitacionBloqueada,
+    diagnostico: item.descripcionPatologia?.trim() || '—',
+    medicoTratante: item.profesionalTratante?.nombre ?? '—',
+    matricula: String(item.profesionalTratante?.matricula ?? '—'),
+    diasInternacion: item.diasInternacion,
+    egreso: item.fechaEgreso ? formatearFechaHoraArgentina(item.fechaEgreso) : '—',
+  }))
 
   const sectoresFiltradosPorBusqueda = qNormalizado
     ? mapa.sectores
@@ -259,8 +268,6 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           fechaSeleccionada={fechaSeleccionada}
           q={q}
           obraSocialIdFiltro={obraSocialIdFiltro}
-          ingresoDesde={ingresoDesdeFiltro}
-          ingresoHasta={ingresoHastaFiltro}
         />
         <p className="-mt-3 text-xs text-gray-500 print:hidden">Fecha seleccionada: {fechaLabel}</p>
 
@@ -302,8 +309,6 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           obrasSociales={obrasSociales}
           hayFiltros={hayFiltros}
           fechaReferencia={fechaSeleccionada}
-          ingresoDesde={ingresoDesdeFiltro}
-          ingresoHasta={ingresoHastaFiltro}
         />
 
         {/* Mapa visual por sector */}
@@ -376,197 +381,20 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           </div>
         )}
 
-        {/* Lista de internaciones activas */}
-        <div id="censo-internacion" className="ips-print-sheet">
-          <div className="pdf-export-header hidden print:flex items-center justify-between border-b border-gray-400 pb-3 mb-3">
-            <div className="flex items-center gap-4">
-              <Image
-                src="/logo-clinica.png"
-                alt="Logo de Clínica San Rafael"
-                width={208}
-                height={144}
-                className="h-auto w-26"
-                priority
-              />
-              <div>
-                <h1 className="text-lg font-bold text-gray-900">CLINICA SAN RAFAEL</h1>
-                <p className="text-xs text-gray-700">Email: admisionsanar@gmail.com</p>
-                <p className="text-xs text-gray-700">Tel. 0387 431-8111</p>
-                <p className="text-xs text-gray-700">Av. Sarmiento 566</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-base font-semibold text-gray-900">Censo de internación</p>
-              <p className="text-xs text-gray-700">Fecha: {fechaLabel}</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold text-gray-900">
-              Internaciones activas
-              <span className="ml-2 text-sm font-normal text-gray-500">
-                ({internaciones.paginacion.total})
-              </span>
-            </h2>
-            <div className="pdf-export-actions print:hidden flex items-center gap-2">
-              <PrintButton
-                label="Imprimir censo"
-                className="flex items-center gap-2 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2"
-              />
-              <PdfDownloadButton
-                targetId="censo-internacion"
-                filename={`censo-internacion-${fechaSeleccionada}.pdf`}
-                className="flex items-center gap-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70 text-white text-sm font-medium px-3 py-2"
-              />
-            </div>
-          </div>
-
-          <InternacionRangoFechas
-            fechaDesde={ingresoDesdeFiltro}
-            fechaHasta={ingresoHastaFiltro}
-          />
-
-          {hayFiltros && (
-            <p className="pdf-export-filters hidden print:block text-xs text-gray-700 mb-2">
-              Filtros aplicados:
-              {` Fecha: ${fechaLabel}.`}
-              {q ? ` Persona: ${q}.` : ''}
-              {obraSocialIdFiltro
-                ? ` Obra social: ${obrasSociales.find((o) => o.id === obraSocialIdFiltro)?.nombre ?? 'N/A'}.`
-                : ''}
-              {ingresoDesdeFiltro ? ` Ingreso desde: ${formatearFechaArgentina(fechaDesdeClaveArgentina(ingresoDesdeFiltro))}.` : ''}
-              {ingresoHastaFiltro ? ` Ingreso hasta: ${formatearFechaArgentina(fechaDesdeClaveArgentina(ingresoHastaFiltro))}.` : ''}
-            </p>
-          )}
-
-          {internaciones.items.length === 0 ? (
-            <div className="his-card p-8 text-center">
-              <BedDouble className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-              <p className="text-sm text-gray-500">No hay internaciones activas</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="his-card overflow-hidden ips-print-table censo-print-table">
-              <table className="w-full min-w-7xl table-fixed text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Ingreso
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      HC
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Paciente
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      DNI / Edad / Afiliado
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Cobertura
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Habitación
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Diagnóstico
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Médico tratante
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Días / Egreso
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {internacionesConDias.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/dashboard/internacion/${item.id}`}
-                          className="font-medium text-blue-700 hover:text-blue-900 print:text-gray-900"
-                        >
-                          #{item.numeroIngreso}
-                        </Link>
-                        <p className="text-xs text-gray-500">
-                          {item.fechaIngreso ? formatearFechaHoraArgentina(item.fechaIngreso) : '—'}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">
-                        {item.paciente?.historiaClinica ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">
-                        {item.paciente?.nombreCompleto ?? item.nombre ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        <p>DNI {item.paciente?.numeroDocumento ?? '—'}</p>
-                        <p>Edad {calcularEdad(item.paciente?.fechaNacimiento, item.edad, fechaReferencia) ?? '—'}</p>
-                        <p>Af. {item.numeroAfiliado?.trim() || '—'}</p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        <p className="font-medium text-gray-900">{item.obraSocial?.nombre ?? '—'}</p>
-                        <p className="text-xs text-gray-500">Coseguro: {item.coseguroNombre ?? 'No'}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{item.cama?.sector ?? '—'}</p>
-                        <p className="text-xs text-gray-500">
-                          Hab. {item.cama?.habitacion ?? '—'} · Cama {item.cama?.identificador ?? '—'}
-                        </p>
-                        <p className={`text-xs font-medium ${item.habitacionBloqueada ? 'text-amber-700' : 'text-emerald-700'}`}>
-                          {item.habitacionBloqueada ? 'Habitación bloqueada' : 'Habitación no bloqueada'}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {item.descripcionPatologia?.trim() || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        <p>{item.profesionalTratante?.nombre ?? '—'}</p>
-                        <p className="text-xs text-gray-500">MP {item.profesionalTratante?.matricula ?? '—'}</p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        <p className="font-medium text-gray-900">{item.diasInternacion} días</p>
-                        <p className="text-xs text-gray-500">
-                          Egreso: {item.fechaEgreso ? formatearFechaHoraArgentina(item.fechaEgreso) : '—'}
-                        </p>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-
-              <div className="his-card overflow-hidden ips-print-table">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Obra social</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Internados</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Días totales</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {resumenPorObraSocial.map((fila) => (
-                      <tr key={fila.nombre}>
-                        <td className="px-4 py-3 font-medium text-gray-900">{fila.nombre}</td>
-                        <td className="px-4 py-3 text-right text-gray-700">{fila.internados}</td>
-                        <td className="px-4 py-3 text-right text-gray-700">{fila.dias}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td className="px-4 py-3">Total general</td>
-                      <td className="px-4 py-3 text-right">{internacionesConDias.length}</td>
-                      <td className="px-4 py-3 text-right">
-                        {internacionesConDias.reduce((total, item) => total + item.diasInternacion, 0)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+        <CensoInternacion
+          rows={censoRows}
+          fechaLabel={fechaLabel}
+          fechaSeleccionada={fechaSeleccionada}
+          ingresoDesdeInicial={ingresoDesdeFiltro}
+          ingresoHastaInicial={ingresoHastaFiltro}
+          filtrosBase={[
+            `Fecha: ${fechaLabel}`,
+            q ? `Persona: ${q}` : '',
+            obraSocialIdFiltro
+              ? `Obra social: ${obrasSociales.find((obra) => obra.id === obraSocialIdFiltro)?.nombre ?? 'N/A'}`
+              : '',
+          ].filter(Boolean)}
+        />
       </div>
     </>
   )

@@ -14,8 +14,6 @@ interface InternacionFiltrosProps {
     obrasSociales: ObraSocialOption[]
     hayFiltros: boolean
     fechaReferencia: string
-    ingresoDesde: string
-    ingresoHasta: string
 }
 
 export function InternacionFiltros({
@@ -24,8 +22,6 @@ export function InternacionFiltros({
     obrasSociales,
     hayFiltros,
     fechaReferencia,
-    ingresoDesde,
-    ingresoHasta,
 }: InternacionFiltrosProps) {
     const router = useRouter()
     const pathname = usePathname()
@@ -38,11 +34,12 @@ export function InternacionFiltros({
 
     const aplicarFiltros = () => {
         const params = new URLSearchParams()
+        const actuales = new URLSearchParams(window.location.search)
         if (fechaReferencia) params.set('fecha', fechaReferencia)
         if (busqueda.trim()) params.set('q', busqueda.trim())
         if (obraSocialId) params.set('obraSocialId', obraSocialId)
-        if (ingresoDesde) params.set('ingresoDesde', ingresoDesde)
-        if (ingresoHasta) params.set('ingresoHasta', ingresoHasta)
+        if (actuales.get('ingresoDesde')) params.set('ingresoDesde', actuales.get('ingresoDesde')!)
+        if (actuales.get('ingresoHasta')) params.set('ingresoHasta', actuales.get('ingresoHasta')!)
         const qs = params.toString()
         startTransition(() => {
             router.push(qs ? `${pathname}?${qs}` : pathname)
@@ -54,9 +51,10 @@ export function InternacionFiltros({
         setObraSocialId('')
         startTransition(() => {
             const params = new URLSearchParams()
+            const actuales = new URLSearchParams(window.location.search)
             if (fechaReferencia) params.set('fecha', fechaReferencia)
-            if (ingresoDesde) params.set('ingresoDesde', ingresoDesde)
-            if (ingresoHasta) params.set('ingresoHasta', ingresoHasta)
+            if (actuales.get('ingresoDesde')) params.set('ingresoDesde', actuales.get('ingresoDesde')!)
+            if (actuales.get('ingresoHasta')) params.set('ingresoHasta', actuales.get('ingresoHasta')!)
             const query = params.toString()
             router.push(query ? `${pathname}?${query}` : pathname)
         })

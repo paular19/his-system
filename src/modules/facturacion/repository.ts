@@ -35,6 +35,7 @@ import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './difer
 import { crearOrdenAmbulatorio } from '@/modules/orden/service'
 import { claveDiaArgentina } from '@/lib/utils/argentina-date'
 import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
+import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 const NOMBRE_MATRICULA_9110_DEFAULT = 'CLINICA SAN RAFAEL'
@@ -51,6 +52,26 @@ const CODIGOS_HE_CON_OPCION_HA = new Set(['420303'])
 
 function normalizarCodigoPractica(codigoPractica: string): string {
     return codigoPractica.trim().slice(0, 8).toUpperCase()
+}
+
+function resolverImporteTotalTrasEdicion(params: {
+    cantidadAnterior: number
+    importeAnterior: number
+    cantidadNueva: number
+    importeEnviado: number
+}): number {
+    const cambioCantidad = Math.abs(params.cantidadAnterior - params.cantidadNueva) > 0.0001
+    const conservaImporteAnterior = Math.abs(params.importeAnterior - params.importeEnviado) < 0.005
+
+    if (!cambioCantidad || !conservaImporteAnterior) {
+        return params.importeEnviado
+    }
+
+    return recalcularImportePorCambioCantidad(
+        params.cantidadAnterior,
+        params.importeAnterior,
+        params.cantidadNueva
+    )
 }
 
 function normalizarTextoComparacion(value: string | null | undefined): string {
@@ -3361,6 +3382,8 @@ export async function actualizarPrestacionFacturacion(
             where: { id: data.practicaId },
             select: {
                 convenioId: true,
+                cantidad: true,
+                importeTotal: true,
                 puestoNumero: true,
                 ordenNumero: true,
                 ordenItem: true,
@@ -3373,6 +3396,12 @@ export async function actualizarPrestacionFacturacion(
             data.descripcionPractica,
             actual.convenioId
         )
+        const importeTotalFinal = resolverImporteTotalTrasEdicion({
+            cantidadAnterior: Number(actual.cantidad),
+            importeAnterior: Number(actual.importeTotal ?? 0),
+            cantidadNueva: data.cantidad,
+            importeEnviado: data.importeTotal,
+        })
 
         let ingresoIdParaRecalculo: number | null = null
 
@@ -3460,7 +3489,7 @@ export async function actualizarPrestacionFacturacion(
                 codigoPractica: resolved.codigoPractica.trim(),
                 cantidad: data.cantidad,
                 numeroAutorizacion: data.numeroAutorizacion ?? null,
-                importeTotal: data.importeTotal,
+                importeTotal: importeTotalFinal,
                 matriculaEspecialista: matriculaEspecialistaFinal,
                 matriculaAnestesista: data.matriculaAnestesista ?? null,
             }
@@ -3573,7 +3602,7 @@ export async function actualizarPrestacionFacturacion(
                             codigoPractica: resolved.codigoPractica.trim(),
                             cantidad: data.cantidad,
                             numeroAutorizacion: numeroAutorizacionOrden,
-                            importeTotal: data.importeTotal,
+                            importeTotal: importeTotalFinal,
                         }
                         actualizarImportesOrden = true
 
@@ -3649,6 +3678,8 @@ export async function actualizarPrestacionFacturacion(
         select: {
             convenioId: true,
             numeroAutorizacion: true,
+            cantidad: true,
+            importeTotal: true,
         },
     })
     if (!actualItem) throw new Error('Ítem de orden no encontrado')
@@ -3658,6 +3689,12 @@ export async function actualizarPrestacionFacturacion(
         data.descripcionPractica,
         actualItem.convenioId
     )
+    const importeTotalFinal = resolverImporteTotalTrasEdicion({
+        cantidadAnterior: Number(actualItem.cantidad),
+        importeAnterior: Number(actualItem.importeTotal ?? 0),
+        cantidadNueva: data.cantidad,
+        importeEnviado: data.importeTotal,
+    })
 
     const aplicarOrdenCompleta = Boolean(data.aplicarOrdenCompleta)
     let ingresoIdParaRecalculo: number | null = null
@@ -3718,7 +3755,7 @@ export async function actualizarPrestacionFacturacion(
                     codigoPractica: resolved.codigoPractica.trim(),
                     cantidad: data.cantidad,
                     numeroAutorizacion: data.numeroAutorizacion ?? null,
-                    importeTotal: data.importeTotal,
+                    importeTotal: importeTotalFinal,
                     matriculaEspecialista: matriculaEspecialistaFinal,
                     matriculaAnestesista: data.matriculaAnestesista ?? null,
                 },
@@ -3756,7 +3793,7 @@ export async function actualizarPrestacionFacturacion(
                 codigoPractica: resolved.codigoPractica.trim(),
                 cantidad: data.cantidad,
                 numeroAutorizacion: data.numeroAutorizacion ?? null,
-                importeTotal: data.importeTotal,
+                importeTotal: importeTotalFinal,
             }
             actualizarImportesOrden = true
 

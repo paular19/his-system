@@ -6,6 +6,7 @@ import { ChevronRight } from 'lucide-react'
 import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItemDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
 import { LoteResumenPrint } from './lote-resumen-print'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
+import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
 
 const ESTADO_LABEL: Record<string, { label: string; cls: string }> = {
     PEN: { label: 'Pendiente', cls: 'bg-yellow-100 text-yellow-800' },
@@ -174,6 +175,29 @@ function buildOrdenItemEditState(item: OrdenAutorizadaLote['items'][number]): Or
         importeTotal: String(item.importeTotal ?? 0),
         modulo: item.modulo ?? '',
         matriculaEjecutante: item.efectorMatricula ? String(item.efectorMatricula) : '',
+    }
+}
+
+function actualizarCantidadOrdenItem(
+    draft: OrdenItemEditState,
+    cantidadNuevaRaw: string
+): OrdenItemEditState {
+    const cantidadAnterior = Number(draft.cantidad)
+    const cantidadNueva = Number(cantidadNuevaRaw)
+    const importeAnterior = Number(draft.importeTotal)
+
+    if (cantidadNuevaRaw === '' || !Number.isFinite(cantidadNueva) || cantidadNueva <= 0) {
+        return { ...draft, cantidad: cantidadNuevaRaw }
+    }
+
+    return {
+        ...draft,
+        cantidad: cantidadNuevaRaw,
+        importeTotal: String(recalcularImportePorCambioCantidad(
+            cantidadAnterior,
+            importeAnterior,
+            cantidadNueva
+        )),
     }
 }
 
@@ -1082,7 +1106,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                                     <input value={draft.descripcion} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, descripcion: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
                                                                                 </label>
                                                                                 <label>Cantidad
-                                                                                    <input type="number" min={0.01} step={0.01} value={draft.cantidad} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, cantidad: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
+                                                                                    <input type="number" min={0.01} step={0.01} value={draft.cantidad} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: actualizarCantidadOrdenItem(draft, e.target.value) }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
                                                                                 </label>
                                                                                 <label>Fecha de práctica
                                                                                     <input type="datetime-local" value={draft.fecha} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, fecha: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />

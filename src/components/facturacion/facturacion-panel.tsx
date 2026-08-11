@@ -21,6 +21,7 @@ import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/pra
 import { fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 import { normalizarTextoBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
+import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
 
 type AutorizacionVinculadaExtendida = {
     ordenPuestoNumero: number
@@ -972,6 +973,26 @@ function buildEditState(p: PrestacionFacturableItem): EditState {
                 : (tienePatologia ? String(MATRICULA_PATOLOGIA_DEFAULT) : ''))
             : '',
         matriculaAnestesista: p.matriculaAnestesista ? String(p.matriculaAnestesista) : '',
+    }
+}
+
+function actualizarCantidadPrestacion(draft: EditState, cantidadNuevaRaw: string): EditState {
+    const cantidadAnterior = Number(draft.cantidad)
+    const cantidadNueva = Number(cantidadNuevaRaw)
+    const importeAnterior = Number(draft.importeTotal)
+
+    if (cantidadNuevaRaw === '' || !Number.isFinite(cantidadNueva) || cantidadNueva <= 0) {
+        return { ...draft, cantidad: cantidadNuevaRaw }
+    }
+
+    return {
+        ...draft,
+        cantidad: cantidadNuevaRaw,
+        importeTotal: String(recalcularImportePorCambioCantidad(
+            cantidadAnterior,
+            importeAnterior,
+            cantidadNueva
+        )),
     }
 }
 
@@ -3868,7 +3889,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 {filaEnEdicion ? (
                                                                     <input
                                                                         value={draft.cantidad}
-                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))}
+                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: actualizarCantidadPrestacion(draft, e.target.value) }))}
                                                                         className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
                                                                     />
                                                                 ) : (
@@ -3995,7 +4016,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                         Cantidad
                                                                                         <input
                                                                                             value={draft.cantidad}
-                                                                                            onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))}
+                                                                                            onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: actualizarCantidadPrestacion(draft, e.target.value) }))}
                                                                                             disabled={!filaEnEdicion}
                                                                                             className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
                                                                                         />
@@ -4397,7 +4418,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                             {filaEnEdicion ? (
                                                                                 <input
                                                                                     value={draft.cantidad}
-                                                                                    onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))}
+                                                                                    onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: actualizarCantidadPrestacion(draft, e.target.value) }))}
                                                                                     className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
                                                                                 />
                                                                             ) : (
@@ -4502,7 +4523,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                             <div className="grid grid-cols-2 gap-2">
                                                                                                 <label className="text-[11px] text-gray-600">
                                                                                                     Cantidad
-                                                                                                    <input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, cantidad: e.target.value } }))} disabled={!filaEnEdicion} className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
+                                                                                                    <input value={draft.cantidad} onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: actualizarCantidadPrestacion(draft, e.target.value) }))} disabled={!filaEnEdicion} className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500" />
                                                                                                 </label>
                                                                                                 <label className="text-[11px] text-gray-600">
                                                                                                     Importe total

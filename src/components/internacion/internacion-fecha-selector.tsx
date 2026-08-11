@@ -14,6 +14,8 @@ interface InternacionFechaSelectorProps {
     fechaSeleccionada: string
     q: string
     obraSocialIdFiltro: number | undefined
+    ingresoDesde: string
+    ingresoHasta: string
 }
 
 export function InternacionFechaSelector({
@@ -21,6 +23,8 @@ export function InternacionFechaSelector({
     fechaSeleccionada,
     q,
     obraSocialIdFiltro,
+    ingresoDesde,
+    ingresoHasta,
 }: InternacionFechaSelectorProps) {
     const router = useRouter()
     const [isPending, startTransition] = useTransition()
@@ -33,6 +37,8 @@ export function InternacionFechaSelector({
         query.set('fecha', fecha)
         if (q) query.set('q', q)
         if (obraSocialIdFiltro) query.set('obraSocialId', String(obraSocialIdFiltro))
+        if (ingresoDesde) query.set('ingresoDesde', ingresoDesde)
+        if (ingresoHasta) query.set('ingresoHasta', ingresoHasta)
 
         setFechaCambiando(fecha)
         startTransition(() => {

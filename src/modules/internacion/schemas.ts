@@ -51,6 +51,8 @@ export const BusquedaInternacionSchema = z.object({
   obraSocialId: z.coerce.number().int().positive().optional(),
   sector: z.enum(['TERAPIA_INTENSIVA', 'PISO_2', 'PISO_3']).optional(),
   fechaReferencia: z.coerce.date().optional(),
+  fechaIngresoDesde: z.coerce.date().optional(),
+  fechaIngresoHasta: z.coerce.date().optional(),
 })
 
 export type BusquedaInternacionInput = z.infer<typeof BusquedaInternacionSchema>

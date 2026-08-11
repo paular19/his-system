@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { obtenerMapaCamas, obtenerInternacionesActivas } from '@/modules/internacion/service'
 import { SeccionSector } from '@/components/internacion/seccion-sector'
 import { PrintButton } from '@/components/ui/print-button'
+import { PdfDownloadButton } from '@/components/ui/pdf-download-button'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react'
 import { InternacionFiltros } from '@/components/internacion/internacion-filtros'
 import { InternacionFechaSelector } from '@/components/internacion/internacion-fecha-selector'
+import { InternacionRangoFechas } from '@/components/internacion/internacion-rango-fechas'
 import type { Metadata } from 'next'
 import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 import {
@@ -33,6 +35,8 @@ interface PageProps {
     q?: string
     obraSocialId?: string
     fecha?: string
+    ingresoDesde?: string
+    ingresoHasta?: string
   }>
 }
 
@@ -69,6 +73,16 @@ export default async function InternacionPage({ searchParams }: PageProps) {
   const q = params.q?.trim() ?? ''
   const obraSocialId = params.obraSocialId ? Number(params.obraSocialId) : undefined
   const obraSocialIdFiltro = obraSocialId && Number.isFinite(obraSocialId) ? obraSocialId : undefined
+  const fechaKeyValida = /^\d{4}-\d{2}-\d{2}$/
+  const ingresoDesde = params.ingresoDesde && fechaKeyValida.test(params.ingresoDesde)
+    ? params.ingresoDesde
+    : ''
+  const ingresoHasta = params.ingresoHasta && fechaKeyValida.test(params.ingresoHasta)
+    ? params.ingresoHasta
+    : ''
+  const rangoIngresoValido = !ingresoDesde || !ingresoHasta || ingresoDesde <= ingresoHasta
+  const ingresoDesdeFiltro = rangoIngresoValido ? ingresoDesde : ''
+  const ingresoHastaFiltro = rangoIngresoValido ? ingresoHasta : ''
   const fechaHoyKey = claveDiaArgentina(new Date()) ?? new Date().toISOString().slice(0, 10)
   const fechasDisponibles = Array.from({ length: 5 }, (_, idx) => {
     const fecha = new Date(Date.now() + idx * 86_400_000)
@@ -111,6 +125,8 @@ export default async function InternacionPage({ searchParams }: PageProps) {
         q: q || undefined,
         obraSocialId: obraSocialIdFiltro,
         fechaReferencia,
+        fechaIngresoDesde: ingresoDesdeFiltro ? fechaDesdeClaveArgentina(ingresoDesdeFiltro) : undefined,
+        fechaIngresoHasta: ingresoHastaFiltro ? fechaDesdeClaveArgentina(ingresoHastaFiltro) : undefined,
       },
       usuario.codigoUsuario
     ),
@@ -149,7 +165,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
     puedeCrear ||
     tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
     tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
-  const hayFiltros = Boolean(q || obraSocialIdFiltro)
+  const hayFiltros = Boolean(q || obraSocialIdFiltro || ingresoDesdeFiltro || ingresoHastaFiltro)
   const mostrarSoloOcupadas = Boolean(obraSocialIdFiltro)
   const qNormalizado = normalizarTextoBusquedaFlexible(q)
   const qTokens = obtenerTokensBusquedaFlexible(q)
@@ -243,6 +259,8 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           fechaSeleccionada={fechaSeleccionada}
           q={q}
           obraSocialIdFiltro={obraSocialIdFiltro}
+          ingresoDesde={ingresoDesdeFiltro}
+          ingresoHasta={ingresoHastaFiltro}
         />
         <p className="-mt-3 text-xs text-gray-500 print:hidden">Fecha seleccionada: {fechaLabel}</p>
 
@@ -284,6 +302,8 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           obrasSociales={obrasSociales}
           hayFiltros={hayFiltros}
           fechaReferencia={fechaSeleccionada}
+          ingresoDesde={ingresoDesdeFiltro}
+          ingresoHasta={ingresoHastaFiltro}
         />
 
         {/* Mapa visual por sector */}
@@ -357,8 +377,8 @@ export default async function InternacionPage({ searchParams }: PageProps) {
         )}
 
         {/* Lista de internaciones activas */}
-        <div className="ips-print-sheet">
-          <div className="hidden print:flex items-center justify-between border-b border-gray-400 pb-3 mb-3">
+        <div id="censo-internacion" className="ips-print-sheet">
+          <div className="pdf-export-header hidden print:flex items-center justify-between border-b border-gray-400 pb-3 mb-3">
             <div className="flex items-center gap-4">
               <Image
                 src="/logo-clinica.png"
@@ -387,20 +407,34 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                 ({internaciones.paginacion.total})
               </span>
             </h2>
-            <PrintButton
-              label="Imprimir censo"
-              className="print:hidden flex items-center gap-2 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2"
-            />
+            <div className="pdf-export-actions print:hidden flex items-center gap-2">
+              <PrintButton
+                label="Imprimir censo"
+                className="flex items-center gap-2 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2"
+              />
+              <PdfDownloadButton
+                targetId="censo-internacion"
+                filename={`censo-internacion-${fechaSeleccionada}.pdf`}
+                className="flex items-center gap-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70 text-white text-sm font-medium px-3 py-2"
+              />
+            </div>
           </div>
 
+          <InternacionRangoFechas
+            fechaDesde={ingresoDesdeFiltro}
+            fechaHasta={ingresoHastaFiltro}
+          />
+
           {hayFiltros && (
-            <p className="hidden print:block text-xs text-gray-700 mb-2">
+            <p className="pdf-export-filters hidden print:block text-xs text-gray-700 mb-2">
               Filtros aplicados:
               {` Fecha: ${fechaLabel}.`}
               {q ? ` Persona: ${q}.` : ''}
               {obraSocialIdFiltro
                 ? ` Obra social: ${obrasSociales.find((o) => o.id === obraSocialIdFiltro)?.nombre ?? 'N/A'}.`
                 : ''}
+              {ingresoDesdeFiltro ? ` Ingreso desde: ${formatearFechaArgentina(fechaDesdeClaveArgentina(ingresoDesdeFiltro))}.` : ''}
+              {ingresoHastaFiltro ? ` Ingreso hasta: ${formatearFechaArgentina(fechaDesdeClaveArgentina(ingresoHastaFiltro))}.` : ''}
             </p>
           )}
 
@@ -412,7 +446,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           ) : (
             <div className="space-y-4">
               <div className="his-card overflow-hidden ips-print-table censo-print-table">
-              <table className="w-full table-fixed text-sm">
+              <table className="w-full min-w-7xl table-fixed text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -432,6 +466,9 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Habitación
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Diagnóstico
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Médico tratante
@@ -478,6 +515,9 @@ export default async function InternacionPage({ searchParams }: PageProps) {
                         <p className={`text-xs font-medium ${item.habitacionBloqueada ? 'text-amber-700' : 'text-emerald-700'}`}>
                           {item.habitacionBloqueada ? 'Habitación bloqueada' : 'Habitación no bloqueada'}
                         </p>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {item.descripcionPatologia?.trim() || '—'}
                       </td>
                       <td className="px-4 py-3 text-gray-700">
                         <p>{item.profesionalTratante?.nombre ?? '—'}</p>

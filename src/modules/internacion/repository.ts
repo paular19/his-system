@@ -558,7 +558,16 @@ export async function actualizarEstadoCama(
 export async function obtenerInternacionesActivas(
   params: BusquedaInternacionInput
 ): Promise<ResultadoPaginado<InternacionListItem>> {
-  const { pagina, porPagina, q, obraSocialId, sector, fechaReferencia } = params
+  const {
+    pagina,
+    porPagina,
+    q,
+    obraSocialId,
+    sector,
+    fechaReferencia,
+    fechaIngresoDesde,
+    fechaIngresoHasta,
+  } = params
   const skip = (pagina - 1) * porPagina
   const fecha = resolverFechaReferencia(fechaReferencia)
   const filtrosAnd: Prisma.IngresoWhereInput[] = [
@@ -577,6 +586,21 @@ export async function obtenerInternacionesActivas(
 
   if (obraSocialId) {
     where.obraSocialId = obraSocialId
+  }
+
+  if (fechaIngresoDesde || fechaIngresoHasta) {
+    const fechaIngreso: Prisma.DateTimeNullableFilter = {}
+
+    if (fechaIngresoDesde) {
+      fechaIngreso.gte = new Date(`${claveDiaArgentina(fechaIngresoDesde)}T00:00:00-03:00`)
+    }
+
+    if (fechaIngresoHasta) {
+      const finInclusivo = new Date(`${claveDiaArgentina(fechaIngresoHasta)}T00:00:00-03:00`)
+      fechaIngreso.lt = new Date(finInclusivo.getTime() + 86_400_000)
+    }
+
+    where.fechaIngreso = fechaIngreso
   }
 
   if (q) {

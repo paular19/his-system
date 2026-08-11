@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { BedDouble, CalendarRange, FileDown, Loader2, X } from 'lucide-react'
+import { BedDouble, CalendarRange, FileDown, X } from 'lucide-react'
 import { useDeferredValue, useState } from 'react'
 import { PrintButton } from '@/components/ui/print-button'
 
@@ -34,6 +34,7 @@ interface CensoInternacionProps {
   ingresoDesdeInicial: string
   ingresoHastaInicial: string
   filtrosBase: string[]
+  pdfQueryBase: string
 }
 
 function formatearFechaInput(value: string): string {
@@ -49,6 +50,7 @@ export function CensoInternacion({
   ingresoDesdeInicial,
   ingresoHastaInicial,
   filtrosBase,
+  pdfQueryBase,
 }: CensoInternacionProps) {
   const [desde, setDesde] = useState(ingresoDesdeInicial)
   const [hasta, setHasta] = useState(ingresoHastaInicial)
@@ -56,7 +58,6 @@ export function CensoInternacion({
     desde: ingresoDesdeInicial,
     hasta: ingresoHastaInicial,
   })
-  const [isGenerating, setIsGenerating] = useState(false)
   const rangoDiferido = useDeferredValue(rangoAplicado)
   const rangoInvalido = Boolean(desde && hasta && desde > hasta)
 
@@ -82,6 +83,12 @@ export function CensoInternacion({
     rangoAplicado.hasta ? `Ingreso hasta: ${formatearFechaInput(rangoAplicado.hasta)}` : '',
   ].filter(Boolean)
   const filtros = [...filtrosBase, ...filtrosRango]
+  const pdfParams = new URLSearchParams(pdfQueryBase)
+  if (rangoAplicado.desde) pdfParams.set('ingresoDesde', rangoAplicado.desde)
+  else pdfParams.delete('ingresoDesde')
+  if (rangoAplicado.hasta) pdfParams.set('ingresoHasta', rangoAplicado.hasta)
+  else pdfParams.delete('ingresoHasta')
+  const pdfHref = `/api/internacion/censo-pdf?${pdfParams.toString()}`
 
   function actualizarUrl(nuevoDesde: string, nuevoHasta: string) {
     const url = new URL(window.location.href)
@@ -103,81 +110,6 @@ export function CensoInternacion({
     setHasta('')
     setRangoAplicado({ desde: '', hasta: '' })
     actualizarUrl('', '')
-  }
-
-  async function generarPdf() {
-    if (isGenerating) return
-    setIsGenerating(true)
-
-    try {
-      const [{ jsPDF }, { autoTable }] = await Promise.all([
-        import('jspdf'),
-        import('jspdf-autotable'),
-      ])
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(14)
-      doc.text('CLINICA SAN RAFAEL', 10, 12)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8)
-      doc.text('Censo de internacion', 10, 17)
-      doc.text(`Fecha: ${fechaLabel}`, 10, 21)
-      if (filtros.length > 0) doc.text(`Filtros: ${filtros.join(' | ')}`, 10, 25, { maxWidth: 275 })
-
-      autoTable(doc, {
-        startY: filtros.length > 0 ? 29 : 25,
-        head: [['Ingreso', 'HC', 'Paciente', 'DNI / Edad / Af.', 'Cobertura', 'Habitacion', 'Diagnostico', 'Tratante', 'Dias / Egreso']],
-        body: rowsFiltradas.map((row) => [
-          `${row.ingreso}\n${row.fechaIngreso}`,
-          row.historiaClinica,
-          row.paciente,
-          row.documentoEdadAfiliado.join('\n'),
-          `${row.cobertura}\nCoseguro: ${row.coseguro}`,
-          `${row.sector}\n${row.habitacionCama}\n${row.estadoHabitacion}`,
-          row.diagnostico,
-          `${row.medicoTratante}\nMP ${row.matricula}`,
-          `${row.diasInternacion} dias\nEgreso: ${row.egreso}`,
-        ]),
-        theme: 'grid',
-        styles: { fontSize: 6.5, cellPadding: 1.4, overflow: 'linebreak', valign: 'top' },
-        headStyles: { fillColor: [31, 41, 55], textColor: 255, fontStyle: 'bold' },
-        columnStyles: {
-          0: { cellWidth: 22 },
-          1: { cellWidth: 12 },
-          2: { cellWidth: 34 },
-          3: { cellWidth: 28 },
-          4: { cellWidth: 34 },
-          5: { cellWidth: 35 },
-          6: { cellWidth: 38 },
-          7: { cellWidth: 32 },
-          8: { cellWidth: 24 },
-        },
-        margin: { left: 7, right: 7 },
-      })
-
-      const finalY = (doc as typeof doc & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
-      autoTable(doc, {
-        startY: finalY + 5,
-        head: [['Obra social', 'Internados', 'Dias totales']],
-        body: [
-          ...resumen.map((fila) => [fila.nombre, String(fila.internados), String(fila.dias)]),
-          ['Total general', String(rowsFiltradas.length), String(totalDias)],
-        ],
-        theme: 'grid',
-        styles: { fontSize: 7, cellPadding: 1.5 },
-        headStyles: { fillColor: [31, 41, 55], textColor: 255 },
-        columnStyles: { 0: { cellWidth: 90 }, 1: { cellWidth: 25, halign: 'right' }, 2: { cellWidth: 25, halign: 'right' } },
-        margin: { left: 7 },
-      })
-
-      doc.save(`censo-internacion-${fechaSeleccionada}.pdf`)
-    } catch (error) {
-      console.error('No se pudo generar el PDF', error)
-      window.alert('No se pudo generar el PDF. Intente nuevamente.')
-    } finally {
-      setIsGenerating(false)
-    }
   }
 
   return (
@@ -205,10 +137,10 @@ export function CensoInternacion({
         </h2>
         <div className="print:hidden flex items-center gap-2">
           <PrintButton label="Imprimir censo" className="flex items-center gap-2 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2" />
-          <button type="button" onClick={generarPdf} disabled={isGenerating} className="flex items-center gap-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70 text-white text-sm font-medium px-3 py-2">
-            {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-            {isGenerating ? 'Generando PDF...' : 'Generar PDF'}
-          </button>
+          <a href={pdfHref} className="flex items-center gap-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-2">
+            <FileDown className="h-4 w-4" />
+            Generar PDF
+          </a>
         </div>
       </div>
 

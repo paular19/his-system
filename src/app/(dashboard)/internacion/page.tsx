@@ -192,6 +192,9 @@ export default async function InternacionPage({ searchParams }: PageProps) {
     diasInternacion: item.diasInternacion,
     egreso: item.fechaEgreso ? formatearFechaHoraArgentina(item.fechaEgreso) : '—',
   }))
+  const pdfQuery = new URLSearchParams({ fecha: fechaSeleccionada })
+  if (q) pdfQuery.set('q', q)
+  if (obraSocialIdFiltro) pdfQuery.set('obraSocialId', String(obraSocialIdFiltro))
 
   const sectoresFiltradosPorBusqueda = qNormalizado
     ? mapa.sectores
@@ -387,6 +390,7 @@ export default async function InternacionPage({ searchParams }: PageProps) {
           fechaSeleccionada={fechaSeleccionada}
           ingresoDesdeInicial={ingresoDesdeFiltro}
           ingresoHastaInicial={ingresoHastaFiltro}
+          pdfQueryBase={pdfQuery.toString()}
           filtrosBase={[
             `Fecha: ${fechaLabel}`,
             q ? `Persona: ${q}` : '',

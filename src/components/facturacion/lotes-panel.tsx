@@ -342,9 +342,10 @@ export function LotesPanel() {
                                                 {formatMonto(lote.importeTotal)}
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${est.cls}`}>
-                                                    {est.label}
-                                                </span>
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${est.cls}`}>{est.label}</span>
+                                                    {lote.promediAplicado && <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">PROMEDI aplicado</span>}
+                                                </div>
                                             </td>
                                         </tr>
                                     )

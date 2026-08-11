@@ -587,7 +587,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const esPendiente = lote.estado === 'PEN'
     const esIPSTxt = lote.origen === 'IPS_TXT'
     const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)
-    const puedeAplicarPromedi = esPendiente && (esIPSTxt || (lote.tipo === 'PRACTICAS' && esOsecac))
+    const puedeAplicarPromedi = esPendiente && !lote.promediAplicado && (esIPSTxt || (lote.tipo === 'PRACTICAS' && esOsecac))
     const porcentajePromedi = esIPSTxt ? 36 : 20
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const itemsOrdenados = [...lote.items].sort((a, b) =>
@@ -1235,7 +1235,7 @@ export function LoteDetallePage({ loteId }: Props) {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 print:hidden">
                     <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-gray-200">
                         <div className="px-5 py-4 border-b border-gray-100">
-                            <h3 className="text-base font-semibold text-gray-900">Confirmar aplicación de PROMEDI</h3>
+                            <h3 className="text-base font-semibold text-gray-900">Aplicar PROMEDI</h3>
                         </div>
                         <div className="px-5 py-4 space-y-3">
                             <p className="text-sm text-gray-700">

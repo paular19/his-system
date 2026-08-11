@@ -155,6 +155,7 @@ export interface LoteFacturacionListItem {
     descripcion: string | null
     concepto: string | null
     importeTotal: number
+    promediAplicado: boolean
     tipoIngresoCodigo: string | null
     rangoDesde: number | null
     rangoHasta: number | null

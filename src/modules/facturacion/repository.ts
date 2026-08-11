@@ -4314,6 +4314,8 @@ const LOTE_SELECT = {
     descripcion: true,
     concepto: true,
     importeTotal: true,
+    items: { select: { importePromedi: true }, take: 1, where: { importePromedi: { not: null } } },
+    itemsIPSTxt: { select: { importePromedi: true }, take: 1, where: { importePromedi: { not: null } } },
     tipoIngresoCodigo: true,
     rangoDesde: true,
     rangoHasta: true,
@@ -4327,6 +4329,7 @@ function mapLoteRow(row: Prisma.LoteFacturacionGetPayload<{ select: typeof LOTE_
         tipo: row.tipo as LoteFacturacionListItem['tipo'],
         estado: row.estado as EstadoLote,
         importeTotal: Number(row.importeTotal),
+        promediAplicado: row.items.length > 0 || row.itemsIPSTxt.length > 0,
     }
 }
 

@@ -134,6 +134,17 @@ function esObraSocialOsecac(nombre: string | null | undefined): boolean {
     return limpio.includes('OSECAC') || limpio.includes('OBRASOCIALEMPLEADOSDECOMERCIO')
 }
 
+const CODIGOS_PROMEDI = new Set([430101, 431001, 400101, 431002, 431103, 430130])
+
+function importePromediOsecac(codigoRaw: string, importe: number): number {
+    const codigo = Number.parseInt(codigoRaw.trim(), 10)
+    const excluido = codigo === 70116 || codigo === 70607
+    const alcanzado = CODIGOS_PROMEDI.has(codigo) ||
+        (codigo >= 10101 && codigo <= 130304) ||
+        (codigo >= 720201 && codigo <= 722238)
+    return !excluido && alcanzado ? Math.round(importe * 20) / 100 : importe
+}
+
 interface Props { loteId: number }
 
 type OrdenItemEditState = {
@@ -275,6 +286,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const [filtroMatricula, setFiltroMatricula] = useState('')
     const [filtroPaciente, setFiltroPaciente] = useState('')
     const [printIngresoId, setPrintIngresoId] = useState<number | null>(null)
+    const [vistaPromedi, setVistaPromedi] = useState(false)
     const printRef = useRef<HTMLDivElement>(null)
     const [ordenesPorIngreso, setOrdenesPorIngreso] = useState<Record<number, OrdenAutorizadaLote[]>>({})
 
@@ -576,7 +588,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const esIPSTxt = lote.origen === 'IPS_TXT'
     const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)
     const puedeAplicarPromedi = esPendiente && (esIPSTxt || (lote.tipo === 'PRACTICAS' && esOsecac))
-    const porcentajePromedi = esIPSTxt ? 40 : 20
+    const porcentajePromedi = esIPSTxt ? 36 : 20
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const itemsOrdenados = [...lote.items].sort((a, b) =>
         (a.paciente?.nombreCompleto ?? a.ingreso.nombre ?? '').localeCompare(
@@ -591,20 +603,26 @@ export function LoteDetallePage({ loteId }: Props) {
     const totalNetoSinPromedi = esIPSTxt
         ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + it.impTotal, 0)
         : 0
+    const tienePromedi = esIPSTxt
+        ? (lote.itemsIPSTxt ?? []).some((it) => it.importePromedi !== null)
+        : lote.items.some((it) => it.importePromedi !== null)
     const totalIncluido = esIPSTxt
-        ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + (it.importePromedi ?? it.impTotal), 0)
-        : itemsIncluidos.reduce((s, it) => s + it.importeTotal, 0)
+        ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + (vistaPromedi ? (it.importePromedi ?? it.impTotal) : it.impTotal), 0)
+        : itemsIncluidos.reduce((s, it) => s + (vistaPromedi ? (it.importePromedi ?? it.importeTotal) : it.importeTotal), 0)
 
     const detalleParaImpresion = !esIPSTxt
         ? itemsOrdenados.filter((item) => printIngresoId === null || item.ingresoId === printIngresoId).map((item) => {
             const ordenesIngreso = ordenesPorIngreso[item.ingresoId] ?? []
             const lineasBase = ordenesIngreso.filter((orden) => orden.incluidaEnLote).flatMap((orden) =>
                 orden.items.map((linea) => {
+                    const importeLinea = vistaPromedi
+                        ? importePromediOsecac(linea.codigoPractica, linea.importeTotal)
+                        : linea.importeTotal
                     const desglose = desglosarImportesPorCodigo(
                         linea.codigoPractica,
                         linea.modulo,
                         orden.profesional?.nombre,
-                        linea.importeTotal
+                        importeLinea
                     )
                     return {
                         ordenNumero: orden.numero,
@@ -617,7 +635,7 @@ export function LoteDetallePage({ loteId }: Props) {
                         importeAyudante: desglose.importeAyudante,
                         importeAnestesista: desglose.importeAnestesista,
                         importeGastos: desglose.importeGastos,
-                        importeTotal: linea.importeTotal,
+                        importeTotal: importeLinea,
                     }
                 })
             )
@@ -687,6 +705,12 @@ export function LoteDetallePage({ loteId }: Props) {
                             </span>
                             <span className="text-sm text-gray-500">{TIPO_LABEL[lote.tipo]}</span>
                         </div>
+                        {tienePromedi && (
+                            <div className="flex gap-1 pt-2">
+                                <button onClick={() => setVistaPromedi(false)} className={`rounded px-3 py-1 text-xs ${!vistaPromedi ? 'bg-blue-600 text-white' : 'border'}`}>General</button>
+                                <button onClick={() => setVistaPromedi(true)} className={`rounded px-3 py-1 text-xs ${vistaPromedi ? 'bg-blue-600 text-white' : 'border'}`}>PROMEDI</button>
+                            </div>
+                        )}
                         <div className="text-sm text-gray-600 space-x-4">
                             <span>Fecha: {new Date(lote.fecha).toLocaleDateString('es-AR')}</span>
                             <span>Período: {formatPeriodo(lote.periodo)}</span>
@@ -919,7 +943,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                 {item.ingreso.numeroAfiliado ?? '-'}
                                             </td>
                                             <td className="px-3 py-2 text-right font-semibold">
-                                                {formatMonto(item.importeTotal)}
+                                                {formatMonto(vistaPromedi ? (item.importePromedi ?? item.importeTotal) : item.importeTotal)}
                                             </td>
                                         </tr>
                                     ))}
@@ -1215,7 +1239,7 @@ export function LoteDetallePage({ loteId }: Props) {
                         </div>
                         <div className="px-5 py-4 space-y-3">
                             <p className="text-sm text-gray-700">
-                                ¿Aplicar PROMEDI ({porcentajePromedi}%) a los códigos configurados? Los códigos fuera de regla conservan el 100%. Esta acción confirmará el lote.
+                                ¿Generar resumen PROMEDI ({porcentajePromedi}%)? Los códigos fuera de regla conservan el 100%.
                             </p>
                             {errorPromedi && (
                                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

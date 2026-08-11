@@ -906,7 +906,7 @@ function CrearLoteIPSTxtModal({ onClose, onCreado }: CrearLoteIPSTxtModalProps) 
                             <p className="font-medium text-blue-800">Vista previa</p>
                             <p className="text-blue-700">{items.length} registros cargados</p>
                             <p className="text-blue-700">Importe total bruto: <span className="font-semibold">{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(totalBruto)}</span></p>
-                            <p className="text-xs text-blue-600">Al aplicar PROMEDI se calculará el 40% solo para los códigos alcanzados por la regla; el resto quedará al 100%.</p>
+                            <p className="text-xs text-blue-600">Al aplicar PROMEDI se calculará el 36% solo para los códigos alcanzados por la regla; el resto quedará al 100%.</p>
                         </div>
                     )}
 

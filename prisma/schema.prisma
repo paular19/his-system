@@ -1309,6 +1309,7 @@ model LoteFacturacionItem {
 
   incluido     Boolean @default(true) @map("LItIncluido")
   importeTotal Decimal @default(0) @map("LItImpTotal") @db.Decimal(18, 2)
+  importePromedi Decimal? @map("LItImpPromedi") @db.Decimal(18, 2)
 
   lote    LoteFacturacion @relation(fields: [loteId], references: [id], onDelete: Cascade)
   ingreso Ingreso         @relation("IngresoLotes", fields: [ingresoId], references: [id])

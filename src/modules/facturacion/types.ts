@@ -203,6 +203,7 @@ export interface LoteFacturacionItemDetalle {
     ingresoId: number
     incluido: boolean
     importeTotal: number
+    importePromedi: number | null
     ingreso: {
         id: number
         tipoIngresoCodigo: string

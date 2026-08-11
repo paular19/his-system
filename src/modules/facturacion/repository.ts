@@ -4613,6 +4613,7 @@ export async function obtenerLote(
             ingresoId: true,
             incluido: true,
             importeTotal: true,
+            importePromedi: true,
             ingreso: {
                 select: {
                     id: true,
@@ -4673,6 +4674,7 @@ export async function obtenerLote(
             ...item,
             ingreso,
             importeTotal,
+            importePromedi: item.importePromedi !== null ? Number(item.importePromedi) : null,
             paciente: ingreso.paciente,
         }
     }) as LoteFacturacionItemDetalle[]
@@ -5382,7 +5384,7 @@ export async function aplicarPromediLote(
     const usuarioCod = usuario.trim().slice(0, 10) || 'SISTEMA'
 
     if (lote.origen === 'IPS_TXT') {
-        const PORCENTAJE_PROMEDI_IPS = 0.40
+        const PORCENTAJE_PROMEDI_IPS = 0.36
 
         const { totalPromedi, cantidadItems } = await prisma.$transaction(async (tx) => {
             const servicioCodigoNumericoSql = Prisma.sql`
@@ -5418,16 +5420,6 @@ export async function aplicarPromediLote(
 
             const total = redondear2Repo(Number(sumResult._sum.importePromedi ?? 0))
 
-            await tx.loteFacturacion.update({
-                where: { id: loteId },
-                data: {
-                    importeTotal: total,
-                    estado: 'CON',
-                    fechaEstado: new Date(),
-                    usuario: usuarioCod,
-                },
-            })
-
             return { totalPromedi: total, cantidadItems: itemsCount }
         })
 
@@ -5447,10 +5439,6 @@ export async function aplicarPromediLote(
     })
 
     if (loteItems.length === 0) {
-        await prisma.loteFacturacion.update({
-            where: { id: loteId },
-            data: { importeTotal: 0, estado: 'CON', fechaEstado: new Date(), usuario: usuarioCod },
-        })
         return { importeTotal: 0, cantidadItems: 0 }
     }
 
@@ -5514,7 +5502,7 @@ export async function aplicarPromediLote(
     const updatesItems = loteItems.map((it) =>
         prisma.loteFacturacionItem.update({
             where: { id: it.id },
-            data: { importeTotal: redondear2Repo(importePorIngreso.get(it.ingresoId) ?? 0) },
+            data: { importePromedi: redondear2Repo(importePorIngreso.get(it.ingresoId) ?? 0) },
         })
     )
 
@@ -5527,15 +5515,6 @@ export async function aplicarPromediLote(
 
     await prisma.$transaction([
         ...updatesItems,
-        prisma.loteFacturacion.update({
-            where: { id: loteId },
-            data: {
-                importeTotal: totalPromedi,
-                estado: 'CON',
-                fechaEstado: new Date(),
-                usuario: usuarioCod,
-            },
-        }),
     ])
 
     return { importeTotal: totalPromedi, cantidadItems: loteItems.length }

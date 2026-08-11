@@ -506,13 +506,16 @@ export function InternacionForm({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Medico de cabecera
+              Médico de guardia
             </label>
+            <p className="mb-1 text-[11px] text-gray-500">
+              Opcional. Puede cargar el médico de guardia que participó del ingreso.
+            </p>
             <ProfesionalSelect
               profesionales={profesionales}
               value={profesionalGuardiaId}
               onChange={setProfesionalGuardiaId}
-              placeholderOption="— Opcional —"
+              placeholderOption="— Sin médico de guardia —"
               selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
             />
           </div>

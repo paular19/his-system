@@ -36,7 +36,7 @@ model Paciente {
   estadoCivil String? @map("PacEstCiv") @db.Char(1)
   paisId      Int?    @map("PaiID")
   profesionId Int?    @map("PfeID")
-  profesionalCabeceraId Int? @map("PrfIDCabecera")
+  profesionalCabeceraId Int?    @map("PrfIDCabecera")
 
   // Ubicación
   domicilio   String? @map("PacDomic") @db.VarChar(200)
@@ -1293,6 +1293,7 @@ model LoteFacturacion {
   obraSocial  ObraSocial?           @relation("LoteObraSocial", fields: [obraSocialId], references: [id])
   plan        PlanObraSocial?       @relation("LotePlan", fields: [obraSocialId, planId], references: [obraSocialId, id])
   items       LoteFacturacionItem[]
+  ordenesExcluidas LoteFacturacionOrdenExcluida[]
   itemsIPSTxt LoteIPSTxtItem[]
 
   @@index([estado])
@@ -1315,6 +1316,19 @@ model LoteFacturacionItem {
   @@unique([loteId, ingresoId])
   @@index([loteId])
   @@map("LoteFacturacionItem")
+}
+
+model LoteFacturacionOrdenExcluida {
+  id           Int @id @default(autoincrement()) @map("LOeID")
+  loteId       Int @map("LotID")
+  puestoNumero Int @map("PueNum")
+  ordenNumero  Int @map("OrdNum")
+
+  lote LoteFacturacion @relation(fields: [loteId], references: [id], onDelete: Cascade)
+
+  @@unique([loteId, puestoNumero, ordenNumero])
+  @@index([loteId])
+  @@map("LoteFacturacionOrdenExcluida")
 }
 
 // ============================================

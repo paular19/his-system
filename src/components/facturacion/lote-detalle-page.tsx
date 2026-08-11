@@ -237,11 +237,12 @@ export function LoteDetallePage({ loteId }: Props) {
     const [ordenes, setOrdenes] = useState<OrdenAutorizadaLote[]>([])
     const [loadingOrdenes, setLoadingOrdenes] = useState(false)
     const [procesando, setProcesando] = useState(false)
-    const [editandoPracticas, setEditandoPracticas] = useState(false)
+    const [ordenesEnEdicion, setOrdenesEnEdicion] = useState<Record<string, boolean>>({})
     const [editItems, setEditItems] = useState<Record<string, OrdenItemEditState>>({})
     const [editOrdenes, setEditOrdenes] = useState<Record<string, OrdenEditState>>({})
     const [guardandoItemKey, setGuardandoItemKey] = useState<string | null>(null)
     const [guardandoOrdenKey, setGuardandoOrdenKey] = useState<string | null>(null)
+    const [actualizandoOrdenKey, setActualizandoOrdenKey] = useState<string | null>(null)
     const [ordenesAbiertas, setOrdenesAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesExpandidas, setOrdenesExpandidas] = useState<Record<string, boolean>>({})
     const [mostrarConfirmPromedi, setMostrarConfirmPromedi] = useState(false)
@@ -275,11 +276,13 @@ export function LoteDetallePage({ loteId }: Props) {
         setLoadingOrdenes(true)
         setOrdenesAbiertas({})
         setOrdenesExpandidas({})
+        setOrdenesEnEdicion({})
         try {
             const sp = new URLSearchParams()
             if (filtroMedico.trim()) sp.set('medico', filtroMedico.trim())
             if (filtroMatricula.trim()) sp.set('matricula', filtroMatricula.trim())
             if (lote?.periodo) sp.set('periodo', lote.periodo)
+            sp.set('loteId', String(loteId))
             const res = await fetch(`/api/facturacion/lotes/ingreso/${ingresoId}/ordenes?${sp.toString()}`)
             const json = await res.json()
             const ordenesData: OrdenAutorizadaLote[] = json.data ?? []
@@ -326,6 +329,7 @@ export function LoteDetallePage({ loteId }: Props) {
             if (filtroMedico.trim()) spBase.set('medico', filtroMedico.trim())
             if (filtroMatricula.trim()) spBase.set('matricula', filtroMatricula.trim())
             if (loteActual.periodo) spBase.set('periodo', loteActual.periodo)
+            spBase.set('loteId', String(loteId))
 
             const resultados = await Promise.all(
                 loteActual.items.map(async (item) => {
@@ -355,7 +359,7 @@ export function LoteDetallePage({ loteId }: Props) {
         return () => {
             cancelado = true
         }
-    }, [lote, filtroMedico, filtroMatricula])
+    }, [lote, filtroMedico, filtroMatricula, loteId])
 
     async function toggleItem(item: LoteFacturacionItemDetalle) {
         const res = await fetch(`/api/facturacion/lotes/${loteId}/items/${item.id}`, {
@@ -475,6 +479,34 @@ export function LoteDetallePage({ loteId }: Props) {
         }
     }
 
+    async function toggleOrdenEnLote(orden: OrdenAutorizadaLote) {
+        const key = `${orden.puestoNumero}-${orden.numero}`
+        setActualizandoOrdenKey(key)
+        setError('')
+        try {
+            const res = await fetch(
+                `/api/facturacion/lotes/${loteId}/ordenes/${orden.puestoNumero}/${orden.numero}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ incluida: !orden.incluidaEnLote }),
+                }
+            )
+            const json = await res.json()
+            if (!res.ok || !json.ok) {
+                setError(json.error ?? 'No se pudo actualizar la orden en el lote')
+                return
+            }
+            setOrdenesEnEdicion((prev) => ({ ...prev, [key]: false }))
+            await cargar()
+            if (selectedIngresoId !== null) await cargarOrdenes(selectedIngresoId)
+        } catch {
+            setError('Error al actualizar la orden en el lote')
+        } finally {
+            setActualizandoOrdenKey(null)
+        }
+    }
+
     async function aplicarPromedi() {
         setErrorPromedi('')
         setProcesando(true)
@@ -529,7 +561,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const detalleParaImpresion = !esIPSTxt
         ? lote.items.map((item) => {
             const ordenesIngreso = ordenesPorIngreso[item.ingresoId] ?? []
-            const lineasBase = ordenesIngreso.flatMap((orden) =>
+            const lineasBase = ordenesIngreso.filter((orden) => orden.incluidaEnLote).flatMap((orden) =>
                 orden.items.map((linea) => {
                     const desglose = desglosarImportesPorCodigo(
                         linea.codigoPractica,
@@ -660,12 +692,6 @@ export function LoteDetallePage({ loteId }: Props) {
                         {esPendiente && !esIPSTxt && (
                             <>
                                 <button
-                                    onClick={() => setEditandoPracticas((prev) => !prev)}
-                                    className="border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
-                                >
-                                    {editandoPracticas ? 'Finalizar edición de órdenes' : 'Editar órdenes'}
-                                </button>
-                                <button
                                     onClick={() => cambiarEstado('ANU')}
                                     disabled={procesando}
                                     className="border border-red-300 text-red-600 px-3 py-1.5 rounded text-sm hover:bg-red-50 disabled:opacity-50"
@@ -702,11 +728,6 @@ export function LoteDetallePage({ loteId }: Props) {
                 <div className="mt-3 space-y-1 text-sm text-gray-600 print:hidden">
                     {lote.concepto && <div><strong>Concepto:</strong> {lote.concepto}</div>}
                     {lote.descripcion && <div><strong>Descripción:</strong> {lote.descripcion}</div>}
-                    {esPendiente && !esIPSTxt && editandoPracticas && (
-                        <div className="text-xs font-medium text-blue-700">
-                            Modo edición activo: seleccioná un paciente y corregí las prácticas en sus órdenes.
-                        </div>
-                    )}
                 </div>
 
                 {/* Resumen numérico */}
@@ -909,6 +930,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                             const totalCantidadOrden = orden.items.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)
                                             const limitePracticas = 4
                                             const abierta = ordenesAbiertas[keyOrden] ?? false
+                                            const editandoOrden = ordenesEnEdicion[keyOrden] ?? false
                                             const expandida = ordenesExpandidas[keyOrden] ?? false
                                             const practicasVisibles = expandida
                                                 ? itemsTabla
@@ -938,37 +960,74 @@ export function LoteDetallePage({ loteId }: Props) {
                                                         </div>
                                                     )}
 
-                                                    <div className={`border rounded-lg bg-white ${esOrdenCirugia ? 'border-amber-200' : ''}`}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setOrdenesAbiertas((prev) => ({
-                                                        ...prev,
-                                                        [keyOrden]: !(prev[keyOrden] ?? false),
-                                                    }))}
-                                                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-gray-50"
-                                                >
-                                                    <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                                                        <ChevronRight className={`h-4 w-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-                                                        <span>Orden #{orden.numero}</span>
-                                                        {esOrdenCirugia && (
-                                                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                                                                Cirugia
-                                                            </span>
-                                                        )}
-                                                        {esOrdenCirugia && orden.esCirugiaMultiple && (
-                                                            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
-                                                                Multiple
-                                                            </span>
-                                                        )}
-                                                        {orden.descripcion && <span className="font-normal text-gray-500">— {orden.descripcion}</span>}
-                                                    </span>
-                                                    <span className="text-xs text-gray-500">{itemsTabla.length} práctica(s)</span>
-                                                </button>
+                                                    <div className={`border rounded-lg ${orden.incluidaEnLote ? 'bg-white' : 'border-red-200 bg-red-50/50 opacity-75'} ${esOrdenCirugia && orden.incluidaEnLote ? 'border-amber-200' : ''}`}>
+                                                <div className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOrdenesAbiertas((prev) => ({
+                                                            ...prev,
+                                                            [keyOrden]: !(prev[keyOrden] ?? false),
+                                                        }))}
+                                                        className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+                                                    >
+                                                        <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-gray-800">
+                                                            <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+                                                            <span>Orden #{orden.numero}</span>
+                                                            {esOrdenCirugia && (
+                                                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                                                                    Cirugia
+                                                                </span>
+                                                            )}
+                                                            {esOrdenCirugia && orden.esCirugiaMultiple && (
+                                                                <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
+                                                                    Multiple
+                                                                </span>
+                                                            )}
+                                                            {orden.descripcion && <span className="truncate font-normal text-gray-500">— {orden.descripcion}</span>}
+                                                            {!orden.incluidaEnLote && (
+                                                                <span className="inline-flex items-center rounded bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
+                                                                    Excluida del lote
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                        <span className="shrink-0 text-xs text-gray-500">{itemsTabla.length} práctica(s)</span>
+                                                    </button>
+                                                    {esPendiente && orden.incluidaEnLote && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setOrdenesAbiertas((prev) => ({ ...prev, [keyOrden]: true }))
+                                                                setOrdenesEnEdicion((prev) => ({ ...prev, [keyOrden]: !editandoOrden }))
+                                                            }}
+                                                            className={`shrink-0 rounded border px-2.5 py-1 text-xs font-medium ${editandoOrden
+                                                                ? 'border-blue-300 bg-blue-50 text-blue-700'
+                                                                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                                                                }`}
+                                                        >
+                                                            {editandoOrden ? 'Finalizar edición' : 'Editar'}
+                                                        </button>
+                                                    )}
+                                                    {esPendiente && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleOrdenEnLote(orden)}
+                                                            disabled={actualizandoOrdenKey === keyOrden}
+                                                            className={`shrink-0 rounded border px-2.5 py-1 text-xs font-medium disabled:opacity-60 ${orden.incluidaEnLote
+                                                                ? 'border-red-300 bg-white text-red-700 hover:bg-red-50'
+                                                                : 'border-green-300 bg-white text-green-700 hover:bg-green-50'
+                                                                }`}
+                                                        >
+                                                            {actualizandoOrdenKey === keyOrden
+                                                                ? 'Actualizando...'
+                                                                : (orden.incluidaEnLote ? 'Remover del lote' : 'Reincorporar')}
+                                                        </button>
+                                                    )}
+                                                </div>
 
                                                 {abierta && (
                                                     <div className="grid gap-3 p-3 md:grid-cols-2">
                                                         <div className="rounded-md border border-gray-200 bg-gray-50/70 p-3 text-xs text-gray-700 space-y-1.5">
-                                                            {esPendiente && editandoPracticas ? (
+                                                            {esPendiente && editandoOrden ? (
                                                                 <div className="space-y-2">
                                                                     <label className="block">Fecha emisión
                                                                         <input type="datetime-local" value={draftOrden.fechaEmision} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, fechaEmision: e.target.value } }))} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1" />
@@ -1004,7 +1063,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
                                                                     Prácticas de la orden ({itemsTabla.length})
                                                                 </p>
-                                                                {!esPendiente || !editandoPracticas ? (
+                                                                {!esPendiente || !editandoOrden ? (
                                                                     itemsTabla.length > limitePracticas && (
                                                                         <button
                                                                             type="button"
@@ -1020,7 +1079,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                 ) : null}
                                                             </div>
 
-                                                            {esPendiente && editandoPracticas ? (
+                                                            {esPendiente && editandoOrden ? (
                                                                 <div className="mt-2 overflow-x-auto">
                                                                     <table className="w-full text-xs">
                                                                         <thead className="text-gray-500">

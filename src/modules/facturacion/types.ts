@@ -224,6 +224,7 @@ export interface LoteFacturacionItemDetalle {
 export interface OrdenAutorizadaLote {
     puestoNumero: number
     numero: number
+    incluidaEnLote: boolean
     fechaEmision: Date
     descripcion: string | null
     numeroAutorizacion: string | null

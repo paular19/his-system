@@ -17,11 +17,13 @@ export async function GET(req: NextRequest, { params }: Params) {
         const matriculaParam = searchParams.get('matricula')
         const matricula = matriculaParam ? Number(matriculaParam) : undefined
         const periodo = searchParams.get('periodo')?.trim() || undefined
+        const loteIdParam = Number(searchParams.get('loteId'))
 
         const ordenes = await obtenerOrdenesAutorizadasIngreso(Number(ingresoId), {
             medico,
             matricula: matricula && Number.isFinite(matricula) && matricula > 0 ? matricula : undefined,
             periodo,
+            loteId: Number.isInteger(loteIdParam) && loteIdParam > 0 ? loteIdParam : undefined,
         })
         return apiOk(ordenes)
     } catch (error) {

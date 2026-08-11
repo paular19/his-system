@@ -3829,85 +3829,16 @@ async function recalcularTotalesLotesPendientesPracticasPorIngreso(ingresoId: nu
             },
         },
         select: {
-            id: true,
             loteId: true,
-            lote: {
-                select: {
-                    periodo: true,
-                },
-            },
         },
     })
 
     if (itemsPendientes.length === 0) return
 
-    await prisma.$transaction(async (tx) => {
-        for (const item of itemsPendientes) {
-            const { desde, hasta } = periodoToDateRange(item.lote.periodo)
-
-            const ordenes = await tx.orden.findMany({
-                where: {
-                    ingresoId,
-                    estado: { not: 'X' },
-                    fechaEmision: { gte: desde, lt: hasta },
-                    OR: [
-                        {
-                            AND: [
-                                { numeroAutorizacion: { not: null } },
-                                { numeroAutorizacion: { not: '' } },
-                            ],
-                        },
-                        {
-                            items: {
-                                some: {
-                                    AND: [
-                                        { numeroAutorizacion: { not: null } },
-                                        { numeroAutorizacion: { not: '' } },
-                                    ],
-                                },
-                            },
-                        },
-                    ],
-                },
-                select: {
-                    numeroAutorizacion: true,
-                    items: {
-                        select: {
-                            importeTotal: true,
-                            numeroAutorizacion: true,
-                        },
-                    },
-                },
-            })
-
-            const totalIngreso = ordenes
-                .flatMap((o) => {
-                    const ordenConAutorizacion = tieneNumeroAutorizacionValido(o.numeroAutorizacion)
-                    return o.items.filter((it) =>
-                        ordenConAutorizacion || tieneNumeroAutorizacionValido(it.numeroAutorizacion)
-                    )
-                })
-                .reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
-
-            await tx.loteFacturacionItem.update({
-                where: { id: item.id },
-                data: { importeTotal: totalIngreso },
-            })
-        }
-
-        const loteIds = Array.from(new Set(itemsPendientes.map((it) => it.loteId)))
-        for (const loteId of loteIds) {
-            const incluidos = await tx.loteFacturacionItem.findMany({
-                where: { loteId, incluido: true },
-                select: { importeTotal: true },
-            })
-            const total = incluidos.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
-            await tx.loteFacturacion.update({
-                where: { id: loteId },
-                data: { importeTotal: total },
-            })
-        }
-    })
+    const loteIds = Array.from(new Set(itemsPendientes.map((item) => item.loteId)))
+    for (const loteId of loteIds) {
+        await recalcularImportesLoteConExclusiones(loteId)
+    }
 }
 
 export async function actualizarDiferencialesCirugiaFacturacion(
@@ -4625,6 +4556,13 @@ export async function obtenerLote(
     const whereIngresoFiltro: Prisma.IngresoWhereInput = {
         ordenes: { some: ordenFacturadaWhere },
     }
+    const ordenesExcluidas = await prisma.loteFacturacionOrdenExcluida.findMany({
+        where: { loteId: id },
+        select: { puestoNumero: true, ordenNumero: true },
+    })
+    const clavesOrdenesExcluidas = new Set(
+        ordenesExcluidas.map((orden) => `${orden.puestoNumero}:${orden.ordenNumero}`)
+    )
 
     const itemsLote = await prisma.loteFacturacionItem.findMany({
         where: {
@@ -4653,6 +4591,8 @@ export async function obtenerLote(
                     ordenes: {
                         where: ordenFacturadaWhere,
                         select: {
+                            puestoNumero: true,
+                            numero: true,
                             numeroAutorizacion: true,
                             items: {
                                 select: {
@@ -4677,7 +4617,9 @@ export async function obtenerLote(
 
     const items = itemsLote.map((item) => {
         const { ordenes, ...ingreso } = item.ingreso
-        const importeTotal = ordenes.flatMap((orden) => {
+        const importeTotal = ordenes
+            .filter((orden) => !clavesOrdenesExcluidas.has(`${orden.puestoNumero}:${orden.numero}`))
+            .flatMap((orden) => {
             const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
             return orden.items.filter((ordenItem) =>
                 practicaMarcadaComoFacturada(ordenItem.practica?.estado) &&
@@ -4948,9 +4890,64 @@ export async function toggleItemLote(
     await prisma.loteFacturacion.update({ where: { id: loteId }, data: { importeTotal: total } })
 }
 
+export async function toggleOrdenLote(
+    loteId: number,
+    puestoNumero: number,
+    ordenNumero: number,
+    incluida: boolean
+): Promise<void> {
+    const orden = await prisma.orden.findUnique({
+        where: { puestoNumero_numero: { puestoNumero, numero: ordenNumero } },
+        select: { ingresoId: true },
+    })
+    const itemLote = orden?.ingresoId
+        ? await prisma.loteFacturacionItem.findFirst({
+            where: {
+                loteId,
+                ingresoId: orden.ingresoId,
+                lote: { estado: 'PEN' },
+            },
+            select: { id: true },
+        })
+        : null
+    if (!itemLote) throw new Error('Sólo se pueden modificar órdenes de un lote pendiente')
+
+    if (incluida) {
+        await prisma.loteFacturacionOrdenExcluida.deleteMany({
+            where: { loteId, puestoNumero, ordenNumero },
+        })
+    } else {
+        await prisma.loteFacturacionOrdenExcluida.upsert({
+            where: {
+                loteId_puestoNumero_ordenNumero: { loteId, puestoNumero, ordenNumero },
+            },
+            create: { loteId, puestoNumero, ordenNumero },
+            update: {},
+        })
+    }
+
+    await recalcularImportesLoteConExclusiones(loteId)
+}
+
+async function recalcularImportesLoteConExclusiones(loteId: number): Promise<void> {
+    const loteActualizado = await obtenerLote(loteId)
+    if (!loteActualizado) return
+
+    await prisma.$transaction([
+        ...loteActualizado.items.map((item) => prisma.loteFacturacionItem.update({
+            where: { id: item.id },
+            data: { importeTotal: item.importeTotal },
+        })),
+        prisma.loteFacturacion.update({
+            where: { id: loteId },
+            data: { importeTotal: loteActualizado.importeTotal },
+        })
+    ])
+}
+
 export async function obtenerOrdenesAutorizadasIngreso(
     ingresoId: number,
-    filtros?: { medico?: string; matricula?: number; periodo?: string }
+    filtros?: { medico?: string; matricula?: number; periodo?: string; loteId?: number }
 ): Promise<OrdenAutorizadaLote[]> {
     const ingreso = await prisma.ingreso.findUnique({
         where: { id: ingresoId },
@@ -5114,6 +5111,15 @@ export async function obtenerOrdenesAutorizadasIngreso(
             .filter((profesional) => profesional.matricula !== null)
             .map((profesional) => [profesional.matricula as number, profesional])
     )
+    const ordenesExcluidas = filtros?.loteId
+        ? await prisma.loteFacturacionOrdenExcluida.findMany({
+            where: { loteId: filtros.loteId },
+            select: { puestoNumero: true, ordenNumero: true },
+        })
+        : []
+    const clavesOrdenesExcluidas = new Set(
+        ordenesExcluidas.map((orden) => `${orden.puestoNumero}:${orden.ordenNumero}`)
+    )
 
     return ordenes
         .map((o) => {
@@ -5200,6 +5206,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
             return {
                 puestoNumero: o.puestoNumero,
                 numero: o.numero,
+                incluidaEnLote: !clavesOrdenesExcluidas.has(`${o.puestoNumero}:${o.numero}`),
                 fechaEmision: o.fechaEmision,
                 descripcion: o.descripcion,
                 numeroAutorizacion: o.numeroAutorizacion,

@@ -308,9 +308,18 @@ export async function toggleItemLote(loteId: number, itemId: number, incluido: b
     return repo.toggleItemLote(loteId, itemId, incluido)
 }
 
+export async function toggleOrdenLote(
+    loteId: number,
+    puestoNumero: number,
+    ordenNumero: number,
+    incluida: boolean
+) {
+    return repo.toggleOrdenLote(loteId, puestoNumero, ordenNumero, incluida)
+}
+
 export async function obtenerOrdenesAutorizadasIngreso(
     ingresoId: number,
-    filtros?: { medico?: string; matricula?: number; periodo?: string }
+    filtros?: { medico?: string; matricula?: number; periodo?: string; loteId?: number }
 ) {
     return repo.obtenerOrdenesAutorizadasIngreso(ingresoId, filtros)
 }

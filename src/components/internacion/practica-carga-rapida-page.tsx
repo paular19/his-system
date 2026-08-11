@@ -2647,7 +2647,7 @@ export function PracticaCargaRapidaPage({
                             {grupo.tipo === 'orden' && grupo.puestoNumero && grupo.ordenNumero
                                 ? `Orden ${formatearNumeroOrden(grupo.puestoNumero, grupo.ordenNumero)}`
                                 : `Autorizacion ${grupo.numeroAutorizacion ?? '-'}`}
-                            {grupo.tipo === 'orden' && ` · Matricula ejecutante: ${matriculasEjecutantes.join(', ') || '-'}`}
+                            {grupo.tipo === 'orden' && ` · Matricula efector: ${matriculasEjecutantes.join(', ') || '-'}`}
                         </span>
                         <span className={`min-w-0 truncate text-[10px] ${contadorClase}`}>
                             Cod/Cant: {codigosResumen}{codigosRestantes > 0 ? ` +${codigosRestantes}` : ''} · Subitem: {subitemsResumen} · Fecha: {fechaResumenOrden}

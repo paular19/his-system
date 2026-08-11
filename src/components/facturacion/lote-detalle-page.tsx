@@ -1025,182 +1025,106 @@ export function LoteDetallePage({ loteId }: Props) {
                                                 </div>
 
                                                 {abierta && (
-                                                    <div className="grid gap-3 p-3 md:grid-cols-2">
-                                                        <div className="rounded-md border border-gray-200 bg-gray-50/70 p-3 text-xs text-gray-700 space-y-1.5">
+                                                    <div className="border-t border-gray-200">
+                                                        <div className="grid gap-3 bg-gray-50/70 px-3 py-3 text-xs text-gray-700 sm:grid-cols-3">
                                                             {esPendiente && editandoOrden ? (
-                                                                <div className="space-y-2">
-                                                                    <label className="block">Fecha emisión
-                                                                        <input type="datetime-local" value={draftOrden.fechaEmision} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, fechaEmision: e.target.value } }))} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1" />
+                                                                <>
+                                                                    <label className="block">Fecha de emisión
+                                                                        <input type="datetime-local" value={draftOrden.fechaEmision} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, fechaEmision: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5" />
                                                                     </label>
-                                                                    <label className="block">Descripción
-                                                                        <input value={draftOrden.descripcion} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, descripcion: e.target.value } }))} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1" />
+                                                                    <label className="block sm:col-span-2">Descripción de la orden
+                                                                        <input value={draftOrden.descripcion} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, descripcion: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5" />
                                                                     </label>
-                                                                    <label className="block">N° autorización
-                                                                        <input value={draftOrden.numeroAutorizacion} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, numeroAutorizacion: e.target.value } }))} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1" />
-                                                                    </label>
-                                                                    <label className="block">Matrícula ejecutante
-                                                                        <input type="number" min={1} value={draftOrden.matriculaEjecutante} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, matriculaEjecutante: e.target.value } }))} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1" />
-                                                                    </label>
-                                                                    <button type="button" onClick={() => guardarOrden(orden)} disabled={guardandoOrdenKey === keyOrdenEdicion} className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-blue-700 hover:bg-blue-100 disabled:opacity-60">
-                                                                        {guardandoOrdenKey === keyOrdenEdicion ? 'Guardando...' : 'Guardar orden'}
-                                                                    </button>
-                                                                </div>
-                                                            ) : <p>Fecha emisión: {new Date(orden.fechaEmision).toLocaleDateString('es-AR')}</p>}
-                                                            <p>Importe total: <span className="font-semibold">{formatMonto(orden.importeTotal)}</span></p>
-                                                            <p>N° autorización: <span className="text-blue-700">{orden.numeroAutorizacion ?? '-'}</span></p>
-                                                            <p>Cantidad total: {totalCantidadOrden}</p>
-                                                            <p>Ejecutante: {orden.profesional?.nombre ?? '-'}</p>
-                                                            <p>Matrícula ejecutante: {orden.profesional?.matricula ?? '-'}</p>
+                                                                    <div className="flex items-center gap-3 sm:col-span-3">
+                                                                        <span>Total: <strong>{formatMonto(orden.importeTotal)}</strong></span>
+                                                                        <span>Cantidad: <strong>{totalCantidadOrden}</strong></span>
+                                                                        <button type="button" onClick={() => guardarOrden(orden)} disabled={guardandoOrdenKey === keyOrdenEdicion} className="ml-auto rounded border border-blue-300 bg-blue-50 px-3 py-1.5 font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60">
+                                                                            {guardandoOrdenKey === keyOrdenEdicion ? 'Guardando...' : 'Guardar cabecera'}
+                                                                        </button>
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span>Fecha de emisión: <strong>{new Date(orden.fechaEmision).toLocaleString('es-AR')}</strong></span>
+                                                                    <span>Total: <strong>{formatMonto(orden.importeTotal)}</strong></span>
+                                                                    <span>Cantidad: <strong>{totalCantidadOrden}</strong></span>
+                                                                    {orden.descripcion && <span className="sm:col-span-3">Descripción: <strong>{orden.descripcion}</strong></span>}
+                                                                </>
+                                                            )}
                                                             {esOrdenCirugia && (orden.etiquetasCirugia?.length ?? 0) > 0 && (
-                                                                <p>
-                                                                    Reglas cirugía: <span className="font-medium text-amber-800">{(orden.etiquetasCirugia ?? []).join(' · ')}</span>
-                                                                </p>
+                                                                <span className="font-medium text-amber-800 sm:col-span-3">Reglas cirugía: {(orden.etiquetasCirugia ?? []).join(' · ')}</span>
                                                             )}
                                                         </div>
 
-                                                        <div className="rounded-md border border-gray-200 bg-white p-2.5">
-                                                            <div className="flex items-center justify-between gap-2 px-1">
-                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-                                                                    Prácticas de la orden ({itemsTabla.length})
-                                                                </p>
-                                                                {!esPendiente || !editandoOrden ? (
-                                                                    itemsTabla.length > limitePracticas && (
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => setOrdenesExpandidas((prev) => ({
-                                                                                ...prev,
-                                                                                [keyOrden]: !(prev[keyOrden] ?? false),
-                                                                            }))}
-                                                                            className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50"
-                                                                        >
-                                                                            {expandida ? 'Contraer' : 'Expandir'}
-                                                                        </button>
-                                                                    )
-                                                                ) : null}
+                                                        <div className="px-3 py-3">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Prácticas ({itemsTabla.length})</p>
+                                                                {!editandoOrden && itemsTabla.length > limitePracticas && (
+                                                                    <button type="button" onClick={() => setOrdenesExpandidas((prev) => ({ ...prev, [keyOrden]: !(prev[keyOrden] ?? false) }))} className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50">
+                                                                        {expandida ? 'Contraer' : 'Expandir'}
+                                                                    </button>
+                                                                )}
                                                             </div>
 
                                                             {esPendiente && editandoOrden ? (
-                                                                <div className="mt-2 overflow-x-auto">
-                                                                    <table className="w-full text-xs">
-                                                                        <thead className="text-gray-500">
-                                                                            <tr>
-                                                                                <th className="px-2 py-1.5 text-left">Fecha</th>
-                                                                                <th className="px-2 py-1.5 text-left">Práctica</th>
-                                                                                <th className="px-2 py-1.5 text-left">Descripción</th>
-                                                                                <th className="px-2 py-1.5 text-center">Cant.</th>
-                                                                                <th className="px-2 py-1.5 text-left">Nro. Aut.</th>
-                                                                                <th className="px-2 py-1.5 text-left">Módulo</th>
-                                                                                <th className="px-2 py-1.5 text-left">Matrícula ejecutante</th>
-                                                                                <th className="px-2 py-1.5 text-right">Importe</th>
-                                                                                <th className="px-2 py-1.5 text-right">Acción</th>
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody className="divide-y divide-gray-100">
-                                                                            {orden.items.map((it) => {
-                                                                                const key = keyOrdenItem(orden.puestoNumero, orden.numero, it.item)
-                                                                                const draft = editItems[key] ?? buildOrdenItemEditState(it)
-                                                                                const guardando = guardandoItemKey === key
+                                                                <div className="mt-2 divide-y divide-gray-200 border-y border-gray-200">
+                                                                    {orden.items.map((it) => {
+                                                                        const key = keyOrdenItem(orden.puestoNumero, orden.numero, it.item)
+                                                                        const draft = editItems[key] ?? buildOrdenItemEditState(it)
+                                                                        const guardando = guardandoItemKey === key
 
-                                                                                return (
-                                                                                    <tr key={it.item}>
-                                                                                        <td className="px-2 py-1.5 text-gray-600">
-                                                                                            <input
-                                                                                                type="datetime-local"
-                                                                                                value={draft.fecha}
-                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, fecha: e.target.value } }))}
-                                                                                                className="w-40 rounded border border-gray-300 px-2 py-1"
-                                                                                            />
-                                                                                        </td>
-                                                                                        <td className="px-2 py-1.5 font-mono">
-                                                                                            <input
-                                                                                                value={draft.codigoPractica}
-                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, codigoPractica: e.target.value } }))}
-                                                                                                className="w-24 rounded border border-gray-300 px-2 py-1"
-                                                                                            />
-                                                                                        </td>
-                                                                                        <td className="px-2 py-1.5 text-gray-600">
-                                                                                            <input
-                                                                                                value={draft.descripcion}
-                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, descripcion: e.target.value } }))}
-                                                                                                className="w-full rounded border border-gray-300 px-2 py-1"
-                                                                                            />
-                                                                                        </td>
-                                                                                        <td className="px-2 py-1.5 text-center">
-                                                                                            <input
-                                                                                                type="number"
-                                                                                                min={0.01}
-                                                                                                step={0.01}
-                                                                                                value={draft.cantidad}
-                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, cantidad: e.target.value } }))}
-                                                                                                className="w-20 rounded border border-gray-300 px-2 py-1 text-center"
-                                                                                            />
-                                                                                        </td>
-                                                                                        <td className="px-2 py-1.5 text-blue-600">
-                                                                                            <input
-                                                                                                value={draft.numeroAutorizacion}
-                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, numeroAutorizacion: e.target.value } }))}
-                                                                                                className="w-32 rounded border border-gray-300 px-2 py-1 text-gray-700"
-                                                                                            />
-                                                                                        </td>
-                                                                                        <td className="px-2 py-1.5">
-                                                                                            <input value={draft.modulo} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, modulo: e.target.value } }))} className="w-20 rounded border border-gray-300 px-2 py-1" />
-                                                                                        </td>
-                                                                                        <td className="px-2 py-1.5">
-                                                                                            <input type="number" min={1} value={draft.matriculaEjecutante} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, matriculaEjecutante: e.target.value } }))} className="w-28 rounded border border-gray-300 px-2 py-1" />
-                                                                                        </td>
-                                                                                        <td className="px-2 py-1.5 text-right">
-                                                                                            <input
-                                                                                                type="number"
-                                                                                                min={0}
-                                                                                                step={0.01}
-                                                                                                value={draft.importeTotal}
-                                                                                                onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, importeTotal: e.target.value } }))}
-                                                                                                className="w-24 rounded border border-gray-300 px-2 py-1 text-right"
-                                                                                            />
-                                                                                        </td>
-                                                                                        <td className="px-2 py-1.5 text-right">
-                                                                                            <div className="flex justify-end gap-1">
-                                                                                                <button
-                                                                                                    onClick={() => guardarOrdenItem(orden, it)}
-                                                                                                    disabled={guardando}
-                                                                                                    className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-100 disabled:opacity-60"
-                                                                                                >
-                                                                                                    {guardando ? 'Guardando...' : 'Guardar'}
-                                                                                                </button>
-                                                                                                <button
-                                                                                                    onClick={() => cancelarEdicionItem(orden, it)}
-                                                                                                    disabled={guardando}
-                                                                                                    className="rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-                                                                                                >
-                                                                                                    Cancelar
-                                                                                                </button>
-                                                                                            </div>
-                                                                                        </td>
-                                                                                    </tr>
-                                                                                )
-                                                                            })}
-                                                                        </tbody>
-                                                                    </table>
+                                                                        return (
+                                                                            <div key={it.item} className="grid gap-3 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                                                                                <label>Práctica
+                                                                                    <input value={draft.codigoPractica} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, codigoPractica: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 font-mono" />
+                                                                                </label>
+                                                                                <label className="sm:col-span-2">Descripción
+                                                                                    <input value={draft.descripcion} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, descripcion: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
+                                                                                </label>
+                                                                                <label>Cantidad
+                                                                                    <input type="number" min={0.01} step={0.01} value={draft.cantidad} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, cantidad: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
+                                                                                </label>
+                                                                                <label>Fecha de práctica
+                                                                                    <input type="datetime-local" value={draft.fecha} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, fecha: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
+                                                                                </label>
+                                                                                <label>N° autorización
+                                                                                    <input value={draft.numeroAutorizacion} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, numeroAutorizacion: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
+                                                                                </label>
+                                                                                <label>Módulo
+                                                                                    <input value={draft.modulo} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, modulo: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
+                                                                                </label>
+                                                                                <label>Matrícula ejecutante
+                                                                                    <input type="number" min={1} value={draft.matriculaEjecutante} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, matriculaEjecutante: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
+                                                                                </label>
+                                                                                <label>Importe
+                                                                                    <input type="number" min={0} step={0.01} value={draft.importeTotal} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, importeTotal: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
+                                                                                </label>
+                                                                                <div className="flex items-end justify-end gap-2 sm:col-span-2 lg:col-span-3">
+                                                                                    <button onClick={() => cancelarEdicionItem(orden, it)} disabled={guardando} className="rounded border border-gray-300 px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cancelar</button>
+                                                                                    <button onClick={() => guardarOrdenItem(orden, it)} disabled={guardando} className="rounded border border-blue-300 bg-blue-50 px-3 py-1.5 font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60">{guardando ? 'Guardando...' : 'Guardar práctica'}</button>
+                                                                                </div>
+                                                                            </div>
+                                                                        )
+                                                                    })}
                                                                 </div>
                                                             ) : (
-                                                                <div className="mt-2 space-y-1.5 text-xs">
+                                                                <div className="mt-2 divide-y divide-gray-200 border-y border-gray-200 text-xs">
                                                                     {practicasVisibles.map((it) => (
-                                                                        <div key={it.key} className="rounded border border-gray-100 bg-gray-50/60 px-2 py-1.5">
-                                                                            <div className="flex items-center justify-between gap-2 text-gray-800">
-                                                                                <span className="font-mono text-[11px]">{it.codigoPractica}</span>
-                                                                                <span className="font-semibold">{formatMonto(it.importeTotal)}</span>
+                                                                        <div key={it.key} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                                                            <div>
+                                                                                <span className="font-mono text-gray-800">{it.codigoPractica}</span>
+                                                                                <span className="ml-2 text-gray-700">{it.descripcion ?? '-'}</span>
                                                                             </div>
-                                                                            <p className="text-gray-700">{it.descripcion ?? '-'}</p>
-                                                                            <div className="mt-0.5 flex items-center justify-between text-[11px] text-gray-500">
+                                                                            <strong className="text-gray-800">{formatMonto(it.importeTotal)}</strong>
+                                                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 sm:col-span-2">
                                                                                 <span>{new Date(it.fecha).toLocaleString('es-AR')}</span>
                                                                                 <span>Cant. {it.cantidad}</span>
+                                                                                <span className="text-blue-700">Aut. {it.numeroAutorizacion ?? '—'}</span>
+                                                                                <span>Ejecutante: {orden.profesional?.nombre ?? '-'} · Mat. {orden.profesional?.matricula ?? '-'}</span>
                                                                             </div>
-                                                                            <p className="text-[11px] text-blue-700">Aut.: {it.numeroAutorizacion ?? '—'}</p>
                                                                         </div>
                                                                     ))}
-                                                                    {!expandida && restantes > 0 && (
-                                                                        <p className="px-1 text-[11px] text-gray-500">+{restantes} práctica(s) más</p>
-                                                                    )}
+                                                                    {!expandida && restantes > 0 && <p className="py-2 text-[11px] text-gray-500">+{restantes} práctica(s) más</p>}
                                                                 </div>
                                                             )}
                                                         </div>

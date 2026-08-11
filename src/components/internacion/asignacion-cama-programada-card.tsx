@@ -57,7 +57,7 @@ export function AsignacionCamaProgramadaCard({
           camaDestinoId: Number.parseInt(camaDestinoId, 10),
           fecha: fechaAsignacion || undefined,
           motivo: 'Asignacion de cama para cirugia programada',
-          reservarCama: true,
+          reservarCama: false,
         }),
       })
 

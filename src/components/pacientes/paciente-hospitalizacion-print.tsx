@@ -228,6 +228,7 @@ export function PacienteHospitalizacionPrint({ paciente, ingresos }: PacienteHos
                 {ingresosSeleccionados.map((ing) => {
                     const codigo = `${ing.tipoIngresoCodigo}-${ing.numeroIngreso}`
                     const subtipo = ing.ingresoSubtipo?.subtipoAdmision?.descripcion ?? ing.tipoIngreso?.descripcion ?? '-'
+                    const diagnosticoPresuntivo = ing.ingresoPatologias[0]?.descripcion ?? ing.descripcionPatologia ?? '-'
                     return (
                         <div key={ing.id} style={{ border: '1px solid #bbb', padding: 8, marginBottom: 10, pageBreakInside: 'avoid' }}>
                             <div style={{ fontWeight: 700, marginBottom: 6 }}>Admisión {codigo}</div>
@@ -241,7 +242,7 @@ export function PacienteHospitalizacionPrint({ paciente, ingresos }: PacienteHos
                                 <div><strong>Profesional guardia:</strong> {ing.profesionalGuardia?.nombre ?? '-'}</div>
                                 <div><strong>Profesional tratante:</strong> {ing.profesionalTratante?.nombre ?? '-'}</div>
                                 <div><strong>Obra social:</strong> {ing.obraSocial?.nombre ?? '-'}</div>
-                                <div style={{ gridColumn: '1 / -1' }}><strong>Diagnóstico presuntivo:</strong> {ing.descripcionPatologia ?? '-'}</div>
+                                <div style={{ gridColumn: '1 / -1' }}><strong>Diagnóstico presuntivo:</strong> {diagnosticoPresuntivo}</div>
                                 <div style={{ gridColumn: '1 / -1' }}><strong>Diagnóstico definitivo:</strong> {ing.descripcionPatologiaDefinitiva ?? '-'}</div>
                                 <div style={{ gridColumn: '1 / -1' }}><strong>Observaciones:</strong> {ing.observaciones ?? '-'}</div>
                             </div>

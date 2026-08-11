@@ -257,7 +257,7 @@ export function TransferenciaCama({
                     fecha: fechaTransferencia || undefined,
                     motivo: motivo || null,
                     profesionalId: profesionalId ? parseInt(profesionalId) : null,
-                    reservarCama: esAsignacionInicial ? esCirugiaProgramada : estadoCamaActual === 'RESERVADA',
+                    reservarCama: false,
                 }),
             })
             if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Error') }

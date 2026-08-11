@@ -86,6 +86,9 @@ export default async function FichaPacientePage({ params }: PageProps) {
     fechaEgresoPrevista: Date | null
     estado: string | null
     nombre: string | null
+    descripcionPatologia: string | null
+    descripcionPatologiaDefinitiva: string | null
+    observaciones: string | null
     profesionalGuardiaId: number | null
     profesionalTratanteId: number | null
     obraSocialId: number | null
@@ -103,6 +106,9 @@ export default async function FichaPacientePage({ params }: PageProps) {
         "IngFchEgresoPrevista" AS "fechaEgresoPrevista",
         "IngEstad" AS estado,
         "IngNom" AS nombre,
+        "IngPatDescrip" AS "descripcionPatologia",
+        "IngPatDefDescrip" AS "descripcionPatologiaDefinitiva",
+        "IngObser" AS observaciones,
         "PrfIDGuardia" AS "profesionalGuardiaId",
         "PrfIDTratante" AS "profesionalTratanteId",
         "OSID" AS "obraSocialId",
@@ -146,13 +152,14 @@ export default async function FichaPacientePage({ params }: PageProps) {
   ] = await Promise.all([
     ingresoIds.length > 0
       ? prisma.ingresoPatologia.findMany({
-        where: { ingresoId: { in: ingresoIds } },
+        where: { ingresoId: { in: ingresoIds }, estado: 'A' },
         select: {
           id: true,
           ingresoId: true,
           descripcion: true,
           fecha: true,
         },
+        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
       })
       : Promise.resolve([]),
     ingresoIds.length > 0

@@ -58,6 +58,12 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
       ingresoSubtipo: {
         select: { profesionalDerivanteNombre: true },
       },
+      ingresoPatologias: {
+        where: { estado: 'A' },
+        select: { descripcion: true },
+        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+        take: 1,
+      },
     },
   })
 
@@ -121,6 +127,7 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
   const habitacion = ingreso.cama
     ? `${ingreso.cama.habitacion ? `Hab. ${ingreso.cama.habitacion} · ` : ''}${ingreso.cama.identificador}`
     : '—'
+  const diagnostico = ingreso.ingresoPatologias[0]?.descripcion ?? ingreso.descripcionPatologia ?? '—'
 
   return (
     <>
@@ -224,7 +231,7 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
               <DataRow label="N° ingreso" value={`INT-${ingreso.numeroIngreso}`} />
               <DataRow label="Fecha y hora" value={fmt(ingreso.fechaIngreso)} />
               <DataRow label="Habitación" value={habitacion} />
-              <DataRow label="Diagnóstico" value={ingreso.descripcionPatologia ?? '—'} />
+              <DataRow label="Diagnóstico" value={diagnostico} />
               <DataRow label="Clínica derivante" value={observacionesParseadas.clinicaDerivante ?? '—'} />
               <DataRow label="Médico tratante" value={medicoTratanteUltimo} />
               <DataRow label="Médico derivante" value={medicoDerivante} />

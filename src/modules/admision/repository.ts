@@ -993,17 +993,32 @@ export async function registrarDiagnosticoIngreso(
   usuario: string
 ): Promise<IngresoPatologia> {
   const ahora = new Date()
-  return prisma.ingresoPatologia.create({
-    data: {
-      ingresoId: data.ingresoId,
-      patologiaId: data.patologiaId ?? null,
-      fecha: data.fecha ?? ahora,
-      descripcion: data.descripcion,
-      observaciones: data.observaciones ?? null,
-      estado: data.estado,
-      fechaEstado: ahora,
-      usuario,
-    },
+  return prisma.$transaction(async (tx) => {
+    const diagnostico = await tx.ingresoPatologia.create({
+      data: {
+        ingresoId: data.ingresoId,
+        patologiaId: data.patologiaId ?? null,
+        fecha: data.fecha ?? ahora,
+        descripcion: data.descripcion,
+        observaciones: data.observaciones ?? null,
+        estado: data.estado,
+        fechaEstado: ahora,
+        usuario,
+      },
+    })
+
+    const diagnosticoActivo = await tx.ingresoPatologia.findFirst({
+      where: { ingresoId: data.ingresoId, estado: 'A' },
+      orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+      select: { descripcion: true },
+    })
+
+    await tx.ingreso.update({
+      where: { id: data.ingresoId },
+      data: { descripcionPatologia: diagnosticoActivo?.descripcion ?? null },
+    })
+
+    return diagnostico
   })
 }
 

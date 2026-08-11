@@ -310,11 +310,6 @@ function ingresoActivoParaMapa(fechaIngreso: Date | null | undefined, fechaRefer
   return claveDiaArgentina(fechaIngreso) <= claveDiaArgentina(fechaReferencia)
 }
 
-function ingresoDelDiaParaMapa(fechaIngreso: Date | null | undefined, fechaReferencia: Date): boolean {
-  if (!fechaIngreso) return false
-  return claveDiaArgentina(fechaIngreso) === claveDiaArgentina(fechaReferencia)
-}
-
 async function mapearCamaConOcupante(
   cama: Cama & {
     ingresos: Array<{
@@ -323,11 +318,14 @@ async function mapearCamaConOcupante(
       nombre: string | null
       fechaIngreso: Date | null
       descripcionPatologia: string | null
+      observaciones: string | null
       obraSocialCoseguroId: number | null
       obraSocialId: number | null
+      ingresoPatologias: Array<{ descripcion: string | null }>
       paciente: {
         numeroDocumento: number | null
         historiaClinica: number | null
+        obraSocialCoseguroId: number | null
       } | null
       profesionalTratante: { nombre: string } | null
       obraSocial: { nombre: string } | null
@@ -355,15 +353,12 @@ async function mapearCamaConOcupante(
     })
 
   const ingresoActivo = ingresosActivos[0] ?? null
-  const hayIngresoDelDia = ingresosRelevantes.some((ing) => ingresoDelDiaParaMapa(ing.fechaIngreso, fechaReferencia))
   const hayIngresoActivo = ingresoActivo !== null
 
   let estadoVisual = cama.estado
   const bloqueoHabitacion = parseObservacionBloqueoHabitacion(cama.observaciones)
   if (cama.estado !== 'MANTENIMIENTO') {
-    if (cama.estado === 'RESERVADA' && hayIngresoDelDia) {
-      estadoVisual = 'RESERVADA'
-    } else if (hayIngresoActivo) {
+    if (hayIngresoActivo) {
       // Si existe internación activa en esa cama para la fecha, debe verse ocupada
       // aunque el estado físico haya quedado desfasado.
       estadoVisual = 'OCUPADA'
@@ -380,6 +375,13 @@ async function mapearCamaConOcupante(
     ?? ((estadoVisual === 'OCUPADA' || estadoVisual === 'RESERVADA')
       ? (ingresosOrdenadosPorFechaDesc[0] ?? null)
       : null)
+  const diagnosticoParaMostrar = ingresoParaMostrar?.ingresoPatologias[0]?.descripcion
+    ?? ingresoParaMostrar?.descripcionPatologia
+    ?? null
+  const tieneDepositoCoseguro = ingresoParaMostrar
+    ? parseObservacionesInternacion(ingresoParaMostrar.observaciones).depositosRegistros
+      .some((deposito) => deposito.cubreCoseguro)
+    : false
 
   const ocupanteBloqueo =
     !ingresoParaMostrar && estadoVisual === 'OCUPADA' && bloqueoHabitacion
@@ -413,8 +415,12 @@ async function mapearCamaConOcupante(
         numeroDocumento: ingresoParaMostrar.paciente?.numeroDocumento ?? null,
         historiaClinica: ingresoParaMostrar.paciente?.historiaClinica ?? null,
         profesionalTratanteNombre: ingresoParaMostrar.profesionalTratante?.nombre ?? null,
-        diagnostico: ingresoParaMostrar.descripcionPatologia ?? null,
-        tieneCoseguro: Boolean(ingresoParaMostrar.obraSocialCoseguroId),
+        diagnostico: diagnosticoParaMostrar,
+        tieneCoseguro:
+          Boolean(
+            ingresoParaMostrar.obraSocialCoseguroId
+              ?? ingresoParaMostrar.paciente?.obraSocialCoseguroId
+          ) || tieneDepositoCoseguro,
         obraSocialId: ingresoParaMostrar.obraSocialId ?? null,
         obraSocialNombre: ingresoParaMostrar.obraSocial?.nombre ?? null,
       }
@@ -434,9 +440,22 @@ export async function obtenerTodasLasCamas(fechaReferencia?: Date, obraSocialIdF
           nombre: true,
           fechaIngreso: true,
           descripcionPatologia: true,
+          observaciones: true,
           obraSocialCoseguroId: true,
           obraSocialId: true,
-          paciente: { select: { numeroDocumento: true, historiaClinica: true } },
+          ingresoPatologias: {
+            where: { estado: 'A' },
+            select: { descripcion: true },
+            orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+            take: 1,
+          },
+          paciente: {
+            select: {
+              numeroDocumento: true,
+              historiaClinica: true,
+              obraSocialCoseguroId: true,
+            },
+          },
           profesionalTratante: { select: { nombre: true } },
           obraSocial: { select: { nombre: true } },
         },
@@ -492,9 +511,22 @@ export async function obtenerCamaPorId(id: number): Promise<CamaConOcupante | nu
           nombre: true,
           fechaIngreso: true,
           descripcionPatologia: true,
+          observaciones: true,
           obraSocialCoseguroId: true,
           obraSocialId: true,
-          paciente: { select: { numeroDocumento: true, historiaClinica: true } },
+          ingresoPatologias: {
+            where: { estado: 'A' },
+            select: { descripcion: true },
+            orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+            take: 1,
+          },
+          paciente: {
+            select: {
+              numeroDocumento: true,
+              historiaClinica: true,
+              obraSocialCoseguroId: true,
+            },
+          },
           profesionalTratante: { select: { nombre: true } },
           obraSocial: { select: { nombre: true } },
         },
@@ -523,9 +555,22 @@ export async function obtenerCamasDisponibles(sector?: string): Promise<CamaConO
           nombre: true,
           fechaIngreso: true,
           descripcionPatologia: true,
+          observaciones: true,
           obraSocialCoseguroId: true,
           obraSocialId: true,
-          paciente: { select: { numeroDocumento: true, historiaClinica: true } },
+          ingresoPatologias: {
+            where: { estado: 'A' },
+            select: { descripcion: true },
+            orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+            take: 1,
+          },
+          paciente: {
+            select: {
+              numeroDocumento: true,
+              historiaClinica: true,
+              obraSocialCoseguroId: true,
+            },
+          },
           profesionalTratante: { select: { nombre: true } },
           obraSocial: { select: { nombre: true } },
         },
@@ -655,7 +700,14 @@ export async function obtenerInternacionesActivas(
       numeroAfiliado: true,
       estado: true,
       descripcionPatologia: true,
+      ingresoPatologias: {
+        where: { estado: 'A' },
+        select: { descripcion: true },
+        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+        take: 1,
+      },
       obraSocialCoseguroId: true,
+      observaciones: true,
       cama: {
         select: { id: true, identificador: true, sector: true, habitacion: true, estado: true },
       },
@@ -712,13 +764,15 @@ export async function obtenerInternacionesActivas(
   const items = itemsFiltrados
     .slice(skip, skip + porPagina)
     .map((item) => {
-      const { ingresoSubtipo, ...base } = item
+      const { ingresoSubtipo, ingresoPatologias, observaciones, ...base } = item
+      const tieneDepositoCoseguro = parseObservacionesInternacion(observaciones).depositosRegistros
+        .some((deposito) => deposito.cubreCoseguro)
       return {
         ...base,
         fechaTurno: ingresoSubtipo?.fechaTurno ?? null,
         esCirugiaProgramada: ingresoSubtipo?.subtipoAdmisionCodigo === 'PRG',
-        descripcionPatologia: item.descripcionPatologia ?? null,
-        tieneCoseguro: Boolean(item.obraSocialCoseguroId),
+        descripcionPatologia: ingresoPatologias[0]?.descripcion ?? item.descripcionPatologia ?? null,
+        tieneCoseguro: Boolean(item.obraSocialCoseguroId) || tieneDepositoCoseguro,
         coseguroNombre: item.obraSocialCoseguroId
           ? (coseguroNombrePorId.get(item.obraSocialCoseguroId) ?? null)
           : null,
@@ -2942,8 +2996,7 @@ export async function transferirCama(
       })
     }
 
-    const mantenerReserva = data.reservarCama || ingreso.cama?.estado === 'RESERVADA'
-    const estadoDestino = mantenerReserva ? 'RESERVADA' : 'OCUPADA'
+    const estadoDestino = data.reservarCama ? 'RESERVADA' : 'OCUPADA'
     await tx.cama.update({
       where: { id: data.camaDestinoId },
       data: { estado: estadoDestino, usuario: usuario.slice(0, 10), fechaEstado: ahora },
@@ -3167,27 +3220,42 @@ export async function actualizarDiagnosticoInternacion(
     throw new Error('Diagnostico no encontrado para la internacion indicada')
   }
 
-  return prisma.ingresoPatologia.update({
-    where: { id: data.id },
-    data: {
-      patologiaId: data.patologiaId ?? null,
-      descripcion: data.descripcion,
-      observaciones: data.observaciones ?? null,
-      fecha: data.fecha ?? new Date(),
-      estado: data.estado,
-      fechaEstado: new Date(),
-      usuario: usuario.slice(0, 10),
-    },
-    select: {
-      id: true,
-      patologiaId: true,
-      descripcion: true,
-      observaciones: true,
-      estado: true,
-      fecha: true,
-      fechaEstado: true,
-      usuario: true,
-    },
+  return prisma.$transaction(async (tx) => {
+    const diagnostico = await tx.ingresoPatologia.update({
+      where: { id: data.id },
+      data: {
+        patologiaId: data.patologiaId ?? null,
+        descripcion: data.descripcion,
+        observaciones: data.observaciones ?? null,
+        fecha: data.fecha ?? new Date(),
+        estado: data.estado,
+        fechaEstado: new Date(),
+        usuario: usuario.slice(0, 10),
+      },
+      select: {
+        id: true,
+        patologiaId: true,
+        descripcion: true,
+        observaciones: true,
+        estado: true,
+        fecha: true,
+        fechaEstado: true,
+        usuario: true,
+      },
+    })
+
+    const diagnosticoActivo = await tx.ingresoPatologia.findFirst({
+      where: { ingresoId: data.ingresoId, estado: 'A' },
+      orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+      select: { descripcion: true },
+    })
+
+    await tx.ingreso.update({
+      where: { id: data.ingresoId },
+      data: { descripcionPatologia: diagnosticoActivo?.descripcion ?? null },
+    })
+
+    return diagnostico
   })
 }
 

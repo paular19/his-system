@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             camaDestinoId: body.camaDestinoId,
             motivo: body.motivo,
             profesionalId: body.profesionalId,
-            reservarCama: true,
+            reservarCama: false,
         })
 
         const ip = extraerIP(request)

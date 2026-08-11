@@ -16,6 +16,10 @@ export const ROLES = {
 
 export type RolHIS = (typeof ROLES)[keyof typeof ROLES]
 
+export function esRolHIS(value: unknown): value is RolHIS {
+  return typeof value === 'string' && Object.values(ROLES).includes(value as RolHIS)
+}
+
 // Módulos del sistema
 export const MODULOS = {
   PACIENTES: 'PACIENTES',

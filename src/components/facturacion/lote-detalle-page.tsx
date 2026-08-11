@@ -273,6 +273,8 @@ export function LoteDetallePage({ loteId }: Props) {
     const [errorPromedi, setErrorPromedi] = useState('')
     const [filtroMedico, setFiltroMedico] = useState('')
     const [filtroMatricula, setFiltroMatricula] = useState('')
+    const [filtroPaciente, setFiltroPaciente] = useState('')
+    const [printIngresoId, setPrintIngresoId] = useState<number | null>(null)
     const printRef = useRef<HTMLDivElement>(null)
     const [ordenesPorIngreso, setOrdenesPorIngreso] = useState<Record<number, OrdenAutorizadaLote[]>>({})
 
@@ -548,8 +550,9 @@ export function LoteDetallePage({ loteId }: Props) {
         }
     }
 
-    function imprimir() {
-        window.print()
+    function imprimir(ingresoId: number | null = null) {
+        setPrintIngresoId(ingresoId)
+        requestAnimationFrame(() => requestAnimationFrame(() => window.print()))
     }
 
     if (loading) {
@@ -575,6 +578,16 @@ export function LoteDetallePage({ loteId }: Props) {
     const puedeAplicarPromedi = esPendiente && (esIPSTxt || (lote.tipo === 'PRACTICAS' && esOsecac))
     const porcentajePromedi = esIPSTxt ? 40 : 20
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
+    const itemsOrdenados = [...lote.items].sort((a, b) =>
+        (a.paciente?.nombreCompleto ?? a.ingreso.nombre ?? '').localeCompare(
+            b.paciente?.nombreCompleto ?? b.ingreso.nombre ?? '',
+            'es',
+            { sensitivity: 'base' }
+        )
+    )
+    const itemsFiltrados = itemsOrdenados.filter((item) =>
+        normalizarTexto(item.paciente?.nombreCompleto ?? item.ingreso.nombre).includes(normalizarTexto(filtroPaciente))
+    )
     const totalNetoSinPromedi = esIPSTxt
         ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + it.impTotal, 0)
         : 0
@@ -583,7 +596,7 @@ export function LoteDetallePage({ loteId }: Props) {
         : itemsIncluidos.reduce((s, it) => s + it.importeTotal, 0)
 
     const detalleParaImpresion = !esIPSTxt
-        ? lote.items.map((item) => {
+        ? itemsOrdenados.filter((item) => printIngresoId === null || item.ingresoId === printIngresoId).map((item) => {
             const ordenesIngreso = ordenesPorIngreso[item.ingresoId] ?? []
             const lineasBase = ordenesIngreso.filter((orden) => orden.incluidaEnLote).flatMap((orden) =>
                 orden.items.map((linea) => {
@@ -696,10 +709,10 @@ export function LoteDetallePage({ loteId }: Props) {
 
                     <div className="flex gap-2 print:hidden">
                         <button
-                            onClick={imprimir}
+                            onClick={() => imprimir(null)}
                             className="border border-gray-300 text-gray-600 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
                         >
-                            🖨 Imprimir
+                            🖨 Imprimir general
                         </button>
                         {puedeAplicarPromedi && (
                             <button
@@ -820,6 +833,16 @@ export function LoteDetallePage({ loteId }: Props) {
                         <div className="flex flex-wrap items-end gap-2">
                             <h3 className="text-sm font-semibold text-gray-700 mr-2">Pacientes del Lote</h3>
                             <div>
+                                <label className="block text-[11px] text-gray-500 mb-1">Paciente</label>
+                                <input
+                                    type="text"
+                                    value={filtroPaciente}
+                                    onChange={(e) => setFiltroPaciente(e.target.value)}
+                                    placeholder="Nombre o apellido"
+                                    className="border rounded px-2 py-1 text-xs"
+                                />
+                            </div>
+                            <div>
                                 <label className="block text-[11px] text-gray-500 mb-1">Médico</label>
                                 <input
                                     type="text"
@@ -840,11 +863,12 @@ export function LoteDetallePage({ loteId }: Props) {
                                     className="border rounded px-2 py-1 text-xs w-24"
                                 />
                             </div>
-                            {(filtroMedico || filtroMatricula) && (
+                            {(filtroPaciente || filtroMedico || filtroMatricula) && (
                                 <button
                                     onClick={() => {
                                         setFiltroMedico('')
                                         setFiltroMatricula('')
+                                        setFiltroPaciente('')
                                     }}
                                     className="text-xs border border-gray-300 rounded px-2 py-1 hover:bg-gray-50"
                                 >
@@ -864,7 +888,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {lote.items.map((item) => (
+                                    {itemsFiltrados.map((item) => (
                                         <tr
                                             key={item.id}
                                             className={`cursor-pointer hover:bg-blue-50 ${selectedIngresoId === item.ingresoId ? 'bg-blue-50' : ''} ${!item.incluido ? 'opacity-40' : ''}`}
@@ -919,6 +943,12 @@ export function LoteDetallePage({ loteId }: Props) {
                                     Órdenes Facturadas —{' '}
                                     {lote.items.find((i) => i.ingresoId === selectedIngresoId)?.paciente?.nombreCompleto ?? 'Paciente'}
                                 </h3>
+                                <button
+                                    onClick={() => imprimir(selectedIngresoId)}
+                                    className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                                >
+                                    Imprimir paciente
+                                </button>
                                 <button
                                     onClick={() => { setSelectedIngresoId(null); setOrdenes([]) }}
                                     className="text-xs text-gray-400 hover:text-gray-600"
@@ -1168,7 +1198,13 @@ export function LoteDetallePage({ loteId }: Props) {
 
             {/* Vista de impresión oculta */}
             <div ref={printRef} className="hidden print:block">
-                <LoteResumenPrint lote={lote} totalIncluido={totalIncluido} detalleIngresos={detalleParaImpresion} />
+                <LoteResumenPrint
+                    lote={lote}
+                    totalIncluido={printIngresoId === null
+                        ? totalIncluido
+                        : (detalleParaImpresion.find((item) => item.ingresoId === printIngresoId)?.totalIngreso ?? 0)}
+                    detalleIngresos={detalleParaImpresion}
+                />
                 </div>
 
             {mostrarConfirmPromedi && (

@@ -5376,6 +5376,20 @@ function aplicaPromediOsecac(codigoPractica: string | null | undefined): boolean
     return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoPromedi(codigo)
 }
 
+function calcularImportePromediPractica(
+    codigoPractica: string | null | undefined,
+    importeTotal: number | string | { toString(): string } | null | undefined,
+    porcentajePromedi: number,
+    esIps: boolean
+): number {
+    const importeBase = typeof importeTotal === 'object' && importeTotal !== null && 'toString' in importeTotal
+        ? Number(importeTotal.toString())
+        : Number(importeTotal ?? 0)
+    const aplica = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(codigoPractica)
+    const subtotal = Number.isFinite(importeBase) ? redondear2Repo(importeBase) : 0
+    return aplica ? redondear2Repo(subtotal * porcentajePromedi) : subtotal
+}
+
 export async function aplicarPromediLote(
     loteId: number,
     usuario: string
@@ -5505,10 +5519,12 @@ export async function aplicarPromediLote(
             if (!ordenConAutorizacion && !tieneNumeroAutorizacionValido(item.numeroAutorizacion)) continue
             if (!orden.ingresoId) continue
 
-            const importeItem = Number(item.importeTotal ?? 0)
-            const importeFacturable = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
-                ? redondear2Repo(importeItem * porcentajePromedi)
-                : redondear2Repo(importeItem)
+            const importeFacturable = calcularImportePromediPractica(
+                item.codigoPractica,
+                item.importeTotal,
+                porcentajePromedi,
+                esIps,
+            )
 
             const actual = importePorIngreso.get(orden.ingresoId) ?? 0
             importePorIngreso.set(orden.ingresoId, redondear2Repo(actual + importeFacturable))

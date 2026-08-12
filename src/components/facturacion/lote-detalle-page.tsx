@@ -151,6 +151,7 @@ function importePromediAplicado(codigoRaw: string, importe: number, porcentaje: 
     const alcanzado = CODIGOS_PROMEDI.has(codigo) ||
         RANGOS_PROMEDI.some(({ desde, hasta }) => codigo >= desde && codigo <= hasta)
     if (esOsecac && excluido) return importe
+    // El PROMEDI debe evaluarse por práctica/item y no por paciente o ingreso.
     return alcanzado ? Math.round(importe * porcentaje) / 100 : importe
 }
 

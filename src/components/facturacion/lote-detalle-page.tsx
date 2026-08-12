@@ -135,13 +135,16 @@ function esObraSocialOsecac(nombre: string | null | undefined): boolean {
 }
 
 const CODIGOS_PROMEDI = new Set([430101, 431001, 400101, 431002, 431103, 430130])
+const RANGOS_PROMEDI = [
+    { desde: 10101, hasta: 130304 },
+    { desde: 720201, hasta: 722238 },
+]
 
 function importePromediOsecac(codigoRaw: string, importe: number): number {
     const codigo = Number.parseInt(codigoRaw.trim(), 10)
     const excluido = codigo === 70116 || codigo === 70607
     const alcanzado = CODIGOS_PROMEDI.has(codigo) ||
-        (codigo >= 10101 && codigo <= 130304) ||
-        (codigo >= 720201 && codigo <= 722238)
+        RANGOS_PROMEDI.some(({ desde, hasta }) => codigo >= desde && codigo <= hasta)
     return !excluido && alcanzado ? Math.round(importe * 20) / 100 : importe
 }
 

@@ -5338,6 +5338,10 @@ export async function crearLoteIPSTxt(
 
 const CODIGOS_PROMEDI_BASE = new Set([430101, 431001, 400101, 431002, 431103, 430130])
 const CODIGOS_PROMEDI_BASE_ARRAY = Array.from(CODIGOS_PROMEDI_BASE)
+const CODIGOS_PROMEDI_RANGOS = [
+    { desde: 10101, hasta: 130304 },
+    { desde: 720201, hasta: 722238 },
+]
 const CODIGOS_EXCLUIDOS_PROMEDI_OSECAC = new Set([70116, 70607])
 
 function parseCodigoPromedi(codigo: string | null | undefined): number | null {
@@ -5346,23 +5350,21 @@ function parseCodigoPromedi(codigo: string | null | undefined): number | null {
     return parsed
 }
 
-function codigoEnRangoBasePromedi(codigo: number): boolean {
-    if (codigo >= 10101 && codigo <= 130304) return true
-    if (codigo >= 720201 && codigo <= 722238) return true
-    return false
+function codigoEnRangoPromedi(codigo: number): boolean {
+    return CODIGOS_PROMEDI_RANGOS.some(({ desde, hasta }) => codigo >= desde && codigo <= hasta)
 }
 
 function aplicaPromediIPS(codigoPractica: string | null | undefined): boolean {
     const codigo = parseCodigoPromedi(codigoPractica)
     if (codigo === null) return false
-    return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoBasePromedi(codigo)
+    return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoPromedi(codigo)
 }
 
 function aplicaPromediOsecac(codigoPractica: string | null | undefined): boolean {
     const codigo = parseCodigoPromedi(codigoPractica)
     if (codigo === null) return false
     if (CODIGOS_EXCLUIDOS_PROMEDI_OSECAC.has(codigo)) return false
-    return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoBasePromedi(codigo)
+    return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoPromedi(codigo)
 }
 
 export async function aplicarPromediLote(
@@ -5401,7 +5403,7 @@ export async function aplicarPromediLote(
                 WHERE "LotID" = ${loteId}
             `
 
-            // Sobrescribe al 40% solo los codigos alcanzados por regla IPS.
+            // Solo aplica el porcentaje a los códigos exactos y rangos permitidos por la regla.
             await tx.$executeRaw`
                 UPDATE "LoteIPSTxtItem"
                 SET "LipImpPromedi" = ROUND("LipImpTotal" * ${PORCENTAJE_PROMEDI_IPS}, 2)

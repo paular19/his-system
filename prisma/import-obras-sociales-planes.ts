@@ -13,6 +13,7 @@ type ObraSocialCsvRow = {
 const OBRAS_SOCIALES_REGLAS: readonly ObraSocialCsvRow[] = [
     { id: 1, nombre: 'IPSS - Cod.1', requiereCoseguro: 'S', estado: 'A', fechaEstado: new Date() },
     { id: 41, nombre: 'OSPSA - SALTA - Cod.41', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
+    { id: 190, nombre: 'AMSTERDAM SALUD SA - Cod.190', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
     { id: 202, nombre: 'OSPERHYRA - Cod.202', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
     { id: 213, nombre: 'RED ARGENTINA SALUD - Cod.213', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },
     { id: 235, nombre: 'MEDIFE', requiereCoseguro: 'N', estado: 'A', fechaEstado: new Date() },

@@ -34,6 +34,7 @@ const OBRAS_SOCIALES = [
     // IPSS ya existe con ID 1; se incluye para confirmar estado activo
     { id: 1, nombre: 'IPSS - Cod.1', requiereCoseguro: 'S' },
     { id: 41, nombre: 'OSPSA - SALTA - Cod.41', requiereCoseguro: 'N' },
+    { id: 190, nombre: 'AMSTERDAM SALUD SA - Cod.190', requiereCoseguro: 'N' },
     { id: 202, nombre: 'OSPERHYRA - Cod.202', requiereCoseguro: 'N' },
     { id: 213, nombre: 'RED ARGENTINA SALUD - Cod.213', requiereCoseguro: 'N' },
     { id: 235, nombre: 'MEDIFE', requiereCoseguro: 'N' },

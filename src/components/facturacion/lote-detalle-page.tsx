@@ -638,11 +638,23 @@ export function LoteDetallePage({ loteId }: Props) {
         ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + it.impTotal, 0)
         : 0
     const tienePromedi = esIPSTxt
-        ? (lote.itemsIPSTxt ?? []).some((it) => it.importePromedi !== null)
-        : lote.items.some((it) => it.importePromedi !== null)
+        ? (lote.itemsIPSTxt ?? []).some((it) => it.importePromedi !== null && Number(it.importePromedi) !== Number(it.impTotal))
+        : lote.items.some((it) => it.importePromedi !== null && it.importePromedi !== it.importeTotal)
     const totalIncluido = esIPSTxt
-        ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + (vistaPromedi ? (it.importePromedi ?? it.impTotal) : it.impTotal), 0)
-        : itemsIncluidos.reduce((s, it) => s + (vistaPromedi ? (it.importePromedi ?? it.importeTotal) : it.importeTotal), 0)
+        ? (lote.itemsIPSTxt ?? []).reduce((s, it) => {
+            const importeBase = Number(it.impTotal)
+            const importeMostrado = vistaPromedi && it.importePromedi !== null && Number(it.importePromedi) !== importeBase
+                ? Number(it.importePromedi)
+                : importeBase
+            return s + importeMostrado
+        }, 0)
+        : itemsIncluidos.reduce((s, it) => {
+            const importeBase = Number(it.importeTotal)
+            const importeMostrado = vistaPromedi && it.importePromedi !== null && it.importePromedi !== importeBase
+                ? Number(it.importePromedi)
+                : importeBase
+            return s + importeMostrado
+        }, 0)
 
     const detalleParaImpresion = !esIPSTxt
         ? itemsOrdenados.filter((item) => printIngresoId === null || item.ingresoId === printIngresoId).map((item) => {
@@ -979,7 +991,13 @@ export function LoteDetallePage({ loteId }: Props) {
                                                 {item.ingreso.numeroAfiliado ?? '-'}
                                             </td>
                                             <td className="px-3 py-2 text-right font-semibold">
-                                                {formatMonto(vistaPromedi ? (item.importePromedi ?? item.importeTotal) : item.importeTotal)}
+                                                {(() => {
+                                                    const importeBase = Number(item.importeTotal)
+                                                    const importeMostrado = vistaPromedi && item.importePromedi !== null && item.importePromedi !== importeBase
+                                                        ? Number(item.importePromedi)
+                                                        : importeBase
+                                                    return formatMonto(importeMostrado)
+                                                })()}
                                             </td>
                                         </tr>
                                     ))}
@@ -1226,7 +1244,8 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                 <div className="mt-2 divide-y divide-gray-200 border-y border-gray-200 text-xs">
                                                                     {practicasVisibles.map((it) => {
                                                                         const importeBase = it.importeTotal
-                                                                        const importeAplicado = vistaPromedi ? it.importePromedi : importeBase
+                                                                        const cambioPromedi = vistaPromedi && it.importePromedi !== null && it.importePromedi !== importeBase
+                                                                        const importeAplicado = cambioPromedi ? it.importePromedi : importeBase
                                                                         return (
                                                                             <div key={it.key} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                                                                                 <div>
@@ -1234,7 +1253,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                                     <span className="ml-2 text-gray-700">{it.descripcion ?? '-'}</span>
                                                                                 </div>
                                                                                 <div className="text-right">
-                                                                                    {vistaPromedi ? (
+                                                                                    {cambioPromedi ? (
                                                                                         <div className="flex flex-col items-end">
                                                                                             <span className="text-[11px] text-gray-400 line-through">{formatMonto(importeBase)}</span>
                                                                                             <strong className="text-green-700">{formatMonto(importeAplicado)}</strong>

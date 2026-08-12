@@ -650,7 +650,7 @@ export function LoteDetallePage({ loteId }: Props) {
             const lineasBase = ordenesIngreso.filter((orden) => orden.incluidaEnLote).flatMap((orden) =>
                 orden.items.map((linea) => {
                     const importeLinea = vistaPromedi
-                        ? importePromediOsecac(linea.codigoPractica, linea.importeTotal)
+                        ? importePromediAplicado(linea.codigoPractica, linea.importeTotal, porcentajePromedi, esOsecac)
                         : linea.importeTotal
                     const desglose = desglosarImportesPorCodigo(
                         linea.codigoPractica,
@@ -659,6 +659,7 @@ export function LoteDetallePage({ loteId }: Props) {
                         importeLinea
                     )
                     return {
+                        itemKey: String(linea.item ?? `${orden.numero}:${linea.codigoPractica}:${linea.fecha}`),
                         ordenNumero: orden.numero,
                         fecha: linea.fecha,
                         numeroAutorizacion: linea.numeroAutorizacion,
@@ -678,6 +679,7 @@ export function LoteDetallePage({ loteId }: Props) {
                 lineasBase
                     .reduce((acc, linea) => {
                         const key = [
+                            linea.itemKey,
                             linea.ordenNumero,
                             fechaToGroupingKey(linea.fecha),
                             linea.numeroAutorizacion ?? '',

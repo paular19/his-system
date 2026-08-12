@@ -90,6 +90,11 @@ function esObraSocialOsecac(nombre: string | null | undefined): boolean {
     return limpio.includes('OSECAC') || limpio.includes('OBRASOCIALEMPLEADOSDECOMERCIO')
 }
 
+function esObraSocialIps(nombre: string | null | undefined): boolean {
+    const limpio = normalizarTextoSoloAlfanumerico(nombre)
+    return limpio.includes('IPS') || limpio.includes('IPSS')
+}
+
 function descripcionEsAnestesista(descripcion: string | null | undefined): boolean {
     const text = normalizarTextoComparacion(descripcion)
     return text.includes('ANEST') || text.includes('[ANE')
@@ -4324,12 +4329,16 @@ const LOTE_SELECT = {
 } satisfies Prisma.LoteFacturacionSelect
 
 function mapLoteRow(row: Prisma.LoteFacturacionGetPayload<{ select: typeof LOTE_SELECT }>): LoteFacturacionListItem {
+    const promediAplicado =
+        row.items.some((it) => it.importePromedi !== null) ||
+        row.itemsIPSTxt.some((it) => it.importePromedi !== null)
+
     return {
         ...row,
         tipo: row.tipo as LoteFacturacionListItem['tipo'],
         estado: row.estado as EstadoLote,
         importeTotal: Number(row.importeTotal),
-        promediAplicado: row.items.length > 0 || row.itemsIPSTxt.length > 0,
+        promediAplicado,
     }
 }
 
@@ -5431,9 +5440,11 @@ export async function aplicarPromediLote(
         return { importeTotal: totalPromedi, cantidadItems }
     }
 
+    const esIps = esObraSocialIps(lote.obraSocial?.nombre)
     const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)
-    if (!esOsecac || lote.tipo !== 'PRACTICAS') {
-        throw new Error('PROMEDI solo aplica a lotes IPS TXT o lotes de practicas OSECAC')
+    const esPromediObraSocial = esIps || esOsecac
+    if (!esPromediObraSocial || lote.tipo !== 'PRACTICAS') {
+        throw new Error('PROMEDI solo aplica a lotes IPS TXT o lotes de prácticas con obra social de regla PROMEDI')
     }
 
     const { desde, hasta } = periodoToDateRange(lote.periodo)
@@ -5486,7 +5497,7 @@ export async function aplicarPromediLote(
     })
 
     const importePorIngreso = new Map<number, number>()
-    const PORCENTAJE_PROMEDI_OSECAC = 0.20
+    const porcentajePromedi = esIps ? 0.36 : 0.20
 
     for (const orden of ordenes) {
         const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
@@ -5495,8 +5506,8 @@ export async function aplicarPromediLote(
             if (!orden.ingresoId) continue
 
             const importeItem = Number(item.importeTotal ?? 0)
-            const importeFacturable = aplicaPromediOsecac(item.codigoPractica)
-                ? redondear2Repo(importeItem * PORCENTAJE_PROMEDI_OSECAC)
+            const importeFacturable = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
+                ? redondear2Repo(importeItem * porcentajePromedi)
                 : redondear2Repo(importeItem)
 
             const actual = importePorIngreso.get(orden.ingresoId) ?? 0

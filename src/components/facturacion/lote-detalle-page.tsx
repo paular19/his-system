@@ -134,6 +134,11 @@ function esObraSocialOsecac(nombre: string | null | undefined): boolean {
     return limpio.includes('OSECAC') || limpio.includes('OBRASOCIALEMPLEADOSDECOMERCIO')
 }
 
+function esObraSocialIps(nombre: string | null | undefined): boolean {
+    const limpio = normalizarTextoSoloAlfanumerico(nombre)
+    return limpio.includes('IPS') || limpio.includes('IPSS')
+}
+
 const CODIGOS_PROMEDI = new Set([430101, 431001, 400101, 431002, 431103, 430130])
 const RANGOS_PROMEDI = [
     { desde: 10101, hasta: 130304 },
@@ -403,12 +408,40 @@ export function LoteDetallePage({ loteId }: Props) {
     }, [lote, filtroMedico, filtroMatricula, loteId])
 
     async function toggleItem(item: LoteFacturacionItemDetalle) {
-        const res = await fetch(`/api/facturacion/lotes/${loteId}/items/${item.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ incluido: !item.incluido }),
+        const nuevoIncluido = !item.incluido
+        setLote((prev) => {
+            if (!prev) return prev
+            return {
+                ...prev,
+                items: prev.items.map((it) => it.id === item.id ? { ...it, incluido: nuevoIncluido } : it),
+            }
         })
-        if (res.ok) cargar()
+
+        try {
+            const res = await fetch(`/api/facturacion/lotes/${loteId}/items/${item.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ incluido: nuevoIncluido }),
+            })
+
+            if (!res.ok) {
+                setLote((prev) => {
+                    if (!prev) return prev
+                    return {
+                        ...prev,
+                        items: prev.items.map((it) => it.id === item.id ? { ...it, incluido: item.incluido } : it),
+                    }
+                })
+            }
+        } catch {
+            setLote((prev) => {
+                if (!prev) return prev
+                return {
+                    ...prev,
+                    items: prev.items.map((it) => it.id === item.id ? { ...it, incluido: item.incluido } : it),
+                }
+            })
+        }
     }
 
     async function cambiarEstado(estado: 'CON' | 'ANU') {
@@ -589,9 +622,10 @@ export function LoteDetallePage({ loteId }: Props) {
     const est = ESTADO_LABEL[lote.estado] ?? { label: lote.estado, cls: 'bg-gray-100 text-gray-700' }
     const esPendiente = lote.estado === 'PEN'
     const esIPSTxt = lote.origen === 'IPS_TXT'
+    const esIps = esObraSocialIps(lote.obraSocial?.nombre)
     const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)
-    const puedeAplicarPromedi = esPendiente && !lote.promediAplicado && (esIPSTxt || (lote.tipo === 'PRACTICAS' && esOsecac))
-    const porcentajePromedi = esIPSTxt ? 36 : 20
+    const puedeAplicarPromedi = esPendiente && !lote.promediAplicado && (esIPSTxt || (lote.tipo === 'PRACTICAS' && (esIps || esOsecac)))
+    const porcentajePromedi = esIPSTxt || esIps ? 36 : 20
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const itemsOrdenados = [...lote.items].sort((a, b) =>
         (a.paciente?.nombreCompleto ?? a.ingreso.nombre ?? '').localeCompare(

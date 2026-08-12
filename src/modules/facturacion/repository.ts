@@ -5519,12 +5519,11 @@ export async function aplicarPromediLote(
             if (!ordenConAutorizacion && !tieneNumeroAutorizacionValido(item.numeroAutorizacion)) continue
             if (!orden.ingresoId) continue
 
-            const importeFacturable = calcularImportePromediPractica(
-                item.codigoPractica,
-                item.importeTotal,
-                porcentajePromedi,
-                esIps,
-            )
+            const importeBase = Number(item.importeTotal ?? 0)
+            const aplica = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
+            const importeFacturable = aplica
+                ? redondear2Repo(importeBase * porcentajePromedi)
+                : redondear2Repo(importeBase)
 
             const actual = importePorIngreso.get(orden.ingresoId) ?? 0
             importePorIngreso.set(orden.ingresoId, redondear2Repo(actual + importeFacturable))

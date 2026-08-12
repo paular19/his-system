@@ -1827,7 +1827,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             cargarFormDesdeContexto(json.data)
             initEditRows(json.data)
             setEditAutorizacionOrden({})
-            setSeleccion({})
             setOrdenesExpand({})
             setOrdenesPendientesExpand({})
             setFiltroPrestaciones('')

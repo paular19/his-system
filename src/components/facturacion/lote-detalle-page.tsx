@@ -250,38 +250,22 @@ function agruparItemsOrdenParaTabla(
     porcentajePromedi: number,
     esOsecac: boolean
 ): OrdenItemAgrupadoTabla[] {
-    const agrupados = new Map<string, OrdenItemAgrupadoTabla>()
-
-    for (const item of items) {
-        const key = [
+    return items.map((item) => ({
+        key: [
+            item.item,
             fechaToGroupingKey(item.fecha),
             (item.codigoPractica ?? '').trim(),
             item.numeroAutorizacion ?? '',
             item.descripcion ?? '',
-        ].join('|')
-
-        const importePromedi = importePromediAplicado(item.codigoPractica, item.importeTotal, porcentajePromedi, esOsecac)
-        const existente = agrupados.get(key)
-        if (!existente) {
-            agrupados.set(key, {
-                key,
-                fecha: item.fecha,
-                codigoPractica: item.codigoPractica,
-                descripcion: item.descripcion,
-                cantidad: item.cantidad,
-                numeroAutorizacion: item.numeroAutorizacion,
-                importeTotal: item.importeTotal,
-                importePromedi,
-            })
-            continue
-        }
-
-        existente.importeTotal += item.importeTotal
-        existente.importePromedi += importePromedi
-        existente.cantidad = Math.max(existente.cantidad, item.cantidad)
-    }
-
-    return Array.from(agrupados.values())
+        ].join('|'),
+        fecha: item.fecha,
+        codigoPractica: item.codigoPractica,
+        descripcion: item.descripcion,
+        cantidad: item.cantidad,
+        numeroAutorizacion: item.numeroAutorizacion,
+        importeTotal: item.importeTotal,
+        importePromedi: importePromediAplicado(item.codigoPractica, item.importeTotal, porcentajePromedi, esOsecac),
+    }))
 }
 
 export function LoteDetallePage({ loteId }: Props) {

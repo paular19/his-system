@@ -145,12 +145,17 @@ const RANGOS_PROMEDI = [
     { desde: 720201, hasta: 722238 },
 ]
 
-function importePromediOsecac(codigoRaw: string, importe: number): number {
+function importePromediAplicado(codigoRaw: string, importe: number, porcentaje: number, esOsecac: boolean): number {
     const codigo = Number.parseInt(codigoRaw.trim(), 10)
     const excluido = codigo === 70116 || codigo === 70607
     const alcanzado = CODIGOS_PROMEDI.has(codigo) ||
         RANGOS_PROMEDI.some(({ desde, hasta }) => codigo >= desde && codigo <= hasta)
-    return !excluido && alcanzado ? Math.round(importe * 20) / 100 : importe
+    if (esOsecac && excluido) return importe
+    return alcanzado ? Math.round(importe * porcentaje) / 100 : importe
+}
+
+function importePromediOsecac(codigoRaw: string, importe: number): number {
+    return importePromediAplicado(codigoRaw, importe, 20, true)
 }
 
 interface Props { loteId: number }
@@ -237,9 +242,14 @@ type OrdenItemAgrupadoTabla = {
     cantidad: number
     numeroAutorizacion: string | null
     importeTotal: number
+    importePromedi: number
 }
 
-function agruparItemsOrdenParaTabla(items: OrdenAutorizadaLote['items']): OrdenItemAgrupadoTabla[] {
+function agruparItemsOrdenParaTabla(
+    items: OrdenAutorizadaLote['items'],
+    porcentajePromedi: number,
+    esOsecac: boolean
+): OrdenItemAgrupadoTabla[] {
     const agrupados = new Map<string, OrdenItemAgrupadoTabla>()
 
     for (const item of items) {
@@ -250,6 +260,7 @@ function agruparItemsOrdenParaTabla(items: OrdenAutorizadaLote['items']): OrdenI
             item.descripcion ?? '',
         ].join('|')
 
+        const importePromedi = importePromediAplicado(item.codigoPractica, item.importeTotal, porcentajePromedi, esOsecac)
         const existente = agrupados.get(key)
         if (!existente) {
             agrupados.set(key, {
@@ -260,11 +271,13 @@ function agruparItemsOrdenParaTabla(items: OrdenAutorizadaLote['items']): OrdenI
                 cantidad: item.cantidad,
                 numeroAutorizacion: item.numeroAutorizacion,
                 importeTotal: item.importeTotal,
+                importePromedi,
             })
             continue
         }
 
         existente.importeTotal += item.importeTotal
+        existente.importePromedi += importePromedi
         existente.cantidad = Math.max(existente.cantidad, item.cantidad)
     }
 
@@ -1041,7 +1054,8 @@ export function LoteDetallePage({ loteId }: Props) {
                                             const keyOrden = `${orden.puestoNumero}-${orden.numero}`
                                             const keyOrdenEdicion = `${orden.puestoNumero}:${orden.numero}`
                                             const draftOrden = editOrdenes[keyOrdenEdicion] ?? buildOrdenEditState(orden)
-                                            const itemsTabla = agruparItemsOrdenParaTabla(orden.items)
+                                            const porcentajePromediOrden = esIPSTxt || esIps ? 36 : 20
+                                            const itemsTabla = agruparItemsOrdenParaTabla(orden.items, porcentajePromediOrden, esOsecac)
                                             const totalCantidadOrden = orden.items.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)
                                             const limitePracticas = 4
                                             const abierta = ordenesAbiertas[keyOrden] ?? false
@@ -1224,21 +1238,34 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                 </div>
                                                             ) : (
                                                                 <div className="mt-2 divide-y divide-gray-200 border-y border-gray-200 text-xs">
-                                                                    {practicasVisibles.map((it) => (
-                                                                        <div key={it.key} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                                                                            <div>
-                                                                                <span className="font-mono text-gray-800">{it.codigoPractica}</span>
-                                                                                <span className="ml-2 text-gray-700">{it.descripcion ?? '-'}</span>
+                                                                    {practicasVisibles.map((it) => {
+                                                                        const importeBase = it.importeTotal
+                                                                        const importeAplicado = vistaPromedi ? it.importePromedi : importeBase
+                                                                        return (
+                                                                            <div key={it.key} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                                                                <div>
+                                                                                    <span className="font-mono text-gray-800">{it.codigoPractica}</span>
+                                                                                    <span className="ml-2 text-gray-700">{it.descripcion ?? '-'}</span>
+                                                                                </div>
+                                                                                <div className="text-right">
+                                                                                    {vistaPromedi ? (
+                                                                                        <div className="flex flex-col items-end">
+                                                                                            <span className="text-[11px] text-gray-400 line-through">{formatMonto(importeBase)}</span>
+                                                                                            <strong className="text-green-700">{formatMonto(importeAplicado)}</strong>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <strong className="text-gray-800">{formatMonto(importeBase)}</strong>
+                                                                                    )}
+                                                                                </div>
+                                                                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 sm:col-span-2">
+                                                                                    <span>{new Date(it.fecha).toLocaleString('es-AR')}</span>
+                                                                                    <span>Cant. {it.cantidad}</span>
+                                                                                    <span className="text-blue-700">Aut. {it.numeroAutorizacion ?? '—'}</span>
+                                                                                    <span>Ejecutante: {orden.profesional?.nombre ?? '-'} · Mat. {orden.profesional?.matricula ?? '-'}</span>
+                                                                                </div>
                                                                             </div>
-                                                                            <strong className="text-gray-800">{formatMonto(it.importeTotal)}</strong>
-                                                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 sm:col-span-2">
-                                                                                <span>{new Date(it.fecha).toLocaleString('es-AR')}</span>
-                                                                                <span>Cant. {it.cantidad}</span>
-                                                                                <span className="text-blue-700">Aut. {it.numeroAutorizacion ?? '—'}</span>
-                                                                                <span>Ejecutante: {orden.profesional?.nombre ?? '-'} · Mat. {orden.profesional?.matricula ?? '-'}</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
+                                                                        )
+                                                                    })}
                                                                     {!expandida && restantes > 0 && <p className="py-2 text-[11px] text-gray-500">+{restantes} práctica(s) más</p>}
                                                                 </div>
                                                             )}

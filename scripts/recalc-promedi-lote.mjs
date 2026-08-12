@@ -40,6 +40,16 @@ function tieneNumeroAutorizacionValido(valor) {
   return typeof valor === 'string' ? valor.trim().length > 0 : Boolean(valor)
 }
 
+function practicaMarcadaComoFacturada(estado) {
+  return String(estado ?? '').toUpperCase() !== 'N'
+}
+
+function resolverNumeroAutorizacion(numeroAutorizacionItem, numeroAutorizacionOrden) {
+  if (tieneNumeroAutorizacionValido(numeroAutorizacionItem)) return String(numeroAutorizacionItem).trim()
+  if (tieneNumeroAutorizacionValido(numeroAutorizacionOrden)) return String(numeroAutorizacionOrden).trim()
+  return null
+}
+
 function periodoToDateRange(periodo) {
   const [anio, mes] = String(periodo ?? '').split('-').map((v) => Number(v))
   const desde = new Date(Date.UTC(anio, mes - 1, 1, 0, 0, 0, 0))
@@ -91,6 +101,14 @@ async function main() {
   }
 
   const ingresoIds = [...new Set(loteItems.map((it) => it.ingresoId))]
+  const ordenesExcluidas = await prisma.loteFacturacionOrdenExcluida.findMany({
+    where: { loteId },
+    select: { puestoNumero: true, ordenNumero: true },
+  })
+  const clavesOrdenesExcluidas = new Set(
+    ordenesExcluidas.map((orden) => `${orden.puestoNumero}:${orden.ordenNumero}`)
+  )
+
   const ordenes = await prisma.orden.findMany({
     where: {
       ingresoId: { in: ingresoIds },
@@ -103,12 +121,22 @@ async function main() {
     },
     select: {
       ingresoId: true,
+      puestoNumero: true,
+      numero: true,
       numeroAutorizacion: true,
       items: {
         select: {
           codigoPractica: true,
           importeTotal: true,
           numeroAutorizacion: true,
+          practica: {
+            select: {
+              estado: true,
+              puestoNumero: true,
+              ordenNumero: true,
+              ordenItem: true,
+            },
+          },
         },
       },
     },
@@ -118,9 +146,12 @@ async function main() {
   const porcentajePromedi = esIps ? 0.36 : 0.20
 
   for (const orden of ordenes) {
-    const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
+    if (clavesOrdenesExcluidas.has(`${orden.puestoNumero}:${orden.numero}`)) continue
     for (const item of orden.items) {
-      if (!ordenConAutorizacion && !tieneNumeroAutorizacionValido(item.numeroAutorizacion)) continue
+      if (!practicaMarcadaComoFacturada(item.practica?.estado)) continue
+      if (!item.practica?.puestoNumero || !item.practica.ordenNumero || !item.practica.ordenItem) continue
+      const numeroAutorizacion = resolverNumeroAutorizacion(item.numeroAutorizacion, orden.numeroAutorizacion)
+      if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
       if (!orden.ingresoId) continue
       const importeBase = Number(item.importeTotal ?? 0)
       const aplica = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
@@ -142,8 +173,11 @@ async function main() {
     })
   )
 
-  const total = updates.reduce((sum, it) => sum + Number(it.importePromedi ?? 0), 0)
-  console.log(JSON.stringify({ loteId, total, itemsActualizados: updates.length, detalle: updates.slice(0, 10) }, null, 2))
+  const totalIncluido = updates.reduce((sum, it) => {
+    const ref = loteItems.find((item) => item.id === it.id)
+    return ref?.incluido ? sum + Number(it.importePromedi ?? 0) : sum
+  }, 0)
+  console.log(JSON.stringify({ loteId, totalIncluido: round2(totalIncluido), itemsActualizados: updates.length, detalle: updates.slice(0, 10) }, null, 2))
 }
 
 main()

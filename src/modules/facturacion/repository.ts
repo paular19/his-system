@@ -5473,6 +5473,14 @@ export async function aplicarPromediLote(
     }
 
     const ingresoIds = Array.from(new Set(loteItems.map((it) => it.ingresoId)))
+    const ordenesExcluidas = await prisma.loteFacturacionOrdenExcluida.findMany({
+        where: { loteId },
+        select: { puestoNumero: true, ordenNumero: true },
+    })
+    const clavesOrdenesExcluidas = new Set(
+        ordenesExcluidas.map((orden) => `${orden.puestoNumero}:${orden.ordenNumero}`)
+    )
+
     const ordenes = await prisma.orden.findMany({
         where: {
             ingresoId: { in: ingresoIds },
@@ -5499,12 +5507,22 @@ export async function aplicarPromediLote(
         },
         select: {
             ingresoId: true,
+            puestoNumero: true,
+            numero: true,
             numeroAutorizacion: true,
             items: {
                 select: {
                     codigoPractica: true,
                     importeTotal: true,
                     numeroAutorizacion: true,
+                    practica: {
+                        select: {
+                            estado: true,
+                            puestoNumero: true,
+                            ordenNumero: true,
+                            ordenItem: true,
+                        },
+                    },
                 },
             },
         },
@@ -5514,9 +5532,12 @@ export async function aplicarPromediLote(
     const porcentajePromedi = esIps ? 0.36 : 0.20
 
     for (const orden of ordenes) {
-        const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
+        if (clavesOrdenesExcluidas.has(`${orden.puestoNumero}:${orden.numero}`)) continue
         for (const item of orden.items) {
-            if (!ordenConAutorizacion && !tieneNumeroAutorizacionValido(item.numeroAutorizacion)) continue
+            if (!practicaMarcadaComoFacturada(item.practica?.estado)) continue
+            if (!item.practica?.puestoNumero || !item.practica.ordenNumero || !item.practica.ordenItem) continue
+            const numeroAutorizacion = resolverNumeroAutorizacion(item.numeroAutorizacion, orden.numeroAutorizacion)
+            if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
             if (!orden.ingresoId) continue
 
             const importeBase = Number(item.importeTotal ?? 0)

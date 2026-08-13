@@ -2,6 +2,7 @@ import { Header } from '@/components/layout/header'
 import { getUsuarioSesion } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
+import { limpiarBloqueMetaInternacion } from '@/modules/internacion/observaciones-meta'
 import { obtenerPaciente } from '@/modules/pacientes/service'
 import { PacienteForm } from '@/components/pacientes/paciente-form'
 import { getCatalogoPacienteForm } from '@/lib/catalogos/pacientes-cache'
@@ -73,7 +74,7 @@ export default async function EditarPacientePage({ params }: PageProps) {
     obraSocialCoseguroId: paciente.obraSocialCoseguroId ?? undefined,
     nombreTutor: paciente.nombreTutor ?? undefined,
     telefonoTutor: paciente.telefonoTutor ?? undefined,
-    observaciones: paciente.observaciones ?? undefined,
+    observaciones: limpiarBloqueMetaInternacion(paciente.observaciones) ?? undefined,
   }
 
   return (

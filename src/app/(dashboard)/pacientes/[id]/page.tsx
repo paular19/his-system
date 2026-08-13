@@ -4,6 +4,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect, notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { formatearFecha, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
+import { limpiarBloqueMetaInternacion } from '@/modules/internacion/observaciones-meta'
 import Link from 'next/link'
 import { ChevronRight, Pencil, ClipboardList, BedDouble } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -360,6 +361,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
     internaciones.find((ing) => normalizarCodigo(ing.estado) === 'A') ?? null
   const internacionReservaPendiente =
     internaciones.find((ing) => puedeConfirmarReserva(ing)) ?? null
+  const observacionesPaciente = limpiarBloqueMetaInternacion(paciente.observaciones)
 
   return (
     <>
@@ -441,7 +443,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
               obraSocialId: paciente.obraSocialId,
               planId: paciente.planId,
               numeroAfiliado: paciente.numeroAfiliado,
-              observaciones: paciente.observaciones,
+              observaciones: observacionesPaciente,
             }}
             ingresos={ingresosPrint}
           />
@@ -627,11 +629,11 @@ export default async function FichaPacientePage({ params }: PageProps) {
         </div>
 
         {/* Observaciones */}
-        {paciente.observaciones && (
+        {observacionesPaciente && (
           <div className="his-card p-5">
             <h3 className="text-sm font-semibold text-gray-700 mb-2">Observaciones</h3>
             <p className="text-sm text-gray-600 whitespace-pre-line">
-              {paciente.observaciones}
+              {observacionesPaciente}
             </p>
           </div>
         )}

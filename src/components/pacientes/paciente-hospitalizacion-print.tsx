@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { Printer } from 'lucide-react'
 import { formatearFechaCalendario } from '@/lib/utils'
 import { formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
+import { limpiarBloqueMetaInternacion } from '@/modules/internacion/observaciones-meta'
 
 type PacientePrintData = {
     id: number
@@ -86,6 +87,7 @@ function labelEstadoIngreso(estado: string | null | undefined) {
 
 export function PacienteHospitalizacionPrint({ paciente, ingresos }: PacienteHospitalizacionPrintProps) {
     const [seleccionados, setSeleccionados] = useState<number[]>(ingresos.map((i) => i.id))
+    const observacionesPaciente = limpiarBloqueMetaInternacion(paciente.observaciones)
 
     const ingresosSeleccionados = useMemo(
         () => ingresos.filter((i) => seleccionados.includes(i.id)),
@@ -219,8 +221,8 @@ export function PacienteHospitalizacionPrint({ paciente, ingresos }: PacienteHos
                         <div><strong>Tel. fijo:</strong> {paciente.telefonoFijo ?? '-'}</div>
                         <div><strong>Email:</strong> {paciente.email ?? '-'}</div>
                         <div><strong>N° Afiliado:</strong> {paciente.numeroAfiliado ?? '-'}</div>
-                        {paciente.observaciones && (
-                            <div style={{ gridColumn: '1 / -1' }}><strong>Observaciones:</strong> {paciente.observaciones}</div>
+                        {observacionesPaciente && (
+                            <div style={{ gridColumn: '1 / -1' }}><strong>Observaciones:</strong> {observacionesPaciente}</div>
                         )}
                     </div>
                 </div>

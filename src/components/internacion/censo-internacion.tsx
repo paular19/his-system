@@ -62,7 +62,8 @@ export function CensoInternacion({
   const rangoInvalido = Boolean(desde && hasta && desde > hasta)
 
   const rowsFiltradas = rows.filter((row) => {
-    if (rangoDiferido.desde && row.fechaIngresoKey < rangoDiferido.desde) return false
+    // Lógica de solapamiento: paciente activo estaba internado durante el período
+    // si ingresó en o antes del "hasta". El "desde" no excluye activos porque siguen internados hoy.
     if (rangoDiferido.hasta && row.fechaIngresoKey > rangoDiferido.hasta) return false
     return true
   })

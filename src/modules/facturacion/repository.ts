@@ -1034,6 +1034,32 @@ function buildOrdenAutorizadaWhere(): Prisma.OrdenWhereInput {
     }
 }
 
+function buildOrdenNoAnuladaWhere(): Prisma.OrdenWhereInput {
+    return {
+        NOT: [
+            {
+                estado: {
+                    contains: 'X',
+                    mode: 'insensitive',
+                },
+            },
+        ],
+    }
+}
+
+function buildPracticaNoAnuladaWhere(): Prisma.PracticaWhereInput {
+    return {
+        NOT: [
+            {
+                estado: {
+                    contains: 'X',
+                    mode: 'insensitive',
+                },
+            },
+        ],
+    }
+}
+
 function buildOrdenFacturadaWhere(): Prisma.OrdenWhereInput {
     const practicaFacturada: Prisma.PracticaWhereInput = {
         estado: 'F',
@@ -1204,7 +1230,7 @@ export async function buscarAdmisionesFacturacion(
         andFilters.push({
             ordenes: {
                 some: {
-                    estado: { not: 'X' },
+                    ...buildOrdenNoAnuladaWhere(),
                     numero: numeroOrden,
                     items: { some: {} },
                 },
@@ -1220,7 +1246,7 @@ export async function buscarAdmisionesFacturacion(
         andFilters.push({
             ordenes: {
                 some: {
-                    estado: { not: 'X' },
+                    ...buildOrdenNoAnuladaWhere(),
                     ...buildOrdenFacturadaWhere(),
                 },
             },
@@ -1292,7 +1318,7 @@ export async function buscarAdmisionesFacturacion(
                 {
                     practicas: {
                         some: {
-                            estado: { not: 'X' },
+                            ...buildPracticaNoAnuladaWhere(),
                             codigoPractica: { contains: codigoPractica, mode: 'insensitive' },
                         },
                     },
@@ -1300,7 +1326,7 @@ export async function buscarAdmisionesFacturacion(
                 {
                     ordenes: {
                         some: {
-                            estado: { not: 'X' },
+                            ...buildOrdenNoAnuladaWhere(),
                             items: { some: { codigoPractica: { contains: codigoPractica, mode: 'insensitive' } } },
                         },
                     },
@@ -1431,7 +1457,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         prisma.orden.findMany({
             where: {
                 ingresoId,
-                estado: { not: 'X' },
+                ...buildOrdenNoAnuladaWhere(),
             },
             orderBy: [{ fechaEmision: 'desc' }, { numero: 'desc' }],
             select: {
@@ -4528,7 +4554,7 @@ export async function buscarPracticasFacturadasProfesionalEnLotes(
     const ordenes = await prisma.orden.findMany({
         where: {
             ingresoId: { in: ingresoIds },
-            estado: { not: 'X' },
+            ...buildOrdenNoAnuladaWhere(),
             AND: [buildOrdenAutorizadaWhere(), especialistaWhere],
         },
         select: {
@@ -4668,7 +4694,7 @@ export async function obtenerLote(
     const [desde, hasta] = [periodoToDateRange(lote.periodo).desde, periodoToDateRange(lote.periodo).hasta]
     const ordenFacturadaWhere: Prisma.OrdenWhereInput = {
         AND: [
-            { estado: { not: 'X' } },
+            buildOrdenNoAnuladaWhere(),
             { fechaEmision: { gte: desde, lt: hasta } },
             buildOrdenFacturadaWhere(),
             especialistaWhere,
@@ -4829,7 +4855,7 @@ export async function crearLote(
     if (data.tipo === 'PRACTICAS') {
         whereIngreso.ordenes = {
             some: {
-                estado: { not: 'X' },
+                ...buildOrdenNoAnuladaWhere(),
                 fechaEmision: { gte: desde, lt: hasta },
                 ...buildOrdenFacturadaWhere(),
             },
@@ -4849,7 +4875,10 @@ export async function crearLote(
             id: true,
             ordenes: data.tipo === 'PRACTICAS'
                 ? {
-                    where: { estado: { not: 'X' }, fechaEmision: { gte: desde, lt: hasta } },
+                    where: {
+                        ...buildOrdenNoAnuladaWhere(),
+                        fechaEmision: { gte: desde, lt: hasta },
+                    },
                     select: {
                         numeroAutorizacion: true,
                         items: {
@@ -5173,7 +5202,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
     const ordenes = await prisma.orden.findMany({
         where: {
             ingresoId,
-            estado: { not: 'X' },
+            ...buildOrdenNoAnuladaWhere(),
             AND: [
                 buildOrdenFacturadaWhere(),
                 especialistaWhere,
@@ -5513,7 +5542,7 @@ export async function aplicarPromediLote(
     const ordenes = await prisma.orden.findMany({
         where: {
             ingresoId: { in: ingresoIds },
-            estado: { not: 'X' },
+            ...buildOrdenNoAnuladaWhere(),
             fechaEmision: { gte: desde, lt: hasta },
             OR: [
                 {

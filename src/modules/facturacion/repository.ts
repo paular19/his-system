@@ -37,6 +37,11 @@ import { crearOrdenAmbulatorio } from '@/modules/orden/service'
 import { claveDiaArgentina } from '@/lib/utils/argentina-date'
 import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
+import {
+    aplicaPromediIPS,
+    aplicaPromediOsecac,
+    CODIGOS_PROMEDI_BASE,
+} from './promedi-rules'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 const NOMBRE_MATRICULA_9110_DEFAULT = 'CLINICA SAN RAFAEL'
@@ -5351,50 +5356,7 @@ export async function crearLoteIPSTxt(
     return lote
 }
 
-const CODIGOS_PROMEDI_BASE = new Set([430101, 431001, 400101, 431002, 431103, 430130])
 const CODIGOS_PROMEDI_BASE_ARRAY = Array.from(CODIGOS_PROMEDI_BASE)
-const CODIGOS_PROMEDI_RANGOS = [
-    { desde: 10101, hasta: 130304 },
-    { desde: 720201, hasta: 722238 },
-]
-const CODIGOS_EXCLUIDOS_PROMEDI_OSECAC = new Set([70116, 70607])
-
-function parseCodigoPromedi(codigo: string | null | undefined): number | null {
-    const parsed = parseInt((codigo ?? '').trim(), 10)
-    if (isNaN(parsed)) return null
-    return parsed
-}
-
-function codigoEnRangoPromedi(codigo: number): boolean {
-    return CODIGOS_PROMEDI_RANGOS.some(({ desde, hasta }) => codigo >= desde && codigo <= hasta)
-}
-
-function aplicaPromediIPS(codigoPractica: string | null | undefined): boolean {
-    const codigo = parseCodigoPromedi(codigoPractica)
-    if (codigo === null) return false
-    return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoPromedi(codigo)
-}
-
-function aplicaPromediOsecac(codigoPractica: string | null | undefined): boolean {
-    const codigo = parseCodigoPromedi(codigoPractica)
-    if (codigo === null) return false
-    if (CODIGOS_EXCLUIDOS_PROMEDI_OSECAC.has(codigo)) return false
-    return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoPromedi(codigo)
-}
-
-function calcularImportePromediPractica(
-    codigoPractica: string | null | undefined,
-    importeTotal: number | string | { toString(): string } | null | undefined,
-    porcentajePromedi: number,
-    esIps: boolean
-): number {
-    const importeBase = typeof importeTotal === 'object' && importeTotal !== null && 'toString' in importeTotal
-        ? Number(importeTotal.toString())
-        : Number(importeTotal ?? 0)
-    const aplica = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(codigoPractica)
-    const subtotal = Number.isFinite(importeBase) ? redondear2Repo(importeBase) : 0
-    return aplica ? redondear2Repo(subtotal * porcentajePromedi) : subtotal
-}
 
 export async function aplicarPromediLote(
     loteId: number,

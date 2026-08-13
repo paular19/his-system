@@ -8,6 +8,7 @@ import { puedeEditarPrestacionEnLote } from '@/modules/facturacion/editability'
 import { LoteResumenPrint } from './lote-resumen-print'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
+import { aplicaPromediIPS, calcularImportePromediPorCodigo } from '@/modules/facturacion/promedi-rules'
 
 const ESTADO_LABEL: Record<string, { label: string; cls: string }> = {
     PEN: { label: 'Pendiente', cls: 'bg-yellow-100 text-yellow-800' },
@@ -140,24 +141,9 @@ function esObraSocialIps(nombre: string | null | undefined): boolean {
     return limpio.includes('IPS') || limpio.includes('IPSS')
 }
 
-const CODIGOS_PROMEDI = new Set([430101, 431001, 400101, 431002, 431103, 430130])
-const RANGOS_PROMEDI = [
-    { desde: 10101, hasta: 130304 },
-    { desde: 720201, hasta: 722238 },
-]
-
 function importePromediAplicado(codigoRaw: string, importe: number, porcentaje: number, esOsecac: boolean): number {
-    const codigo = Number.parseInt(codigoRaw.trim(), 10)
-    const excluido = codigo === 70116 || codigo === 70607
-    const alcanzado = CODIGOS_PROMEDI.has(codigo) ||
-        RANGOS_PROMEDI.some(({ desde, hasta }) => codigo >= desde && codigo <= hasta)
-    if (esOsecac && excluido) return importe
     // El PROMEDI debe evaluarse por práctica/item y no por paciente o ingreso.
-    return alcanzado ? Math.round(importe * porcentaje) / 100 : importe
-}
-
-function importePromediOsecac(codigoRaw: string, importe: number): number {
-    return importePromediAplicado(codigoRaw, importe, 20, true)
+    return calcularImportePromediPorCodigo(codigoRaw, importe, porcentaje, esOsecac ? 'OSECAC' : 'IPS')
 }
 
 function resolverCodigoSubitemComputado(
@@ -1446,7 +1432,12 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {items.map((it) => (
+                        {items.map((it) => {
+                            const importeAplicado = it.importePromedi !== null ? Number(it.importePromedi) : null
+                            const aplicaCodigoPromedi = aplicaPromediIPS(it.servicioCodigo)
+                            const aplicaDescuentoPromedi = importeAplicado !== null && importeAplicado < Number(it.impTotal)
+
+                            return (
                             <tr key={it.id} className="hover:bg-gray-50 print:hover:bg-transparent">
                                 <td className="px-3 py-2">
                                     <div className="font-medium text-gray-800 leading-tight wrap-break-word">{it.afiliadoNom}</div>
@@ -1458,7 +1449,19 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                                 </td>
                                 <td className="px-3 py-2">
                                     <div className="text-gray-800 leading-tight wrap-break-word">{it.servicioNombre}</div>
-                                    <div className="text-gray-400 font-mono break-all">{it.servicioCodigo}</div>
+                                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                        <span className="text-gray-400 font-mono break-all">{it.servicioCodigo}</span>
+                                        {it.importePromedi !== null && (
+                                            <span
+                                                className={`inline-flex rounded-full px-1.5 py-0.5 font-medium ${aplicaCodigoPromedi
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : 'bg-gray-100 text-gray-600'
+                                                    }`}
+                                            >
+                                                {aplicaCodigoPromedi ? 'PROMEDI 36%' : 'Sin PROMEDI'}
+                                            </span>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-3 py-2 text-center">{it.cantidad}</td>
                                 <td className="px-3 py-2 text-right whitespace-nowrap print:text-[8px]">{formatMonto(it.impEsp)}</td>
@@ -1466,13 +1469,14 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                                 <td className="px-3 py-2 text-right whitespace-nowrap print:text-[8px]">{formatMonto(it.impAne)}</td>
                                 <td className="px-3 py-2 text-right whitespace-nowrap print:text-[8px]">{formatMonto(it.impGto)}</td>
                                 <td className="px-3 py-2 text-right font-semibold whitespace-nowrap print:text-[8px]">{formatMonto(it.impTotal)}</td>
-                                <td className="px-3 py-2 text-right font-semibold text-green-700 whitespace-nowrap print:text-[8px]">
-                                    {it.importePromedi !== null ? formatMonto(it.importePromedi) : (
+                                <td className={`px-3 py-2 text-right font-semibold whitespace-nowrap print:text-[8px] ${aplicaDescuentoPromedi ? 'text-green-700' : 'text-gray-700'}`}>
+                                    {importeAplicado !== null ? formatMonto(importeAplicado) : (
                                         <span className="text-gray-300">—</span>
                                     )}
                                 </td>
                             </tr>
-                        ))}
+                            )
+                        })}
                         {items.length === 0 && (
                             <tr>
                                 <td colSpan={11} className="px-3 py-6 text-center text-gray-400">

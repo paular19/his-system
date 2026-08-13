@@ -2168,19 +2168,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const diferencialesCirugiaCalculados = (() => {
             if (!diferencialesCirugiaRaw) return null
 
-            // Temporalmente, feriado/nocturna no impactan montos en facturación.
-            const diferencialesSoloMultiple = {
-                ...diferencialesCirugiaRaw,
-                esFeriado: false,
-                esNocturna: false,
-            }
-
             // En doble cirugía solo aplica diferencial a la práctica secundaria seleccionada.
             if (diferencialesCirugiaRaw.dobleCirugia) {
-                return esPracticaSecundariaDobleCirugia ? diferencialesSoloMultiple : null
+                return esPracticaSecundariaDobleCirugia ? diferencialesCirugiaRaw : null
             }
 
-            return diferencialesSoloMultiple
+            return diferencialesCirugiaRaw
         })()
         const aplicarDiferencialesCirugia = tieneDiferencialesActivos(diferencialesCirugiaCalculados)
 

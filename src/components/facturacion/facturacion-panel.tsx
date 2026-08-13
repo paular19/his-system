@@ -257,13 +257,18 @@ function calcularRecargosDiferencial(diferenciales: PrestacionFacturableItem['di
     if (diferenciales.aplicaDiferencial === false) return { especialista: 0, gastos: 0 }
 
     const esPrincipalDobleCirugia = Boolean(diferenciales.dobleCirugia && diferenciales.esPracticaBase)
+    const recargoHorario =
+        (!esPrincipalDobleCirugia && diferenciales.esFeriado ? 20 : 0) +
+        (!esPrincipalDobleCirugia && diferenciales.esNocturna ? 20 : 0)
 
     const especialista =
-        (!esPrincipalDobleCirugia && (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia) ? 75 : 0)
+        (!esPrincipalDobleCirugia && (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia) ? 75 : 0) +
+        recargoHorario
 
     const gastos =
         (!esPrincipalDobleCirugia && diferenciales.mismaViaPatologia ? 30 : 0) +
-        (!esPrincipalDobleCirugia && (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia) ? 50 : 0)
+        (!esPrincipalDobleCirugia && (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia) ? 50 : 0) +
+        recargoHorario
 
     return { especialista, gastos }
 }
@@ -286,11 +291,15 @@ function etiquetasCamposDiferencial(
 
 function etiquetasCamposDiferencialCirugia(draft: DiferencialesCirugiaEditState): string[] {
     const recargosEspecialista =
-        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 75 : 0)
+        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 75 : 0) +
+        (draft.esFeriado ? 20 : 0) +
+        (draft.esNocturna ? 20 : 0)
 
     const recargosGastos =
         (draft.mismaViaPatologia ? 30 : 0) +
-        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 50 : 0)
+        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 50 : 0) +
+        (draft.esFeriado ? 20 : 0) +
+        (draft.esNocturna ? 20 : 0)
 
     const etiquetas: string[] = []
     if (recargosEspecialista > 0) etiquetas.push(`Especialista +${recargosEspecialista}%`)

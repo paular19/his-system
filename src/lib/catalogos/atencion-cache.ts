@@ -2,7 +2,8 @@ import 'server-only'
 
 import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/db'
-import { asegurarCosegurosIPSS, filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
+import { asegurarCosegurosIPSS } from '@/lib/catalogos/coseguros-ipss'
+import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
 
 export type CatalogoProfesional = {
     id: number

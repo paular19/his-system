@@ -1,0 +1,320 @@
+{
+  "resumen": [
+    {
+      "fecha": "2026-08-06T00:00:00.000Z",
+      "cantidad": 8,
+      "hc_min": 68281,
+      "hc_max": 68291
+    },
+    {
+      "fecha": "2026-08-07T00:00:00.000Z",
+      "cantidad": 8,
+      "hc_min": 68292,
+      "hc_max": 68300
+    },
+    {
+      "fecha": "2026-08-08T00:00:00.000Z",
+      "cantidad": 3,
+      "hc_min": 68304,
+      "hc_max": 68306
+    },
+    {
+      "fecha": "2026-08-09T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 68307,
+      "hc_max": 68307
+    },
+    {
+      "fecha": "2026-08-10T00:00:00.000Z",
+      "cantidad": 13,
+      "hc_min": 68308,
+      "hc_max": 68322
+    },
+    {
+      "fecha": "2026-08-11T00:00:00.000Z",
+      "cantidad": 2,
+      "hc_min": 68323,
+      "hc_max": 68326
+    },
+    {
+      "fecha": "2026-08-12T00:00:00.000Z",
+      "cantidad": 3,
+      "hc_min": 68327,
+      "hc_max": 68329
+    },
+    {
+      "fecha": "2028-06-28T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 29028,
+      "hc_max": 29028
+    },
+    {
+      "fecha": "2032-04-28T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 27625,
+      "hc_max": 27625
+    },
+    {
+      "fecha": "2032-06-01T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 27690,
+      "hc_max": 27690
+    },
+    {
+      "fecha": "2032-06-08T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 49945,
+      "hc_max": 49945
+    },
+    {
+      "fecha": "2032-07-19T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 47653,
+      "hc_max": 47653
+    },
+    {
+      "fecha": "2032-08-14T00:00:00.000Z",
+      "cantidad": 2,
+      "hc_min": 27833,
+      "hc_max": 27834
+    },
+    {
+      "fecha": "2032-08-17T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 48786,
+      "hc_max": 48786
+    },
+    {
+      "fecha": "2106-11-03T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 52005,
+      "hc_max": 52005
+    },
+    {
+      "fecha": "2202-11-23T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 67176,
+      "hc_max": 67176
+    },
+    {
+      "fecha": "2206-04-18T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 14572,
+      "hc_max": 14572
+    },
+    {
+      "fecha": "5005-05-18T00:00:00.000Z",
+      "cantidad": 1,
+      "hc_min": 38330,
+      "hc_max": 38330
+    }
+  ],
+  "primeros": [
+    {
+      "hc": 68281,
+      "nombre": "AVILA BORJA, WALTER ARON",
+      "fecha_alta": "2026-08-06T00:12:00.541Z"
+    },
+    {
+      "hc": 68282,
+      "nombre": "OCAMPO, RAMONA DEL CARMEN",
+      "fecha_alta": "2026-08-06T00:30:17.033Z"
+    },
+    {
+      "hc": 68285,
+      "nombre": "ARGUELLO, MARIA TERESITA",
+      "fecha_alta": "2026-08-06T11:01:40.262Z"
+    },
+    {
+      "hc": 68286,
+      "nombre": "AIMO, PABLO ANTONIO",
+      "fecha_alta": "2026-08-06T12:46:13.514Z"
+    },
+    {
+      "hc": 68287,
+      "nombre": "CARDOZO, HECTOR DANIEL",
+      "fecha_alta": "2026-08-06T19:57:31.668Z"
+    },
+    {
+      "hc": 68288,
+      "nombre": "RUEDA, NESTOR RODOLFO",
+      "fecha_alta": "2026-08-06T19:59:01.082Z"
+    },
+    {
+      "hc": 68289,
+      "nombre": "PEREZ, GLADIS ANGELICA",
+      "fecha_alta": "2026-08-06T20:20:30.559Z"
+    },
+    {
+      "hc": 68291,
+      "nombre": "ARIAS BRIZUELA, JULIANA JAZMIN",
+      "fecha_alta": "2026-08-06T23:22:37.233Z"
+    },
+    {
+      "hc": 68292,
+      "nombre": "SAGLE, LIONEL NAIM",
+      "fecha_alta": "2026-08-07T01:42:49.084Z"
+    },
+    {
+      "hc": 68293,
+      "nombre": "GUTIERREZ, HECTOR EDUARDO",
+      "fecha_alta": "2026-08-07T01:53:28.282Z"
+    },
+    {
+      "hc": 68294,
+      "nombre": "GUANCA, PAULA VIRGINIA",
+      "fecha_alta": "2026-08-07T05:31:12.511Z"
+    },
+    {
+      "hc": 68295,
+      "nombre": "ABDALA, MARIA ALEJANDRA",
+      "fecha_alta": "2026-08-07T05:43:30.737Z"
+    },
+    {
+      "hc": 68296,
+      "nombre": "MEDINA, TRANSITO",
+      "fecha_alta": "2026-08-07T12:07:26.146Z"
+    },
+    {
+      "hc": 68297,
+      "nombre": "DIAZ, ANTONIO DAVID",
+      "fecha_alta": "2026-08-07T14:25:33.495Z"
+    },
+    {
+      "hc": 68299,
+      "nombre": "PINTOS, CARMEN LILIANA",
+      "fecha_alta": "2026-08-07T15:26:58.303Z"
+    },
+    {
+      "hc": 68300,
+      "nombre": "SILVESTRI, JOSE ANTONIO",
+      "fecha_alta": "2026-08-07T17:46:37.937Z"
+    },
+    {
+      "hc": 68304,
+      "nombre": "MOLINA, AUGUSTO ARIEL",
+      "fecha_alta": "2026-08-08T14:39:18.738Z"
+    },
+    {
+      "hc": 68305,
+      "nombre": "MMUÑOZ, GLORIA NOEMI",
+      "fecha_alta": "2026-08-08T17:26:16.633Z"
+    },
+    {
+      "hc": 68306,
+      "nombre": "GUZMAN, ANGEL SANTIAGO",
+      "fecha_alta": "2026-08-08T18:53:28.522Z"
+    },
+    {
+      "hc": 68307,
+      "nombre": "ROSALES, HECTOR BENITO",
+      "fecha_alta": "2026-08-09T15:55:23.430Z"
+    }
+  ],
+  "ultimos": [
+    {
+      "hc": 38330,
+      "nombre": "LUNA TERESA",
+      "fecha_alta": "5005-05-18T03:00:00.000Z"
+    },
+    {
+      "hc": 14572,
+      "nombre": "TERUEL LUCIA",
+      "fecha_alta": "2206-04-18T03:00:00.000Z"
+    },
+    {
+      "hc": 67176,
+      "nombre": "ALFARO JOSE FRANCISCO",
+      "fecha_alta": "2202-11-23T03:00:00.000Z"
+    },
+    {
+      "hc": 52005,
+      "nombre": "PARDO MARIA CECILIA",
+      "fecha_alta": "2106-11-03T03:00:00.000Z"
+    },
+    {
+      "hc": 48786,
+      "nombre": "PERALTA FRANCISCO ALEJANDRO",
+      "fecha_alta": "2032-08-17T03:00:00.000Z"
+    },
+    {
+      "hc": 27834,
+      "nombre": "SALAZAR MARTA VIRGINIA",
+      "fecha_alta": "2032-08-14T03:00:00.000Z"
+    },
+    {
+      "hc": 27833,
+      "nombre": "OGANEKU MARIA CRISTINA",
+      "fecha_alta": "2032-08-14T03:00:00.000Z"
+    },
+    {
+      "hc": 47653,
+      "nombre": "SALAZAR SANTOS FELIPE",
+      "fecha_alta": "2032-07-19T03:00:00.000Z"
+    },
+    {
+      "hc": 49945,
+      "nombre": "ROBLES JUAN ALBERTO",
+      "fecha_alta": "2032-06-08T03:00:00.000Z"
+    },
+    {
+      "hc": 27690,
+      "nombre": "TORRES ESTHER AMANDA",
+      "fecha_alta": "2032-06-01T03:00:00.000Z"
+    },
+    {
+      "hc": 27625,
+      "nombre": "ANTELO PAMELA SOLEDAD",
+      "fecha_alta": "2032-04-28T03:00:00.000Z"
+    },
+    {
+      "hc": 29028,
+      "nombre": "JUAREZ ANA FRANCISCA",
+      "fecha_alta": "2028-06-28T03:00:00.000Z"
+    },
+    {
+      "hc": 68329,
+      "nombre": "BARRIOS, MAGDALENA SOCORRO",
+      "fecha_alta": "2026-08-12T15:12:52.254Z"
+    },
+    {
+      "hc": 68328,
+      "nombre": "GARNICA, MARIA ANTONIA",
+      "fecha_alta": "2026-08-12T11:43:23.329Z"
+    },
+    {
+      "hc": 68327,
+      "nombre": "SANTILLAN, ROMINA DEL VALLE",
+      "fecha_alta": "2026-08-12T09:52:54.630Z"
+    },
+    {
+      "hc": 68326,
+      "nombre": "TARCAYA, FLORENCIA DEL MILAGRO",
+      "fecha_alta": "2026-08-11T15:17:35.052Z"
+    },
+    {
+      "hc": 68323,
+      "nombre": "LAGORIA CHOCOBAR, ALEXANDER GONZALO",
+      "fecha_alta": "2026-08-11T02:29:31.804Z"
+    },
+    {
+      "hc": 68322,
+      "nombre": "ARAMAYO, SUSANA DEL VALLE",
+      "fecha_alta": "2026-08-10T19:48:50.470Z"
+    },
+    {
+      "hc": 68321,
+      "nombre": "AGUILAR, MOISES",
+      "fecha_alta": "2026-08-10T18:45:29.050Z"
+    },
+    {
+      "hc": 68320,
+      "nombre": "CONDORI, JORGE RAFAEL",
+      "fecha_alta": "2026-08-10T18:27:03.534Z"
+    }
+  ],
+  "secuenciaActual": {
+    "last_value": "68329",
+    "is_called": true
+  }
+}

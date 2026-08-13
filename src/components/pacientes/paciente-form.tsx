@@ -7,6 +7,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { ActualizarPacienteSchema, CrearPacienteSchema } from '@/modules/pacientes/schemas'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
+import { requiereCoseguroParaObraSocial } from '@/lib/utils/coseguros'
 
 // Tipo flexible para valores iniciales del formulario.
 // Las fechas llegan como strings YYYY-MM-DD desde el servidor,
@@ -102,7 +103,8 @@ export function PacienteForm({
     : (obraSocialIdRaw ? Number(obraSocialIdRaw) : undefined)
   const obraSocialSeleccionada = obraSociales.find((os) => os.id === obraSocialIdSeleccionada)
 
-  const esObraSocialConCoseguro = !pacienteParticular && Boolean(obraSocialSeleccionada)
+  const esObraSocialConCoseguro =
+    !pacienteParticular && requiereCoseguroParaObraSocial(obraSocialSeleccionada)
   const cosegurosDisponibles = coseguros
 
   const obraSocialRegister = register('obraSocialId', {

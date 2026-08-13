@@ -17,6 +17,7 @@ import {
   obtenerSubitemsSeleccionados,
   valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
+import { requiereCoseguroParaObraSocial } from '@/lib/utils/coseguros'
 import {
   PracticasAdmisionCard,
   type PracticaAdmisionItem,
@@ -286,7 +287,8 @@ export function AdmisionForm({
   const obraSocialSeleccionada = pacienteParticular
     ? null
     : obraSociales.find((os) => String(os.id) === obraSocialId)
-  const esCoberturaConCoseguro = !pacienteParticular && Boolean(obraSocialSeleccionada)
+  const esCoberturaConCoseguro =
+    !pacienteParticular && requiereCoseguroParaObraSocial(obraSocialSeleccionada)
   const cosegurosDisponibles = coseguros
 
   // Sincronizar cobertura cuando cambia el paciente
@@ -297,8 +299,13 @@ export function AdmisionForm({
       setPacienteParticular(esParticular)
       setObraSocialId(!esParticular && p.obraSocialId ? p.obraSocialId.toString() : '')
       setPlanId('')
+      const requiereCoseguroPaciente = !esParticular && p.obraSocialId
+        ? requiereCoseguroParaObraSocial(obraSociales.find((os) => os.id === p.obraSocialId))
+        : false
       setObraSocialCoseguroId(
-        !esParticular && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
+        !esParticular && requiereCoseguroPaciente && p.obraSocialCoseguroId
+          ? p.obraSocialCoseguroId.toString()
+          : ''
       )
       setNumeroAfiliado(!esParticular ? (p.numeroAfiliado ?? '') : '')
       setProfesionalTratanteId(p.profesionalCabeceraId?.toString() ?? '')

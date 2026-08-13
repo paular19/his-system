@@ -15,6 +15,7 @@ import {
   obtenerSubitemsSeleccionados,
   valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
+import { requiereCoseguroParaObraSocial } from '@/lib/utils/coseguros'
 import {
   PracticasAdmisionCard,
   type PracticaAdmisionItem,
@@ -158,6 +159,11 @@ export function InternacionForm({
     [camasDisponibles, camaId]
   )
 
+  const obraSocialSeleccionada = pacienteParticular
+    ? null
+    : obraSociales.find((os) => String(os.id) === obraSocialId)
+  const esCoberturaConCoseguro =
+    !pacienteParticular && requiereCoseguroParaObraSocial(obraSocialSeleccionada)
   const cosegurosDisponibles = coseguros
 
   const obtenerMatriculaDefault = () => {
@@ -180,10 +186,15 @@ export function InternacionForm({
     setPaciente(p)
     if (p) {
       const esParticular = !p.obraSocialId
+      const requiereCoseguroPaciente = !esParticular && p.obraSocialId
+        ? requiereCoseguroParaObraSocial(obraSociales.find((os) => os.id === p.obraSocialId))
+        : false
       setPacienteParticular(esParticular)
       setObraSocialId(!esParticular && p.obraSocialId ? p.obraSocialId.toString() : '')
       setObraSocialCoseguroId(
-        !esParticular && p.obraSocialCoseguroId ? p.obraSocialCoseguroId.toString() : ''
+        !esParticular && requiereCoseguroPaciente && p.obraSocialCoseguroId
+          ? p.obraSocialCoseguroId.toString()
+          : ''
       )
       setNumeroAfiliado(!esParticular ? (p.numeroAfiliado ?? '') : '')
       setNombreTutor(p.nombreTutor ?? '')
@@ -734,7 +745,7 @@ export function InternacionForm({
               ))}
             </select>
           </div>
-          {!pacienteParticular && (
+          {esCoberturaConCoseguro && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Coseguro</label>
               <select

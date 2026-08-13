@@ -5,6 +5,7 @@ import type { CrearPacienteInput, ActualizarPacienteInput, BusquedaPacienteInput
 import type { ResultadoPaginado } from '@/types'
 import type { PacienteConRelaciones, PacienteBusqueda } from './types'
 import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
+import { requiereCoseguroParaObraSocial } from '@/lib/utils/coseguros'
 
 // Selección de campos para incluir en relaciones
 const incluirRelaciones = {
@@ -38,7 +39,15 @@ async function construirDatosCreacionPaciente(
 ): Promise<PacienteCreateData> {
   const nombreCompleto = generarNombreCompleto(data.apellido, data.nombre)
   const ahora = new Date()
-  const obraSocialCoseguroId = data.obraSocialId ? (data.obraSocialCoseguroId ?? null) : null
+  const obraSocial = data.obraSocialId
+    ? await prisma.obraSocial.findUnique({
+        where: { id: data.obraSocialId },
+        select: { requiereCoseguro: true },
+      })
+    : null
+  const obraSocialCoseguroId = data.obraSocialId && requiereCoseguroParaObraSocial(obraSocial)
+    ? (data.obraSocialCoseguroId ?? null)
+    : null
 
   return {
     apellido: data.apellido.toUpperCase(),
@@ -184,12 +193,22 @@ export async function actualizarPaciente(
       ? (data.obraSocialId ?? null)
       : pacienteActual.obraSocialId
 
+  const obraSocialRelacionada = obraSocialIdFinal
+    ? await prisma.obraSocial.findUnique({
+        where: { id: obraSocialIdFinal },
+        select: { requiereCoseguro: true },
+      })
+    : null
+
   const obraSocialCoseguroFinalInput =
     data.obraSocialCoseguroId !== undefined
       ? (data.obraSocialCoseguroId ?? null)
       : pacienteActual.obraSocialCoseguroId
 
-  const obraSocialCoseguroFinal = obraSocialIdFinal ? obraSocialCoseguroFinalInput : null
+  const obraSocialCoseguroFinal =
+    obraSocialIdFinal && requiereCoseguroParaObraSocial(obraSocialRelacionada)
+      ? obraSocialCoseguroFinalInput
+      : null
 
   const updateData: Record<string, unknown> = {
     fechaModificacion: new Date(),

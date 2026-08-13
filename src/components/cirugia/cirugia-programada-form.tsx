@@ -21,6 +21,7 @@ import {
 import type { PacienteResumen } from '@/modules/admision/types'
 import { formatearFechaCalendario } from '@/lib/utils'
 import { fechaAInputLocal } from '@/lib/utils/argentina-date'
+import { requiereCoseguroParaObraSocial } from '@/lib/utils/coseguros'
 
 interface ObraSocialOption {
     id: number
@@ -117,7 +118,7 @@ export function CirugiaProgramadaForm({
 
     const obraSocialIdNumero = obraSocialId ? Number.parseInt(obraSocialId, 10) : null
     const obraSocialSeleccionada = obraSociales.find((o) => o.id === obraSocialIdNumero)
-    const esCoberturaConCoseguro = Boolean(obraSocialSeleccionada)
+    const esCoberturaConCoseguro = requiereCoseguroParaObraSocial(obraSocialSeleccionada)
     const cosegurosDisponibles = coseguros
 
     const puedeGenerarAutorizacion = useMemo(() => {
@@ -126,8 +127,15 @@ export function CirugiaProgramadaForm({
 
     const handleSeleccionarPaciente = (p: PacienteResumen | null) => {
         setPaciente(p)
+        const requiereCoseguroPaciente = p?.obraSocialId
+            ? requiereCoseguroParaObraSocial(obraSociales.find((os) => os.id === p.obraSocialId))
+            : false
         setObraSocialId(p?.obraSocialId?.toString() ?? '')
-        setObraSocialCoseguroId(p?.obraSocialCoseguroId?.toString() ?? '')
+        setObraSocialCoseguroId(
+            p?.obraSocialId && requiereCoseguroPaciente && p.obraSocialCoseguroId
+                ? p.obraSocialCoseguroId.toString()
+                : ''
+        )
         setNumeroAfiliado(p?.numeroAfiliado ?? '')
     }
 

@@ -159,6 +159,45 @@ function importePromediOsecac(codigoRaw: string, importe: number): number {
     return importePromediAplicado(codigoRaw, importe, 20, true)
 }
 
+function resolverCodigoSubitemComputado(
+    codigoRaw: string,
+    moduloRaw: string | null | undefined,
+    profesionalRaw: string | null | undefined
+): 'HE' | 'HA' | 'GA' | 'A1' | 'A2' | 'A3' {
+    const codigo = normalizarTexto(codigoRaw)
+    const modulo = normalizarTexto(moduloRaw)
+    const profesional = normalizarTexto(profesionalRaw)
+
+    if (modulo.includes('A1')) return 'A1'
+    if (modulo.includes('A2')) return 'A2'
+    if (modulo.includes('A3')) return 'A3'
+    if (modulo.includes('HE')) return 'HE'
+    if (modulo.includes('HA') || profesional.includes('ANEST')) return 'HA'
+    if (modulo.includes('GA') || profesional.includes('CLINICA SAN RAFAEL')) return 'GA'
+
+    if (codigo.includes('A1')) return 'A1'
+    if (codigo.includes('A2')) return 'A2'
+    if (codigo.includes('A3')) return 'A3'
+    if (codigo.includes('HA')) return 'HA'
+    if (codigo.includes('GA')) return 'GA'
+
+    return 'HE'
+}
+
+function etiquetaSubitemComputado(
+    codigoRaw: string,
+    moduloRaw: string | null | undefined,
+    profesionalRaw: string | null | undefined
+): string {
+    const subitem = resolverCodigoSubitemComputado(codigoRaw, moduloRaw, profesionalRaw)
+    if (subitem === 'A1' || subitem === 'A2' || subitem === 'A3') {
+        return `Ayudante (${subitem})`
+    }
+    if (subitem === 'HE') return 'Honorario Especialista (HE)'
+    if (subitem === 'HA') return 'Honorario Anestesista (HA)'
+    return 'Derechos/Gastos (GA)'
+}
+
 interface Props { loteId: number }
 
 type OrdenItemEditState = {
@@ -240,6 +279,7 @@ type OrdenItemAgrupadoTabla = {
     fecha: Date
     codigoPractica: string
     descripcion: string | null
+    subitemComputado: string
     cantidad: number
     numeroAutorizacion: string | null
     importeTotal: number
@@ -249,7 +289,8 @@ type OrdenItemAgrupadoTabla = {
 function agruparItemsOrdenParaTabla(
     items: OrdenAutorizadaLote['items'],
     porcentajePromedi: number,
-    esOsecac: boolean
+    esOsecac: boolean,
+    profesionalNombre: string | null | undefined
 ): OrdenItemAgrupadoTabla[] {
     return items.map((item) => ({
         key: [
@@ -262,6 +303,7 @@ function agruparItemsOrdenParaTabla(
         fecha: item.fecha,
         codigoPractica: item.codigoPractica,
         descripcion: item.descripcion,
+        subitemComputado: etiquetaSubitemComputado(item.codigoPractica, item.modulo, profesionalNombre),
         cantidad: item.cantidad,
         numeroAutorizacion: item.numeroAutorizacion,
         importeTotal: item.importeTotal,
@@ -1060,7 +1102,12 @@ export function LoteDetallePage({ loteId }: Props) {
                                             const keyOrdenEdicion = `${orden.puestoNumero}:${orden.numero}`
                                             const draftOrden = editOrdenes[keyOrdenEdicion] ?? buildOrdenEditState(orden)
                                             const porcentajePromediOrden = esIPSTxt || esIps ? 36 : 20
-                                            const itemsTabla = agruparItemsOrdenParaTabla(orden.items, porcentajePromediOrden, esOsecac)
+                                            const itemsTabla = agruparItemsOrdenParaTabla(
+                                                orden.items,
+                                                porcentajePromediOrden,
+                                                esOsecac,
+                                                orden.profesional?.nombre
+                                            )
                                             const totalCantidadOrden = orden.items.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)
                                             const limitePracticas = 4
                                             const abierta = ordenesAbiertas[keyOrden] ?? false
@@ -1267,6 +1314,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                                     <span>{new Date(it.fecha).toLocaleString('es-AR')}</span>
                                                                                     <span>Cant. {it.cantidad}</span>
                                                                                     <span className="text-blue-700">Aut. {it.numeroAutorizacion ?? '—'}</span>
+                                                                                    <span>Subitem: {it.subitemComputado}</span>
                                                                                     <span>Ejecutante: {orden.profesional?.nombre ?? '-'} · Mat. {orden.profesional?.matricula ?? '-'}</span>
                                                                                 </div>
                                                                             </div>

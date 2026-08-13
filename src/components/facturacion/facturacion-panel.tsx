@@ -79,6 +79,8 @@ type DiferencialesCirugiaEditState = {
 
 type CirugiaPracticaEditable = {
     practicaId: number
+    practicaIdsAgrupadas: number[]
+    claveAgrupacion: string
     descripcion: string
     importeTotal: number
     importeTotalReferencia: number
@@ -1005,8 +1007,16 @@ function actualizarCantidadPrestacion(draft: EditState, cantidadNuevaRaw: string
 }
 
 function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): DiferencialesCirugiaEditState {
-    const baseIdActual = cirugia.diferenciales?.practicaBaseId ?? null
-    const secundariaIdActual = cirugia.diferenciales?.practicaSecundariaId ?? null
+    const resolverIdAgrupado = (practicaId: number | null | undefined): number | null => {
+        if (!practicaId) return null
+        const match = cirugia.practicas.find((practica) =>
+            practica.practicaId === practicaId || practica.practicaIdsAgrupadas.includes(practicaId)
+        )
+        return match?.practicaId ?? null
+    }
+
+    const baseIdActual = resolverIdAgrupado(cirugia.diferenciales?.practicaBaseId ?? null)
+    const secundariaIdActual = resolverIdAgrupado(cirugia.diferenciales?.practicaSecundariaId ?? null)
     const baseIdPorMayorTotal =
         [...cirugia.practicas]
             .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)[0]?.practicaId ??
@@ -1412,6 +1422,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const cirugiasEditables = useMemo(() => {
         if (!contexto) return []
 
+        const limpiarDescripcionCirugia = (descripcion: string): string => {
+            return descripcion.replace(/\s*\[[^\]]*\]\s*$/g, '').trim()
+        }
+
         const map = new Map<number, CirugiaEditableGroup>()
 
         for (const p of contexto.prestaciones) {
@@ -1421,12 +1435,16 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             if (!p.origen.practicaId) continue
 
             const cirugiaId = p.origen.cirugiaProgramadaId
+            const descripcionLimpia = limpiarDescripcionCirugia(p.descripcion)
+            const claveAgrupacion = `${(p.codigoPractica ?? '').trim().toUpperCase()}::${normalizarTextoBusqueda(descripcionLimpia)}`
+            const importeFilaOriginal = Number(p.importeTotalOriginal ?? p.importeTotal ?? 0)
             const practica: CirugiaPracticaEditable = {
                 practicaId: p.origen.practicaId,
-                descripcion: p.descripcion,
+                practicaIdsAgrupadas: [p.origen.practicaId],
+                claveAgrupacion,
+                descripcion: descripcionLimpia,
                 importeTotal: Number(p.importeTotal ?? 0),
                 importeTotalReferencia: Number(
-                    p.importeTotalCirugiaReferencia ??
                     p.importeTotalOriginal ??
                     p.importeTotal ??
                     0
@@ -1446,7 +1464,22 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 continue
             }
 
-            existente.practicas.push(practica)
+            const indexExistente = existente.practicas.findIndex((actual) => actual.claveAgrupacion === claveAgrupacion)
+            if (indexExistente === -1) {
+                existente.practicas.push(practica)
+            } else {
+                const actual = existente.practicas[indexExistente]
+                if (actual) {
+                    actual.practicaIdsAgrupadas = Array.from(new Set([...actual.practicaIdsAgrupadas, p.origen.practicaId]))
+                    actual.importeTotal += Number(p.importeTotal ?? 0)
+                    actual.importeTotalReferencia = Number((actual.importeTotalReferencia + importeFilaOriginal).toFixed(2))
+                    actual.esPracticaBase = actual.esPracticaBase || Boolean(p.diferenciales?.esPracticaBase)
+                    actual.esPracticaSecundaria = actual.esPracticaSecundaria || Boolean(p.diferenciales?.esPracticaSecundaria)
+                    actual.aplicaDiferencial = actual.aplicaDiferencial || Boolean(p.diferenciales?.aplicaDiferencial)
+                    actual.practicaId = Math.min(actual.practicaId, p.origen.practicaId)
+                }
+            }
+
             if (!existente.diferenciales && p.diferenciales) {
                 existente.diferenciales = p.diferenciales
             }
@@ -1455,12 +1488,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         return Array.from(map.values())
             .map((cirugia) => ({
                 ...cirugia,
-                practicas: [...cirugia.practicas].sort((a, b) => {
-                    if (b.importeTotalReferencia !== a.importeTotalReferencia) {
-                        return b.importeTotalReferencia - a.importeTotalReferencia
-                    }
-                    return a.practicaId - b.practicaId
-                }),
+                practicas: [...cirugia.practicas]
+                    .sort((a, b) => {
+                        if (b.importeTotalReferencia !== a.importeTotalReferencia) {
+                            return b.importeTotalReferencia - a.importeTotalReferencia
+                        }
+                        return a.practicaId - b.practicaId
+                    }),
             }))
             .sort((a, b) => b.cirugiaId - a.cirugiaId)
     }, [contexto])

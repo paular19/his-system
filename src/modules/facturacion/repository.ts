@@ -1708,6 +1708,46 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     const practicaBaseAutomaticaPorCirugia = new Map<number, number>()
     const practicaSecundariaAutomaticaPorCirugia = new Map<number, number>()
 
+    const resolverImporteTotalReferenciaCirugia = (practicaIngreso: typeof ingreso.practicas[number]): number => {
+        const cantidad = Math.max(1, Number(practicaIngreso.cantidad) || 1)
+        const codigoNormalizado = normalizarCodigoPractica(practicaIngreso.codigoPractica)
+        const desgloseReferencia: DesgloseValores | null = practicaIngreso.nomencladorPractica
+            ? {
+                valorEspecialista:
+                    practicaIngreso.nomencladorPractica.valorEspecialista != null
+                        ? Number(practicaIngreso.nomencladorPractica.valorEspecialista)
+                        : null,
+                valorAyudante:
+                    practicaIngreso.nomencladorPractica.valorAyudante != null
+                        ? Number(practicaIngreso.nomencladorPractica.valorAyudante)
+                        : null,
+                valorAnestesista:
+                    practicaIngreso.nomencladorPractica.valorAnestesista != null
+                        ? Number(practicaIngreso.nomencladorPractica.valorAnestesista)
+                        : null,
+                valorGastos:
+                    practicaIngreso.nomencladorPractica.valorGastos != null
+                        ? Number(practicaIngreso.nomencladorPractica.valorGastos)
+                        : null,
+            }
+            : (desgloseFallbackPorCodigo.get(codigoNormalizado) ?? null)
+
+        const desgloseBaseReferencia = desgloseReferencia
+            ? aplicarOverrideEspecialAnestesistaPorCodigo(practicaIngreso.codigoPractica, desgloseReferencia)
+            : null
+        const totalUnitarioReferencia = desgloseBaseReferencia
+            ? calcularTotalUnitarioDesglose(desgloseBaseReferencia, null)
+            : null
+
+        if (totalUnitarioReferencia !== null && totalUnitarioReferencia > 0) {
+            return Number((totalUnitarioReferencia * cantidad).toFixed(2))
+        }
+
+        return practicaIngreso.importeTotal != null
+            ? Number(String(practicaIngreso.importeTotal))
+            : 0
+    }
+
     for (const cirugia of ingreso.cirugiasProgramadas) {
         const practicaBaseId =
             cirugia.diferenciales.find((d) => d.practicaBaseId != null)?.practicaBaseId ?? null
@@ -1783,8 +1823,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         )
         if (!infoCirugia?.diferenciales?.dobleCirugia) continue
 
-        const importeReferencia =
-            practicaIngreso.importeTotal != null ? Number(String(practicaIngreso.importeTotal)) : 0
+        const importeReferencia = resolverImporteTotalReferenciaCirugia(practicaIngreso)
 
         const actual = candidatasBasePorCirugia.get(infoCirugia.cirugiaId)
         if (
@@ -1821,8 +1860,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const practicaBaseId = practicaBaseAutomaticaPorCirugia.get(infoCirugia.cirugiaId) ?? null
         if (practicaBaseId != null && practicaIngreso.id === practicaBaseId) continue
 
-        const importeReferencia =
-            practicaIngreso.importeTotal != null ? Number(String(practicaIngreso.importeTotal)) : 0
+        const importeReferencia = resolverImporteTotalReferenciaCirugia(practicaIngreso)
 
         const actual = candidatasSecundariaPorCirugia.get(infoCirugia.cirugiaId)
         if (
@@ -2231,6 +2269,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const totalUnitarioDesglose = desgloseFiltradoPorIncluye
             ? calcularTotalUnitarioDesglose(desgloseFiltradoPorIncluye, incluyeCodigoPractica)
             : null
+        const totalUnitarioCirugiaReferencia = desgloseBase
+            ? calcularTotalUnitarioDesglose(desgloseBase, null)
+            : null
+        const importeTotalCirugiaReferencia = totalUnitarioCirugiaReferencia !== null
+            ? Number((totalUnitarioCirugiaReferencia * cant).toFixed(2))
+            : (importeFromDb ?? null)
         const precioUnitario = totalUnitarioDesglose !== null
             ? totalUnitarioDesglose
             : (incluyeCodigoPractica && precioUnitarioDesdeDb !== null
@@ -2308,6 +2352,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             precioUnitario,
             importeTotal: importeTotalFacturacion,
             importeTotalOriginal: importeFromDb,
+            importeTotalCirugiaReferencia,
             // Una práctica queda facturada solo cuando fue marcada explícitamente
             // por acción de FACTURAR y conserva vínculo + autorización.
             facturada: practicaFacturada,

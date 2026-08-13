@@ -32,6 +32,7 @@ export interface PrestacionFacturableItem {
     precioUnitario: number | null
     importeTotal: number | null
     importeTotalOriginal?: number | null
+    importeTotalCirugiaReferencia?: number | null
     facturada: boolean
     matriculaProfesional: number | null
     matriculaEspecialista: number | null

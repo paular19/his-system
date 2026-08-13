@@ -82,7 +82,6 @@ type CirugiaPracticaEditable = {
     descripcion: string
     importeTotal: number
     importeTotalReferencia: number
-    importeGastosReferencia: number
     esPracticaBase: boolean
     esPracticaSecundaria: boolean
     aplicaDiferencial: boolean
@@ -1426,16 +1425,12 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 practicaId: p.origen.practicaId,
                 descripcion: p.descripcion,
                 importeTotal: Number(p.importeTotal ?? 0),
-                importeTotalReferencia: Number(p.importeTotalOriginal ?? p.importeTotal ?? 0),
-                importeGastosReferencia: (() => {
-                    if (p.desglose?.valorGastos != null) {
-                        return Number((Number(p.desglose.valorGastos) * Number(p.cantidad ?? 1)).toFixed(2))
-                    }
-                    if ((p.incluyeCodigo ?? '').toUpperCase().includes('GA')) {
-                        return Number(p.importeTotalOriginal ?? p.importeTotal ?? 0)
-                    }
-                    return 0
-                })(),
+                importeTotalReferencia: Number(
+                    p.importeTotalCirugiaReferencia ??
+                    p.importeTotalOriginal ??
+                    p.importeTotal ??
+                    0
+                ),
                 esPracticaBase: Boolean(p.diferenciales?.esPracticaBase),
                 esPracticaSecundaria: Boolean(p.diferenciales?.esPracticaSecundaria),
                 aplicaDiferencial: Boolean(p.diferenciales?.aplicaDiferencial),
@@ -3278,7 +3273,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             <option value="">-- Seleccionar práctica principal --</option>
                                                             {cirugia.practicas.map((practica) => (
                                                                 <option key={practica.practicaId} value={String(practica.practicaId)}>
-                                                                    {practica.descripcion} · Total {formatCurrency(practica.importeTotalReferencia)} · Gastos {formatCurrency(practica.importeGastosReferencia)}
+                                                                    {practica.descripcion} · Total cirugía {formatCurrency(practica.importeTotalReferencia)}
                                                                 </option>
                                                             ))}
                                                         </select>
@@ -3299,7 +3294,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 .filter((practica) => String(practica.practicaId) !== draft.practicaBaseId)
                                                                 .map((practica) => (
                                                                     <option key={practica.practicaId} value={String(practica.practicaId)}>
-                                                                        {practica.descripcion} · Total {formatCurrency(practica.importeTotalReferencia)} · Gastos {formatCurrency(practica.importeGastosReferencia)}
+                                                                        {practica.descripcion} · Total cirugía {formatCurrency(practica.importeTotalReferencia)}
                                                                     </option>
                                                                 ))}
                                                         </select>

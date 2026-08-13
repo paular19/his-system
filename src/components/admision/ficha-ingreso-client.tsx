@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ActualizarPracticaSchema } from '@/modules/internacion/schemas'
 import type { ActualizarIngresoInput } from '@/modules/admision/schemas'
-import { updateIngresoAction } from '@/modules/admision/actions'
+import { getObrasSocialesAction, getPlanesAction, updateIngresoAction } from '@/modules/admision/actions'
 import { ChevronRight, ChevronDown, ChevronUp, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle, Ban, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
@@ -36,6 +36,17 @@ interface FichaIngresoClientProps {
     autoImprimirInicial?: boolean
     autoSepararInicial?: boolean
     ventanaImpresionNombreInicial?: string | null
+}
+
+interface ObraSocialOption {
+    id: number
+    nombre: string
+}
+
+interface PlanOption {
+    id: number
+    nombre: string
+    obraSocialId: number | null
 }
 
 type PracticaEditable = {
@@ -163,6 +174,9 @@ export function FichaIngresoClient({
     const [cardError, setCardError] = useState<string | null>(null)
     const [cardSuccess, setCardSuccess] = useState<string | null>(null)
     const [cardValues, setCardValues] = useState<any>({})
+    const [obrasSocialesCatalogo, setObrasSocialesCatalogo] = useState<ObraSocialOption[]>([])
+    const [planesCatalogo, setPlanesCatalogo] = useState<PlanOption[]>([])
+    const [cargandoCoberturaCatalogos, setCargandoCoberturaCatalogos] = useState(false)
     const [practicasIngreso, setPracticasIngreso] = useState(ingreso.practicas)
     const [estadoIngreso, setEstadoIngreso] = useState((ingreso.estado ?? '').trim().toUpperCase())
     const [anulandoAdmision, setAnulandoAdmision] = useState(false)
@@ -399,6 +413,18 @@ export function FichaIngresoClient({
             setCardSuccess(null)
             cardSuccessTimeoutRef.current = null
         }, 4000)
+    }
+
+    const cargarCatalogosCobertura = async () => {
+        if (obrasSocialesCatalogo.length > 0 && planesCatalogo.length > 0) return
+        setCargandoCoberturaCatalogos(true)
+        try {
+            const [obras, planes] = await Promise.all([getObrasSocialesAction(), getPlanesAction()])
+            setObrasSocialesCatalogo(obras)
+            setPlanesCatalogo(planes)
+        } finally {
+            setCargandoCoberturaCatalogos(false)
+        }
     }
 
     const anularAdmision = async () => {
@@ -1310,13 +1336,18 @@ export function FichaIngresoClient({
                         <h3 className="text-sm font-semibold text-gray-700">Cobertura Médica</h3>
                         {puedeModificar && editingCard !== 'cobertura' && (
                             <button
-                                onClick={() => {
+                                onClick={async () => {
                                     setEditingCard('cobertura');
                                     setCardValues({
-                                        obraSocial: ingreso.obraSocial?.nombre || '',
-                                        plan: ingreso.obraSocialCoseguroNombre || '',
+                                        obraSocialId: ingreso.obraSocialId ?? '',
+                                        planId: ingreso.planId ?? '',
                                         numeroAfiliado: ingreso.numeroAfiliado || '',
                                     });
+                                    try {
+                                        await cargarCatalogosCobertura()
+                                    } catch {
+                                        setCardError('No se pudieron cargar obras sociales y planes')
+                                    }
                                 }}
                                 className="ml-1 text-gray-400 hover:text-blue-600" title="Editar sección"
                             >
@@ -1332,13 +1363,37 @@ export function FichaIngresoClient({
                                 setCardLoading(true);
                                 setCardError(null);
                                 try {
+                                    const obraSocialId =
+                                        cardValues.obraSocialId === ''
+                                            ? null
+                                            : Number.parseInt(String(cardValues.obraSocialId), 10)
+                                    const planId =
+                                        cardValues.planId === ''
+                                            ? null
+                                            : Number.parseInt(String(cardValues.planId), 10)
+
+                                    if (obraSocialId != null && !Number.isFinite(obraSocialId)) {
+                                        throw new Error('Obra social inválida')
+                                    }
+
+                                    if (planId != null && !Number.isFinite(planId)) {
+                                        throw new Error('Plan inválido')
+                                    }
+
                                     await updateIngresoAction(ingreso.id, {
-                                        numeroAfiliado: cardValues.numeroAfiliado,
-                                        // Aquí deberías mapear a los IDs reales si corresponde
+                                        obraSocialId,
+                                        planId: obraSocialId ? planId : null,
+                                        numeroAfiliado: (cardValues.numeroAfiliado ?? '').trim() || null,
                                     });
                                     setEditingCard(null);
+                                    notificarGuardadoCard('Cobertura médica actualizada correctamente.')
+                                    router.refresh()
                                 } catch (err) {
-                                    setCardError('Error al guardar');
+                                    const detalle =
+                                        err instanceof Error && err.message.trim().length > 0
+                                            ? err.message
+                                            : 'Error al guardar'
+                                    setCardError(detalle);
                                 } finally {
                                     setCardLoading(false);
                                 }
@@ -1347,25 +1402,49 @@ export function FichaIngresoClient({
                             <div>
                                 <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Obra Social</dt>
                                 <dd className="text-sm text-gray-900">
-                                    <input
-                                        type="text"
+                                    <select
                                         className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.obraSocial}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, obraSocial: e.target.value }))}
-                                        disabled={cardLoading}
-                                    />
+                                        value={cardValues.obraSocialId ?? ''}
+                                        onChange={(e) => {
+                                            const nextObraSocialId = e.target.value === '' ? '' : Number.parseInt(e.target.value, 10)
+                                            setCardValues((v: any) => ({
+                                                ...v,
+                                                obraSocialId: nextObraSocialId,
+                                                planId: '',
+                                            }))
+                                        }}
+                                        disabled={cardLoading || cargandoCoberturaCatalogos}
+                                    >
+                                        <option value="">Particular</option>
+                                        {obrasSocialesCatalogo.map((os) => (
+                                            <option key={os.id} value={os.id}>{os.nombre}</option>
+                                        ))}
+                                    </select>
                                 </dd>
                             </div>
                             <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Coseguro</dt>
+                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Plan</dt>
                                 <dd className="text-sm text-gray-900">
-                                    <input
-                                        type="text"
+                                    <select
                                         className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.plan}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, plan: e.target.value }))}
-                                        disabled
-                                    />
+                                        value={cardValues.planId ?? ''}
+                                        onChange={(e) => {
+                                            const nextPlanId = e.target.value === '' ? '' : Number.parseInt(e.target.value, 10)
+                                            setCardValues((v: any) => ({ ...v, planId: nextPlanId }))
+                                        }}
+                                        disabled={
+                                            cardLoading ||
+                                            cargandoCoberturaCatalogos ||
+                                            !cardValues.obraSocialId
+                                        }
+                                    >
+                                        <option value="">Sin plan</option>
+                                        {planesCatalogo
+                                            .filter((plan) => plan.obraSocialId === Number(cardValues.obraSocialId))
+                                            .map((plan) => (
+                                                <option key={plan.id} value={plan.id}>{plan.nombre}</option>
+                                            ))}
+                                    </select>
                                 </dd>
                             </div>
                             <div>
@@ -1402,8 +1481,7 @@ export function FichaIngresoClient({
                 </div>
 
                 {/* Diagnóstico inicial */}
-                {(ingreso.descripcionPatologia || ingreso.descripcionPatologiaDefinitiva) && (
-                    <div className="his-card p-5">
+                <div className="his-card p-5">
                         <div className="flex items-center justify-between mb-4 pb-2 border-b">
                             <h3 className="text-sm font-semibold text-gray-700">Diagnóstico</h3>
                             {puedeModificar && editingCard !== 'diagnostico' && (
@@ -1434,8 +1512,14 @@ export function FichaIngresoClient({
                                             descripcionPatologiaDefinitiva: cardValues.descripcionPatologiaDefinitiva,
                                         });
                                         setEditingCard(null);
+                                        notificarGuardadoCard('Diagnóstico actualizado correctamente.')
+                                        router.refresh()
                                     } catch (err) {
-                                        setCardError('Error al guardar');
+                                        const detalle =
+                                            err instanceof Error && err.message.trim().length > 0
+                                                ? err.message
+                                                : 'Error al guardar'
+                                        setCardError(detalle);
                                     } finally {
                                         setCardLoading(false);
                                     }
@@ -1484,7 +1568,6 @@ export function FichaIngresoClient({
                             </>
                         )}
                     </div>
-                )}
 
                 {/* Diagnósticos registrados */}
                 <div className="his-card p-5">

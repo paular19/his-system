@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import type { CrearOrdenInput } from './schemas'
 import type {
   AdmisionActivaItem,
@@ -14,6 +14,7 @@ import { coincideTextoConBusquedaFlexible, obtenerTokensBusquedaFlexible } from 
 import { claveDiaArgentina, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
 
 const PUESTO_NUMERO = 1 // Número de puesto fijo (configurable a futuro)
+const MAX_REINTENTOS_NUMERO_ORDEN = 5
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const EFECTOR_FALLBACK_POR_MATRICULA: Record<number, string> = {
   6: 'ASOSIACION ANESTESISTA',
@@ -215,6 +216,17 @@ function esObraSocialParticular(nombreObraSocial: string | null | undefined): bo
   return normalized.includes('PARTICULAR')
 }
 
+function esColisionNumeroOrden(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false
+  if (error.code !== 'P2002') return false
+
+  const targetRaw = error.meta?.target
+  const target =
+    Array.isArray(targetRaw) ? targetRaw.join(',') : String(targetRaw ?? '')
+
+  return /puenum|ordnum|puestonumero|numero/i.test(target)
+}
+
 // ============================================
 // CREAR ORDEN
 // ============================================
@@ -230,107 +242,118 @@ export async function crearOrdenInterna(
     modoLigero?: boolean
   }
 ) {
-  return prisma.$transaction(async (tx) => {
-    const usuarioRegistro = usuario.trim().slice(0, 10) || 'SISTEMA'
-    const tipoOrdenCodigo = await resolverTipoOrdenCodigo(tx, data.tipoOrdenCodigo)
-    const planId = await resolverPlanOrden(tx, data.obraSocialId, usuarioRegistro)
+  for (let intento = 1; intento <= MAX_REINTENTOS_NUMERO_ORDEN; intento += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const usuarioRegistro = usuario.trim().slice(0, 10) || 'SISTEMA'
+        const tipoOrdenCodigo = await resolverTipoOrdenCodigo(tx, data.tipoOrdenCodigo)
+        const planId = await resolverPlanOrden(tx, data.obraSocialId, usuarioRegistro)
 
-    // Obtener próximo número de orden
-    const ultimo = await tx.orden.findFirst({
-      where: { puestoNumero: PUESTO_NUMERO },
-      orderBy: { numero: 'desc' },
-      select: { numero: true },
-    })
-    const numero = (ultimo?.numero ?? 0) + 1
-    const totalOrden = data.items.reduce((sum, item) => sum + Number(item.importeTotal ?? 0), 0)
-    const fechasItems = data.items
-      .map((item) => item.fecha)
-      .filter((fecha): fecha is Date => fecha instanceof Date)
+        // Obtener próximo número de orden (puede colisionar en concurrencia; se reintenta arriba)
+        const ultimo = await tx.orden.findFirst({
+          where: { puestoNumero: PUESTO_NUMERO },
+          orderBy: { numero: 'desc' },
+          select: { numero: true },
+        })
+        const numero = (ultimo?.numero ?? 0) + 1
+        const totalOrden = data.items.reduce((sum, item) => sum + Number(item.importeTotal ?? 0), 0)
+        const fechasItems = data.items
+          .map((item) => item.fecha)
+          .filter((fecha): fecha is Date => fecha instanceof Date)
 
-    const claveFechaSeleccionada = fechasItems.reduce<string | null>((max, fecha) => {
-      const clave = claveDiaArgentina(fecha)
-      if (!clave) return max
-      if (!max) return clave
-      return clave > max ? clave : max
-    }, null)
+        const claveFechaSeleccionada = fechasItems.reduce<string | null>((max, fecha) => {
+          const clave = claveDiaArgentina(fecha)
+          if (!clave) return max
+          if (!max) return clave
+          return clave > max ? clave : max
+        }, null)
 
-    const claveHoyArgentina = claveDiaArgentina(new Date())
-    const fechaEmisionOrden = claveFechaSeleccionada
-      ? fechaDesdeClaveArgentina(claveFechaSeleccionada)
-      : claveHoyArgentina
-      ? fechaDesdeClaveArgentina(claveHoyArgentina)
-      : new Date()
-    const fechaBaseItem = fechaEmisionOrden
+        const claveHoyArgentina = claveDiaArgentina(new Date())
+        const fechaEmisionOrden = claveFechaSeleccionada
+          ? fechaDesdeClaveArgentina(claveFechaSeleccionada)
+          : claveHoyArgentina
+          ? fechaDesdeClaveArgentina(claveHoyArgentina)
+          : new Date()
+        const fechaBaseItem = fechaEmisionOrden
 
-    const ordenData = {
-      puestoNumero: PUESTO_NUMERO,
-      numero,
-      ingresoId: data.ingresoId ?? null,
-      pacienteId: data.pacienteId ?? null,
-      descripcion: data.descripcion ?? null,
-      nombrePaciente: data.nombrePaciente,
-      numeroAfiliado: data.numeroAfiliado,
-      obraSocialId: data.obraSocialId,
-      planId,
-      obraSocialCoseguroId: data.obraSocialCoseguroId ?? null,
-      planCoseguroId: data.planCoseguroId ?? null,
-      profesionalId: data.profesionalId,
-      tipoOrdenCodigo,
-      descripcionPatologia: data.descripcionPatologia ?? null,
-      titularModular: data.titularModular ?? null,
-      imprimirPorDuplicado: data.imprimirPorDuplicado ?? false,
-      fechaEmision: fechaEmisionOrden,
-      fechaPedido: fechaEmisionOrden,
-      importeTotal: totalOrden,
-      estado: 'A' as const,
-      fechaEstado: new Date(),
-      usuarioRegistro,
-      items: {
-        create: data.items.map((item, idx) => {
-          const fechaItem = item.fecha instanceof Date ? item.fecha : fechaBaseItem
-          return {
-            item: idx + 1,
-            practicaId: item.practicaId ?? null,
-            convenioId: item.convenioId,
-            codigoPractica: item.codigoPractica.trim().slice(0, 8),
-            cantidad: item.cantidad,
-            tipoFacturacion: item.tipoFacturacion ?? 'H',
-            clasificacionAgrupacion: normalizarClasificacion(item.clasificacionAgrupacion),
-            modulo: normalizarIncluyeCodigo(item.incluyeCodigo),
-            titularModular: item.titularModular ?? null,
-            imprimirPorDuplicado: item.imprimirPorDuplicado ?? false,
-            efectorMatricula: item.efectorMatricula ?? null,
-            importeTotal: item.importeTotal ?? null,
-            porcentajeCargoPac: item.porcentajeCargoPac ?? null,
-            fecha: fechaItem,
-            numeroAutorizacion: normalizarNumeroAutorizacion(item.numeroAutorizacion)?.slice(0, 15) ?? null,
-          }
-        }),
-      },
+        const ordenData = {
+          puestoNumero: PUESTO_NUMERO,
+          numero,
+          ingresoId: data.ingresoId ?? null,
+          pacienteId: data.pacienteId ?? null,
+          descripcion: data.descripcion ?? null,
+          nombrePaciente: data.nombrePaciente,
+          numeroAfiliado: data.numeroAfiliado,
+          obraSocialId: data.obraSocialId,
+          planId,
+          obraSocialCoseguroId: data.obraSocialCoseguroId ?? null,
+          planCoseguroId: data.planCoseguroId ?? null,
+          profesionalId: data.profesionalId,
+          tipoOrdenCodigo,
+          descripcionPatologia: data.descripcionPatologia ?? null,
+          titularModular: data.titularModular ?? null,
+          imprimirPorDuplicado: data.imprimirPorDuplicado ?? false,
+          fechaEmision: fechaEmisionOrden,
+          fechaPedido: fechaEmisionOrden,
+          importeTotal: totalOrden,
+          estado: 'A' as const,
+          fechaEstado: new Date(),
+          usuarioRegistro,
+          items: {
+            create: data.items.map((item, idx) => {
+              const fechaItem = item.fecha instanceof Date ? item.fecha : fechaBaseItem
+              return {
+                item: idx + 1,
+                practicaId: item.practicaId ?? null,
+                convenioId: item.convenioId,
+                codigoPractica: item.codigoPractica.trim().slice(0, 8),
+                cantidad: item.cantidad,
+                tipoFacturacion: item.tipoFacturacion ?? 'H',
+                clasificacionAgrupacion: normalizarClasificacion(item.clasificacionAgrupacion),
+                modulo: normalizarIncluyeCodigo(item.incluyeCodigo),
+                titularModular: item.titularModular ?? null,
+                imprimirPorDuplicado: item.imprimirPorDuplicado ?? false,
+                efectorMatricula: item.efectorMatricula ?? null,
+                importeTotal: item.importeTotal ?? null,
+                porcentajeCargoPac: item.porcentajeCargoPac ?? null,
+                fecha: fechaItem,
+                numeroAutorizacion: normalizarNumeroAutorizacion(item.numeroAutorizacion)?.slice(0, 15) ?? null,
+              }
+            }),
+          },
+        }
+
+        const orden = options?.modoLigero
+          ? await tx.orden.create({
+            data: ordenData,
+            select: {
+              puestoNumero: true,
+              numero: true,
+              nombrePaciente: true,
+            },
+          })
+          : await tx.orden.create({
+            data: ordenData,
+            include: {
+              items: true,
+              obraSocial: { select: { id: true, nombre: true } },
+              plan: { select: { id: true, descripcion: true } },
+              profesional: { select: { id: true, nombre: true, matricula: true } },
+              tipoOrden: { select: { codigo: true, descripcion: true } },
+            },
+          })
+
+        return orden
+      })
+    } catch (error) {
+      if (esColisionNumeroOrden(error) && intento < MAX_REINTENTOS_NUMERO_ORDEN) {
+        continue
+      }
+      throw error
     }
+  }
 
-    const orden = options?.modoLigero
-      ? await tx.orden.create({
-        data: ordenData,
-        select: {
-          puestoNumero: true,
-          numero: true,
-          nombrePaciente: true,
-        },
-      })
-      : await tx.orden.create({
-        data: ordenData,
-        include: {
-          items: true,
-          obraSocial: { select: { id: true, nombre: true } },
-          plan: { select: { id: true, descripcion: true } },
-          profesional: { select: { id: true, nombre: true, matricula: true } },
-          tipoOrden: { select: { codigo: true, descripcion: true } },
-        },
-      })
-
-    return orden
-  })
+  throw new Error('No se pudo generar un numero de orden unico')
 }
 
 // ============================================

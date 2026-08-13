@@ -158,14 +158,6 @@ function ordenarClaveClasificacion(a: string, b: string): number {
   return a.localeCompare(b)
 }
 
-function claveSubitemPorCodigo(
-  clasificacion: string,
-  convenioId: number,
-  codigoPractica: string
-): string {
-  return `__SUBITEM_CODIGO__${clasificacion}__${convenioId}:${codigoPractica}`
-}
-
 function claveClasificacionItem(item: CrearOrdenInput['items'][number]): string {
   if (item.codigoPractica.trim() === '66') return '__PROTOCOLO_BIOQUIMICO__'
 
@@ -581,19 +573,12 @@ export async function generarOrdenesDesdeInternacionAction(input: {
 
       for (const [idxClasificacion, clasificacion] of clasificacionesObjetivo.entries()) {
         const codigoPracticaNormalizado = practica.codigoPractica.trim().slice(0, 8)
-        const separarSubitemPorCodigo =
-          !parsed.data.agruparEnUnaOrden &&
-          !parsed.data.separarPorPractica &&
-          parsed.data.separarPorSubitem &&
-          !esProtocoloBioquimico
         const key = parsed.data.agruparEnUnaOrden
           ? '__AGRUPAR_EN_UNA_ORDEN__'
           : parsed.data.separarPorPractica
           ? (clasificacionesObjetivo.length > 1
               ? `__PRACTICA_${practica.id}_${idxClasificacion}__`
               : `__PRACTICA_${practica.id}__`)
-          : separarSubitemPorCodigo
-          ? claveSubitemPorCodigo(clasificacion, practica.convenioId, codigoPracticaNormalizado)
           : (esProtocoloBioquimico ? '__PROTOCOLO_BIOQUIMICO__' : clasificacion)
         const esClasificacionSoloGastos =
           contieneClasificacion(clasificacion, 'GA') &&
@@ -692,14 +677,11 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     for (const [key, itemsGrupo] of gruposOrdenados) {
       const esGrupoAgrupado = key === '__AGRUPAR_EN_UNA_ORDEN__'
       const esGrupoPorPractica = key.startsWith('__PRACTICA_')
-      const esGrupoSubitemPorCodigo = key.startsWith('__SUBITEM_CODIGO__')
       const clasificacionItemBase =
         normalizarClasificacionAgrupacion(itemsGrupo[0]?.item?.clasificacionAgrupacion) ?? 'HE'
       const clasificacion = esGrupoAgrupado
         ? 'AGRUPADA'
         : esGrupoPorPractica
-        ? clasificacionItemBase
-        : esGrupoSubitemPorCodigo
         ? clasificacionItemBase
         : (key === '__PROTOCOLO_BIOQUIMICO__' ? 'HE' : key)
       const esGrupoConDerechos = esGrupoAgrupado

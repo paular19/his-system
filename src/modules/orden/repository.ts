@@ -178,7 +178,7 @@ type OrdenListaRowConItems = {
   obraSocialCoseguroId: number | null
   numeroAutorizacion: string | null
   fechaEmision: Date
-  estado: string
+  estado: string | null
   obraSocial: { nombre: string } | null
   _count: { items: number }
   items: Array<{
@@ -214,6 +214,15 @@ function resolverNumeroAutorizacionOrdenLista(row: OrdenListaRowConItems): strin
 function esObraSocialParticular(nombreObraSocial: string | null | undefined): boolean {
   const normalized = (nombreObraSocial ?? '').trim().toUpperCase()
   return normalized.includes('PARTICULAR')
+}
+
+function normalizarEstadoOrden(value: string | null | undefined): string {
+  const normalized = (value ?? '').trim().toUpperCase()
+  return normalized.length > 0 ? normalized : 'A'
+}
+
+function esEstadoOrdenAnulada(value: string | null | undefined): boolean {
+  return normalizarEstadoOrden(value).startsWith('X')
 }
 
 function esColisionNumeroOrden(error: unknown): boolean {
@@ -579,7 +588,7 @@ export async function listarOrdenes(params: {
         obraSocialNombre: o.obraSocial?.nombre ?? '',
         coseguroNombre: o.obraSocialCoseguroId ? (coseguroPorId.get(o.obraSocialCoseguroId) ?? '-') : '-',
         fechaEmision: o.fechaEmision,
-        estado: o.estado,
+        estado: normalizarEstadoOrden(o.estado),
         cantidadItems: o._count.items,
         practicas: [...o.items]
           .sort((a, b) => a.item - b.item)
@@ -598,7 +607,16 @@ export async function listarOrdenes(params: {
 
   if (estadoTab === 'pendientes' || estadoTab === 'confirmadas') {
     const rows = await prisma.orden.findMany({
-      where: { estado: { not: 'X' } },
+      where: {
+        NOT: [
+          {
+            estado: {
+              contains: 'X',
+              mode: 'insensitive',
+            },
+          },
+        ],
+      },
       orderBy: [{ fechaEmision: 'desc' }, { puestoNumero: 'desc' }, { numero: 'desc' }],
       select: {
         puestoNumero: true,
@@ -632,6 +650,8 @@ export async function listarOrdenes(params: {
         }
       })
       .filter((row) => {
+        if (esEstadoOrdenAnulada(row.estado)) return false
+
         const esPendiente =
           row.numeroAutorizacionReal == null &&
           !esObraSocialParticular(row.obraSocial?.nombre)
@@ -694,7 +714,10 @@ export async function listarOrdenes(params: {
   const where: Prisma.OrdenWhereInput =
     estadoTab === 'anuladas'
       ? {
-        estado: 'X',
+        estado: {
+          contains: 'X',
+          mode: 'insensitive',
+        },
         ...filtroBusqueda,
       }
       : filtroBusqueda

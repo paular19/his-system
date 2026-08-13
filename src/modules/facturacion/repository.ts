@@ -1218,15 +1218,10 @@ export async function buscarAdmisionesFacturacion(
 
     if (soloFacturadas) {
         andFilters.push({
-            practicas: {
+            ordenes: {
                 some: {
-                    estado: 'F',
-                    puestoNumero: { not: null },
-                    ordenNumero: { not: null },
-                    AND: [
-                        { numeroAutorizacion: { not: null } },
-                        { numeroAutorizacion: { not: '' } },
-                    ],
+                    estado: { not: 'X' },
+                    ...buildOrdenFacturadaWhere(),
                 },
             },
         })
@@ -1294,10 +1289,18 @@ export async function buscarAdmisionesFacturacion(
     if (codigoPractica) {
         andFilters.push({
             OR: [
-                { practicas: { some: { codigoPractica: { contains: codigoPractica, mode: 'insensitive' } } } },
+                {
+                    practicas: {
+                        some: {
+                            estado: { not: 'X' },
+                            codigoPractica: { contains: codigoPractica, mode: 'insensitive' },
+                        },
+                    },
+                },
                 {
                     ordenes: {
                         some: {
+                            estado: { not: 'X' },
                             items: { some: { codigoPractica: { contains: codigoPractica, mode: 'insensitive' } } },
                         },
                     },
@@ -1426,7 +1429,10 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             },
         }),
         prisma.orden.findMany({
-            where: { ingresoId },
+            where: {
+                ingresoId,
+                estado: { not: 'X' },
+            },
             orderBy: [{ fechaEmision: 'desc' }, { numero: 'desc' }],
             select: {
                 puestoNumero: true,
@@ -1493,7 +1499,40 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         }),
     ])
 
-    const conveniosPractica = Array.from(new Set(practicasBase.map((p) => p.convenioId)))
+    const clavesOrdenesActivas = new Set<string>()
+    const puestosPorNumeroOrdenActivo = new Map<number, Set<number>>()
+    for (const orden of ordenes) {
+        clavesOrdenesActivas.add(`${orden.puestoNumero}:${orden.numero}`)
+        const puestos = puestosPorNumeroOrdenActivo.get(orden.numero) ?? new Set<number>()
+        puestos.add(orden.puestoNumero)
+        puestosPorNumeroOrdenActivo.set(orden.numero, puestos)
+    }
+
+    const resolverPuestoOrdenActivo = (
+        ordenNumero: number,
+        puestoNumero: number | null
+    ): number | null => {
+        if (typeof puestoNumero === 'number' && Number.isFinite(puestoNumero) && puestoNumero > 0) {
+            return puestoNumero
+        }
+
+        const puestos = puestosPorNumeroOrdenActivo.get(ordenNumero)
+        if (!puestos || puestos.size !== 1) return null
+
+        for (const puesto of puestos) {
+            return puesto
+        }
+        return null
+    }
+
+    const practicasSinOrdenAnulada = practicasBase.filter((practica) => {
+        if (practica.ordenNumero == null) return true
+        const puesto = resolverPuestoOrdenActivo(practica.ordenNumero, practica.puestoNumero)
+        if (puesto == null) return false
+        return clavesOrdenesActivas.has(`${puesto}:${practica.ordenNumero}`)
+    })
+
+    const conveniosPractica = Array.from(new Set(practicasSinOrdenAnulada.map((p) => p.convenioId)))
     const nomencladorRows = conveniosPractica.length
         ? await prisma.nomencladorPractica.findMany({
             where: { convenioId: { in: conveniosPractica } },
@@ -1527,7 +1566,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         })
     }
 
-    const practicas = practicasBase.map((p) => ({
+    const practicas = practicasSinOrdenAnulada.map((p) => ({
         ...p,
         nomencladorPractica: nomencladorPorClave.get(`${p.convenioId}:${p.codigoPractica.trim()}`) ?? null,
     }))
@@ -1657,6 +1696,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     const prestaciones: PrestacionFacturableItem[] = []
     const practicasConEstadoFacturado = new Set<number>()
+    const clavesOrdenActivasIngreso = new Set(ingreso.ordenes.map((o) => `${o.puestoNumero}:${o.numero}`))
     const matriculaPorOrden = new Map<string, number | null>()
     const autorizacionPorOrden = new Map<string, string | null>()
     const autorizacionPorOrdenItem = new Map<string, string | null>()
@@ -2331,9 +2371,16 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             )
             : (p.numeroAutorizacion?.trim() || null)
 
+        const ordenActivaVinculada = Boolean(
+            ordenPuestoNumero &&
+            ordenNumero &&
+            clavesOrdenActivasIngreso.has(`${ordenPuestoNumero}:${ordenNumero}`)
+        )
+
         const practicaFacturada = Boolean(
             practicaMarcadaComoFacturada(p.estado) &&
             tieneVinculoExplicitoEnDB &&
+            ordenActivaVinculada &&
             tieneNumeroAutorizacionValido(numeroAutorizacionPractica)
         )
         if (practicaFacturada) {

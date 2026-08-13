@@ -673,7 +673,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const totalIncluido = esIPSTxt
         ? (lote.itemsIPSTxt ?? []).reduce((s, it) => {
             const importeBase = Number(it.impTotal)
-            const importeMostrado = vistaPromedi && it.importePromedi !== null && Number(it.importePromedi) !== importeBase
+            const importeMostrado = it.importePromedi !== null
                 ? Number(it.importePromedi)
                 : importeBase
             return s + importeMostrado

@@ -110,6 +110,108 @@ function resolverEfectorMatriculaDesdeClasificacion(
   return matriculaEspecialista ?? matriculaAnestesista ?? null
 }
 
+function periodoDesdeFechaArgentina(fecha: Date): string {
+  return claveDiaArgentina(fecha).slice(0, 7)
+}
+
+async function validarEdicionPracticaEnLoteConfirmado(
+  tx: Prisma.TransactionClient,
+  ingresoId: number,
+  practicaId: number,
+  puestoNumeroLegacy: number | null | undefined,
+  ordenNumeroLegacy: number | null | undefined
+): Promise<void> {
+  const ordenesVinculadas = await tx.ordenPractica.findMany({
+    where: {
+      practicaId,
+      orden: { ingresoId },
+    },
+    select: {
+      puestoNumero: true,
+      ordenNumero: true,
+    },
+  })
+
+  const clavesOrden = new Set<string>()
+  for (const orden of ordenesVinculadas) {
+    clavesOrden.add(`${orden.puestoNumero}:${orden.ordenNumero}`)
+  }
+
+  if (
+    puestoNumeroLegacy != null &&
+    ordenNumeroLegacy != null &&
+    Number(puestoNumeroLegacy) > 0 &&
+    Number(ordenNumeroLegacy) > 0
+  ) {
+    clavesOrden.add(`${Number(puestoNumeroLegacy)}:${Number(ordenNumeroLegacy)}`)
+  }
+
+  if (clavesOrden.size === 0) return
+
+  const filtrosOrden = Array.from(clavesOrden).map((clave) => {
+    const [puestoRaw, numeroRaw] = clave.split(':')
+    return {
+      puestoNumero: Number.parseInt(puestoRaw ?? '0', 10),
+      numero: Number.parseInt(numeroRaw ?? '0', 10),
+    }
+  })
+
+  const ordenes = await tx.orden.findMany({
+    where: {
+      ingresoId,
+      OR: filtrosOrden,
+    },
+    select: {
+      puestoNumero: true,
+      numero: true,
+      fechaEmision: true,
+    },
+  })
+
+  if (ordenes.length === 0) return
+
+  const periodosOrden = Array.from(
+    new Set(ordenes.map((orden) => periodoDesdeFechaArgentina(orden.fechaEmision)))
+  )
+
+  const lotesConfirmados = await tx.loteFacturacion.findMany({
+    where: {
+      estado: 'CON',
+      tipo: 'PRACTICAS',
+      periodo: { in: periodosOrden },
+      items: {
+        some: { ingresoId },
+      },
+    },
+    select: {
+      id: true,
+      periodo: true,
+      ordenesExcluidas: {
+        select: {
+          puestoNumero: true,
+          ordenNumero: true,
+        },
+      },
+    },
+  })
+
+  for (const lote of lotesConfirmados) {
+    const excluidas = new Set(
+      lote.ordenesExcluidas.map((orden) => `${orden.puestoNumero}:${orden.ordenNumero}`)
+    )
+
+    const incluidaEnLoteConfirmado = ordenes.some((orden) => {
+      const periodoOrden = periodoDesdeFechaArgentina(orden.fechaEmision)
+      if (periodoOrden !== lote.periodo) return false
+      return !excluidas.has(`${orden.puestoNumero}:${orden.numero}`)
+    })
+
+    if (incluidaEnLoteConfirmado) {
+      throw new Error('No se puede editar una práctica incluida en un lote confirmado')
+    }
+  }
+}
+
 async function liberarBloqueosHabitacionDeIngreso(
   tx: Prisma.TransactionClient,
   ingresoId: number,
@@ -1549,6 +1651,14 @@ export async function actualizarPractica(
     if (estadoActual === 'X') {
       throw new Error('No se puede editar una práctica anulada')
     }
+
+    await validarEdicionPracticaEnLoteConfirmado(
+      tx,
+      ingresoId,
+      practicaActual.id,
+      practicaActual.puestoNumero,
+      practicaActual.ordenNumero
+    )
 
     const ingreso = await tx.ingreso.findUnique({
       where: { id: ingresoId },

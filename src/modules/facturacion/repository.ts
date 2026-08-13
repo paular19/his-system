@@ -32,6 +32,7 @@ import type {
 } from './types'
 import { calcularImporteFacturable, resolverReglaFacturacion } from './cobertura'
 import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './diferenciales'
+import { puedeEditarPrestacionEnLote } from './editability'
 import { crearOrdenAmbulatorio } from '@/modules/orden/service'
 import { claveDiaArgentina } from '@/lib/utils/argentina-date'
 import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
@@ -3316,12 +3317,17 @@ export async function actualizarPrestacionFacturacion(
                 where: {
                     loteId: data.loteId,
                     ingresoId: orden.ingresoId,
-                    lote: { estado: 'PEN' },
                 },
-                select: { id: true },
+                select: {
+                    id: true,
+                    lote: {
+                        select: { estado: true },
+                    },
+                },
             })
             : null
-        if (!itemLote) {
+
+        if (!itemLote || !puedeEditarPrestacionEnLote(itemLote.lote.estado)) {
             throw new Error('Sólo se pueden editar órdenes de un lote pendiente')
         }
     }

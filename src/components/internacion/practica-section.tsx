@@ -332,11 +332,6 @@ export function PracticaSection({
     }
 
     const abrirEdicionPractica = (practica: PracticaItem) => {
-        if (practicaFacturada(practica)) {
-            setError('La práctica ya fue facturada. Anulá la orden en Facturación para poder editarla.')
-            return
-        }
-
         const cantidad = Number.isFinite(Number(practica.cantidad)) && Number(practica.cantidad) > 0
             ? Number(practica.cantidad)
             : 1
@@ -1448,10 +1443,8 @@ export function PracticaSection({
                                                                                     <button
                                                                                         type="button"
                                                                                         onClick={() => abrirEdicionPractica(practica)}
-                                                                                        disabled={guardandoPracticaEditando || practicaFacturada(practica)}
-                                                                                        title={practicaFacturada(practica)
-                                                                                            ? 'Práctica facturada. Anulá la orden en Facturación para editar.'
-                                                                                            : 'Editar práctica'}
+                                                                                        disabled={guardandoPracticaEditando}
+                                                                                        title="Editar práctica"
                                                                                         className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                                                                     >
                                                                                         <Pencil className="h-3.5 w-3.5" />

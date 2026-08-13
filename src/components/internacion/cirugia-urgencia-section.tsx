@@ -697,11 +697,6 @@ export function CirugiaUrgenciaSection({
             return
         }
 
-        if (practicaInternacionFacturada(practicaInternacion)) {
-            setError('La práctica ya fue facturada. Anulá la orden en Facturación para poder editarla.')
-            return
-        }
-
         setError(null)
         setPracticaEditando({
             cirugiaId,
@@ -1540,10 +1535,10 @@ export function CirugiaUrgenciaSection({
                                                                                                 <button
                                                                                                     type="button"
                                                                                                     onClick={() => abrirEdicionPracticaCirugia(c.id, practica.id)}
-                                                                                                    disabled={estaFacturada || !practicaInternacion || guardandoPracticaEditando}
+                                                                                                    disabled={!practicaInternacion || guardandoPracticaEditando}
                                                                                                     title={
-                                                                                                        estaFacturada
-                                                                                                            ? 'Practica facturada. Anula la orden en Facturacion para editar.'
+                                                                                                        !practicaInternacion
+                                                                                                            ? 'No se encontró la práctica asociada'
                                                                                                             : 'Editar practica'
                                                                                                     }
                                                                                                     className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
@@ -1618,7 +1613,7 @@ export function CirugiaUrgenciaSection({
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-900">Editar práctica de cirugía</h3>
                                 <p className="text-xs text-gray-600">
-                                    Solo se permite editar prácticas con orden generada no facturada.
+                                    Se puede editar mientras no esté incluida en un lote confirmado.
                                 </p>
                             </div>
                             <button

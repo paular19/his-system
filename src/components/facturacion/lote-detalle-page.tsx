@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItemDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
+import { puedeEditarPrestacionEnLote } from '@/modules/facturacion/editability'
 import { LoteResumenPrint } from './lote-resumen-print'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
@@ -660,7 +661,7 @@ export function LoteDetallePage({ loteId }: Props) {
     }
 
     const est = ESTADO_LABEL[lote.estado] ?? { label: lote.estado, cls: 'bg-gray-100 text-gray-700' }
-    const esPendiente = lote.estado === 'PEN'
+    const esPendiente = puedeEditarPrestacionEnLote(lote.estado)
     const esIPSTxt = lote.origen === 'IPS_TXT'
     const esIps = esObraSocialIps(lote.obraSocial?.nombre)
     const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)

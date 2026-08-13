@@ -1944,11 +1944,6 @@ export function PracticaCargaRapidaPage({
     }
 
     const abrirEdicionPractica = (practica: PracticaItem) => {
-        if (practicaFacturada(practica)) {
-            setMensajeError('La practica ya fue facturada. Anula la orden en Facturacion para poder editarla.')
-            return
-        }
-
         const cantidad = Number.isFinite(Number(practica.cantidad)) && Number(practica.cantidad) > 0
             ? Number(practica.cantidad)
             : 1
@@ -2798,10 +2793,8 @@ export function PracticaCargaRapidaPage({
                                                     <button
                                                         type="button"
                                                         onClick={() => abrirEdicionPractica(practica)}
-                                                        disabled={guardandoPracticaEditando || practicaFacturada(practica)}
-                                                        title={practicaFacturada(practica)
-                                                            ? 'Practica facturada. Anula la orden en Facturacion para editar.'
-                                                            : 'Editar practica'}
+                                                        disabled={guardandoPracticaEditando}
+                                                        title="Editar practica"
                                                         className="inline-flex items-center rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                                                     >
                                                         Editar

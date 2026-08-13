@@ -1464,7 +1464,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     if (b.importeTotalReferencia !== a.importeTotalReferencia) {
                         return b.importeTotalReferencia - a.importeTotalReferencia
                     }
-                    return b.importeGastosReferencia - a.importeGastosReferencia
+                    return a.practicaId - b.practicaId
                 }),
             }))
             .sort((a, b) => b.cirugiaId - a.cirugiaId)
@@ -3114,7 +3114,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                             En cirugía múltiple, elegí práctica principal y práctica secundaria. El diferencial quirúrgico se aplica solo a la secundaria.
                                         </p>
                                         <p className="text-xs text-amber-700">
-                                            Por ahora, feriado y nocturna no impactan montos en facturación.
+                                            Feriado y nocturna impactan montos en facturación según las reglas de diferenciales.
                                         </p>
                                         {diferencialesCirugiaCongelados && (
                                             <p className="mt-1 text-xs font-medium text-amber-800">
@@ -3738,6 +3738,16 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     ? fechaDraft.toLocaleString('es-AR')
                                                     : '—'
                                                 const importeResumen = Number.parseFloat(draft.importeTotal)
+                                                const importeOriginal = p.importeTotalOriginal != null ? Number(p.importeTotalOriginal) : null
+                                                const deltaDiferencial =
+                                                    importeOriginal !== null
+                                                        ? Number((Number(p.importeTotal ?? 0) - importeOriginal).toFixed(2))
+                                                        : null
+                                                const mostrarDeltaDiferencial = Boolean(
+                                                    p.diferenciales?.aplicaDiferencial &&
+                                                    importeOriginal !== null &&
+                                                    Math.abs(deltaDiferencial ?? 0) > 0.009
+                                                )
                                                 const numeroOrdenLinea = obtenerNumeroOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
                                                 const destinoOrdenLinea = obtenerDestinoOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
                                                 const ordenAgrupada = Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
@@ -3858,6 +3868,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                 +{autorizacionesVinculadasOrdenadas.length - 2} más
                                                                             </span>
                                                                         )}
+                                                                        {p.esPracticaCirugia && etiquetasDiferencial.map((etq) => (
+                                                                            <span
+                                                                                key={`${p.uid}:resumen-diferencial:${etq}`}
+                                                                                className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+                                                                            >
+                                                                                {etq}
+                                                                            </span>
+                                                                        ))}
                                                                     </div>
                                                                 )}
                                                             </td>
@@ -3912,7 +3930,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
                                                                     />
                                                                 ) : (
-                                                                    <span className="text-xs font-semibold text-gray-800">{Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}</span>
+                                                                    <div className="space-y-0.5">
+                                                                        <span className="text-xs font-semibold text-gray-800">{Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}</span>
+                                                                        {mostrarDeltaDiferencial && importeOriginal !== null && deltaDiferencial !== null && (
+                                                                            <div className="text-[10px] text-amber-700">
+                                                                                Base {formatCurrency(importeOriginal)} · Dif {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
                                                                 )}
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
@@ -4335,6 +4360,16 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 ? fechaDraft.toLocaleString('es-AR')
                                                                 : '—'
                                                             const importeResumen = Number.parseFloat(draft.importeTotal)
+                                                            const importeOriginal = p.importeTotalOriginal != null ? Number(p.importeTotalOriginal) : null
+                                                            const deltaDiferencial =
+                                                                importeOriginal !== null
+                                                                    ? Number((Number(p.importeTotal ?? 0) - importeOriginal).toFixed(2))
+                                                                    : null
+                                                            const mostrarDeltaDiferencial = Boolean(
+                                                                p.diferenciales?.aplicaDiferencial &&
+                                                                importeOriginal !== null &&
+                                                                Math.abs(deltaDiferencial ?? 0) > 0.009
+                                                            )
                                                             const numeroOrdenLinea = obtenerNumeroOrdenPrestacion(p, [])
                                                             const destinoOrdenLinea = obtenerDestinoOrdenPrestacion(p, [])
                                                             const matriculaEjecutante = obtenerMatriculaEjecutante(p, draft, [])
@@ -4441,7 +4476,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                     className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
                                                                                 />
                                                                             ) : (
-                                                                                <span className="text-xs font-semibold text-gray-800">{Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}</span>
+                                                                                <div className="space-y-0.5">
+                                                                                    <span className="text-xs font-semibold text-gray-800">{Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}</span>
+                                                                                    {mostrarDeltaDiferencial && importeOriginal !== null && deltaDiferencial !== null && (
+                                                                                        <div className="text-[10px] text-amber-700">
+                                                                                            Base {formatCurrency(importeOriginal)} · Dif {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
                                                                             )}
                                                                         </td>
                                                                         <td className="px-3 py-2 align-top">

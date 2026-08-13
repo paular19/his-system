@@ -1770,7 +1770,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     const candidatasBasePorCirugia = new Map<
         number,
-        { practicaId: number; gastoReferencia: number; importeReferencia: number }
+        { practicaId: number; importeReferencia: number }
     >()
 
     for (const practicaIngreso of ingreso.practicas) {
@@ -1783,29 +1783,17 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         )
         if (!infoCirugia?.diferenciales?.dobleCirugia) continue
 
-        const cantidad = Math.max(1, Number(practicaIngreso.cantidad) || 1)
         const importeReferencia =
             practicaIngreso.importeTotal != null ? Number(String(practicaIngreso.importeTotal)) : 0
-        const valorGastosUnitario =
-            practicaIngreso.nomencladorPractica?.valorGastos != null
-                ? Number(practicaIngreso.nomencladorPractica.valorGastos)
-                : null
-        const esGastoPorCodigo = normalizarCodigoPracticaFacturacion(practicaIngreso.codigoPractica).includes('GA')
-        const esGastoPorDescripcion = descripcionEsGasto(practicaIngreso.nomencladorPractica?.descripcion)
-        const gastoReferencia =
-            valorGastosUnitario != null && valorGastosUnitario > 0
-                ? Number((valorGastosUnitario * cantidad).toFixed(2))
-                : (esGastoPorCodigo || esGastoPorDescripcion ? importeReferencia : 0)
 
         const actual = candidatasBasePorCirugia.get(infoCirugia.cirugiaId)
         if (
             !actual ||
             importeReferencia > actual.importeReferencia ||
-            (importeReferencia === actual.importeReferencia && gastoReferencia > actual.gastoReferencia)
+            (importeReferencia === actual.importeReferencia && practicaIngreso.id < actual.practicaId)
         ) {
             candidatasBasePorCirugia.set(infoCirugia.cirugiaId, {
                 practicaId: practicaIngreso.id,
-                gastoReferencia,
                 importeReferencia,
             })
         }
@@ -1817,7 +1805,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     const candidatasSecundariaPorCirugia = new Map<
         number,
-        { practicaId: number; gastoReferencia: number; importeReferencia: number }
+        { practicaId: number; importeReferencia: number }
     >()
 
     for (const practicaIngreso of ingreso.practicas) {
@@ -1833,29 +1821,17 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const practicaBaseId = practicaBaseAutomaticaPorCirugia.get(infoCirugia.cirugiaId) ?? null
         if (practicaBaseId != null && practicaIngreso.id === practicaBaseId) continue
 
-        const cantidad = Math.max(1, Number(practicaIngreso.cantidad) || 1)
         const importeReferencia =
             practicaIngreso.importeTotal != null ? Number(String(practicaIngreso.importeTotal)) : 0
-        const valorGastosUnitario =
-            practicaIngreso.nomencladorPractica?.valorGastos != null
-                ? Number(practicaIngreso.nomencladorPractica.valorGastos)
-                : null
-        const esGastoPorCodigo = normalizarCodigoPracticaFacturacion(practicaIngreso.codigoPractica).includes('GA')
-        const esGastoPorDescripcion = descripcionEsGasto(practicaIngreso.nomencladorPractica?.descripcion)
-        const gastoReferencia =
-            valorGastosUnitario != null && valorGastosUnitario > 0
-                ? Number((valorGastosUnitario * cantidad).toFixed(2))
-                : (esGastoPorCodigo || esGastoPorDescripcion ? importeReferencia : 0)
 
         const actual = candidatasSecundariaPorCirugia.get(infoCirugia.cirugiaId)
         if (
             !actual ||
             importeReferencia > actual.importeReferencia ||
-            (importeReferencia === actual.importeReferencia && gastoReferencia > actual.gastoReferencia)
+            (importeReferencia === actual.importeReferencia && practicaIngreso.id < actual.practicaId)
         ) {
             candidatasSecundariaPorCirugia.set(infoCirugia.cirugiaId, {
                 practicaId: practicaIngreso.id,
-                gastoReferencia,
                 importeReferencia,
             })
         }

@@ -4248,11 +4248,38 @@ export async function actualizarDiferencialesCirugiaFacturacion(
 
 export async function anularOrdenFacturacion(puestoNumero: number, numero: number): Promise<void> {
     await prisma.$transaction(async (tx) => {
-        // Unlink Practica records that were source of this order
-        await tx.practica.updateMany({
-            where: { puestoNumero, ordenNumero: numero },
-            data: { puestoNumero: null, ordenNumero: null, ordenItem: null, estado: 'A' },
-        })
+        const [practicasExplicitas, practicasPorOrdenItem] = await Promise.all([
+            tx.practica.findMany({
+                where: { puestoNumero, ordenNumero: numero },
+                select: { id: true },
+            }),
+            tx.ordenPractica.findMany({
+                where: {
+                    puestoNumero,
+                    ordenNumero: numero,
+                    practicaId: { not: null },
+                },
+                select: { practicaId: true },
+            }),
+        ])
+
+        const practicaIds = Array.from(
+            new Set([
+                ...practicasExplicitas.map((p) => p.id),
+                ...practicasPorOrdenItem
+                    .map((item) => item.practicaId)
+                    .filter((id): id is number => typeof id === 'number'),
+            ])
+        )
+
+        // Cancel linked practices so they no longer reappear as pending in facturacion.
+        if (practicaIds.length > 0) {
+            await tx.practica.updateMany({
+                where: { id: { in: practicaIds } },
+                data: { puestoNumero: null, ordenNumero: null, ordenItem: null, estado: 'X' },
+            })
+        }
+
         // Cancel the order
         await tx.orden.update({
             where: { puestoNumero_numero: { puestoNumero, numero } },

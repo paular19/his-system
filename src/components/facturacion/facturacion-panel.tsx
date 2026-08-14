@@ -2617,7 +2617,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     async function anularOrden(puestoNumero: number, numero: number) {
         if (!contexto) return
         const ok = window.confirm(
-            `¿Anular la facturación de la Orden ${puestoNumero}-${numero}?\nLas prácticas vinculadas volverán a estado pendiente.`
+            `¿Anular la facturación de la Orden ${puestoNumero}-${numero}?\nLas prácticas vinculadas quedarán anuladas y dejarán de mostrarse en esta pantalla.`
         )
         if (!ok) return
 
@@ -2633,7 +2633,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             const json = (await res.json()) as ApiResponse<{ ok: boolean }>
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo anular la orden')
 
-            setMensaje(`Orden ${puestoNumero}-${numero} anulada. Las prácticas quedaron como pendientes.`)
+            setMensaje(`Orden ${puestoNumero}-${numero} anulada. Las prácticas vinculadas se ocultaron de facturación.`)
             await cargarContexto(contexto.ingreso.id)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al anular orden')

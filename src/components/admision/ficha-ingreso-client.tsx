@@ -49,6 +49,14 @@ interface PlanOption {
     obraSocialId: number | null
 }
 
+type CoberturaVista = {
+    obraSocialId: number | null
+    obraSocialNombre: string | null
+    planId: number | null
+    numeroAfiliado: string | null
+    coberturaSecundariaValor: string | null
+}
+
 type PracticaEditable = {
     id: number
     ingresoId: number
@@ -152,6 +160,18 @@ function DataItem({ label, value }: { label: string; value?: string | null }) {
     )
 }
 
+function construirCoberturaVista(ingreso: IngresoDetalle): CoberturaVista {
+    return {
+        obraSocialId: ingreso.obraSocialId ?? null,
+        obraSocialNombre: ingreso.obraSocial?.nombre ?? null,
+        planId: ingreso.planId ?? null,
+        numeroAfiliado: ingreso.numeroAfiliado ?? null,
+        coberturaSecundariaValor:
+            ingreso.obraSocialCoseguroNombre
+            ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : null),
+    }
+}
+
 export function FichaIngresoClient({
     ingreso,
     puedeModificar,
@@ -174,6 +194,7 @@ export function FichaIngresoClient({
     const [cardError, setCardError] = useState<string | null>(null)
     const [cardSuccess, setCardSuccess] = useState<string | null>(null)
     const [cardValues, setCardValues] = useState<any>({})
+    const [coberturaVista, setCoberturaVista] = useState<CoberturaVista>(() => construirCoberturaVista(ingreso))
     const [obrasSocialesCatalogo, setObrasSocialesCatalogo] = useState<ObraSocialOption[]>([])
     const [planesCatalogo, setPlanesCatalogo] = useState<PlanOption[]>([])
     const [cargandoCoberturaCatalogos, setCargandoCoberturaCatalogos] = useState(false)
@@ -330,6 +351,17 @@ export function FichaIngresoClient({
     }, [ingreso.fechaIngreso, ingreso.fechaEgreso, ingreso.fechaEgresoPrevista])
 
     useEffect(() => {
+        setCoberturaVista(construirCoberturaVista(ingreso))
+    }, [
+        ingreso.obraSocialId,
+        ingreso.obraSocial?.nombre,
+        ingreso.planId,
+        ingreso.numeroAfiliado,
+        ingreso.obraSocialCoseguroNombre,
+        ingreso.obraSocialCoseguroId,
+    ])
+
+    useEffect(() => {
         setPaginaPendientes((prev) => Math.min(prev, totalPaginasPendientes))
     }, [totalPaginasPendientes])
 
@@ -366,11 +398,26 @@ export function FichaIngresoClient({
         )
     const destinoPracticasInternacion = `/dashboard/internacion/${ingreso.id}/practicas`
     const destinoCirugiaInternacion = `/dashboard/internacion/${ingreso.id}#internacion-cirugia`
-    const coberturaSecundariaValor = ingreso.obraSocialCoseguroNombre
-        ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : null)
     const ocultarEgresoPrevisto =
         esPracticaAmbulatoria ||
         ['GUA', 'DER', 'IND'].includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
+
+    const ingresoConCoberturaActualizada = useMemo<IngresoDetalle>(
+        () => ({
+            ...ingreso,
+            obraSocialId: coberturaVista.obraSocialId,
+            planId: coberturaVista.planId,
+            numeroAfiliado: coberturaVista.numeroAfiliado,
+            obraSocial: coberturaVista.obraSocialId
+                ? {
+                    id: coberturaVista.obraSocialId,
+                    nombre: coberturaVista.obraSocialNombre ?? `ID ${coberturaVista.obraSocialId}`,
+                }
+                : null,
+            obraSocialCoseguroNombre: coberturaVista.coberturaSecundariaValor,
+        }),
+        [ingreso, coberturaVista]
+    )
 
     const toDateInputValue = (value: Date | string | null | undefined) => {
         if (!value) return ''
@@ -1339,9 +1386,9 @@ export function FichaIngresoClient({
                                 onClick={async () => {
                                     setEditingCard('cobertura');
                                     setCardValues({
-                                        obraSocialId: ingreso.obraSocialId ?? '',
-                                        planId: ingreso.planId ?? '',
-                                        numeroAfiliado: ingreso.numeroAfiliado || '',
+                                        obraSocialId: coberturaVista.obraSocialId ?? '',
+                                        planId: coberturaVista.planId ?? '',
+                                        numeroAfiliado: coberturaVista.numeroAfiliado || '',
                                     });
                                     try {
                                         await cargarCatalogosCobertura()
@@ -1385,9 +1432,27 @@ export function FichaIngresoClient({
                                         planId: obraSocialId ? planId : null,
                                         numeroAfiliado: (cardValues.numeroAfiliado ?? '').trim() || null,
                                     });
+
+                                    const obraSocialNombre = obraSocialId
+                                        ? (
+                                            obrasSocialesCatalogo.find((os) => os.id === obraSocialId)?.nombre
+                                            ?? coberturaVista.obraSocialNombre
+                                            ?? `ID ${obraSocialId}`
+                                        )
+                                        : null
+                                    const numeroAfiliado = (cardValues.numeroAfiliado ?? '').trim() || null
+
+                                    setCoberturaVista((prev) => ({
+                                        ...prev,
+                                        obraSocialId,
+                                        obraSocialNombre,
+                                        planId: obraSocialId ? planId : null,
+                                        numeroAfiliado,
+                                        coberturaSecundariaValor: obraSocialId ? prev.coberturaSecundariaValor : null,
+                                    }))
+
                                     setEditingCard(null);
                                     notificarGuardadoCard('Cobertura médica actualizada correctamente.')
-                                    router.refresh()
                                 } catch (err) {
                                     const detalle =
                                         err instanceof Error && err.message.trim().length > 0
@@ -1469,13 +1534,16 @@ export function FichaIngresoClient({
                         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                             <DataItem
                                 label="Obra Social"
-                                value={ingreso.obraSocial?.nombre ?? (ingreso.obraSocialId ? `ID ${ingreso.obraSocialId}` : 'Particular')}
+                                value={
+                                    coberturaVista.obraSocialNombre
+                                    ?? (coberturaVista.obraSocialId ? `ID ${coberturaVista.obraSocialId}` : 'Particular')
+                                }
                             />
                             <DataItem
                                 label="Coseguro"
-                                value={coberturaSecundariaValor}
+                                value={coberturaVista.coberturaSecundariaValor}
                             />
-                            <DataItem label="Número de Afiliado" value={ingreso.numeroAfiliado} />
+                            <DataItem label="Número de Afiliado" value={coberturaVista.numeroAfiliado} />
                         </dl>
                     )}
                 </div>
@@ -1636,7 +1704,7 @@ export function FichaIngresoClient({
 
                     {editingCard === 'practicas' && puedeModificar ? (
                         <PracticaIngresoForm
-                            ingreso={ingreso}
+                            ingreso={ingresoConCoberturaActualizada}
                             onEncolarGeneracionOrdenes={(task) => {
                                 encolarGeneracionOrdenes(
                                     task.imprimirDespues,
@@ -2264,7 +2332,7 @@ export function FichaIngresoClient({
             </div>
 
             {/* Contenido imprimible — solo visible al imprimir */}
-            <FichaAdmisionPrint ingreso={ingreso} />
+            <FichaAdmisionPrint ingreso={ingresoConCoberturaActualizada} />
         </div>
     )
 }

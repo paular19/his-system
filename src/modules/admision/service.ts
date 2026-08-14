@@ -680,15 +680,37 @@ export async function actualizarIngreso(
   usuario: string,
   ip?: string
 ): Promise<IngresoConRelaciones> {
-  const existe = await repo.obtenerIngresoPorId(id)
+  const existe = await prisma.ingreso.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      tipoIngresoCodigo: true,
+      obraSocialId: true,
+      obraSocialCoseguroId: true,
+      planCoseguroId: true,
+      numeroAfiliadoCoseguro: true,
+      planId: true,
+      ingresoSubtipo: {
+        select: { subtipoAdmisionCodigo: true },
+      },
+    },
+  })
   if (!existe) {
     throw new Error(`Ingreso con ID ${id} no encontrado`)
   }
 
-  const obraSocialIdFinal = data.obraSocialId ?? existe.obraSocialId ?? null
-  const obraSocialCoseguroIdFinal = data.obraSocialCoseguroId ?? existe.obraSocialCoseguroId ?? null
-  const planCoseguroIdFinal = data.planCoseguroId ?? existe.planCoseguroId ?? null
-  const numeroAfiliadoCoseguroFinal = data.numeroAfiliadoCoseguro ?? existe.numeroAfiliadoCoseguro ?? null
+  const obraSocialIdFinal =
+    data.obraSocialId !== undefined ? data.obraSocialId : (existe.obraSocialId ?? null)
+  const obraSocialCoseguroIdFinal =
+    data.obraSocialCoseguroId !== undefined
+      ? data.obraSocialCoseguroId
+      : (existe.obraSocialCoseguroId ?? null)
+  const planCoseguroIdFinal =
+    data.planCoseguroId !== undefined ? data.planCoseguroId : (existe.planCoseguroId ?? null)
+  const numeroAfiliadoCoseguroFinal =
+    data.numeroAfiliadoCoseguro !== undefined
+      ? data.numeroAfiliadoCoseguro
+      : (existe.numeroAfiliadoCoseguro ?? null)
 
   const obraSocialNombreFinal = await obtenerNombreObraSocial(obraSocialIdFinal)
 

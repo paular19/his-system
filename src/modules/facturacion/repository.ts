@@ -278,8 +278,22 @@ function esIngresoInternacion(tipoIngresoCodigo: string | null | undefined): boo
 }
 
 function resolverMatriculaGastoPorTipoIngreso(tipoIngresoCodigo: string | null | undefined): number {
-    void tipoIngresoCodigo
-    return MATRICULA_GASTOS_INTERNACION_DEFAULT
+    if (esIngresoInternacion(tipoIngresoCodigo)) {
+        return MATRICULA_GASTOS_INTERNACION_DEFAULT
+    }
+    return MATRICULA_AMBULATORIO_DEFAULT
+}
+
+function resolverMatriculaGastoEditable(
+    tipoIngresoCodigo: string | null | undefined,
+    ...candidatas: Array<number | null | undefined>
+): number {
+    for (const candidata of candidatas) {
+        if (typeof candidata === 'number' && Number.isFinite(candidata) && candidata > 0) {
+            return candidata
+        }
+    }
+    return resolverMatriculaGastoPorTipoIngreso(tipoIngresoCodigo)
 }
 
 function resolverMatriculaEspecialistaPorPatologia(
@@ -2099,7 +2113,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     esDesgloseSoloGastos(desgloseVinculo)
                 ))
             const matriculaEspecialistaVinculo = esGastoVinculo
-                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                ? resolverMatriculaGastoEditable(
+                    ingreso.tipoIngresoCodigo,
+                    it.practica?.matriculaEspecialista,
+                    it.efectorMatricula
+                )
                 : (esCodigoAnestesistaVinculo
                     ? null
                     : resolverMatriculaEspecialistaPorPatologia(
@@ -2113,7 +2131,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         it.codigoPractica
                     ))
             const matriculaAnestesistaVinculo = esGastoVinculo
-                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                ? resolverMatriculaGastoEditable(
+                    ingreso.tipoIngresoCodigo,
+                    it.practica?.matriculaAnestesista,
+                    it.efectorMatricula
+                )
                 : (it.practica?.matriculaAnestesista ??
                     (ingreso.tipoIngresoCodigo === 'INT' &&
                         (it.nomencladorPractica?.valorAnestesista != null || esCodigoAnestesistaVinculo) &&
@@ -2122,7 +2144,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         : null))
             const matriculaAyudanteVinculo = incluyeTieneAyudanteVinculo
                 ? (esGastoVinculo
-                    ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                    ? resolverMatriculaGastoEditable(
+                        ingreso.tipoIngresoCodigo,
+                        it.practica?.matriculaEspecialista,
+                        it.efectorMatricula
+                    )
                     : (it.practica?.matriculaEspecialista ?? MATRICULA_AYUDANTE_INT_DEFAULT))
                 : null
 
@@ -2158,7 +2184,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     const incluye = desglosarIncluyeCodigo(it.modulo)
                     const esGasto = esSeleccionSoloGastos(incluye) || (!incluye && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
                     if (esGasto) {
-                        return resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                        return resolverMatriculaGastoEditable(
+                            ingreso.tipoIngresoCodigo,
+                            it.practica?.matriculaEspecialista,
+                            it.efectorMatricula
+                        )
                     }
                     const incluyeSoloAyudante = Boolean(
                         incluye &&
@@ -2189,7 +2219,13 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 matriculaAnestesista: (() => {
                     const incluye = desglosarIncluyeCodigo(it.modulo)
                     const esGasto = esSeleccionSoloGastos(incluye) || (!incluye && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
-                    if (esGasto) return resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                    if (esGasto) {
+                        return resolverMatriculaGastoEditable(
+                            ingreso.tipoIngresoCodigo,
+                            it.practica?.matriculaAnestesista,
+                            it.efectorMatricula
+                        )
+                    }
                     const tieneHA = Boolean(incluye?.anestesista)
                     const tituloAnestesista = esTituloAnestesista(it.titularModular)
                     const matriculaDesdeEfector =
@@ -2490,10 +2526,18 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 esDesgloseSoloGastos(desgloseFiltradoPorIncluye ?? desgloseConDiferencial ?? desgloseBase)
             ))
         const matriculaEspecialistaFinal = esGastoPractica
-            ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+            ? resolverMatriculaGastoEditable(
+                ingreso.tipoIngresoCodigo,
+                p.matriculaEspecialista,
+                vinculoPorItem?.matriculaEspecialista
+            )
             : matriculaEspecialista
         const matriculaAnestesistaFinal = esGastoPractica
-            ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+            ? resolverMatriculaGastoEditable(
+                ingreso.tipoIngresoCodigo,
+                p.matriculaAnestesista,
+                vinculoPorItem?.matriculaAnestesista
+            )
             : matriculaAnestesista
         const diferencialesPractica = diferencialCirugia
             ? {
@@ -2677,7 +2721,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         ? MATRICULA_AYUDANTE_INT_DEFAULT
                         : null
             const matriculaEspecialistaItem = esGastoItem
-                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                ? resolverMatriculaGastoEditable(
+                    ingreso.tipoIngresoCodigo,
+                    it.efectorMatricula,
+                    it.practica?.matriculaEspecialista
+                )
                 : (incluyeSoloAyudante
                     ? MATRICULA_AYUDANTE_INT_DEFAULT
                     : resolverMatriculaEspecialistaPorPatologia(
@@ -2705,7 +2753,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     ? MATRICULA_ANESTESISTA_INT_DEFAULT
                     : (tituloAnestesista ? MATRICULA_ANESTESISTA_INT_DEFAULT : null)
             const matriculaAnestesistaItem = esGastoItem
-                ? resolverMatriculaGastoPorTipoIngreso(ingreso.tipoIngresoCodigo)
+                ? resolverMatriculaGastoEditable(
+                    ingreso.tipoIngresoCodigo,
+                    it.efectorMatricula,
+                    it.practica?.matriculaAnestesista
+                )
                 : (matriculaAnestesistaEfector ?? it.practica?.matriculaAnestesista ?? fallbackAnestesistaDefault)
             const diferencialesOrdenItem =
                 it.practicaId != null ? (diferencialesPorPracticaId.get(it.practicaId) ?? null) : null

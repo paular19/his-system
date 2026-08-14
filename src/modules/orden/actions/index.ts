@@ -491,6 +491,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       practicasPendientes
         .map((p) => (esMatriculaEspecialistaFirmanteValida(p) ? p.matriculaEspecialista : null))
         .find((m): m is number => m != null) ?? null
+    const matriculaFirmanteEfectiva = matriculaFirmanteManual ?? matriculaFirmanteDesdePractica
 
     const matriculasFirmantesBuscadas = new Set<number>()
     if (matriculaFirmanteManual) matriculasFirmantesBuscadas.add(matriculaFirmanteManual)
@@ -501,6 +502,9 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       matriculasFirmantesBuscadas.add(MATRICULA_GASTOS_INTERNACION_DEFAULT)
     }
     for (const practica of practicasPendientes) {
+      if (practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0) {
+        matriculasFirmantesBuscadas.add(practica.matriculaEspecialista)
+      }
       if (!esMatriculaEspecialistaFirmanteValida(practica)) continue
       matriculasFirmantesBuscadas.add(practica.matriculaEspecialista!)
     }
@@ -614,8 +618,8 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           efectorMatricula:
             esGuardiaAmbulatoria
               ? MATRICULA_AMBULATORIO_DEFAULT
-              : matriculaFirmanteManual != null
-              ? matriculaFirmanteManual
+              : matriculaFirmanteEfectiva != null
+              ? matriculaFirmanteEfectiva
               : esClasificacionSoloGastos
               ? MATRICULA_GASTOS_INTERNACION_DEFAULT
               : esClasificacionSoloAyudante
@@ -737,6 +741,11 @@ export async function generarOrdenesDesdeInternacionAction(input: {
             null
           )
 
+      const matriculaAyudanteSeleccionadaGrupo =
+        itemsGrupo
+          .map(({ practicaId }) => practicasPendientesPorId.get(practicaId)?.matriculaEspecialista ?? null)
+          .find((matricula): matricula is number => typeof matricula === 'number' && matricula > 0) ?? null
+
       const matriculaProfesionalGrupo = esGuardiaAmbulatoria
         ? MATRICULA_AMBULATORIO_DEFAULT
         : esGrupoAgrupado && matriculaFirmanteManual != null
@@ -746,7 +755,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         : esGrupoSoloAnestesista
         ? MATRICULA_ANESTESISTA_INTERNACION_DEFAULT
         : esGrupoSoloAyudante
-        ? MATRICULA_AYUDANTE_INTERNACION_DEFAULT
+        ? (matriculaAyudanteSeleccionadaGrupo ?? MATRICULA_AYUDANTE_INTERNACION_DEFAULT)
         : esGrupoSoloGastos
         ? MATRICULA_GASTOS_INTERNACION_DEFAULT
         : matriculaFirmanteGrupo

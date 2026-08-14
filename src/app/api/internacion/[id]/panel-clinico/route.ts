@@ -45,6 +45,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
           },
           select: {
             id: true,
+            convenioId: true,
             codigoPractica: true,
             fecha: true,
             cantidad: true,
@@ -57,11 +58,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
             usuarioRegistro: true,
             matriculaEspecialista: true,
             matriculaAnestesista: true,
-            nomencladorPractica: {
-              select: {
-                descripcion: true,
-              },
-            },
             ordenPractica: {
               where: {
                 orden: {
@@ -75,11 +71,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
                 numeroAutorizacion: true,
                 clasificacionAgrupacion: true,
                 efectorMatricula: true,
-                nomencladorPractica: {
-                  select: {
-                    descripcion: true,
-                  },
-                },
+                convenioId: true,
+                codigoPractica: true,
                 orden: {
                   select: {
                     fechaEmision: true,
@@ -95,6 +88,36 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
           },
           orderBy: { id: 'asc' },
         })
+
+    // El codigo de practica se guarda con padding inconsistente (VarChar en Practica,
+    // Char en el nomenclador), asi que la descripcion se resuelve con una consulta
+    // aparte normalizando el codigo en vez de usar la relacion de Prisma.
+    const clavesNomenclador = new Map<string, { convenioId: number; codigo: string }>()
+    for (const practica of practicasCirugiaEspejoRaw) {
+      const codigo = practica.codigoPractica.trim()
+      if (codigo) clavesNomenclador.set(`${practica.convenioId}:${codigo}`, { convenioId: practica.convenioId, codigo })
+      for (const orden of practica.ordenPractica) {
+        const codigoOrden = orden.codigoPractica.trim()
+        if (codigoOrden) clavesNomenclador.set(`${orden.convenioId}:${codigoOrden}`, { convenioId: orden.convenioId, codigo: codigoOrden })
+      }
+    }
+
+    const descripcionNomencladorPorClave = new Map<string, string>()
+    if (clavesNomenclador.size > 0) {
+      const claves = Array.from(clavesNomenclador.values())
+      const nomencladores = await prisma.nomencladorPractica.findMany({
+        where: {
+          convenioId: { in: Array.from(new Set(claves.map((clave) => clave.convenioId))) },
+          codigo: { in: Array.from(new Set(claves.map((clave) => clave.codigo))) },
+        },
+        select: { convenioId: true, codigo: true, descripcion: true },
+      })
+      for (const nomenclador of nomencladores) {
+        const descripcion = nomenclador.descripcion.trim()
+        if (!descripcion) continue
+        descripcionNomencladorPorClave.set(`${nomenclador.convenioId}:${nomenclador.codigo.trim()}`, descripcion)
+      }
+    }
 
     const clavesOrdenLegacy = Array.from(new Set(
       practicasCirugiaEspejoRaw
@@ -148,7 +171,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         numeroAutorizacion: orden.numeroAutorizacion,
         clasificacionAgrupacion: orden.clasificacionAgrupacion,
         efectorMatricula: orden.efectorMatricula,
-        descripcionPractica: orden.nomencladorPractica?.descripcion?.trim() ?? null,
+        descripcionPractica:
+          descripcionNomencladorPorClave.get(`${orden.convenioId}:${orden.codigoPractica.trim()}`) ?? null,
         fechaEmision: orden.orden?.fechaEmision ?? null,
       }))
 
@@ -177,7 +201,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
       return {
         ...practica,
-        descripcionPractica: practica.nomencladorPractica?.descripcion?.trim() ?? null,
+        descripcionPractica:
+          descripcionNomencladorPorClave.get(`${practica.convenioId}:${practica.codigoPractica.trim()}`) ?? null,
         ordenPractica: ordenPracticaActivas,
         tuvoOrdenGenerada:
           (practica._count?.ordenPractica ?? 0) > 0 ||

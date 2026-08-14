@@ -71,11 +71,6 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                 puestoNumero: true,
                 ordenNumero: true,
                 ordenItem: true,
-                nomencladorPractica: {
-                    select: {
-                        descripcion: true,
-                    },
-                },
                 facturable: true,
                 estado: true,
                 usuarioRegistro: true,
@@ -92,11 +87,8 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                         numeroAutorizacion: true,
                         clasificacionAgrupacion: true,
                         efectorMatricula: true,
-                        nomencladorPractica: {
-                            select: {
-                                descripcion: true,
-                            },
-                        },
+                        convenioId: true,
+                        codigoPractica: true,
                         orden: {
                             select: {
                                 fechaEmision: true,
@@ -113,6 +105,36 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
         })
         : []
+
+    // El codigo de practica se guarda con padding inconsistente (VarChar en Practica,
+    // Char en el nomenclador), asi que la descripcion se resuelve con una consulta
+    // aparte normalizando el codigo en vez de usar la relacion de Prisma.
+    const clavesNomenclador = new Map<string, { convenioId: number; codigo: string }>()
+    for (const practica of practicasCirugiaActivas) {
+        const codigo = practica.codigoPractica.trim()
+        if (codigo) clavesNomenclador.set(`${practica.convenioId}:${codigo}`, { convenioId: practica.convenioId, codigo })
+        for (const orden of practica.ordenPractica) {
+            const codigoOrden = orden.codigoPractica.trim()
+            if (codigoOrden) clavesNomenclador.set(`${orden.convenioId}:${codigoOrden}`, { convenioId: orden.convenioId, codigo: codigoOrden })
+        }
+    }
+
+    const descripcionNomencladorPorClave = new Map<string, string>()
+    if (clavesNomenclador.size > 0) {
+        const claves = Array.from(clavesNomenclador.values())
+        const nomencladores = await prisma.nomencladorPractica.findMany({
+            where: {
+                convenioId: { in: Array.from(new Set(claves.map((clave) => clave.convenioId))) },
+                codigo: { in: Array.from(new Set(claves.map((clave) => clave.codigo))) },
+            },
+            select: { convenioId: true, codigo: true, descripcion: true },
+        })
+        for (const nomenclador of nomencladores) {
+            const descripcion = nomenclador.descripcion.trim()
+            if (!descripcion) continue
+            descripcionNomencladorPorClave.set(`${nomenclador.convenioId}:${nomenclador.codigo.trim()}`, descripcion)
+        }
+    }
 
     const clavesOrdenLegacy = Array.from(new Set(
         practicasCirugiaActivas
@@ -184,9 +206,12 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
     const practicasCirugiaParaPagina = practicasCirugiaActivas.map((practica) => {
         const codigoNormalizado = practica.codigoPractica.trim().toUpperCase()
         const descripcionOrden = practica.ordenPractica
-            .map((orden) => orden.nomencladorPractica?.descripcion?.trim() ?? '')
+            .map((orden) =>
+                descripcionNomencladorPorClave.get(`${orden.convenioId}:${orden.codigoPractica.trim()}`) ?? ''
+            )
             .find((item) => item.length > 0)
-        const descripcionNomenclador = practica.nomencladorPractica?.descripcion?.trim() ?? ''
+        const descripcionNomenclador =
+            descripcionNomencladorPorClave.get(`${practica.convenioId}:${practica.codigoPractica.trim()}`) ?? ''
         const descripcion =
             descripcionOrden ??
             (descripcionNomenclador.length > 0 ? descripcionNomenclador : null) ??

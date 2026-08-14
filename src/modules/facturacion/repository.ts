@@ -1047,6 +1047,15 @@ function buildOrdenNoAnuladaWhere(): Prisma.OrdenWhereInput {
     }
 }
 
+function normalizarEstadoOrdenFacturacion(value: string | null | undefined): string {
+    const normalized = (value ?? '').trim().toUpperCase()
+    return normalized.length > 0 ? normalized : 'A'
+}
+
+function esEstadoOrdenAnuladaFacturacion(value: string | null | undefined): boolean {
+    return normalizarEstadoOrdenFacturacion(value).startsWith('X')
+}
+
 function buildPracticaNoAnuladaWhere(): Prisma.PracticaWhereInput {
     return {
         NOT: [
@@ -1408,7 +1417,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     if (!ingresoBase) return null
 
-    const [practicasBase, medicaciones, descartables, ordenes, cirugiasProgramadas] = await Promise.all([
+    const [practicasBase, medicaciones, descartables, ordenes, ordenesEstadoIngreso, cirugiasProgramadas] = await Promise.all([
         prisma.practica.findMany({
             where: {
                 ingresoId,
@@ -1496,6 +1505,14 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 },
             },
         }),
+        prisma.orden.findMany({
+            where: { ingresoId },
+            select: {
+                puestoNumero: true,
+                numero: true,
+                estado: true,
+            },
+        }),
         prisma.cirugiaProgramada.findMany({
             where: { internacionId: ingresoId },
             orderBy: [{ fechaCirugia: 'desc' }, { id: 'desc' }],
@@ -1527,6 +1544,16 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     const clavesOrdenesActivas = new Set<string>()
     const puestosPorNumeroOrdenActivo = new Map<number, Set<number>>()
+    const estadoOrdenPorClave = new Map<string, string | null>()
+    const puestosPorNumeroOrdenIngreso = new Map<number, Set<number>>()
+    for (const orden of ordenesEstadoIngreso) {
+        const clave = `${orden.puestoNumero}:${orden.numero}`
+        estadoOrdenPorClave.set(clave, orden.estado)
+        const puestos = puestosPorNumeroOrdenIngreso.get(orden.numero) ?? new Set<number>()
+        puestos.add(orden.puestoNumero)
+        puestosPorNumeroOrdenIngreso.set(orden.numero, puestos)
+    }
+
     for (const orden of ordenes) {
         clavesOrdenesActivas.add(`${orden.puestoNumero}:${orden.numero}`)
         const puestos = puestosPorNumeroOrdenActivo.get(orden.numero) ?? new Set<number>()
@@ -1542,10 +1569,14 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             return puestoNumero
         }
 
-        const puestos = puestosPorNumeroOrdenActivo.get(ordenNumero)
+        const puestos = puestosPorNumeroOrdenIngreso.get(ordenNumero)
         if (!puestos || puestos.size !== 1) return null
 
         for (const puesto of puestos) {
+            const estado = estadoOrdenPorClave.get(`${puesto}:${ordenNumero}`)
+            if (esEstadoOrdenAnuladaFacturacion(estado)) {
+                return null
+            }
             return puesto
         }
         return null
@@ -2483,7 +2514,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     }
 
     for (const o of ingreso.ordenes) {
-        if (o.estado === 'X') continue
+        if (esEstadoOrdenAnuladaFacturacion(o.estado)) continue
         for (const it of o.items) {
             if (!it.practicaId || !practicasFacturadasIds.has(it.practicaId)) continue
             itemsOrdenFacturados.add(`${o.puestoNumero}:${o.numero}:${it.item}`)
@@ -2491,7 +2522,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     }
 
     for (const o of ingreso.ordenes) {
-        if (o.estado === 'X') continue
+        if (esEstadoOrdenAnuladaFacturacion(o.estado)) continue
         for (const it of o.items) {
             const claveItem = `${o.puestoNumero}:${o.numero}:${it.item}`
             if (!itemsOrdenFacturados.has(claveItem)) continue

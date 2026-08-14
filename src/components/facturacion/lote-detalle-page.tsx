@@ -652,7 +652,8 @@ export function LoteDetallePage({ loteId }: Props) {
     const esIps = esObraSocialIps(lote.obraSocial?.nombre)
     const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)
     const puedeAplicarPromedi = esPendiente && !lote.promediAplicado && (esIPSTxt || (lote.tipo === 'PRACTICAS' && (esIps || esOsecac)))
-    const porcentajePromedi = esIPSTxt || esIps ? 36 : 20
+    const porcentajePromediDecimal = esIPSTxt || esIps ? 0.36 : 0.20
+    const porcentajePromediLabel = esIPSTxt || esIps ? 36 : 20
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const itemsOrdenados = [...lote.items].sort((a, b) =>
         (a.paciente?.nombreCompleto ?? a.ingreso.nombre ?? '').localeCompare(
@@ -692,7 +693,7 @@ export function LoteDetallePage({ loteId }: Props) {
             const lineasBase = ordenesIngreso.filter((orden) => orden.incluidaEnLote).flatMap((orden) =>
                 orden.items.map((linea) => {
                     const importeLinea = vistaPromedi
-                        ? importePromediAplicado(linea.codigoPractica, linea.importeTotal, porcentajePromedi, esOsecac)
+                        ? importePromediAplicado(linea.codigoPractica, linea.importeTotal, porcentajePromediDecimal, esOsecac)
                         : linea.importeTotal
                     const desglose = desglosarImportesPorCodigo(
                         linea.codigoPractica,
@@ -825,7 +826,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                 disabled={procesando}
                                 className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50 font-medium"
                             >
-                                Aplicar PROMEDI ({porcentajePromedi}%)
+                                Aplicar PROMEDI ({porcentajePromediLabel}%)
                             </button>
                         )}
                         {esPendiente && !esIPSTxt && (
@@ -1088,7 +1089,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                             const keyOrden = `${orden.puestoNumero}-${orden.numero}`
                                             const keyOrdenEdicion = `${orden.puestoNumero}:${orden.numero}`
                                             const draftOrden = editOrdenes[keyOrdenEdicion] ?? buildOrdenEditState(orden)
-                                            const porcentajePromediOrden = esIPSTxt || esIps ? 36 : 20
+                                            const porcentajePromediOrden = esIPSTxt || esIps ? 0.36 : 0.20
                                             const itemsTabla = agruparItemsOrdenParaTabla(
                                                 orden.items,
                                                 porcentajePromediOrden,
@@ -1344,7 +1345,7 @@ export function LoteDetallePage({ loteId }: Props) {
                         </div>
                         <div className="px-5 py-4 space-y-3">
                             <p className="text-sm text-gray-700">
-                                ¿Generar resumen PROMEDI ({porcentajePromedi}%)? Los códigos fuera de regla conservan el 100%.
+                                ¿Generar resumen PROMEDI ({porcentajePromediLabel}%)? Los códigos fuera de regla conservan el 100%.
                             </p>
                             {errorPromedi && (
                                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

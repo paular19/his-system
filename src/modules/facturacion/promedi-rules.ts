@@ -56,5 +56,7 @@ export function calcularImportePromediPorCodigo(
     if (!aplicaPromediPorObra(codigoPractica, obraSocial)) {
         return importeBase
     }
-    return redondear2(importeBase * porcentajePromedi)
+
+    const porcentajeNormalizado = Math.abs(porcentajePromedi) > 1 ? porcentajePromedi / 100 : porcentajePromedi
+    return redondear2(importeBase * porcentajeNormalizado)
 }

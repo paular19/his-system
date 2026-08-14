@@ -40,7 +40,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         : await prisma.practica.findMany({
           where: {
             ingresoId,
-            OR: [{ estado: 'A' }, { estado: null }],
+            estado: { not: 'X' },
             usuarioRegistro: 'CIRUGIA',
           },
           select: {

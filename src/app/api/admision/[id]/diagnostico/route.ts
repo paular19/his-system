@@ -22,7 +22,13 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const usuario = await getUsuarioSesion()
-    if (!tienePermiso(usuario.rol, 'ADMISION', 'CREAR')) {
+    const puedeRegistrarDiagnostico =
+      tienePermiso(usuario.rol, 'ADMISION', 'CREAR') ||
+      tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+      tienePermiso(usuario.rol, 'INTERNACION', 'CREAR') ||
+      tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR')
+
+    if (!puedeRegistrarDiagnostico) {
       return apiForbidden()
     }
 

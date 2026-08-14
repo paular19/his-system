@@ -2236,6 +2236,57 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         }
     }
 
+    type ResumenDuplicadoCirugia = {
+        count: number
+        hasLinked: boolean
+    }
+    const resumenDuplicadosCirugia = new Map<string, ResumenDuplicadoCirugia>()
+
+    const buildClaveDuplicadoCirugia = (
+        practica: typeof ingreso.practicas[number],
+        cirugiaId: number
+    ): string => {
+        const codigo = normalizarCodigoPractica(practica.codigoPractica)
+        const cantidad = Number(practica.cantidad)
+        const fecha = fechaClave(practica.fecha)
+        const importe = practica.importeTotal != null ? Number(String(practica.importeTotal)).toFixed(2) : 'NULL'
+        return `${cirugiaId}:${codigo}:${cantidad}:${fecha}:${importe}`
+    }
+
+    for (const p of ingreso.practicas) {
+        const infoCirugia = resolverInfoCirugiaConFallback(
+            cirugiaPracticas,
+            cirugiaPracticasPorCodigoCantidad,
+            p.codigoPractica,
+            Number(p.cantidad),
+            p.fecha
+        )
+
+        if (!infoCirugia) continue
+
+        const ordenPuestoNumero =
+            p.puestoNumero ??
+            (p.ordenNumero ? (puestoPorNumeroOrden.get(p.ordenNumero) ?? null) : null)
+        const linkedActivo = Boolean(
+            (autorizacionesVinculadasPorPractica.get(p.id)?.length ?? 0) > 0 ||
+            (
+                ordenPuestoNumero &&
+                p.ordenNumero &&
+                clavesOrdenActivasIngreso.has(`${ordenPuestoNumero}:${p.ordenNumero}`)
+            )
+        )
+
+        const clave = buildClaveDuplicadoCirugia(p, infoCirugia.cirugiaId)
+        const actual = resumenDuplicadosCirugia.get(clave)
+        if (!actual) {
+            resumenDuplicadosCirugia.set(clave, { count: 1, hasLinked: linkedActivo })
+            continue
+        }
+
+        actual.count += 1
+        actual.hasLinked = actual.hasLinked || linkedActivo
+    }
+
     for (const p of ingreso.practicas) {
         const vinculoPorItem = ordenVinculadaPorPractica.get(p.id)
         const tieneVinculoExplicitoEnDB = Boolean(p.ordenNumero || p.puestoNumero)
@@ -2276,6 +2327,24 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 if (a.ordenNumero !== b.ordenNumero) return a.ordenNumero - b.ordenNumero
                 return a.ordenItem - b.ordenItem
             })
+
+        if (diferencialCirugia) {
+            const linkedActivo = Boolean(
+                autorizacionesVinculadas.length > 0 ||
+                (
+                    ordenPuestoNumero &&
+                    ordenNumero &&
+                    clavesOrdenActivasIngreso.has(`${ordenPuestoNumero}:${ordenNumero}`)
+                )
+            )
+            const clave = buildClaveDuplicadoCirugia(p, diferencialCirugia.cirugiaId)
+            const resumen = resumenDuplicadosCirugia.get(clave)
+
+            if (resumen && resumen.count > 1 && resumen.hasLinked && !linkedActivo) {
+                continue
+            }
+        }
+
         const practicaBaseIdEfectiva = diferencialCirugia
             ? (
                 diferencialCirugia.diferenciales.practicaBaseId ??

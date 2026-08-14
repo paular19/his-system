@@ -37,11 +37,17 @@ async function resolverObraSocialParticularId(): Promise<number> {
   const particularPorIdEstandar = await prisma.obraSocial.findFirst({
     where: {
       id: 500,
-      estado: 'A',
     },
     select: { id: true },
   })
   if (particularPorIdEstandar) {
+    const particular500Activa = await prisma.obraSocial.findFirst({
+      where: { id: 500, estado: 'A' },
+      select: { id: true },
+    })
+    if (!particular500Activa) {
+      console.warn('[ORDEN] Usando OS id 500 para PARTICULAR aunque no esté activa')
+    }
     return particularPorIdEstandar.id
   }
 
@@ -63,7 +69,46 @@ async function resolverObraSocialParticularId(): Promise<number> {
     return particularPorNombre.id
   }
 
-  throw new Error('No se encontró una obra social activa de tipo PARTICULAR para emitir la orden')
+  const particularPorNombreSinEstado = await prisma.obraSocial.findFirst({
+    where: {
+      OR: [
+        { nombre: { contains: 'PARTICULAR', mode: 'insensitive' } },
+        { nombre: { contains: 'SIN COBERTURA', mode: 'insensitive' } },
+        { nombre: { contains: 'PRIVADO', mode: 'insensitive' } },
+      ],
+    },
+    orderBy: { id: 'asc' },
+    select: { id: true },
+  })
+  if (particularPorNombreSinEstado) {
+    console.warn('[ORDEN] OS PARTICULAR resuelta por nombre sin filtro de estado (fallback)')
+    return particularPorNombreSinEstado.id
+  }
+
+  const obraSocialActivaFallback = await prisma.obraSocial.findFirst({
+    where: { estado: 'A' },
+    orderBy: { id: 'asc' },
+    select: { id: true, nombre: true },
+  })
+  if (obraSocialActivaFallback) {
+    console.warn(
+      `[ORDEN] No se encontró OS PARTICULAR. Se usa OS activa ${obraSocialActivaFallback.id} - ${obraSocialActivaFallback.nombre}`
+    )
+    return obraSocialActivaFallback.id
+  }
+
+  const obraSocialFallback = await prisma.obraSocial.findFirst({
+    orderBy: { id: 'asc' },
+    select: { id: true, nombre: true },
+  })
+  if (obraSocialFallback) {
+    console.warn(
+      `[ORDEN] No hay OS activas. Se usa OS ${obraSocialFallback.id} - ${obraSocialFallback.nombre}`
+    )
+    return obraSocialFallback.id
+  }
+
+  throw new Error('No se encontró ninguna obra social para emitir la orden')
 }
 
 const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({

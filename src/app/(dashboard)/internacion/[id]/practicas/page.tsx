@@ -52,7 +52,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
         ? await prisma.practica.findMany({
             where: {
                 ingresoId,
-                estado: { not: 'X' },
+                OR: [{ estado: null }, { estado: { not: 'X' } }],
                 usuarioRegistro: 'CIRUGIA',
             },
             select: {

@@ -419,11 +419,13 @@ export function CirugiaUrgenciaSection({
                 const codigoCirugia = practicaCirugia.codigo.trim().toUpperCase()
                 const candidatas = practicasInternacionPorCodigo.get(codigoCirugia) ?? []
 
-                const candidata = candidatas.find((item) => {
+                const candidataPrioritaria = candidatas.find((item) => {
                     if (usadosPorCodigo.has(item.id)) return false
                     const usuario = (item.usuario ?? '').trim().toUpperCase()
                     return usuario === 'CIRUGIA'
                 })
+                const candidataFallback = candidatas.find((item) => !usadosPorCodigo.has(item.id))
+                const candidata = candidataPrioritaria ?? candidataFallback
 
                 if (!candidata) continue
 

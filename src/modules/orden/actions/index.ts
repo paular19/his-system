@@ -540,6 +540,10 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       return { error: 'No hay prácticas pendientes para generar órdenes' }
     }
 
+    const tieneProtocoloBioquimico = practicasPendientes.some(
+      (practica) => practica.codigoPractica.trim() === '66'
+    )
+
     const profesionalTratante = ingreso.profesionalTratanteId
       ? await prisma.profesional.findUnique({
           where: { id: ingreso.profesionalTratanteId },
@@ -641,7 +645,14 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         ? (profesionalIdPorMatricula.get(matriculaFirmanteDesdePractica) ?? null)
         : null
 
+    const profesionalIdFirmantePrioritarioInternacion =
+      profesionalIdManual ??
+      ingreso.profesionalTratanteId ??
+      profesionalIdPorPractica ??
+      null
+
     let profesionalIdFallback =
+      profesionalIdFirmantePrioritarioInternacion ??
       profesionalIdPorPractica ??
       ingreso.profesionalTratanteId ??
       ingreso.profesionalGuardiaId ??
@@ -929,8 +940,11 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         ? (profesionalIdManual ?? profesionalIdFallback)
         : esFlujoCirugiaInternacion
         ? (profesionalIdCirujanoFirmante ?? profesionalIdFallback)
+        : esIngresoInternacion && tieneProtocoloBioquimico
+        ? (profesionalIdFirmantePrioritarioInternacion ?? profesionalIdFallback)
         : esIngresoInternacion && (esGrupoConEspecialista || esGrupoSoloGastos)
         ? (
+            profesionalIdManual ??
             (esGrupoConEspecialista ? profesionalIdDesdeMatriculaGrupo : null) ??
             ingreso.profesionalTratanteId ??
             profesionalIdDesdeMatriculaGrupo ??

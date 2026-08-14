@@ -57,6 +57,11 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
             usuarioRegistro: true,
             matriculaEspecialista: true,
             matriculaAnestesista: true,
+            nomencladorPractica: {
+              select: {
+                descripcion: true,
+              },
+            },
             ordenPractica: {
               where: {
                 orden: {
@@ -68,6 +73,13 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
                 ordenNumero: true,
                 item: true,
                 numeroAutorizacion: true,
+                clasificacionAgrupacion: true,
+                efectorMatricula: true,
+                nomencladorPractica: {
+                  select: {
+                    descripcion: true,
+                  },
+                },
                 orden: {
                   select: {
                     fechaEmision: true,
@@ -134,6 +146,9 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         ordenNumero: orden.ordenNumero,
         item: orden.item,
         numeroAutorizacion: orden.numeroAutorizacion,
+        clasificacionAgrupacion: orden.clasificacionAgrupacion,
+        efectorMatricula: orden.efectorMatricula,
+        descripcionPractica: orden.nomencladorPractica?.descripcion?.trim() ?? null,
         fechaEmision: orden.orden?.fechaEmision ?? null,
       }))
 
@@ -150,6 +165,9 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
           ordenNumero: Number(practica.ordenNumero),
           item: practica.ordenItem != null ? Number(practica.ordenItem) : 1,
           numeroAutorizacion: practica.numeroAutorizacion,
+          clasificacionAgrupacion: null,
+          efectorMatricula: practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null,
+          descripcionPractica: null,
           fechaEmision:
             fechaEmisionOrdenLegacyPorClave.get(
               `${Number(practica.puestoNumero)}:${Number(practica.ordenNumero)}`
@@ -159,6 +177,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
       return {
         ...practica,
+        descripcionPractica: practica.nomencladorPractica?.descripcion?.trim() ?? null,
         ordenPractica: ordenPracticaActivas,
         tuvoOrdenGenerada:
           (practica._count?.ordenPractica ?? 0) > 0 ||

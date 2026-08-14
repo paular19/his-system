@@ -71,6 +71,11 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                 puestoNumero: true,
                 ordenNumero: true,
                 ordenItem: true,
+                nomencladorPractica: {
+                    select: {
+                        descripcion: true,
+                    },
+                },
                 facturable: true,
                 estado: true,
                 usuarioRegistro: true,
@@ -85,7 +90,13 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                         ordenNumero: true,
                         item: true,
                         numeroAutorizacion: true,
+                        clasificacionAgrupacion: true,
                         efectorMatricula: true,
+                        nomencladorPractica: {
+                            select: {
+                                descripcion: true,
+                            },
+                        },
                         orden: {
                             select: {
                                 fechaEmision: true,
@@ -147,6 +158,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
     )
 
     const descripcionCirugiaPorCodigo = new Map<string, string>()
+    const descripcionInternacionPorId = new Map<number, string>()
     for (const practicaCirugia of cirugiaObjetivo?.practicas ?? []) {
         const codigo = practicaCirugia.codigo.trim().toUpperCase()
         const descripcion = practicaCirugia.descripcion.trim()
@@ -156,6 +168,11 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
         }
     }
     for (const practica of detalle.practicas) {
+        const descripcionPorId = practica.descripcionPractica?.trim() ?? ''
+        if (descripcionPorId) {
+            descripcionInternacionPorId.set(practica.id, descripcionPorId)
+        }
+
         const codigo = practica.codigoPractica.trim().toUpperCase()
         const descripcion = practica.descripcionPractica?.trim() ?? ''
         if (!codigo || !descripcion) continue
@@ -166,12 +183,22 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
 
     const practicasCirugiaParaPagina = practicasCirugiaActivas.map((practica) => {
         const codigoNormalizado = practica.codigoPractica.trim().toUpperCase()
-        const descripcion = descripcionCirugiaPorCodigo.get(codigoNormalizado) ?? practica.codigoPractica.trim()
+        const descripcionOrden = practica.ordenPractica
+            .map((orden) => orden.nomencladorPractica?.descripcion?.trim() ?? '')
+            .find((item) => item.length > 0)
+        const descripcionNomenclador = practica.nomencladorPractica?.descripcion?.trim() ?? ''
+        const descripcion =
+            descripcionOrden ??
+            (descripcionNomenclador.length > 0 ? descripcionNomenclador : null) ??
+            descripcionInternacionPorId.get(practica.id) ??
+            descripcionCirugiaPorCodigo.get(codigoNormalizado) ??
+            practica.codigoPractica.trim()
         const ordenPracticaActivas = practica.ordenPractica.map((orden) => ({
             puestoNumero: orden.puestoNumero,
             ordenNumero: orden.ordenNumero,
             item: orden.item,
             numeroAutorizacion: orden.numeroAutorizacion,
+            clasificacionAgrupacion: orden.clasificacionAgrupacion,
             efectorMatricula: orden.efectorMatricula,
             fechaEmision: orden.orden?.fechaEmision ?? null,
         }))
@@ -188,6 +215,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                 ordenNumero: Number(practica.ordenNumero),
                 item: practica.ordenItem != null ? Number(practica.ordenItem) : 1,
                 numeroAutorizacion: practica.numeroAutorizacion,
+                clasificacionAgrupacion: null,
                 efectorMatricula: practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null,
                 fechaEmision:
                     fechaEmisionOrdenLegacyPorClave.get(

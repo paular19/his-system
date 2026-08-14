@@ -478,6 +478,12 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         : parsed.data.cirujanoFirmanteMatricula != null && parsed.data.cirujanoFirmanteMatricula > 0
         ? parsed.data.cirujanoFirmanteMatricula
         : null
+    const matriculaEfectorForzadaCirugia =
+      !esGuardiaAmbulatoria &&
+      parsed.data.cirujanoFirmanteMatricula != null &&
+      parsed.data.cirujanoFirmanteMatricula > 0
+        ? parsed.data.cirujanoFirmanteMatricula
+        : null
 
     const esMatriculaEspecialistaFirmanteValida = (practica: (typeof practicasPendientes)[number]): boolean => {
       const matricula = practica.matriculaEspecialista
@@ -609,6 +615,8 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           efectorMatricula:
             esGuardiaAmbulatoria
               ? MATRICULA_AMBULATORIO_DEFAULT
+              : matriculaEfectorForzadaCirugia != null
+              ? matriculaEfectorForzadaCirugia
               : esClasificacionSoloGastos
               ? ((practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0)
                   ? practica.matriculaEspecialista

@@ -1129,6 +1129,7 @@ export function PracticaCargaRapidaPage({
                 ? (jsonPanel.data.practicasCirugiaEspejo as Array<{
                     id: number
                     codigoPractica: string
+                    descripcionPractica?: string | null
                     fecha: string | Date
                     cantidad: number
                     numeroAutorizacion: string | null
@@ -1145,13 +1146,22 @@ export function PracticaCargaRapidaPage({
                         ordenNumero: number
                         item: number
                         numeroAutorizacion: string | null
+                        descripcionPractica?: string | null
+                        clasificacionAgrupacion?: string | null
+                        efectorMatricula?: number | null
                         fechaEmision?: string | Date | null
                     }>
                 }>)
                 : []
 
+            const descripcionPorPracticaId = new Map<number, string>()
             const descripcionPorCodigo = new Map<string, string>()
             for (const practica of practicasPanelBase) {
+                const descripcionPorId = practica.descripcionPractica?.trim()
+                if (descripcionPorId) {
+                    descripcionPorPracticaId.set(practica.id, descripcionPorId)
+                }
+
                 const codigo = practica.codigoPractica.trim().toUpperCase()
                 const descripcion = practica.descripcionPractica?.trim()
                 if (codigo && descripcion) descripcionPorCodigo.set(codigo, descripcion)
@@ -1165,22 +1175,36 @@ export function PracticaCargaRapidaPage({
             const practicasCirugiaEspejo: PracticaItem[] = practicasCirugiaEspejoRaw.map((practica) => {
                 const codigoTrim = practica.codigoPractica.trim()
                 const codigoLookup = codigoTrim.toUpperCase()
+                const descripcionPorId = descripcionPorPracticaId.get(practica.id) ?? null
                 const ordenPractica = Array.isArray(practica.ordenPractica)
                     ? practica.ordenPractica.map((orden) => ({
                         puestoNumero: orden.puestoNumero,
                         ordenNumero: orden.ordenNumero,
                         item: orden.item,
                         numeroAutorizacion: orden.numeroAutorizacion ?? null,
+                        clasificacionAgrupacion: orden.clasificacionAgrupacion ?? null,
+                        efectorMatricula: orden.efectorMatricula ?? null,
                         fechaEmision: orden.fechaEmision ? new Date(orden.fechaEmision) : null,
                     }))
                     : []
+                const descripcionDesdeOrden = Array.isArray(practica.ordenPractica)
+                    ? (practica.ordenPractica
+                        .map((orden) => orden.descripcionPractica?.trim() ?? '')
+                        .find((item) => item.length > 0) ?? null)
+                    : null
+                const descripcionBackend = practica.descripcionPractica?.trim() ?? null
 
                 return {
                     id: practica.id,
                     ingresoId,
                     convenioId: contextoCirugia.obraSocialId ?? convenioId ?? 0,
                     codigoPractica: codigoTrim,
-                    descripcionPractica: descripcionPorCodigo.get(codigoLookup) ?? codigoTrim,
+                    descripcionPractica:
+                        descripcionDesdeOrden ??
+                        descripcionBackend ??
+                        descripcionPorId ??
+                        descripcionPorCodigo.get(codigoLookup) ??
+                        codigoTrim,
                     numeroProtocoloLaboratorio: null,
                     diagnosticoLaboratorio: null,
                     fecha: new Date(practica.fecha),
@@ -3064,31 +3088,6 @@ export function PracticaCargaRapidaPage({
                                 </span>
                                 <span className="block text-[10px] text-emerald-800">Firma prevista: {firmaPrevistaTexto}</span>
                             </label>
-
-                            <div className="flex flex-wrap gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => encolarGeneracionOrdenes(false, idsPendientesCirugiaObjetivo, false)}
-                                    disabled={idsPendientesCirugiaObjetivo.length === 0 || !firmanteCirugiaValido}
-                                    className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                >
-                                    {generandoOrdenes && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                                    Generar orden
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => encolarGeneracionOrdenes(true, idsPendientesCirugiaObjetivo, false)}
-                                    disabled={idsPendientesCirugiaObjetivo.length === 0 || !firmanteCirugiaValido}
-                                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                >
-                                    <Printer className="h-3.5 w-3.5" />
-                                    Generar e imprimir
-                                </button>
-                            </div>
-
-                            <p className="text-[11px] text-emerald-800">
-                                Estas acciones generan por item. Si queres agrupar libremente, usa Editar grupos de practicas.
-                            </p>
                         </div>
                     )}
 

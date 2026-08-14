@@ -1438,6 +1438,18 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 puestoNumero: true,
                 ordenNumero: true,
                 ordenItem: true,
+                ordenPractica: {
+                    select: {
+                        puestoNumero: true,
+                        ordenNumero: true,
+                        item: true,
+                        orden: {
+                            select: {
+                                estado: true,
+                            },
+                        },
+                    },
+                },
             },
         }),
         prisma.medicacionIngreso.findMany({
@@ -1583,7 +1595,20 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     }
 
     const practicasSinOrdenAnulada = practicasBase.filter((practica) => {
-        if (practica.ordenNumero == null) return true
+        const tieneVinculosHistoricos = practica.ordenPractica.length > 0
+        const tieneVinculoHistoricoNoAnulado = practica.ordenPractica.some(
+            (vinculo) => !esEstadoOrdenAnuladaFacturacion(vinculo.orden?.estado)
+        )
+
+        // Evita que prácticas huérfanas reaparezcan cuando su único historial
+        // de vínculo corresponde a órdenes anuladas.
+        if (practica.ordenNumero == null) {
+            if (tieneVinculosHistoricos && !tieneVinculoHistoricoNoAnulado) {
+                return false
+            }
+            return true
+        }
+
         const puesto = resolverPuestoOrdenActivo(practica.ordenNumero, practica.puestoNumero)
         if (puesto == null) return false
         return clavesOrdenesActivas.has(`${puesto}:${practica.ordenNumero}`)

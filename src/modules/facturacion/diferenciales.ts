@@ -66,17 +66,20 @@ export function aplicarDiferencialesAValores(
         (diferenciales.esFeriado ? 20 : 0) +
         (diferenciales.esNocturna ? 20 : 0)
 
-    const porcentajeTotalSobreGa = recargoEspecialista + recargoGastos
-    const montoDiferencialSobreGa =
-        baseGastos !== null && porcentajeTotalSobreGa > 0
-            ? redondear2(baseGastos * (porcentajeTotalSobreGa / 100))
-            : 0
+    const valorEspecialistaConDiferencial =
+        baseEspecialista !== null && recargoEspecialista > 0
+            ? redondear2(baseEspecialista * (recargoEspecialista / 100))
+            : null
+    const valorGastosConDiferencial =
+        baseGastos !== null && recargoGastos > 0
+            ? redondear2(baseGastos * (recargoGastos / 100))
+            : null
 
     return {
-        valorEspecialista: baseEspecialista,
-        valorAyudante: baseAyudante,
-        valorAnestesista: baseAnestesista,
-        valorGastos: baseGastos !== null ? redondear2(baseGastos + montoDiferencialSobreGa) : null,
+        valorEspecialista: valorEspecialistaConDiferencial,
+        valorAyudante: null,
+        valorAnestesista: null,
+        valorGastos: valorGastosConDiferencial,
         recargoEspecialista,
         recargoGastos,
     }

@@ -853,7 +853,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         ? (profesionalIdManual ?? profesionalIdFallback)
         : esFlujoCirugiaInternacion
         ? (profesionalIdCirujanoFirmante ?? profesionalIdFallback)
-        : esIngresoInternacion && esGrupoConEspecialista
+        : esIngresoInternacion && (esGrupoConEspecialista || esGrupoSoloGastos)
         ? (
             ingreso.profesionalTratanteId ??
             (matriculaProfesionalGrupo != null

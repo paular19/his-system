@@ -515,7 +515,11 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       practicasPendientes
         .map((p) => (esMatriculaEspecialistaFirmanteValida(p) ? p.matriculaEspecialista : null))
         .find((m): m is number => m != null) ?? null
-    const matriculaFirmanteEfectiva = matriculaFirmanteManual ?? matriculaFirmanteDesdePractica
+    const matriculaFirmanteEfectiva =
+      matriculaFirmanteManual ??
+      (esFlujoCirugiaInternacion
+        ? (matriculaTratante ?? matriculaFirmanteDesdePractica)
+        : matriculaFirmanteDesdePractica)
 
     const matriculasFirmantesBuscadas = new Set<number>()
     if (matriculaFirmanteManual) matriculasFirmantesBuscadas.add(matriculaFirmanteManual)
@@ -551,9 +555,19 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     }
 
     const profesionalIdCirujanoFirmante =
-      matriculaFirmanteEfectiva != null
-        ? (profesionalIdPorMatricula.get(matriculaFirmanteEfectiva) ?? null)
-        : null
+      esFlujoCirugiaInternacion
+        ? (
+            (matriculaFirmanteManual != null
+              ? (profesionalIdPorMatricula.get(matriculaFirmanteManual) ?? null)
+              : null) ??
+            ingreso.profesionalTratanteId ??
+            (matriculaFirmanteEfectiva != null
+              ? (profesionalIdPorMatricula.get(matriculaFirmanteEfectiva) ?? null)
+              : null)
+          )
+        : (matriculaFirmanteEfectiva != null
+          ? (profesionalIdPorMatricula.get(matriculaFirmanteEfectiva) ?? null)
+          : null)
 
     if (esFlujoCirugiaInternacion && !profesionalIdCirujanoFirmante) {
       return { error: 'No se encontró el cirujano firmante para emitir las órdenes de cirugía' }

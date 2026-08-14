@@ -598,6 +598,10 @@ export function CirugiaUrgenciaSection({
     }, [cirugias, estadoPracticaCirugiaPorId, practicasInternacionPorId])
 
     const matriculaFirmanteSugerida = useMemo(() => {
+        if (matriculaTratanteDefault != null && matriculaTratanteDefault > 0) {
+            return matriculaTratanteDefault
+        }
+
         const idsRelevantes = practicasSeleccionadasVigentes.length > 0
             ? practicasSeleccionadasVigentes
             : practicaIdsPendientesCirugia
@@ -619,6 +623,7 @@ export function CirugiaUrgenciaSection({
 
         return null
     }, [
+        matriculaTratanteDefault,
         practicaIdsPendientesCirugia,
         practicasSeleccionadasVigentes,
         estadoPracticaCirugiaPorId,

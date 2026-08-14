@@ -833,6 +833,10 @@ export function PracticaCargaRapidaPage({
     }, [profesionalesConMatricula])
 
     const matriculaFirmanteSugerida = useMemo(() => {
+        if (modoCirugia && matriculaTratanteDefault != null && matriculaTratanteDefault > 0) {
+            return matriculaTratanteDefault
+        }
+
         const idsRelevantes = modoCirugia
             ? idsPendientesCirugiaObjetivo
             : idsPendientesSeleccionadas.length > 0

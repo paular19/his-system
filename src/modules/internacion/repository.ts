@@ -2419,6 +2419,8 @@ export async function crearCirugiaUrgencia(
     .slice(0, 500)
 
   const cirugia = await prisma.$transaction(async (tx) => {
+    const practicaIdsInternacionCreadas: number[] = []
+
     const practicaIdsSeleccionadas = Array.from(
       new Set((data.practicaIds ?? []).filter((id) => Number.isInteger(id) && id > 0))
     )
@@ -2574,7 +2576,7 @@ export async function crearCirugiaUrgencia(
           throw new Error(`No se pudo resolver convenio para el código ${codigoPracticaNormalizado}`)
         }
 
-        await tx.practica.create({
+        const practicaCreada = await tx.practica.create({
           data: {
             ingresoId: data.ingresoId,
             convenioId: convenioResuelto,
@@ -2590,6 +2592,8 @@ export async function crearCirugiaUrgencia(
             usuarioRegistro: USUARIO_REGISTRO_CIRUGIA,
           },
         })
+
+        practicaIdsInternacionCreadas.push(practicaCreada.id)
       }
     }
 
@@ -2636,7 +2640,10 @@ export async function crearCirugiaUrgencia(
       throw new Error('No se pudo recuperar la cirugía después de guardar las prácticas')
     }
 
-    return cirugiaObjetivo
+    return {
+      ...cirugiaObjetivo,
+      practicaIdsInternacionCreadas,
+    }
   })
 
   return {
@@ -2645,6 +2652,7 @@ export async function crearCirugiaUrgencia(
       ...p,
       cantidad: Number(p.cantidad),
     })),
+    practicaIdsInternacionCreadas: cirugia.practicaIdsInternacionCreadas,
   } as CirugiaUrgenciaItem
 }
 

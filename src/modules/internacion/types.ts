@@ -238,6 +238,7 @@ export interface CirugiaUrgenciaItem {
     diferentesViasDiferentesPatologia: boolean
     dobleCirugia?: boolean
   }>
+  practicaIdsInternacionCreadas?: number[]
 }
 
 // ============================================

@@ -1062,11 +1062,12 @@ export function PracticaCargaRapidaPage({
                 cache: 'no-store',
             })
             const preJson = await prePanel.json().catch(() => null)
-            const preIdsBackend = new Set<number>(
-                Array.isArray(preJson?.data?.practicasCirugiaEspejo)
-                    ? (preJson.data.practicasCirugiaEspejo as Array<{ id: number }>).map((practica) => practica.id)
-                    : practicas.map((practica) => practica.id)
-            )
+            const preIdsBackend = new Set<number>(practicas.map((practica) => practica.id))
+            if (Array.isArray(preJson?.data?.practicasCirugiaEspejo)) {
+                for (const practica of preJson.data.practicasCirugiaEspejo as Array<{ id: number }>) {
+                    preIdsBackend.add(practica.id)
+                }
+            }
 
             const practicasExpandida = entradasCrear.map((entrada) => ({
                 convenioId: entrada.payload.convenioId,
@@ -1112,12 +1113,90 @@ export function PracticaCargaRapidaPage({
                 return { ok: false, error: mensaje }
             }
 
+            const practicaIdsInternacionCreadas = Array.isArray(json?.data?.practicaIdsInternacionCreadas)
+                ? (json.data.practicaIdsInternacionCreadas as unknown[])
+                    .filter((id): id is number => typeof id === 'number' && Number.isInteger(id) && id > 0)
+                : []
+
+            const clasificacionDesdeIdsRespuesta: Record<number, string> = {}
+            for (const [idx, practicaId] of practicaIdsInternacionCreadas.entries()) {
+                clasificacionDesdeIdsRespuesta[practicaId] = entradasCrear[idx]?.clasificacion ?? 'HE'
+            }
+
+            const practicasOptimistasDesdeRespuesta = practicaIdsInternacionCreadas
+                .map((practicaId, idx) => {
+                    const entrada = entradasCrear[idx]
+                    if (!entrada) return null
+
+                    const codigo = entrada.payload.codigoPractica.trim()
+                    const descripcion = descripcionParaListaSesion(entrada.payload.descripcionPractica?.trim() ?? codigo)
+
+                    return {
+                        id: practicaId,
+                        ingresoId,
+                        convenioId: entrada.payload.convenioId,
+                        codigoPractica: codigo,
+                        descripcionPractica: descripcion,
+                        numeroProtocoloLaboratorio: null,
+                        diagnosticoLaboratorio: null,
+                        fecha: new Date(entrada.payload.fecha),
+                        cantidad: Number(entrada.payload.cantidad ?? 1),
+                        importeTotal: entrada.payload.importeBaseUnitario ?? null,
+                        numeroAutorizacion: entrada.payload.numeroAutorizacion ?? null,
+                        matriculaEspecialista: entrada.payload.matriculaEspecialista ?? null,
+                        matriculaAnestesista: entrada.payload.matriculaAnestesista ?? null,
+                        puestoNumero: null,
+                        ordenNumero: null,
+                        ordenItem: null,
+                        facturada: false,
+                        ordenPractica: [],
+                        facturable: entrada.payload.facturable,
+                        estado: 'A',
+                        usuario: 'CIRUGIA',
+                        tuvoOrdenGenerada: false,
+                    } as PracticaItem
+                })
+                .filter((practica): practica is PracticaItem => practica != null)
+
             const resPanel = await fetch(`/api/internacion/${ingresoId}/panel-clinico`, {
                 cache: 'no-store',
             })
             const jsonPanel = await resPanel.json().catch(() => null)
 
             if (!resPanel.ok || !Array.isArray(jsonPanel?.data?.practicas)) {
+                if (practicasOptimistasDesdeRespuesta.length > 0) {
+                    setPracticas((prev) => {
+                        const activasPrevias = prev.filter((practica) => practicaActiva(practica.estado))
+                        const map = new Map<number, PracticaItem>(
+                            activasPrevias.map((practica) => [practica.id, practica])
+                        )
+                        for (const practica of practicasOptimistasDesdeRespuesta) {
+                            map.set(practica.id, practica)
+                        }
+
+                        return Array.from(map.values()).sort(
+                            (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+                        )
+                    })
+
+                    setPracticaIdsCirugiaLocales((prev) =>
+                        Array.from(new Set([...prev, ...practicasOptimistasDesdeRespuesta.map((practica) => practica.id)]))
+                    )
+                    setClasificacionPorPracticaId((prev) => ({
+                        ...prev,
+                        ...clasificacionDesdeIdsRespuesta,
+                    }))
+                    registrarGuardadasSesionDesdePracticas(
+                        practicasOptimistasDesdeRespuesta,
+                        clasificacionDesdeIdsRespuesta
+                    )
+                    router.refresh()
+                    return {
+                        ok: true,
+                        practicaIds: practicasOptimistasDesdeRespuesta.map((practica) => practica.id),
+                    }
+                }
+
                 setMensajeError('Las practicas se guardaron, pero no se pudo actualizar la lista sin recargar')
                 return { ok: true }
             }
@@ -1238,6 +1317,10 @@ export function PracticaCargaRapidaPage({
                 practicasUnicasPorId.set(practica.id, practica)
             }
 
+            const practicasNuevasPorIds = practicaIdsInternacionCreadas
+                .map((practicaId) => practicasUnicasPorId.get(practicaId))
+                .filter((practica): practica is PracticaItem => practica != null)
+
             const practicasNoPrevias = Array.from(practicasUnicasPorId.values())
                 .filter((practica) => !preIdsBackend.has(practica.id))
                 // El backend inserta en orden; mantener ASC por id permite alinear
@@ -1246,7 +1329,9 @@ export function PracticaCargaRapidaPage({
 
             const practicasNoPreviasDisponibles = [...practicasNoPrevias]
             const practicasNuevasDelLote: PracticaItem[] = []
-            const clasificacionPorNuevaPracticaId: Record<number, string> = {}
+            const clasificacionPorNuevaPracticaId: Record<number, string> = {
+                ...clasificacionDesdeIdsRespuesta,
+            }
 
             const entradasSinMatch: number[] = []
 
@@ -1300,7 +1385,9 @@ export function PracticaCargaRapidaPage({
                 practicasNoPreviasDisponibles.length = 0
             }
 
-            const practicasNuevas = practicasNuevasDelLote.length > 0
+            const practicasNuevas = practicasNuevasPorIds.length > 0
+                ? practicasNuevasPorIds
+                : practicasNuevasDelLote.length > 0
                 ? practicasNuevasDelLote
                 : (practicasNoPrevias.length === entradasCrear.length ? practicasNoPrevias : [])
 

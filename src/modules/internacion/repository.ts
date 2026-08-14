@@ -1434,6 +1434,17 @@ export async function crearPractica(
   }
 
   if (convenioResuelto == null || convenioResuelto <= 0) {
+    const convenioDesdeNomenclador = await prisma.nomencladorPractica.findFirst({
+      where: {
+        OR: [{ codigo }, { codigo: codigo.trim() }],
+      },
+      select: { convenioId: true },
+      orderBy: [{ convenioId: 'asc' }],
+    })
+    convenioResuelto = convenioDesdeNomenclador?.convenioId ?? null
+  }
+
+  if (convenioResuelto == null || convenioResuelto <= 0) {
     throw new Error('Convenio no encontrado para la internación')
   }
 
@@ -2533,13 +2544,41 @@ export async function crearCirugiaUrgencia(
     if (practicaIdsSeleccionadas.length === 0) {
       // Importante: conservar el orden de inserción para mantener alineado
       // el mapeo subitem->práctica en la carga rápida de cirugía.
+      const cacheConvenioPorCodigo = new Map<string, number | null>()
       for (const p of practicasParaCirugia) {
         const fechaPractica = p.fecha instanceof Date ? p.fecha : fechaHoyArgentina
+        const codigoPracticaNormalizado = p.codigo.trim().slice(0, 8)
+        const codigoPracticaPad = codigoPracticaNormalizado.padEnd(8)
+
+        let convenioResuelto =
+          p.convenioId != null && Number(p.convenioId) > 0
+            ? Number(p.convenioId)
+            : (data.obraSocialId != null && Number(data.obraSocialId) > 0 ? Number(data.obraSocialId) : null)
+
+        if (convenioResuelto == null) {
+          const cacheKey = codigoPracticaNormalizado
+          if (!cacheConvenioPorCodigo.has(cacheKey)) {
+            const convenioDesdeNomenclador = await tx.nomencladorPractica.findFirst({
+              where: {
+                OR: [{ codigo: codigoPracticaPad }, { codigo: codigoPracticaNormalizado }],
+              },
+              select: { convenioId: true },
+              orderBy: [{ convenioId: 'asc' }],
+            })
+            cacheConvenioPorCodigo.set(cacheKey, convenioDesdeNomenclador?.convenioId ?? null)
+          }
+          convenioResuelto = cacheConvenioPorCodigo.get(cacheKey) ?? null
+        }
+
+        if (convenioResuelto == null || convenioResuelto <= 0) {
+          throw new Error(`No se pudo resolver convenio para el código ${codigoPracticaNormalizado}`)
+        }
+
         await tx.practica.create({
           data: {
             ingresoId: data.ingresoId,
-            convenioId: p.convenioId ?? data.obraSocialId ?? 0,
-            codigoPractica: p.codigo.padEnd(8).slice(0, 8),
+            convenioId: convenioResuelto,
+            codigoPractica: codigoPracticaPad,
             convenioValorId: 0,
             fecha: fechaPractica,
             cantidad: p.cantidad,

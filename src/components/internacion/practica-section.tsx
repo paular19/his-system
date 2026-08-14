@@ -606,6 +606,7 @@ export function PracticaSection({
                 agruparEnUnaOrden: task.agruparEnUnaOrden,
                 titularOrdenAgrupada: task.titularOrdenAgrupada,
                 cirujanoFirmanteMatricula: task.cirujanoFirmanteMatricula,
+                origenGeneracion: 'PRACTICAS',
             })
 
             if ('error' in result && result.error) {

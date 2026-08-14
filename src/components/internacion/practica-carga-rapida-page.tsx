@@ -1053,12 +1053,6 @@ export function PracticaCargaRapidaPage({
             return { ok: false, error: mensaje }
         }
 
-        if (!contextoCirugia.obraSocialId) {
-            const mensaje = 'La internacion no tiene obra social asignada. Actualizala para cargar practicas de cirugia.'
-            setMensajeError(mensaje)
-            return { ok: false, error: mensaje }
-        }
-
         try {
             const prePanel = await fetch(`/api/internacion/${ingresoId}/panel-clinico`, {
                 cache: 'no-store',
@@ -1523,6 +1517,7 @@ export function PracticaCargaRapidaPage({
                 separarPorSubitem: Boolean(task.separarPorSubitem),
                 titularOrdenAgrupada: task.agruparEnUnaOrden ? (task.titularOrdenAgrupada ?? null) : undefined,
                 cirujanoFirmanteMatricula: medicoFirmanteMatricula ?? undefined,
+                origenGeneracion: modoCirugia ? 'CIRUGIA' : 'PRACTICAS',
             })
 
             if ('error' in result && result.error) {

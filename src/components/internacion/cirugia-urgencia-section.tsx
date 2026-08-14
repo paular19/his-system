@@ -974,6 +974,7 @@ export function CirugiaUrgenciaSection({
                 practicaIds: task.practicaIdsInternacion,
                 agruparEnUnaOrden: true,
                 cirujanoFirmanteMatricula: task.cirujanoFirmanteMatricula,
+                origenGeneracion: 'CIRUGIA',
             })
 
             if ('error' in result && result.error) {

@@ -94,6 +94,7 @@ const GenerarOrdenesInternacionSchema = z.object({
   separarPorSubitem: z.boolean().optional().default(false),
   titularOrdenAgrupada: z.string().trim().max(120).optional().nullable(),
   cirujanoFirmanteMatricula: z.number().int().positive().optional().nullable(),
+  origenGeneracion: z.enum(['PRACTICAS', 'CIRUGIA', 'AUTO']).optional().default('PRACTICAS'),
 })
 
 function componentesClasificacion(
@@ -371,6 +372,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
   separarPorSubitem?: boolean
   titularOrdenAgrupada?: string | null
   cirujanoFirmanteMatricula?: number | null
+  origenGeneracion?: 'PRACTICAS' | 'CIRUGIA' | 'AUTO'
 }) {
   const usuario = await getUsuarioSesion()
 
@@ -417,8 +419,13 @@ export async function generarOrdenesDesdeInternacionAction(input: {
 
     if (!ingreso) return { error: 'Internación no encontrada' }
 
+    const tipoIngresoCodigoNormalizado = (ingreso.tipoIngresoCodigo ?? '').trim().toUpperCase()
+    const esIngresoInternacion = tipoIngresoCodigoNormalizado === 'INT'
+    const origenGeneracion = parsed.data.origenGeneracion
+    const esFlujoCirugiaInternacion = esIngresoInternacion && origenGeneracion === 'CIRUGIA'
+
     const esGuardiaAmbulatoria =
-      (ingreso.tipoIngresoCodigo ?? '').trim().toUpperCase() === 'AMB' &&
+      tipoIngresoCodigoNormalizado === 'AMB' &&
       (ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '').trim().toUpperCase() === 'GUA'
 
     const profesionalGuardia9110 = esGuardiaAmbulatoria
@@ -472,13 +479,30 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       return { error: 'No hay prácticas pendientes para generar órdenes' }
     }
 
+    const profesionalTratante = ingreso.profesionalTratanteId
+      ? await prisma.profesional.findUnique({
+          where: { id: ingreso.profesionalTratanteId },
+          select: { id: true, matricula: true },
+        })
+      : null
+    const matriculaTratante =
+      profesionalTratante?.matricula != null && profesionalTratante.matricula > 0
+        ? profesionalTratante.matricula
+        : null
+
     const practicasPendientesPorId = new Map(practicasPendientes.map((practica) => [practica.id, practica] as const))
+    const matriculaFirmanteManualBase =
+      parsed.data.cirujanoFirmanteMatricula != null && parsed.data.cirujanoFirmanteMatricula > 0
+        ? parsed.data.cirujanoFirmanteMatricula
+        : null
     const matriculaFirmanteManual =
       esGuardiaAmbulatoria
         ? MATRICULA_AMBULATORIO_DEFAULT
-        : parsed.data.cirujanoFirmanteMatricula != null && parsed.data.cirujanoFirmanteMatricula > 0
-        ? parsed.data.cirujanoFirmanteMatricula
-        : null
+        : esFlujoCirugiaInternacion
+        ? matriculaFirmanteManualBase
+        : esIngresoInternacion
+        ? null
+        : matriculaFirmanteManualBase
 
     const esMatriculaEspecialistaFirmanteValida = (practica: (typeof practicasPendientes)[number]): boolean => {
       const matricula = practica.matriculaEspecialista
@@ -496,6 +520,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     const matriculasFirmantesBuscadas = new Set<number>()
     if (matriculaFirmanteManual) matriculasFirmantesBuscadas.add(matriculaFirmanteManual)
     if (matriculaFirmanteDesdePractica) matriculasFirmantesBuscadas.add(matriculaFirmanteDesdePractica)
+    if (matriculaTratante) matriculasFirmantesBuscadas.add(matriculaTratante)
     if (!esGuardiaAmbulatoria) {
       matriculasFirmantesBuscadas.add(MATRICULA_ANESTESISTA_INTERNACION_DEFAULT)
       matriculasFirmantesBuscadas.add(MATRICULA_AYUDANTE_INTERNACION_DEFAULT)
@@ -523,6 +548,15 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     for (const profesional of profesionalesFirmantes) {
       if (profesional.matricula == null) continue
       profesionalIdPorMatricula.set(profesional.matricula, profesional.id)
+    }
+
+    const profesionalIdCirujanoFirmante =
+      matriculaFirmanteEfectiva != null
+        ? (profesionalIdPorMatricula.get(matriculaFirmanteEfectiva) ?? null)
+        : null
+
+    if (esFlujoCirugiaInternacion && !profesionalIdCirujanoFirmante) {
+      return { error: 'No se encontró el cirujano firmante para emitir las órdenes de cirugía' }
     }
 
     const profesionalIdManual = esGuardiaAmbulatoria
@@ -605,6 +639,59 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           !contieneClasificacion(clasificacion, 'HA') &&
           !contieneClasificacion(clasificacion, 'GA') &&
           !contieneClasificacion(clasificacion, 'HP')
+        const esClasificacionSoloAnestesista =
+          contieneClasificacion(clasificacion, 'HA') &&
+          !contieneClasificacion(clasificacion, 'HE') &&
+          !contieneClasificacion(clasificacion, 'GA') &&
+          !contieneClasificacion(clasificacion, 'HP') &&
+          !contieneClasificacion(clasificacion, 'A1') &&
+          !contieneClasificacion(clasificacion, 'A2') &&
+          !contieneClasificacion(clasificacion, 'A3')
+        const esClasificacionConEspecialista =
+          contieneClasificacion(clasificacion, 'HE') || contieneClasificacion(clasificacion, 'HP')
+        const matriculaEspecialistaPractica =
+          practica.matriculaEspecialista != null && practica.matriculaEspecialista > 0
+            ? practica.matriculaEspecialista
+            : null
+        const matriculaAnestesistaPractica =
+          practica.matriculaAnestesista != null && practica.matriculaAnestesista > 0
+            ? practica.matriculaAnestesista
+            : null
+        const matriculaAyudanteAsignada =
+          matriculaEspecialistaPractica ?? MATRICULA_AYUDANTE_INTERNACION_DEFAULT
+
+        const efectorMatriculaItem =
+          esGuardiaAmbulatoria
+            ? MATRICULA_AMBULATORIO_DEFAULT
+            : esFlujoCirugiaInternacion
+            ? esClasificacionSoloGastos
+              ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+              : esClasificacionSoloAnestesista
+              ? MATRICULA_ANESTESISTA_INTERNACION_DEFAULT
+              : esClasificacionConEspecialista
+              ? (matriculaFirmanteEfectiva ?? matriculaEspecialistaPractica ?? matriculaTratante ?? null)
+              : esClasificacionSoloAyudante
+              ? matriculaAyudanteAsignada
+              : (matriculaFirmanteEfectiva ?? matriculaEspecialistaPractica ?? matriculaAnestesistaPractica ?? matriculaTratante ?? null)
+            : esIngresoInternacion
+            ? esClasificacionSoloGastos
+              ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+              : esClasificacionSoloAnestesista
+              ? MATRICULA_ANESTESISTA_INTERNACION_DEFAULT
+              : esClasificacionConEspecialista
+              ? (matriculaTratante ?? matriculaEspecialistaPractica ?? matriculaAnestesistaPractica ?? null)
+              : esClasificacionSoloAyudante
+              ? matriculaAyudanteAsignada
+              : (matriculaEspecialistaPractica ?? matriculaAnestesistaPractica ?? matriculaTratante ?? null)
+            : matriculaFirmanteEfectiva != null
+            ? matriculaFirmanteEfectiva
+            : esClasificacionSoloGastos
+            ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+            : esClasificacionSoloAyudante
+            ? MATRICULA_AYUDANTE_INTERNACION_DEFAULT
+            : clasificacion === 'HA'
+            ? MATRICULA_ANESTESISTA_INTERNACION_DEFAULT
+            : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null)
 
         const item: CrearOrdenInput['items'][number] = {
           practicaId: practica.id,
@@ -615,18 +702,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           fecha: normalizarFechaOrdenArgentina(practica.fecha),
           tipoFacturacion: 'H',
           clasificacionAgrupacion: esProtocoloBioquimico ? 'HE' : clasificacion,
-          efectorMatricula:
-            esGuardiaAmbulatoria
-              ? MATRICULA_AMBULATORIO_DEFAULT
-              : matriculaFirmanteEfectiva != null
-              ? matriculaFirmanteEfectiva
-              : esClasificacionSoloGastos
-              ? MATRICULA_GASTOS_INTERNACION_DEFAULT
-              : esClasificacionSoloAyudante
-              ? MATRICULA_AYUDANTE_INTERNACION_DEFAULT
-              : clasificacion === 'HA'
-              ? MATRICULA_ANESTESISTA_INTERNACION_DEFAULT
-              : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null),
+          efectorMatricula: efectorMatriculaItem,
           numeroAutorizacion: practica.numeroAutorizacion,
           importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : undefined,
         }
@@ -725,7 +801,8 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         !contieneClasificacion(clasificacion, 'A1') &&
         !contieneClasificacion(clasificacion, 'A2') &&
         !contieneClasificacion(clasificacion, 'A3')
-      const esGrupoConEspecialista = contieneClasificacion(clasificacion, 'HE')
+      const esGrupoConEspecialista =
+        contieneClasificacion(clasificacion, 'HE') || contieneClasificacion(clasificacion, 'HP')
 
       const matriculaFirmanteGrupo = esGuardiaAmbulatoria
         ? MATRICULA_AMBULATORIO_DEFAULT
@@ -748,6 +825,18 @@ export async function generarOrdenesDesdeInternacionAction(input: {
 
       const matriculaProfesionalGrupo = esGuardiaAmbulatoria
         ? MATRICULA_AMBULATORIO_DEFAULT
+        : esFlujoCirugiaInternacion
+        ? (matriculaFirmanteEfectiva ?? null)
+        : esIngresoInternacion
+        ? esGrupoSoloGastos
+          ? MATRICULA_GASTOS_INTERNACION_DEFAULT
+          : esGrupoSoloAnestesista
+          ? MATRICULA_ANESTESISTA_INTERNACION_DEFAULT
+          : esGrupoConEspecialista
+          ? (matriculaTratante ?? matriculaFirmanteGrupo)
+          : esGrupoSoloAyudante
+          ? (matriculaAyudanteSeleccionadaGrupo ?? MATRICULA_AYUDANTE_INTERNACION_DEFAULT)
+          : (matriculaFirmanteGrupo ?? matriculaTratante)
         : esGrupoAgrupado && matriculaFirmanteManual != null
         ? matriculaFirmanteManual
         : esGrupoConEspecialista
@@ -762,6 +851,16 @@ export async function generarOrdenesDesdeInternacionAction(input: {
 
       const profesionalIdGrupo = esGuardiaAmbulatoria
         ? (profesionalIdManual ?? profesionalIdFallback)
+        : esFlujoCirugiaInternacion
+        ? (profesionalIdCirujanoFirmante ?? profesionalIdFallback)
+        : esIngresoInternacion && esGrupoConEspecialista
+        ? (
+            ingreso.profesionalTratanteId ??
+            (matriculaProfesionalGrupo != null
+              ? (profesionalIdPorMatricula.get(matriculaProfesionalGrupo) ?? null)
+              : null) ??
+            profesionalIdFallback
+          )
         : (matriculaProfesionalGrupo != null
           ? (profesionalIdPorMatricula.get(matriculaProfesionalGrupo) ?? null)
           : null) ?? profesionalIdFallback

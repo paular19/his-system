@@ -601,7 +601,6 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           !contieneClasificacion(clasificacion, 'HA') &&
           !contieneClasificacion(clasificacion, 'GA') &&
           !contieneClasificacion(clasificacion, 'HP')
-        const esClasificacionConEspecialista = contieneClasificacion(clasificacion, 'HE')
 
         const item: CrearOrdenInput['items'][number] = {
           practicaId: practica.id,
@@ -615,14 +614,14 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           efectorMatricula:
             esGuardiaAmbulatoria
               ? MATRICULA_AMBULATORIO_DEFAULT
+              : matriculaFirmanteManual != null
+              ? matriculaFirmanteManual
               : esClasificacionSoloGastos
               ? MATRICULA_GASTOS_INTERNACION_DEFAULT
               : esClasificacionSoloAyudante
               ? MATRICULA_AYUDANTE_INTERNACION_DEFAULT
               : clasificacion === 'HA'
               ? MATRICULA_ANESTESISTA_INTERNACION_DEFAULT
-              : esClasificacionConEspecialista && matriculaFirmanteManual != null
-              ? matriculaFirmanteManual
               : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null),
           numeroAutorizacion: practica.numeroAutorizacion,
           importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : undefined,

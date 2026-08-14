@@ -13,3 +13,6 @@ prisma/*.db-journal
 tsconfig.tsbuildinfo
 FORMATO FICHA.docx
 escaner.pdf
+
+# Claude Code (permisos locales)
+.claude/

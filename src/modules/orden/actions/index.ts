@@ -34,20 +34,36 @@ function normalizarFechaOrdenArgentina(value: Date | string | null | undefined):
 }
 
 async function resolverObraSocialParticularId(): Promise<number> {
-  const particular = await prisma.obraSocial.findFirst({
+  const particularPorIdEstandar = await prisma.obraSocial.findFirst({
+    where: {
+      id: 500,
+      estado: 'A',
+    },
+    select: { id: true },
+  })
+  if (particularPorIdEstandar) {
+    return particularPorIdEstandar.id
+  }
+
+  const particularPorNombre = await prisma.obraSocial.findFirst({
     where: {
       estado: 'A',
-      nombre: { contains: 'PARTICULAR', mode: 'insensitive' },
+      OR: [
+        { nombre: { contains: 'PARTICULAR', mode: 'insensitive' } },
+        { nombre: { contains: 'SIN COBERTURA', mode: 'insensitive' } },
+        { nombre: { contains: 'PRIVADO', mode: 'insensitive' } },
+      ],
     },
     orderBy: { id: 'asc' },
     select: { id: true },
   })
 
-  if (!particular) {
-    throw new Error('No se encontró una obra social activa de tipo PARTICULAR para emitir la orden')
+  if (particularPorNombre) {
+    console.warn('[ORDEN] OS PARTICULAR resuelta por nombre (fallback)')
+    return particularPorNombre.id
   }
 
-  return particular.id
+  throw new Error('No se encontró una obra social activa de tipo PARTICULAR para emitir la orden')
 }
 
 const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({

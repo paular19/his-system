@@ -1850,8 +1850,9 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
     }
 
-    async function cargarContexto(ingresoId: number, options?: { silent?: boolean }) {
+    async function cargarContexto(ingresoId: number, options?: { silent?: boolean; preserveUiState?: boolean }) {
         const silent = Boolean(options?.silent)
+        const preserveUiState = Boolean(options?.preserveUiState)
         setError(null)
         if (!silent) {
             setCargandoContexto(true)
@@ -1864,15 +1865,17 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             setContexto(json.data)
             cargarFormDesdeContexto(json.data)
             initEditRows(json.data)
-            setEditAutorizacionOrden({})
-            setOrdenesExpand({})
-            setOrdenesPendientesExpand({})
-            setFiltroPrestaciones('')
-            setPaginaPrestaciones(1)
-            setRowEditMode({})
-            setAplicarOrdenCompletaPorFila({})
-            setDetallePrestacionesExpand({})
-            setEditandoFicha(false)
+            if (!preserveUiState) {
+                setEditAutorizacionOrden({})
+                setOrdenesExpand({})
+                setOrdenesPendientesExpand({})
+                setFiltroPrestaciones('')
+                setPaginaPrestaciones(1)
+                setRowEditMode({})
+                setAplicarOrdenCompletaPorFila({})
+                setDetallePrestacionesExpand({})
+                setEditandoFicha(false)
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al cargar contexto')
             setContexto(null)
@@ -2606,7 +2609,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudieron guardar los diferenciales de cirugía')
 
             setMensaje('Diferenciales de cirugía actualizados')
-            await cargarContexto(contexto.ingreso.id)
+            await cargarContexto(contexto.ingreso.id, { silent: true, preserveUiState: true })
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al guardar diferenciales de cirugía')
         } finally {

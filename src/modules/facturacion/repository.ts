@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { claveNomenclador, obtenerDescripcionesNomenclador } from '@/lib/nomenclador'
 import { Prisma } from '@prisma/client'
 import type {
     ActualizarAutorizacionInput,
@@ -3076,15 +3077,18 @@ export async function cargarOrdenesDesdePrestaciones(
                 numeroAutorizacion: true,
                 matriculaEspecialista: true,
                 matriculaAnestesista: true,
-                nomencladorPractica: { select: { descripcion: true } },
             },
         })
+
+        const descripcionesNomenclador = await obtenerDescripcionesNomenclador(practicasPendientes)
 
         prestacionesOrigen = practicasPendientes.map((p) => ({
             practicaId: p.id,
             convenioId: p.convenioId,
             codigoPractica: p.codigoPractica.trim(),
-            descripcionPractica: p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim(),
+            descripcionPractica:
+                descripcionesNomenclador.get(claveNomenclador(p.convenioId, p.codigoPractica)) ??
+                p.codigoPractica.trim(),
             cantidad: Number(p.cantidad),
             incluyeCodigo: null,
             numeroAutorizacion: p.numeroAutorizacion,

@@ -3,6 +3,7 @@ import { getUsuarioSesion } from '@/lib/auth'
 import { ROLES, tienePermiso } from '@/lib/auth/rbac'
 import { manejarErrorApi } from '@/lib/utils/response'
 import { prisma } from '@/lib/db'
+import { claveNomenclador, obtenerDescripcionesNomenclador } from '@/lib/nomenclador'
 import * as service from '@/modules/internacion/service'
 
 interface RouteParams {
@@ -89,35 +90,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
           orderBy: { id: 'asc' },
         })
 
-    // El codigo de practica se guarda con padding inconsistente (VarChar en Practica,
-    // Char en el nomenclador), asi que la descripcion se resuelve con una consulta
-    // aparte normalizando el codigo en vez de usar la relacion de Prisma.
-    const clavesNomenclador = new Map<string, { convenioId: number; codigo: string }>()
-    for (const practica of practicasCirugiaEspejoRaw) {
-      const codigo = practica.codigoPractica.trim()
-      if (codigo) clavesNomenclador.set(`${practica.convenioId}:${codigo}`, { convenioId: practica.convenioId, codigo })
-      for (const orden of practica.ordenPractica) {
-        const codigoOrden = orden.codigoPractica.trim()
-        if (codigoOrden) clavesNomenclador.set(`${orden.convenioId}:${codigoOrden}`, { convenioId: orden.convenioId, codigo: codigoOrden })
-      }
-    }
-
-    const descripcionNomencladorPorClave = new Map<string, string>()
-    if (clavesNomenclador.size > 0) {
-      const claves = Array.from(clavesNomenclador.values())
-      const nomencladores = await prisma.nomencladorPractica.findMany({
-        where: {
-          convenioId: { in: Array.from(new Set(claves.map((clave) => clave.convenioId))) },
-          codigo: { in: Array.from(new Set(claves.map((clave) => clave.codigo))) },
-        },
-        select: { convenioId: true, codigo: true, descripcion: true },
-      })
-      for (const nomenclador of nomencladores) {
-        const descripcion = nomenclador.descripcion.trim()
-        if (!descripcion) continue
-        descripcionNomencladorPorClave.set(`${nomenclador.convenioId}:${nomenclador.codigo.trim()}`, descripcion)
-      }
-    }
+    const descripcionNomencladorPorClave = await obtenerDescripcionesNomenclador([
+      ...practicasCirugiaEspejoRaw,
+      ...practicasCirugiaEspejoRaw.flatMap((practica) => practica.ordenPractica),
+    ])
 
     const clavesOrdenLegacy = Array.from(new Set(
       practicasCirugiaEspejoRaw
@@ -172,7 +148,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         clasificacionAgrupacion: orden.clasificacionAgrupacion,
         efectorMatricula: orden.efectorMatricula,
         descripcionPractica:
-          descripcionNomencladorPorClave.get(`${orden.convenioId}:${orden.codigoPractica.trim()}`) ?? null,
+          descripcionNomencladorPorClave.get(claveNomenclador(orden.convenioId, orden.codigoPractica)) ?? null,
         fechaEmision: orden.orden?.fechaEmision ?? null,
       }))
 
@@ -202,7 +178,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       return {
         ...practica,
         descripcionPractica:
-          descripcionNomencladorPorClave.get(`${practica.convenioId}:${practica.codigoPractica.trim()}`) ?? null,
+          descripcionNomencladorPorClave.get(claveNomenclador(practica.convenioId, practica.codigoPractica)) ?? null,
         ordenPractica: ordenPracticaActivas,
         tuvoOrdenGenerada:
           (practica._count?.ordenPractica ?? 0) > 0 ||

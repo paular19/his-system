@@ -4,6 +4,7 @@ import { InternacionPracticasFichaTable } from '@/components/internacion/interna
 import { getUsuarioSesion } from '@/lib/auth'
 import { ROLES, tienePermiso } from '@/lib/auth/rbac'
 import { prisma } from '@/lib/db'
+import { claveNomenclador, obtenerDescripcionesNomenclador } from '@/lib/nomenclador'
 import { obtenerInternacionDetalle } from '@/modules/internacion/service'
 import Link from 'next/link'
 import { ChevronRight, ArrowLeft } from 'lucide-react'
@@ -106,35 +107,10 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
         })
         : []
 
-    // El codigo de practica se guarda con padding inconsistente (VarChar en Practica,
-    // Char en el nomenclador), asi que la descripcion se resuelve con una consulta
-    // aparte normalizando el codigo en vez de usar la relacion de Prisma.
-    const clavesNomenclador = new Map<string, { convenioId: number; codigo: string }>()
-    for (const practica of practicasCirugiaActivas) {
-        const codigo = practica.codigoPractica.trim()
-        if (codigo) clavesNomenclador.set(`${practica.convenioId}:${codigo}`, { convenioId: practica.convenioId, codigo })
-        for (const orden of practica.ordenPractica) {
-            const codigoOrden = orden.codigoPractica.trim()
-            if (codigoOrden) clavesNomenclador.set(`${orden.convenioId}:${codigoOrden}`, { convenioId: orden.convenioId, codigo: codigoOrden })
-        }
-    }
-
-    const descripcionNomencladorPorClave = new Map<string, string>()
-    if (clavesNomenclador.size > 0) {
-        const claves = Array.from(clavesNomenclador.values())
-        const nomencladores = await prisma.nomencladorPractica.findMany({
-            where: {
-                convenioId: { in: Array.from(new Set(claves.map((clave) => clave.convenioId))) },
-                codigo: { in: Array.from(new Set(claves.map((clave) => clave.codigo))) },
-            },
-            select: { convenioId: true, codigo: true, descripcion: true },
-        })
-        for (const nomenclador of nomencladores) {
-            const descripcion = nomenclador.descripcion.trim()
-            if (!descripcion) continue
-            descripcionNomencladorPorClave.set(`${nomenclador.convenioId}:${nomenclador.codigo.trim()}`, descripcion)
-        }
-    }
+    const descripcionNomencladorPorClave = await obtenerDescripcionesNomenclador([
+        ...practicasCirugiaActivas,
+        ...practicasCirugiaActivas.flatMap((practica) => practica.ordenPractica),
+    ])
 
     const clavesOrdenLegacy = Array.from(new Set(
         practicasCirugiaActivas
@@ -207,11 +183,11 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
         const codigoNormalizado = practica.codigoPractica.trim().toUpperCase()
         const descripcionOrden = practica.ordenPractica
             .map((orden) =>
-                descripcionNomencladorPorClave.get(`${orden.convenioId}:${orden.codigoPractica.trim()}`) ?? ''
+                descripcionNomencladorPorClave.get(claveNomenclador(orden.convenioId, orden.codigoPractica)) ?? ''
             )
             .find((item) => item.length > 0)
         const descripcionNomenclador =
-            descripcionNomencladorPorClave.get(`${practica.convenioId}:${practica.codigoPractica.trim()}`) ?? ''
+            descripcionNomencladorPorClave.get(claveNomenclador(practica.convenioId, practica.codigoPractica)) ?? ''
         const descripcion =
             descripcionOrden ??
             (descripcionNomenclador.length > 0 ? descripcionNomenclador : null) ??

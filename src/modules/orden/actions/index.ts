@@ -5,6 +5,7 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { CrearOrdenSchema, type CrearOrdenInput } from '../schemas'
 import { crearOrdenAmbulatorio, crearOrdenesAmbulatoriasPorPractica } from '../service'
 import { prisma } from '@/lib/db'
+import { claveNomenclador, obtenerDescripcionesNomenclador } from '@/lib/nomenclador'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { crearPractica as crearPracticaInternacion } from '@/modules/internacion/service'
@@ -528,11 +529,10 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         importeTotal: true,
         numeroProtocoloLab: true,
         diagnosticoLab: true,
-        nomencladorPractica: {
-          select: { descripcion: true },
-        },
       },
     })
+
+    const descripcionesNomenclador = await obtenerDescripcionesNomenclador(practicas)
 
     const practicasPendientes = practicas
 
@@ -675,7 +675,8 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     for (const practica of practicasPendientes) {
       const descripcionPractica = practica.codigoPractica.trim() === '66'
         ? 'PROTOCOLO BIOQUIMICO'
-        : (practica.nomencladorPractica?.descripcion?.trim() || practica.codigoPractica.trim())
+        : (descripcionesNomenclador.get(claveNomenclador(practica.convenioId, practica.codigoPractica))
+          || practica.codigoPractica.trim())
 
       const clasificacionDesdeInput = normalizarClasificacionAgrupacion(
         parsed.data.clasificacionPorPracticaId[String(practica.id)]

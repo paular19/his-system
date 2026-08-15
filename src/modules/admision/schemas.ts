@@ -81,6 +81,7 @@ const CrearIngresoBaseSchema = z.object({
   motivoDerivacion: z.string().max(500).trim().optional().nullable(),
   diagnosticoDerivacion: z.string().max(500).trim().optional().nullable(),
   // Campos específicos para indicación médica
+  profesionalIndicadorId: z.number().int().positive().optional().nullable(),
   profesionalIndicadorNombre: z.string().max(200).trim().optional().nullable(),
   tipoIndicacion: z.string().max(100).trim().optional().nullable(),
   descripcionIndicacion: z.string().max(500).trim().optional().nullable(),

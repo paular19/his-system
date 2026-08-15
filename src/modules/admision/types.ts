@@ -30,6 +30,7 @@ export type IngresoDetalle = IngresoConRelaciones & {
   obraSocial?: Pick<ObraSocial, 'id' | 'nombre'> | null
   plan?: Pick<PlanObraSocial, 'obraSocialId' | 'id' | 'descripcion'> | null
   obraSocialCoseguroNombre?: string | null
+  motivoEgreso?: { codigo: string; descripcion: string | null } | null
   cama?: (Pick<Cama, 'id' | 'identificador' | 'sector' | 'habitacion'>) | null
   profesionalTratanteFallback?: {
     nombre: string
@@ -75,6 +76,15 @@ export type IngresoDetalle = IngresoConRelaciones & {
   movimientosIngreso: (MovimientoIngreso & {
     tipoMovimiento: TipoMovimientoIngreso
   })[]
+}
+
+// Catalogos que necesita la edicion inline de la ficha de admision
+export interface CatalogosFichaAdmision {
+  profesionales: { id: number; nombre: string; matricula: number | null }[]
+  motivosEgreso: { codigo: string; descripcion: string }[]
+  obrasSociales: { id: number; nombre: string; requiereCoseguro: boolean }[]
+  planes: { id: number; nombre: string; obraSocialId: number | null }[]
+  coseguros: { id: number; nombre: string }[]
 }
 
 // DTO para listado de ingresos

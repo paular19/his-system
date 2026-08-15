@@ -2,23 +2,29 @@
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { ActualizarPracticaSchema } from '@/modules/internacion/schemas'
-import type { ActualizarIngresoInput } from '@/modules/admision/schemas'
-import { getObrasSocialesAction, getPlanesAction, updateIngresoAction } from '@/modules/admision/actions'
-import { ChevronRight, ChevronDown, ChevronUp, User, Pencil, FileText, Printer, X, Loader2, AlertTriangle, Ban, Trash2 } from 'lucide-react'
+import { updateIngresoAction } from '@/modules/admision/actions'
+import { ChevronRight, ChevronDown, ChevronUp, User, FileText, Printer, Loader2, AlertTriangle, Ban, Trash2, Pencil } from 'lucide-react'
 import Link from 'next/link'
 import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
-import { claveDiaArgentina, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
-import { AdmisionEditForm } from './admision-edit-form'
 import { FichaAdmisionPrint } from './ficha-admision-print'
+import {
+    SeccionCobertura,
+    SeccionDatosAdmision,
+    SeccionDiagnostico,
+    SeccionObservaciones,
+    SeccionResponsable,
+    SeccionSubtipo,
+} from './ficha-secciones'
+import {
+    PracticaEdicionForm,
+    PracticasEdicionMasiva,
+    type PracticaEditable,
+} from './practica-edicion-form'
 import { PracticaIngresoForm } from './practica-ingreso-form'
 import { generarOrdenesPendientesAdmision } from './ordenes-auto'
 import type { IngresoDetalle } from '@/modules/admision/types'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { anularOrdenAction } from '@/modules/orden/actions'
-import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 import { agruparPracticasAutorizadasPorOrden, obtenerDestinoGrupoPracticasAutorizadas } from '@/lib/practicas-autorizadas'
 import { ObservacionesSection } from '@/components/internacion/observaciones-section'
 import {
@@ -36,41 +42,6 @@ interface FichaIngresoClientProps {
     autoImprimirInicial?: boolean
     autoSepararInicial?: boolean
     ventanaImpresionNombreInicial?: string | null
-}
-
-interface ObraSocialOption {
-    id: number
-    nombre: string
-}
-
-interface PlanOption {
-    id: number
-    nombre: string
-    obraSocialId: number | null
-}
-
-type CoberturaVista = {
-    obraSocialId: number | null
-    obraSocialNombre: string | null
-    planId: number | null
-    numeroAfiliado: string | null
-    coberturaSecundariaValor: string | null
-}
-
-type PracticaEditable = {
-    id: number
-    ingresoId: number
-    convenioId: number
-    codigoPractica: string
-    descripcionPractica: string | null
-    fecha: Date | string
-    cantidad: number
-    importeTotal?: number | null
-    numeroAutorizacion: string | null
-    matriculaEspecialista?: number | null
-    matriculaAnestesista?: number | null
-    facturable: boolean
-    facturada?: boolean
 }
 
 type GeneracionOrdenTask = {
@@ -115,14 +86,6 @@ function normalizarTexto(value: string | null | undefined): string {
         .trim()
 }
 
-function normalizarFechaInputArgentina(value: Date | string | null | undefined): Date {
-    const clave = claveDiaArgentina(value)
-    if (clave) return fechaDesdeClaveArgentina(clave)
-
-    const parsed = value ? new Date(value) : new Date()
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed
-}
-
 function normalizarNumeroAutorizacion(value: string | null | undefined): string | null {
     const normalizada = value?.trim() ?? ''
     return normalizada.length > 0 ? normalizada : null
@@ -160,18 +123,6 @@ function DataItem({ label, value }: { label: string; value?: string | null }) {
     )
 }
 
-function construirCoberturaVista(ingreso: IngresoDetalle): CoberturaVista {
-    return {
-        obraSocialId: ingreso.obraSocialId ?? null,
-        obraSocialNombre: ingreso.obraSocial?.nombre ?? null,
-        planId: ingreso.planId ?? null,
-        numeroAfiliado: ingreso.numeroAfiliado ?? null,
-        coberturaSecundariaValor:
-            ingreso.obraSocialCoseguroNombre
-            ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : null),
-    }
-}
-
 export function FichaIngresoClient({
     ingreso,
     puedeModificar,
@@ -183,21 +134,13 @@ export function FichaIngresoClient({
     ventanaImpresionNombreInicial = null,
 }: FichaIngresoClientProps) {
     const router = useRouter()
-    const [isEditing, setIsEditing] = useState(false)
     const fechaNacimientoPaciente = ingreso.paciente?.fechaNacimiento ?? ingreso.fechaNacimiento
     const edad = fechaNacimientoPaciente ? calcularEdad(fechaNacimientoPaciente) : null
-    const observacionesLimpias = limpiarObservacionesAdmision(ingreso.observaciones)
 
-    // Inline edit state for each card
+    // Card de practicas: la unica seccion que sigue usando el toggle manual.
     const [editingCard, setEditingCard] = useState<string | null>(null)
-    const [cardLoading, setCardLoading] = useState(false)
-    const [cardError, setCardError] = useState<string | null>(null)
-    const [cardSuccess, setCardSuccess] = useState<string | null>(null)
-    const [cardValues, setCardValues] = useState<any>({})
-    const [coberturaVista, setCoberturaVista] = useState<CoberturaVista>(() => construirCoberturaVista(ingreso))
-    const [obrasSocialesCatalogo, setObrasSocialesCatalogo] = useState<ObraSocialOption[]>([])
-    const [planesCatalogo, setPlanesCatalogo] = useState<PlanOption[]>([])
-    const [cargandoCoberturaCatalogos, setCargandoCoberturaCatalogos] = useState(false)
+    // Cambios guardados desde las secciones, para reflejarlos en el imprimible sin recargar.
+    const [ingresoOverrides, setIngresoOverrides] = useState<Partial<IngresoDetalle>>({})
     const [practicasIngreso, setPracticasIngreso] = useState(ingreso.practicas)
     const [estadoIngreso, setEstadoIngreso] = useState((ingreso.estado ?? '').trim().toUpperCase())
     const [anulandoAdmision, setAnulandoAdmision] = useState(false)
@@ -216,20 +159,18 @@ export function FichaIngresoClient({
     const [errorEliminarPractica, setErrorEliminarPractica] = useState<string | null>(null)
     const [errorGenerarOrdenes, setErrorGenerarOrdenes] = useState<string | null>(null)
     const [practicaEditando, setPracticaEditando] = useState<PracticaEditable | null>(null)
-    const [guardandoPracticaEditando, setGuardandoPracticaEditando] = useState(false)
+    const [grupoPracticaEditando, setGrupoPracticaEditando] = useState<{
+        practicas: PracticaEditable[]
+        titulo: string | null
+    } | null>(null)
+    const [edicionMasivaAbierta, setEdicionMasivaAbierta] = useState(false)
     const [anulandoOrdenKey, setAnulandoOrdenKey] = useState<string | null>(null)
     const [ordenesAutorizadasAbiertas, setOrdenesAutorizadasAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesAutorizadasExpandidas, setOrdenesAutorizadasExpandidas] = useState<Record<string, boolean>>({})
     const [mostrarOrdenesPendientesAutorizacion, setMostrarOrdenesPendientesAutorizacion] = useState(true)
     const [mostrarOrdenesYaAutorizadas, setMostrarOrdenesYaAutorizadas] = useState(true)
-    const [admisionVista, setAdmisionVista] = useState(() => ({
-        fechaIngreso: ingreso.fechaIngreso,
-        fechaEgreso: ingreso.fechaEgreso,
-        fechaEgresoPrevista: ingreso.fechaEgresoPrevista,
-    }))
     const colaGeneracionRef = useRef<Promise<void>>(Promise.resolve())
     const practicaIdsEnGeneracionRef = useRef<Set<number>>(new Set())
-    const cardSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const autoGeneracionInicialEjecutadaRef = useRef(false)
     const hayGeneracionesEnBackground = tareasGeneracionPendientes > 0
     const terminoFiltroPracticas = normalizarTexto(filtroPracticas)
@@ -342,24 +283,10 @@ export function FichaIngresoClient({
         setEstadoIngreso((ingreso.estado ?? '').trim().toUpperCase())
     }, [ingreso.estado])
 
+    // Los datos que llegan del server ya traen los cambios: se descartan los overrides locales.
     useEffect(() => {
-        setAdmisionVista({
-            fechaIngreso: ingreso.fechaIngreso,
-            fechaEgreso: ingreso.fechaEgreso,
-            fechaEgresoPrevista: ingreso.fechaEgresoPrevista,
-        })
-    }, [ingreso.fechaIngreso, ingreso.fechaEgreso, ingreso.fechaEgresoPrevista])
-
-    useEffect(() => {
-        setCoberturaVista(construirCoberturaVista(ingreso))
-    }, [
-        ingreso.obraSocialId,
-        ingreso.obraSocial?.nombre,
-        ingreso.planId,
-        ingreso.numeroAfiliado,
-        ingreso.obraSocialCoseguroNombre,
-        ingreso.obraSocialCoseguroId,
-    ])
+        setIngresoOverrides({})
+    }, [ingreso])
 
     useEffect(() => {
         setPaginaPendientes((prev) => Math.min(prev, totalPaginasPendientes))
@@ -372,14 +299,6 @@ export function FichaIngresoClient({
     useEffect(() => {
         setPracticasSeleccionadas((prev) => prev.filter((id) => practicasPendientes.some((p) => p.id === id)))
     }, [practicasPendientes])
-
-    useEffect(() => {
-        return () => {
-            if (cardSuccessTimeoutRef.current) {
-                clearTimeout(cardSuccessTimeoutRef.current)
-            }
-        }
-    }, [])
 
     const profesionalTratanteNombre = ingreso.profesionalTratante?.nombre
         ?? ingreso.evoluciones?.[0]?.profesional?.nombre
@@ -402,75 +321,16 @@ export function FichaIngresoClient({
         esPracticaAmbulatoria ||
         ['GUA', 'DER', 'IND'].includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
 
-    const ingresoConCoberturaActualizada = useMemo<IngresoDetalle>(
-        () => ({
-            ...ingreso,
-            obraSocialId: coberturaVista.obraSocialId,
-            planId: coberturaVista.planId,
-            numeroAfiliado: coberturaVista.numeroAfiliado,
-            obraSocial: coberturaVista.obraSocialId
-                ? {
-                    id: coberturaVista.obraSocialId,
-                    nombre: coberturaVista.obraSocialNombre ?? `ID ${coberturaVista.obraSocialId}`,
-                }
-                : null,
-            obraSocialCoseguroNombre: coberturaVista.coberturaSecundariaValor,
-        }),
-        [ingreso, coberturaVista]
+    /** Ingreso con los cambios recien guardados aplicados (para el imprimible y las prácticas). */
+    const ingresoVista = useMemo<IngresoDetalle>(
+        () => ({ ...ingreso, ...ingresoOverrides }),
+        [ingreso, ingresoOverrides]
     )
 
-    const toDateInputValue = (value: Date | string | null | undefined) => {
-        if (!value) return ''
-        const date = new Date(value)
-        const y = date.getFullYear()
-        const m = String(date.getMonth() + 1).padStart(2, '0')
-        const d = String(date.getDate()).padStart(2, '0')
-        return `${y}-${m}-${d}`
-    }
-
-    const toDateTimeLocalInputValue = (value: Date | string | null | undefined) => {
-        if (!value) return ''
-        const date = new Date(value)
-        const y = date.getFullYear()
-        const m = String(date.getMonth() + 1).padStart(2, '0')
-        const d = String(date.getDate()).padStart(2, '0')
-        const hh = String(date.getHours()).padStart(2, '0')
-        const mm = String(date.getMinutes()).padStart(2, '0')
-        return `${y}-${m}-${d}T${hh}:${mm}`
-    }
-
-    const parseFechaInputLocal = (value: string | null | undefined): Date | null => {
-        const raw = (value ?? '').trim()
-        if (!raw) return null
-
-        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-            return new Date(`${raw}T12:00:00-03:00`)
-        }
-
-        const normalizado = raw.length === 16 ? `${raw}:00` : raw
-        return new Date(`${normalizado}-03:00`)
-    }
-
-    const notificarGuardadoCard = (mensaje: string) => {
-        setCardSuccess(mensaje)
-        if (cardSuccessTimeoutRef.current) {
-            clearTimeout(cardSuccessTimeoutRef.current)
-        }
-        cardSuccessTimeoutRef.current = setTimeout(() => {
-            setCardSuccess(null)
-            cardSuccessTimeoutRef.current = null
-        }, 4000)
-    }
-
-    const cargarCatalogosCobertura = async () => {
-        if (obrasSocialesCatalogo.length > 0 && planesCatalogo.length > 0) return
-        setCargandoCoberturaCatalogos(true)
-        try {
-            const [obras, planes] = await Promise.all([getObrasSocialesAction(), getPlanesAction()])
-            setObrasSocialesCatalogo(obras)
-            setPlanesCatalogo(planes)
-        } finally {
-            setCargandoCoberturaCatalogos(false)
+    const registrarCambioSeccion = (parcial: Partial<IngresoDetalle>) => {
+        setIngresoOverrides((prev) => ({ ...prev, ...parcial }))
+        if (parcial.estado !== undefined) {
+            setEstadoIngreso((parcial.estado ?? '').trim().toUpperCase())
         }
     }
 
@@ -485,7 +345,7 @@ export function FichaIngresoClient({
         try {
             await updateIngresoAction(ingreso.id, { estado: 'X' })
             setEstadoIngreso('X')
-            setIsEditing(false)
+            setIngresoOverrides((prev) => ({ ...prev, estado: 'X' }))
             setEditingCard(null)
             router.refresh()
         } catch (error) {
@@ -750,50 +610,15 @@ export function FichaIngresoClient({
         ingreso.practicas,
     ])
 
-    const guardarEdicionPractica = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault()
-        if (!practicaEditando) return
+    const cerrarEdicionPractica = async () => {
+        await recargarPracticasIngreso()
+        setPracticaEditando(null)
+        setGrupoPracticaEditando(null)
+    }
 
-        setGuardandoPracticaEditando(true)
-        try {
-            const numeroAutorizacion = practicaEditando.numeroAutorizacion?.trim() || null
-
-            const payload = ActualizarPracticaSchema.parse({
-                convenioId: practicaEditando.convenioId,
-                codigoPractica: practicaEditando.codigoPractica.trim(),
-                descripcionPractica: practicaEditando.descripcionPractica,
-                fecha: normalizarFechaInputArgentina(practicaEditando.fecha),
-                cantidad: Number(practicaEditando.cantidad),
-                numeroAutorizacion,
-                facturable: Boolean(practicaEditando.facturable),
-                matriculaEspecialista: practicaEditando.matriculaEspecialista ?? null,
-                matriculaAnestesista: practicaEditando.matriculaAnestesista ?? null,
-                importeBaseUnitario:
-                    practicaEditando.importeTotal != null && Number(practicaEditando.cantidad) > 0
-                        ? Number(practicaEditando.importeTotal) / Number(practicaEditando.cantidad)
-                        : null,
-            })
-
-            const res = await fetch(`/api/internacion/${ingreso.id}/practicas/${practicaEditando.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            })
-
-            const json = await res.json().catch(() => null)
-            if (!res.ok) {
-                setErrorGenerarOrdenes(json?.error ?? 'No se pudo guardar la práctica')
-                return
-            }
-
-            await recargarPracticasIngreso()
-            setPracticaEditando(null)
-            setErrorGenerarOrdenes(null)
-        } catch {
-            setErrorGenerarOrdenes('No se pudo guardar la práctica')
-        } finally {
-            setGuardandoPracticaEditando(false)
-        }
+    const cerrarEdicionMasiva = async () => {
+        await recargarPracticasIngreso()
+        setEdicionMasivaAbierta(false)
     }
 
     const confirmarEliminarSeleccionadas = async () => {
@@ -1052,590 +877,36 @@ export function FichaIngresoClient({
                     </dl>
                 </div>
 
-                {isEditing && puedeModificar && (
-                    <div className="his-card p-5 border-l-4 border-blue-500 print:hidden">
-                        <div className="flex items-center justify-between gap-3 mb-4 pb-2 border-b">
-                            <h3 className="text-sm font-semibold text-gray-700">Editar ficha</h3>
-                            <button
-                                onClick={() => setIsEditing(false)}
-                                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                            >
-                                <X className="h-4 w-4" />
-                                Cerrar edición
-                            </button>
-                        </div>
-                        <AdmisionEditForm ingreso={ingreso} onSuccess={() => setIsEditing(false)} />
-                    </div>
-                )}
+                <SeccionDatosAdmision
+                    ingreso={ingreso}
+                    puedeModificar={puedeModificar}
+                    onGuardado={registrarCambioSeccion}
+                    esIngresoAmbulatorio={esIngresoAmbulatorio}
+                    esGuardia={esGuardia}
+                    ocultarEgresoPrevisto={ocultarEgresoPrevisto}
+                    profesionalTratanteNombre={profesionalTratanteNombre}
+                    profesionalTratanteMatricula={profesionalTratanteMatricula}
+                />
 
-                {/* Datos de admisión */}
-                <div className="his-card p-5">
-                    <div className="flex items-center justify-between mb-4 pb-2 border-b">
-                        <h3 className="text-sm font-semibold text-gray-700">Datos de la Admisión</h3>
-                        {puedeModificar && editingCard !== 'admision' && (
-                            <button
-                                onClick={() => {
-                                    setCardError(null)
-                                    setCardSuccess(null)
-                                    setEditingCard('admision');
-                                    setCardValues({
-                                        fechaIngreso: toDateTimeLocalInputValue(ingreso.fechaIngreso),
-                                        profesionalGuardiaId: ingreso.profesionalGuardiaId ?? undefined,
-                                        ...(!esIngresoAmbulatorio
-                                            ? { fechaEgreso: toDateInputValue(ingreso.fechaEgreso) }
-                                            : {}),
-                                        ...(!ocultarEgresoPrevisto
-                                            ? { fechaEgresoPrevista: toDateInputValue(ingreso.fechaEgresoPrevista) }
-                                            : {}),
-                                        ...(!esGuardia
-                                            ? { profesionalTratanteId: ingreso.profesionalTratanteId ?? undefined }
-                                            : {}),
-                                    });
-                                }}
-                                className="ml-1 text-gray-400 hover:text-blue-600" title="Editar sección"
-                            >
-                                <Pencil className="h-4 w-4" />
-                            </button>
-                        )}
-                    </div>
-                    {cardSuccess && editingCard !== 'admision' && (
-                        <div className="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-                            {cardSuccess}
-                        </div>
-                    )}
-                    {editingCard === 'admision' ? (
-                        <form
-                            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4"
-                            onSubmit={async (e) => {
-                                e.preventDefault();
-                                setCardLoading(true);
-                                setCardError(null);
-                                setCardSuccess(null);
-                                try {
-                                    const payload: ActualizarIngresoInput = {
-                                        fechaIngreso: cardValues.fechaIngreso ? cardValues.fechaIngreso : undefined,
-                                        ...(!esIngresoAmbulatorio
-                                            ? {
-                                                fechaEgreso: cardValues.fechaEgreso ? cardValues.fechaEgreso : undefined,
-                                            }
-                                            : {}),
-                                        ...(!ocultarEgresoPrevisto
-                                            ? {
-                                                fechaEgresoPrevista: cardValues.fechaEgresoPrevista
-                                                    ? cardValues.fechaEgresoPrevista
-                                                    : undefined,
-                                            }
-                                            : {}),
-                                        ...(
-                                            typeof cardValues.profesionalGuardiaId === 'number' &&
-                                                Number.isFinite(cardValues.profesionalGuardiaId)
-                                                ? { profesionalGuardiaId: cardValues.profesionalGuardiaId }
-                                                : {}
-                                        ),
-                                        ...(
-                                            !esGuardia &&
-                                                typeof cardValues.profesionalTratanteId === 'number' &&
-                                                Number.isFinite(cardValues.profesionalTratanteId)
-                                                ? { profesionalTratanteId: cardValues.profesionalTratanteId }
-                                                : {}
-                                        ),
-                                    }
+                <SeccionResponsable
+                    ingreso={ingreso}
+                    puedeModificar={puedeModificar}
+                    onGuardado={registrarCambioSeccion}
+                />
 
-                                    await updateIngresoAction(ingreso.id, payload);
+                <SeccionSubtipo ingreso={ingreso} puedeModificar={puedeModificar} />
 
-                                    setAdmisionVista((prev) => ({
-                                        fechaIngreso: payload.fechaIngreso
-                                            ? parseFechaInputLocal(String(payload.fechaIngreso))
-                                            : prev.fechaIngreso,
-                                        fechaEgreso: 'fechaEgreso' in payload
-                                            ? (payload.fechaEgreso ? parseFechaInputLocal(String(payload.fechaEgreso)) : null)
-                                            : prev.fechaEgreso,
-                                        fechaEgresoPrevista: 'fechaEgresoPrevista' in payload
-                                            ? (payload.fechaEgresoPrevista
-                                                ? parseFechaInputLocal(String(payload.fechaEgresoPrevista))
-                                                : null)
-                                            : prev.fechaEgresoPrevista,
-                                    }))
+                <SeccionCobertura
+                    ingreso={ingreso}
+                    puedeModificar={puedeModificar}
+                    onGuardado={registrarCambioSeccion}
+                />
 
-                                    setEditingCard(null);
-                                    notificarGuardadoCard('Datos de admisión actualizados correctamente.')
-                                    router.refresh()
-                                } catch (err) {
-                                    const detalle =
-                                        err instanceof Error && err.message.trim().length > 0
-                                            ? err.message
-                                            : 'Error al guardar'
-                                    setCardError(detalle);
-                                } finally {
-                                    setCardLoading(false);
-                                }
-                            }}
-                        >
-                            {/* Tipo de Ingreso (solo lectura) */}
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Tipo de Ingreso</dt>
-                                <dd className="text-sm text-gray-900">
-                                    {ingreso.ingresoSubtipo?.subtipoAdmision?.descripcion
-                                        ?? ingreso.tipoIngreso?.descripcion
-                                        ?? ingreso.tipoIngresoCodigo}
-                                </dd>
-                            </div>
-                            {/* Número de Ingreso (solo lectura) */}
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Número de Ingreso</dt>
-                                <dd className="text-sm text-gray-900">{`${ingreso.tipoIngresoCodigo}-${ingreso.numeroIngreso}`}</dd>
-                            </div>
-                            {/* Fecha de Ingreso */}
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Fecha de Ingreso</dt>
-                                <dd className="text-sm text-gray-900">
-                                    <input
-                                        type="datetime-local"
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.fechaIngreso ? cardValues.fechaIngreso + (cardValues.fechaIngreso.length === 10 ? 'T00:00' : '') : ''}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, fechaIngreso: e.target.value.slice(0, 16) }))}
-                                        disabled={cardLoading}
-                                    />
-                                </dd>
-                            </div>
-                            {/* Profesional Guardia */}
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Profesional Guardia</dt>
-                                <dd className="text-sm text-gray-900">
-                                    <input
-                                        type="text"
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.profesionalGuardiaNombre || ingreso.profesionalGuardia?.nombre || ''}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, profesionalGuardiaNombre: e.target.value }))}
-                                        disabled={cardLoading}
-                                    />
-                                </dd>
-                            </div>
-                            {/* Fecha de Egreso */}
-                            {!esIngresoAmbulatorio && (
-                                <div>
-                                    <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Fecha de Egreso</dt>
-                                    <dd className="text-sm text-gray-900">
-                                        <input
-                                            type="datetime-local"
-                                            className="border rounded px-2 py-1 w-full"
-                                            value={cardValues.fechaEgreso ? cardValues.fechaEgreso + (cardValues.fechaEgreso.length === 10 ? 'T00:00' : '') : ''}
-                                            onChange={e => setCardValues((v: any) => ({ ...v, fechaEgreso: e.target.value.slice(0, 16) }))}
-                                            disabled={cardLoading}
-                                        />
-                                    </dd>
-                                </div>
-                            )}
-                            {/* Egreso Previsto */}
-                            {!ocultarEgresoPrevisto && (
-                                <div>
-                                    <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Egreso Previsto</dt>
-                                    <dd className="text-sm text-gray-900">
-                                        <input
-                                            type="datetime-local"
-                                            className="border rounded px-2 py-1 w-full"
-                                            value={cardValues.fechaEgresoPrevista ? cardValues.fechaEgresoPrevista + (cardValues.fechaEgresoPrevista.length === 10 ? 'T00:00' : '') : ''}
-                                            onChange={e => setCardValues((v: any) => ({ ...v, fechaEgresoPrevista: e.target.value.slice(0, 16) }))}
-                                            disabled={cardLoading}
-                                        />
-                                    </dd>
-                                </div>
-                            )}
-                            {/* Profesional Tratante */}
-                            {!esGuardia && (
-                                <div>
-                                    <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Profesional Tratante</dt>
-                                    <dd className="text-sm text-gray-900">
-                                        <input
-                                            type="text"
-                                            className="border rounded px-2 py-1 w-full"
-                                            value={cardValues.profesionalTratanteNombre || ingreso.profesionalTratante?.nombre || ''}
-                                            onChange={e => setCardValues((v: any) => ({ ...v, profesionalTratanteNombre: e.target.value }))}
-                                            disabled={cardLoading}
-                                        />
-                                    </dd>
-                                </div>
-                            )}
-                            <div className="col-span-full flex gap-2 mt-2">
-                                <button type="submit" className="inline-flex items-center gap-1.5 text-green-600 border px-3 py-1 rounded" disabled={cardLoading}>
-                                    {cardLoading ? (
-                                        <>
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            Guardando...
-                                        </>
-                                    ) : (
-                                        'Guardar'
-                                    )}
-                                </button>
-                                <button type="button" className="text-gray-400 border px-3 py-1 rounded" onClick={() => setEditingCard(null)} disabled={cardLoading}>Cancelar</button>
-                                {cardError && <span className="text-red-500 ml-2">{cardError}</span>}
-                            </div>
-                        </form>
-                    ) : (
-                        <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-                            <DataItem
-                                label="Tipo de Ingreso"
-                                value={
-                                    ingreso.ingresoSubtipo?.subtipoAdmision?.descripcion
-                                    ?? ingreso.tipoIngreso?.descripcion
-                                    ?? ingreso.tipoIngresoCodigo
-                                }
-                            />
-                            <DataItem
-                                label="Número de Ingreso"
-                                value={`${ingreso.tipoIngresoCodigo}-${ingreso.numeroIngreso}`}
-                            />
-                            <DataItem label="Fecha de Ingreso" value={formatearFechaHora(admisionVista.fechaIngreso)} />
-                            <DataItem label="Profesional Guardia" value={ingreso.profesionalGuardia?.nombre} />
-                            {!esIngresoAmbulatorio && (
-                                <DataItem label="Fecha de Egreso" value={formatearFecha(admisionVista.fechaEgreso)} />
-                            )}
-                            {!ocultarEgresoPrevisto && (
-                                <DataItem label="Egreso Previsto" value={formatearFecha(admisionVista.fechaEgresoPrevista)} />
-                            )}
-                            {!esGuardia && (
-                                <DataItem label="Profesional Tratante" value={profesionalTratanteNombre} />
-                            )}
-                            {!esGuardia && (
-                                <DataItem
-                                    label="Matrícula Tratante"
-                                    value={profesionalTratanteMatricula ? String(profesionalTratanteMatricula) : null}
-                                />
-                            )}
-                            <DataItem
-                                label="Profesional Interviniente"
-                                value={ingreso.profesionalInterviniente?.nombre}
-                            />
-                            {ingreso.cama && (
-                                <DataItem
-                                    label="Cama"
-                                    value={`${ingreso.cama.identificador} (${ingreso.cama.sector}${ingreso.cama.habitacion ? ` · ${ingreso.cama.habitacion}` : ''})`}
-                                />
-                            )}
-                        </dl>
-                    )}
-                </div>
-
-                {/* Información específica del subtipo de admisión */}
-                {ingreso.ingresoSubtipo && (() => {
-                    const sub = ingreso.ingresoSubtipo!
-                    const codigo = sub.subtipoAdmisionCodigo
-
-                    if (codigo === 'DER') {
-                        return (
-                            <div className="his-card p-5 border-l-4 border-yellow-400">
-                                <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
-                                    Información de Derivación
-                                </h3>
-                                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                                    <DataItem label="Centro Derivante" value={sub.centroDerivante} />
-                                    <DataItem label="Profesional Derivante" value={sub.profesionalDerivanteNombre} />
-                                    <DataItem label="Motivo de Derivación" value={sub.motivoDerivacion} />
-                                    <DataItem label="Diagnóstico de Derivación" value={sub.diagnosticoDerivacion} />
-                                </dl>
-                            </div>
-                        )
-                    }
-
-                    if (codigo === 'TUR' || codigo === 'RAY' || codigo === 'PAM') {
-                        const tieneDatosTurnoPractica = Boolean(sub.practicaCodigo?.trim() || sub.fechaTurno)
-                        if (!tieneDatosTurnoPractica) return null
-
-                        return (
-                            <div className="his-card p-5 border-l-4 border-green-400">
-                                <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
-                                    Ingreso por Turno / Práctica
-                                </h3>
-                                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                                    <DataItem label="Código de Práctica" value={sub.practicaCodigo} />
-                                    {sub.fechaTurno && (
-                                        <DataItem label="Fecha de Turno" value={formatearFechaHora(sub.fechaTurno)} />
-                                    )}
-                                </dl>
-                            </div>
-                        )
-                    }
-
-                    if (codigo === 'IND') {
-                        return (
-                            <div className="his-card p-5 border-l-4 border-purple-400">
-                                <h3 className="text-sm font-semibold text-gray-700 mb-4 pb-2 border-b">
-                                    Indicación Médica
-                                </h3>
-                                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                                    <DataItem
-                                        label="Profesional Interviniente"
-                                        value={ingreso.profesionalInterviniente?.nombre ?? sub.profesionalIndicadorNombre}
-                                    />
-                                    <DataItem label="Tipo de Indicación" value={sub.tipoIndicacion} />
-                                    <DataItem label="Descripción" value={sub.descripcionIndicacion} />
-                                </dl>
-                            </div>
-                        )
-                    }
-
-                    return null
-                })()}
-
-                {/* Cobertura médica */}
-                <div className="his-card p-5">
-                    <div className="flex items-center justify-between mb-4 pb-2 border-b">
-                        <h3 className="text-sm font-semibold text-gray-700">Cobertura Médica</h3>
-                        {puedeModificar && editingCard !== 'cobertura' && (
-                            <button
-                                onClick={async () => {
-                                    setEditingCard('cobertura');
-                                    setCardValues({
-                                        obraSocialId: coberturaVista.obraSocialId ?? '',
-                                        planId: coberturaVista.planId ?? '',
-                                        numeroAfiliado: coberturaVista.numeroAfiliado || '',
-                                    });
-                                    try {
-                                        await cargarCatalogosCobertura()
-                                    } catch {
-                                        setCardError('No se pudieron cargar obras sociales y planes')
-                                    }
-                                }}
-                                className="ml-1 text-gray-400 hover:text-blue-600" title="Editar sección"
-                            >
-                                <Pencil className="h-4 w-4" />
-                            </button>
-                        )}
-                    </div>
-                    {editingCard === 'cobertura' ? (
-                        <form
-                            className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4"
-                            onSubmit={async (e) => {
-                                e.preventDefault();
-                                setCardLoading(true);
-                                setCardError(null);
-                                try {
-                                    const obraSocialId =
-                                        cardValues.obraSocialId === ''
-                                            ? null
-                                            : Number.parseInt(String(cardValues.obraSocialId), 10)
-                                    const planId =
-                                        cardValues.planId === ''
-                                            ? null
-                                            : Number.parseInt(String(cardValues.planId), 10)
-
-                                    if (obraSocialId != null && !Number.isFinite(obraSocialId)) {
-                                        throw new Error('Obra social inválida')
-                                    }
-
-                                    if (planId != null && !Number.isFinite(planId)) {
-                                        throw new Error('Plan inválido')
-                                    }
-
-                                    await updateIngresoAction(ingreso.id, {
-                                        obraSocialId,
-                                        planId: obraSocialId ? planId : null,
-                                        numeroAfiliado: (cardValues.numeroAfiliado ?? '').trim() || null,
-                                    });
-
-                                    const obraSocialNombre = obraSocialId
-                                        ? (
-                                            obrasSocialesCatalogo.find((os) => os.id === obraSocialId)?.nombre
-                                            ?? coberturaVista.obraSocialNombre
-                                            ?? `ID ${obraSocialId}`
-                                        )
-                                        : null
-                                    const numeroAfiliado = (cardValues.numeroAfiliado ?? '').trim() || null
-
-                                    setCoberturaVista((prev) => ({
-                                        ...prev,
-                                        obraSocialId,
-                                        obraSocialNombre,
-                                        planId: obraSocialId ? planId : null,
-                                        numeroAfiliado,
-                                        coberturaSecundariaValor: obraSocialId ? prev.coberturaSecundariaValor : null,
-                                    }))
-
-                                    setEditingCard(null);
-                                    notificarGuardadoCard('Cobertura médica actualizada correctamente.')
-                                } catch (err) {
-                                    const detalle =
-                                        err instanceof Error && err.message.trim().length > 0
-                                            ? err.message
-                                            : 'Error al guardar'
-                                    setCardError(detalle);
-                                } finally {
-                                    setCardLoading(false);
-                                }
-                            }}
-                        >
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Obra Social</dt>
-                                <dd className="text-sm text-gray-900">
-                                    <select
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.obraSocialId ?? ''}
-                                        onChange={(e) => {
-                                            const nextObraSocialId = e.target.value === '' ? '' : Number.parseInt(e.target.value, 10)
-                                            setCardValues((v: any) => ({
-                                                ...v,
-                                                obraSocialId: nextObraSocialId,
-                                                planId: '',
-                                            }))
-                                        }}
-                                        disabled={cardLoading || cargandoCoberturaCatalogos}
-                                    >
-                                        <option value="">Particular</option>
-                                        {obrasSocialesCatalogo.map((os) => (
-                                            <option key={os.id} value={os.id}>{os.nombre}</option>
-                                        ))}
-                                    </select>
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Plan</dt>
-                                <dd className="text-sm text-gray-900">
-                                    <select
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.planId ?? ''}
-                                        onChange={(e) => {
-                                            const nextPlanId = e.target.value === '' ? '' : Number.parseInt(e.target.value, 10)
-                                            setCardValues((v: any) => ({ ...v, planId: nextPlanId }))
-                                        }}
-                                        disabled={
-                                            cardLoading ||
-                                            cargandoCoberturaCatalogos ||
-                                            !cardValues.obraSocialId
-                                        }
-                                    >
-                                        <option value="">Sin plan</option>
-                                        {planesCatalogo
-                                            .filter((plan) => plan.obraSocialId === Number(cardValues.obraSocialId))
-                                            .map((plan) => (
-                                                <option key={plan.id} value={plan.id}>{plan.nombre}</option>
-                                            ))}
-                                    </select>
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Número de Afiliado</dt>
-                                <dd className="text-sm text-gray-900">
-                                    <input
-                                        type="text"
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.numeroAfiliado}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, numeroAfiliado: e.target.value }))}
-                                        disabled={cardLoading}
-                                    />
-                                </dd>
-                            </div>
-                            <div className="col-span-full flex gap-2 mt-2">
-                                <button type="submit" className="text-green-600 border px-3 py-1 rounded" disabled={cardLoading}>Guardar</button>
-                                <button type="button" className="text-gray-400 border px-3 py-1 rounded" onClick={() => setEditingCard(null)} disabled={cardLoading}>Cancelar</button>
-                                {cardError && <span className="text-red-500 ml-2">{cardError}</span>}
-                            </div>
-                        </form>
-                    ) : (
-                        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                            <DataItem
-                                label="Obra Social"
-                                value={
-                                    coberturaVista.obraSocialNombre
-                                    ?? (coberturaVista.obraSocialId ? `ID ${coberturaVista.obraSocialId}` : 'Particular')
-                                }
-                            />
-                            <DataItem
-                                label="Coseguro"
-                                value={coberturaVista.coberturaSecundariaValor}
-                            />
-                            <DataItem label="Número de Afiliado" value={coberturaVista.numeroAfiliado} />
-                        </dl>
-                    )}
-                </div>
-
-                {/* Diagnóstico inicial */}
-                <div className="his-card p-5">
-                        <div className="flex items-center justify-between mb-4 pb-2 border-b">
-                            <h3 className="text-sm font-semibold text-gray-700">Diagnóstico</h3>
-                            {puedeModificar && editingCard !== 'diagnostico' && (
-                                <button
-                                    onClick={() => {
-                                        setEditingCard('diagnostico');
-                                        setCardValues({
-                                            descripcionPatologia: ingreso.descripcionPatologia || '',
-                                            descripcionPatologiaDefinitiva: ingreso.descripcionPatologiaDefinitiva || '',
-                                        });
-                                    }}
-                                    className="ml-1 text-gray-400 hover:text-blue-600" title="Editar sección"
-                                >
-                                    <Pencil className="h-4 w-4" />
-                                </button>
-                            )}
-                        </div>
-                        {editingCard === 'diagnostico' ? (
-                            <form
-                                className="space-y-3"
-                                onSubmit={async (e) => {
-                                    e.preventDefault();
-                                    setCardLoading(true);
-                                    setCardError(null);
-                                    try {
-                                        await updateIngresoAction(ingreso.id, {
-                                            descripcionPatologia: cardValues.descripcionPatologia,
-                                            descripcionPatologiaDefinitiva: cardValues.descripcionPatologiaDefinitiva,
-                                        });
-                                        setEditingCard(null);
-                                        notificarGuardadoCard('Diagnóstico actualizado correctamente.')
-                                        router.refresh()
-                                    } catch (err) {
-                                        const detalle =
-                                            err instanceof Error && err.message.trim().length > 0
-                                                ? err.message
-                                                : 'Error al guardar'
-                                        setCardError(detalle);
-                                    } finally {
-                                        setCardLoading(false);
-                                    }
-                                }}
-                            >
-                                <div>
-                                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Presuntivo</p>
-                                    <input
-                                        type="text"
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.descripcionPatologia}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, descripcionPatologia: e.target.value }))}
-                                        disabled={cardLoading}
-                                    />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Definitivo</p>
-                                    <input
-                                        type="text"
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={cardValues.descripcionPatologiaDefinitiva}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, descripcionPatologiaDefinitiva: e.target.value }))}
-                                        disabled={cardLoading}
-                                    />
-                                </div>
-                                <div className="flex gap-2 mt-2">
-                                    <button type="submit" className="text-green-600 border px-3 py-1 rounded" disabled={cardLoading}>Guardar</button>
-                                    <button type="button" className="text-gray-400 border px-3 py-1 rounded" onClick={() => setEditingCard(null)} disabled={cardLoading}>Cancelar</button>
-                                    {cardError && <span className="text-red-500 ml-2">{cardError}</span>}
-                                </div>
-                            </form>
-                        ) : (
-                            <>
-                                {ingreso.descripcionPatologia && (
-                                    <div className="mb-3">
-                                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Presuntivo</p>
-                                        <p className="text-sm text-gray-900">{ingreso.descripcionPatologia}</p>
-                                    </div>
-                                )}
-                                {ingreso.descripcionPatologiaDefinitiva && (
-                                    <div>
-                                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Definitivo</p>
-                                        <p className="text-sm text-gray-900">{ingreso.descripcionPatologiaDefinitiva}</p>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
+                <SeccionDiagnostico
+                    ingreso={ingreso}
+                    puedeModificar={puedeModificar}
+                    onGuardado={registrarCambioSeccion}
+                />
 
                 {/* Diagnósticos registrados */}
                 <div className="his-card p-5">
@@ -1704,7 +975,7 @@ export function FichaIngresoClient({
 
                     {editingCard === 'practicas' && puedeModificar ? (
                         <PracticaIngresoForm
-                            ingreso={ingresoConCoberturaActualizada}
+                            ingreso={ingresoVista}
                             onEncolarGeneracionOrdenes={(task) => {
                                 encolarGeneracionOrdenes(
                                     task.imprimirDespues,
@@ -1783,6 +1054,20 @@ export function FichaIngresoClient({
                                             type="button"
                                             onClick={() => {
                                                 if (practicasSeleccionadas.length === 0) return
+                                                setPracticaEditando(null)
+                                                setGrupoPracticaEditando(null)
+                                                setEdicionMasivaAbierta(true)
+                                            }}
+                                            disabled={practicasSeleccionadas.length === 0}
+                                            className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                                        >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                            Editar seleccionadas ({practicasSeleccionadas.length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (practicasSeleccionadas.length === 0) return
                                                 setErrorEliminarPractica(null)
                                                 setConfirmarEliminacionSeleccionadas(true)
                                             }}
@@ -1793,6 +1078,16 @@ export function FichaIngresoClient({
                                         </button>
                                     </div>
                                 )}
+                                {edicionMasivaAbierta && practicasSeleccionadas.length > 0 && (
+                                    <PracticasEdicionMasiva
+                                        ingresoId={ingreso.id}
+                                        practicas={practicasIngreso.filter((p) =>
+                                            practicasSeleccionadas.includes(p.id)
+                                        ) as PracticaEditable[]}
+                                        onListo={cerrarEdicionMasiva}
+                                        onCancelar={() => setEdicionMasivaAbierta(false)}
+                                    />
+                                )}
                                 {errorGenerarOrdenes && (
                                     <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
                                         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -1800,65 +1095,17 @@ export function FichaIngresoClient({
                                     </div>
                                 )}
                                 {practicaEditando && (
-                                    <form
-                                        onSubmit={(e) => void guardarEdicionPractica(e)}
-                                        className="mb-3 rounded-md border border-blue-200 bg-blue-50/60 p-3"
-                                    >
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
-                                            <div>
-                                                <label className="block text-[11px] text-gray-600 mb-1">Código</label>
-                                                <input
-                                                    type="text"
-                                                    value={practicaEditando.codigoPractica.trim()}
-                                                    disabled
-                                                    className="w-full rounded border border-gray-300 px-2 py-1 text-xs bg-gray-100"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[11px] text-gray-600 mb-1">Cantidad</label>
-                                                <input
-                                                    type="number"
-                                                    min={1}
-                                                    value={practicaEditando.cantidad}
-                                                    onChange={(e) => setPracticaEditando((prev) => prev ? {
-                                                        ...prev,
-                                                        cantidad: Number(e.target.value) > 0 ? Number(e.target.value) : 1,
-                                                    } : prev)}
-                                                    className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[11px] text-gray-600 mb-1">N° autorización</label>
-                                                <input
-                                                    type="text"
-                                                    value={practicaEditando.numeroAutorizacion ?? ''}
-                                                    onChange={(e) => setPracticaEditando((prev) => prev ? {
-                                                        ...prev,
-                                                        numeroAutorizacion: e.target.value,
-                                                    } : prev)}
-                                                    className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                                                    placeholder="Opcional"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="mt-2 flex items-center gap-2">
-                                            <button
-                                                type="submit"
-                                                disabled={guardandoPracticaEditando}
-                                                className="rounded-md border border-blue-200 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                                            >
-                                                {guardandoPracticaEditando ? 'Guardando...' : 'Guardar edición'}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setPracticaEditando(null)}
-                                                disabled={guardandoPracticaEditando}
-                                                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                                            >
-                                                Cancelar
-                                            </button>
-                                        </div>
-                                    </form>
+                                    <PracticaEdicionForm
+                                        ingresoId={ingreso.id}
+                                        practica={practicaEditando}
+                                        practicasDelGrupo={grupoPracticaEditando?.practicas ?? [practicaEditando]}
+                                        tituloGrupo={grupoPracticaEditando?.titulo ?? null}
+                                        onListo={cerrarEdicionPractica}
+                                        onCancelar={() => {
+                                            setPracticaEditando(null)
+                                            setGrupoPracticaEditando(null)
+                                        }}
+                                    />
                                 )}
                                 {errorEliminarPractica && (
                                     <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
@@ -1924,7 +1171,8 @@ export function FichaIngresoClient({
                                                         <th className="pb-2 pr-4">Código</th>
                                                         <th className="pb-2 pr-4">Descripción</th>
                                                         <th className="pb-2 pr-4">Fecha</th>
-                                                        <th className="pb-2">N° Autorización</th>
+                                                        <th className="pb-2 pr-4">N° Autorización</th>
+                                                        {puedeModificar && <th className="pb-2"></th>}
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-100">
@@ -1954,7 +1202,23 @@ export function FichaIngresoClient({
                                                             <td className="py-2 pr-4 text-gray-500">
                                                                 {formatearFechaHora(p.fecha)}
                                                             </td>
-                                                            <td className="py-2 text-gray-700">{p.numeroAutorizacion ?? '-'}</td>
+                                                            <td className="py-2 pr-4 text-gray-700">{p.numeroAutorizacion ?? '-'}</td>
+                                                            {puedeModificar && (
+                                                                <td className="py-2 text-right">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setEdicionMasivaAbierta(false)
+                                                                            setGrupoPracticaEditando(null)
+                                                                            setPracticaEditando(p as PracticaEditable)
+                                                                        }}
+                                                                        className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50"
+                                                                    >
+                                                                        <Pencil className="h-3 w-3" />
+                                                                        Editar
+                                                                    </button>
+                                                                </td>
+                                                            )}
                                                         </tr>
                                                     )})}
                                                 </tbody>
@@ -2151,8 +1415,13 @@ export function FichaIngresoClient({
                                                                                     grupo.practicas.find((practica) => !Boolean(practica.facturada)) ??
                                                                                     grupo.practicas[0]
                                                                                 if (editable) {
+                                                                                    setEdicionMasivaAbierta(false)
+                                                                                    setGrupoPracticaEditando({
+                                                                                        practicas: grupo.practicas as PracticaEditable[],
+                                                                                        titulo: tituloGrupo,
+                                                                                    })
                                                                                     setPracticaEditando({
-                                                                                        ...editable,
+                                                                                        ...(editable as PracticaEditable),
                                                                                         numeroAutorizacion: grupo.numeroAutorizacion ?? editable.numeroAutorizacion ?? '',
                                                                                     })
                                                                                 }
@@ -2276,63 +1545,16 @@ export function FichaIngresoClient({
                         puedeModificar={puedeModificar}
                     />
                 ) : (
-                    observacionesLimpias && (
-                        <div className="his-card p-5">
-                            <div className="flex items-center justify-between mb-2">
-                                <h3 className="text-sm font-semibold text-gray-700">Observaciones</h3>
-                                {puedeModificar && editingCard !== 'observaciones' && (
-                                    <button
-                                        onClick={() => {
-                                            setEditingCard('observaciones');
-                                            setCardValues({ observaciones: observacionesLimpias });
-                                        }}
-                                        className="ml-1 text-gray-400 hover:text-blue-600" title="Editar sección"
-                                    >
-                                        <Pencil className="h-4 w-4" />
-                                    </button>
-                                )}
-                            </div>
-                            {editingCard === 'observaciones' ? (
-                                <form
-                                    onSubmit={async (e) => {
-                                        e.preventDefault();
-                                        setCardLoading(true);
-                                        setCardError(null);
-                                        try {
-                                            await updateIngresoAction(ingreso.id, { observaciones: cardValues.observaciones });
-                                            setEditingCard(null);
-                                        } catch (err) {
-                                            setCardError('Error al guardar');
-                                        } finally {
-                                            setCardLoading(false);
-                                        }
-                                    }}
-                                >
-                                    <textarea
-                                        className="border rounded px-2 py-1 w-full text-sm"
-                                        rows={4}
-                                        value={cardValues.observaciones}
-                                        onChange={e => setCardValues((v: any) => ({ ...v, observaciones: e.target.value }))}
-                                        disabled={cardLoading}
-                                    />
-                                    <div className="flex gap-2 mt-2">
-                                        <button type="submit" className="text-green-600 border px-3 py-1 rounded" disabled={cardLoading}>Guardar</button>
-                                        <button type="button" className="text-gray-400 border px-3 py-1 rounded" onClick={() => setEditingCard(null)} disabled={cardLoading}>Cancelar</button>
-                                        {cardError && <span className="text-red-500 ml-2">{cardError}</span>}
-                                    </div>
-                                </form>
-                            ) : (
-                                <p className="text-sm text-gray-600 whitespace-pre-line">
-                                    {observacionesLimpias}
-                                </p>
-                            )}
-                        </div>
-                    )
+                    <SeccionObservaciones
+                        ingreso={ingreso}
+                        puedeModificar={puedeModificar}
+                        onGuardado={registrarCambioSeccion}
+                    />
                 )}
             </div>
 
             {/* Contenido imprimible — solo visible al imprimir */}
-            <FichaAdmisionPrint ingreso={ingresoConCoberturaActualizada} />
+            <FichaAdmisionPrint ingreso={ingresoVista} />
         </div>
     )
 }

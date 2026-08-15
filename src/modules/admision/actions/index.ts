@@ -19,7 +19,7 @@ import type {
   DiagnosticoIngresoInput,
   MovimientoIngresoInput,
 } from '../schemas'
-import type { IngresoDetalle, IngresoListItem } from '../types'
+import type { CatalogosFichaAdmision, IngresoDetalle, IngresoListItem } from '../types'
 import type { IngresoPatologia, MovimientoIngreso } from '@prisma/client'
 import type { ResultadoPaginado } from '@/types'
 import { filtrarObrasSocialesPrincipales } from '@/lib/utils/coseguros'
@@ -168,6 +168,42 @@ export async function getObrasSocialesAction(): Promise<{ id: number; nombre: st
     orderBy: { nombre: 'asc' },
   })
   return filtrarObrasSocialesPrincipales(rows)
+}
+
+/**
+ * Catalogos que necesita la edicion de la ficha de admision, en una sola llamada.
+ * Reutiliza los caches de atencion-cache para no golpear la base en cada apertura.
+ */
+export async function getCatalogosFichaAdmisionAction(): Promise<CatalogosFichaAdmision> {
+  const usuario = await getUsuarioSesion()
+  if (!tienePermiso(usuario.rol, 'ADMISION', 'LEER')) {
+    throw new Error('Sin permisos para consultar catalogos de admision')
+  }
+
+  const { getCatalogoCoberturaAtencion, getProfesionalesActivosCatalogo } = await import(
+    '@/lib/catalogos/atencion-cache'
+  )
+
+  const [profesionales, cobertura, motivosEgreso] = await Promise.all([
+    getProfesionalesActivosCatalogo(),
+    getCatalogoCoberturaAtencion(),
+    prisma.motivoEgreso.findMany({
+      select: { codigo: true, descripcion: true },
+      orderBy: { descripcion: 'asc' },
+    }),
+  ])
+
+  return {
+    profesionales: profesionales.map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      matricula: p.matricula ?? null,
+    })),
+    motivosEgreso,
+    obrasSociales: cobertura.obraSociales,
+    planes: cobertura.planes,
+    coseguros: cobertura.coseguros,
+  }
 }
 
 export async function getPlanesAction(): Promise<{ id: number; nombre: string; obraSocialId: number | null }[]> {

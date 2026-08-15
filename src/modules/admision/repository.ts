@@ -450,6 +450,7 @@ export async function obtenerIngresoPorId(id: number): Promise<IngresoDetalle | 
       },
       obraSocial: { select: { id: true, nombre: true } },
       plan: { select: { obraSocialId: true, id: true, descripcion: true } },
+      motivoEgreso: { select: { codigo: true, descripcion: true } },
       cama: {
         select: { id: true, identificador: true, sector: true, habitacion: true },
       },
@@ -839,10 +840,40 @@ export async function actualizarIngreso(
     }
   }
 
-  return prisma.ingreso.update({
-    where: { id },
-    data: updateData,
-    include: incluirRelacionesBase,
+  // Campos que viven en IngresoSubtipo (derivacion, turno/practica, indicacion medica).
+  const camposSubtipo = [
+    'profesionalIdTurno', 'fechaTurno', 'practicaCodigo',
+    'centroDerivante', 'profesionalDerivanteNombre', 'motivoDerivacion', 'diagnosticoDerivacion',
+    'profesionalIndicadorId', 'profesionalIndicadorNombre', 'tipoIndicacion', 'descripcionIndicacion',
+  ] as const
+
+  const updateSubtipo: Record<string, unknown> = {}
+  for (const campo of camposSubtipo) {
+    if (data[campo] !== undefined) {
+      updateSubtipo[campo] = data[campo]
+    }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (Object.keys(updateSubtipo).length > 0) {
+      const subtipoExistente = await tx.ingresoSubtipo.findUnique({
+        where: { ingresoId: id },
+        select: { id: true },
+      })
+
+      if (subtipoExistente) {
+        await tx.ingresoSubtipo.update({
+          where: { id: subtipoExistente.id },
+          data: { ...updateSubtipo, usuario: usuarioNormalizado, fechaEstado: ahora },
+        })
+      }
+    }
+
+    return tx.ingreso.update({
+      where: { id },
+      data: updateData,
+      include: incluirRelacionesBase,
+    })
   })
 }
 

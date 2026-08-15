@@ -34,6 +34,15 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
     const coberturaSecundariaValor = ingreso.obraSocialCoseguroNombre
         ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : '—')
     const esAlta = ingreso.estado === 'E'
+    // El alta se imprime siempre que exista fecha de egreso, no solo con estado 'E'.
+    const tieneAlta = Boolean(ingreso.fechaEgreso)
+    const responsableNombre = ingreso.nombreTutor ?? ingreso.paciente?.nombreTutor ?? null
+    const responsableTelefono = ingreso.telefonoTutor ?? ingreso.paciente?.telefonoTutor ?? null
+    const domicilioPaciente = ingreso.paciente?.domicilio ?? null
+    const telefonoPaciente = ingreso.paciente?.celular1 ?? ingreso.paciente?.telefonoFijo ?? null
+    const hayDatosResponsable = Boolean(
+        responsableNombre || responsableTelefono || domicilioPaciente || telefonoPaciente
+    )
 
     useEffect(() => {
         const originalTitle = document.title
@@ -249,16 +258,26 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                 <dt className="text-gray-600">Fecha de Ingreso:</dt>
                                 <dd className="font-medium">{formatearFechaHora(ingreso.fechaIngreso)}</dd>
                             </div>
-                            {esAlta && (
+                            {tieneAlta && (
                                 <div className="flex justify-between">
-                                    <dt className="text-gray-600">Fecha y Hora de Alta:</dt>
+                                    <dt className="text-gray-600">
+                                        {esAlta ? 'Fecha y Hora de Alta:' : 'Fecha y Hora de Egreso:'}
+                                    </dt>
                                     <dd className="font-medium">{formatearFechaHora(ingreso.fechaEgreso)}</dd>
                                 </div>
                             )}
-                            {!esIngresoAmbulatorio && !esAlta && (
+                            {!esIngresoAmbulatorio && !tieneAlta && (
                                 <div className="flex justify-between">
                                     <dt className="text-gray-600">Fecha de Egreso:</dt>
-                                    <dd className="font-medium">{formatearFecha(ingreso.fechaEgreso) ?? '—'}</dd>
+                                    <dd className="font-medium">—</dd>
+                                </div>
+                            )}
+                            {ingreso.motivoEgresoCodigo && (
+                                <div className="flex justify-between">
+                                    <dt className="text-gray-600">Motivo de Egreso:</dt>
+                                    <dd className="font-medium">
+                                        {ingreso.motivoEgreso?.descripcion ?? ingreso.motivoEgresoCodigo}
+                                    </dd>
                                 </div>
                             )}
                             {!ocultarEgresoPrevisto && (
@@ -385,6 +404,33 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                         </div>
                     </dl>
                 </div>
+
+                {/* Responsable del paciente */}
+                {hayDatosResponsable && (
+                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
+                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
+                            RESPONSABLE DEL PACIENTE
+                        </h3>
+                        <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            <div className="flex justify-between">
+                                <dt className="text-gray-600">Familiar / Responsable:</dt>
+                                <dd className="font-medium">{responsableNombre ?? '—'}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                                <dt className="text-gray-600">Teléfono del responsable:</dt>
+                                <dd className="font-medium">{responsableTelefono ?? '—'}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                                <dt className="text-gray-600">Domicilio:</dt>
+                                <dd className="font-medium">{domicilioPaciente ?? '—'}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                                <dt className="text-gray-600">Teléfono del paciente:</dt>
+                                <dd className="font-medium">{telefonoPaciente ?? '—'}</dd>
+                            </div>
+                        </dl>
+                    </div>
+                )}
 
                 {/* Diagnóstico */}
                 {(ingreso.descripcionPatologia || ingreso.descripcionPatologiaDefinitiva) && (

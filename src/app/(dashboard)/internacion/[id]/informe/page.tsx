@@ -132,22 +132,82 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
   return (
     <>
       <style>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 7mm;
-          }
+        .ih-doc { font-family: Arial, Helvetica, sans-serif; color: #111; }
 
-          .informe-hospitalizacion-print {
-            font-size: 11px;
-            line-height: 1.2;
-          }
+        /* --- Encabezado --- */
+        .ih-header { border-bottom: 2.5px solid #111; padding-bottom: 8px; }
+        .ih-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .ih-header-clinica { display: flex; flex-direction: column; gap: 2px; }
+        .ih-header-sub { font-size: 11px; color: #444; }
+        .ih-doc-titulo {
+          font-size: 20px; font-weight: bold; letter-spacing: 1.4px;
+          text-transform: uppercase; margin: 4px 0 0;
+        }
+        .ih-ident { display: flex; gap: 10px; }
+        .ih-ident-caja {
+          border: 1.5px solid #111; padding: 3px 10px; text-align: center; min-width: 108px;
+        }
+        .ih-ident-valor { font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; }
+        .ih-ident-label {
+          font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: #444;
+        }
+
+        /* --- Secciones --- */
+        .ih-cols { display: grid; grid-template-columns: 1fr; gap: 12px; }
+        @media (min-width: 768px) { .ih-cols { grid-template-columns: 1fr 1fr; } }
+
+        .ih-seccion { border: 1px solid #111; break-inside: avoid; page-break-inside: avoid; }
+        .ih-seccion-titulo {
+          background: #e6e6e6;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+          font-size: 11px; font-weight: bold;
+          text-transform: uppercase; letter-spacing: 0.9px;
+          padding: 4px 8px; border-bottom: 1px solid #111; margin: 0;
+        }
+        .ih-seccion-cuerpo { padding: 4px 8px 6px; }
+
+        /* --- Renglones --- */
+        .ih-fila {
+          display: flex; align-items: baseline; gap: 6px;
+          padding: 3px 0 2px; border-bottom: 1px dotted #b0b0b0;
+        }
+        .ih-fila:last-child { border-bottom: none; }
+        .ih-fila-label {
+          font-size: 10px; color: #444; text-transform: uppercase;
+          letter-spacing: 0.3px; white-space: nowrap;
+        }
+        .ih-fila-guia { flex: 1 1 auto; min-width: 8px; }
+        .ih-fila-valor { font-size: 12px; font-weight: bold; text-align: right; }
+
+        /* --- Pie de firmas --- */
+        .ih-firmas {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 28px;
+          break-inside: avoid; page-break-inside: avoid;
+        }
+        .ih-firma { border-top: 1px solid #111; padding-top: 3px; text-align: center; }
+        .ih-firma span {
+          font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: #444;
+        }
+
+        @media print {
+          @page { size: A4 portrait; margin: 7mm; }
+
+          .informe-hospitalizacion-print { font-size: 11px; line-height: 1.25; }
+          .ih-cols { grid-template-columns: 1fr 1fr; gap: 8px; }
+          .ih-seccion-cuerpo { padding: 3px 6px 4px; }
+          .ih-fila { padding: 2px 0 1.5px; }
+          .ih-fila-label { font-size: 8pt; }
+          .ih-fila-valor { font-size: 9pt; }
+          .ih-doc-titulo { font-size: 15pt; }
+          .ih-ident-valor { font-size: 13pt; }
+          .ih-firmas { margin-top: 16px; gap: 28px; }
         }
       `}</style>
 
       <Header titulo="Informe de Hospitalización" />
 
-      <div className="informe-hospitalizacion-print p-6 max-w-4xl space-y-6 print:space-y-3">
+      <div className="ih-doc informe-hospitalizacion-print p-6 max-w-4xl space-y-5 print:space-y-3">
         <nav className="flex items-center gap-1 text-xs text-gray-500 print:hidden">
           <Link href="/dashboard/internacion" className="hover:text-gray-700">Internación</Link>
           <ChevronRight className="h-3 w-3" />
@@ -172,37 +232,37 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
           />
         </div>
 
-        <div className="border-b-2 pb-4 print:pb-3">
-          <div className="flex items-start justify-between">
-            <div className="flex flex-col gap-1">
+        <div className="ih-header">
+          <div className="ih-header-row">
+            <div className="ih-header-clinica">
               <img
                 src="/logo-clinica.png"
                 alt="Logo Clínica"
                 className="hidden print:block"
                 style={{ maxWidth: 110, marginBottom: 4 }}
               />
-              <p className="hidden print:block text-xs text-gray-500">
+              <p className="ih-header-sub hidden print:block">
                 Av. Sarmiento 566, Salta Capital, Argentina · Tel: 3872537289
               </p>
-              <h1 className="text-2xl font-bold text-gray-900 print:text-xl">Informe de Hospitalización</h1>
+              <h1 className="ih-doc-titulo">Informe de Hospitalización</h1>
             </div>
-            <div className="text-right">
-              <p className="text-3xl font-mono font-bold text-blue-700 print:text-2xl">INT-{ingreso.numeroIngreso}</p>
-              <p className="text-xs text-gray-500 print:text-[10px]">Número de ingreso</p>
-              <p className="mt-1 text-xl font-mono font-bold text-gray-900 print:text-lg">
-                HC {ingreso.paciente?.historiaClinica ?? '—'}
-              </p>
-              <p className="text-xs text-gray-500 print:text-[10px]">Historia clínica</p>
+            <div className="ih-ident">
+              <div className="ih-ident-caja">
+                <p className="ih-ident-valor">INT-{ingreso.numeroIngreso}</p>
+                <p className="ih-ident-label">N° de ingreso</p>
+              </div>
+              <div className="ih-ident-caja">
+                <p className="ih-ident-valor">{ingreso.paciente?.historiaClinica ?? '—'}</p>
+                <p className="ih-ident-label">Historia clínica</p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:gap-4 print:text-sm">
-          <div>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">
-              Datos del Paciente
-            </h2>
-            <dl className="space-y-1.5 print:space-y-1">
+        <div className="ih-cols">
+          <section className="ih-seccion">
+            <h2 className="ih-seccion-titulo">Datos del paciente</h2>
+            <div className="ih-seccion-cuerpo">
               <DataRow label="N° historia clínica" value={ingreso.paciente?.historiaClinica?.toString() ?? '—'} />
               <DataRow label="N° admisión" value={String(ingreso.id)} />
               <DataRow label="Nombre del paciente" value={ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? '—'} />
@@ -218,16 +278,12 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
               />
               <DataRow label="Domicilio" value={ingreso.paciente?.domicilio ?? '—'} />
               <DataRow label="Teléfono" value={telefonoPaciente} />
-              <DataRow label="Familiar responsable" value={ingreso.nombreTutor ?? '—'} />
-              <DataRow label="Teléfono familiar responsable" value={ingreso.telefonoTutor ?? '—'} />
-            </dl>
-          </div>
+            </div>
+          </section>
 
-          <div>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b pb-2 mb-3 print:pb-1 print:mb-2">
-              Datos del Ingreso
-            </h2>
-            <dl className="space-y-1.5 print:space-y-1">
+          <section className="ih-seccion">
+            <h2 className="ih-seccion-titulo">Datos del ingreso</h2>
+            <div className="ih-seccion-cuerpo">
               <DataRow label="N° ingreso" value={`INT-${ingreso.numeroIngreso}`} />
               <DataRow label="Fecha y hora" value={fmt(ingreso.fechaIngreso)} />
               <DataRow label="Habitación" value={habitacion} />
@@ -235,7 +291,25 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
               <DataRow label="Clínica derivante" value={observacionesParseadas.clinicaDerivante ?? '—'} />
               <DataRow label="Médico tratante" value={medicoTratanteUltimo} />
               <DataRow label="Médico derivante" value={medicoDerivante} />
-            </dl>
+            </div>
+          </section>
+
+          <section className="ih-seccion">
+            <h2 className="ih-seccion-titulo">Responsable del paciente</h2>
+            <div className="ih-seccion-cuerpo">
+              <DataRow label="Familiar responsable" value={ingreso.nombreTutor ?? '—'} />
+              <DataRow label="Teléfono del responsable" value={ingreso.telefonoTutor ?? '—'} />
+              <DataRow label="Domicilio" value={ingreso.paciente?.domicilio ?? '—'} />
+            </div>
+          </section>
+        </div>
+
+        <div className="ih-firmas">
+          <div className="ih-firma">
+            <span>Firma del paciente / responsable</span>
+          </div>
+          <div className="ih-firma">
+            <span>Firma y sello — Admisión</span>
           </div>
         </div>
       </div>
@@ -245,9 +319,10 @@ export default async function InformeHospitalizacionPage({ params }: PageProps) 
 
 function DataRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-gray-500 font-medium">{label}</dt>
-      <dd className="text-gray-900 text-right font-medium">{value}</dd>
+    <div className="ih-fila">
+      <span className="ih-fila-label">{label}</span>
+      <span className="ih-fila-guia" aria-hidden="true" />
+      <span className="ih-fila-valor">{value}</span>
     </div>
   )
 }

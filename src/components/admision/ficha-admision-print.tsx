@@ -9,6 +9,56 @@ interface FichaAdmisionPrintProps {
     ingreso: IngresoDetalle
 }
 
+/** Seccion con barra de titulo y marco, pensada para no cortarse entre paginas. */
+function Seccion({
+    titulo,
+    children,
+    columnas = 2,
+}: {
+    titulo: string
+    children: React.ReactNode
+    columnas?: 1 | 2 | 3
+}) {
+    return (
+        <section className="pf-seccion">
+            <h3 className="pf-seccion-titulo">{titulo}</h3>
+            <div className={`pf-seccion-cuerpo pf-cols-${columnas}`}>{children}</div>
+        </section>
+    )
+}
+
+/** Renglon etiqueta/valor con linea de guia, para leer en diagonal. */
+function Fila({
+    label,
+    valor,
+    ancho = false,
+}: {
+    label: string
+    valor?: string | number | null
+    ancho?: boolean
+}) {
+    // formatearFecha devuelve '-' cuando no hay dato: se unifica con el guion largo.
+    const texto = valor == null || valor === '' || valor === '-' ? '—' : String(valor)
+
+    return (
+        <div className={`pf-fila${ancho ? ' pf-fila-ancho' : ''}`}>
+            <span className="pf-fila-label">{label}</span>
+            <span className="pf-fila-guia" aria-hidden="true" />
+            <span className="pf-fila-valor">{texto}</span>
+        </div>
+    )
+}
+
+/** Bloque de texto largo (diagnosticos, observaciones) sobre renglon. */
+function Bloque({ label, texto }: { label: string; texto: string }) {
+    return (
+        <div className="pf-bloque">
+            <p className="pf-bloque-label">{label}</p>
+            <p className="pf-bloque-texto">{texto}</p>
+        </div>
+    )
+}
+
 export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
     const fechaNacimientoPaciente = ingreso.paciente?.fechaNacimiento ?? ingreso.fechaNacimiento
     const edad = fechaNacimientoPaciente ? calcularEdad(fechaNacimientoPaciente) : null
@@ -32,7 +82,7 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
         esPracticaAmbulatoria ||
         ['GUA', 'DER', 'IND'].includes(ingreso.ingresoSubtipo?.subtipoAdmisionCodigo ?? '')
     const coberturaSecundariaValor = ingreso.obraSocialCoseguroNombre
-        ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : '—')
+        ?? (ingreso.obraSocialCoseguroId ? `ID ${ingreso.obraSocialCoseguroId}` : null)
     const esAlta = ingreso.estado === 'E'
     // El alta se imprime siempre que exista fecha de egreso, no solo con estado 'E'.
     const tieneAlta = Boolean(ingreso.fechaEgreso)
@@ -71,6 +121,9 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
         X: 'Anulado',
     }
 
+    const sub = ingreso.ingresoSubtipo
+    const codigoSubtipo = sub?.subtipoAdmisionCodigo ?? ''
+
     return (
         <>
             <style>{`
@@ -88,116 +141,180 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                     .print-hidden { display: none !important; }
 
                     /* Evitar corrimiento por el layout del dashboard */
-                    .flex-1.pl-60 {
-                        padding-left: 0 !important;
-                    }
-                    main {
-                        padding: 0 !important;
-                        margin: 0 !important;
-                    }
+                    .flex-1.pl-60 { padding-left: 0 !important; }
+                    main { padding: 0 !important; margin: 0 !important; }
 
-                    /* Asegurar visibilidad y centrado de la ficha */
                     .print-ficha {
                         display: block !important;
                         visibility: visible !important;
                         width: 100%;
                         max-width: 100%;
                         margin: 0;
-                        padding: 2.5mm 3mm;
+                        padding: 3mm 4mm;
                         box-sizing: border-box;
-                        page-break-after: auto;
-                        break-after: auto;
-                        font-family: Arial, sans-serif;
+                        font-family: Arial, Helvetica, sans-serif;
                         font-size: 9pt;
-                        line-height: 1.15;
+                        line-height: 1.25;
                         color: #000;
                     }
-                    
-                    .print-ficha h1 { font-size: 14pt; font-weight: bold; margin: 0 0 1px; text-align: center; }
-                    .print-ficha h2 { font-size: 11pt; font-weight: bold; margin: 6px 0 3px; }
-                    .print-ficha p { margin: 1px 0; }
 
-                    .print-header { border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 6px; }
-                    .print-header-row { display: flex; gap: 8px; align-items: flex-start; }
-                    .print-header-clinica { min-width: 135px; }
-                    .print-header-clinica-nombre { font-size: 13pt; font-weight: bold; line-height: 1.1; }
-                    .print-header-sub { font-size: 7.5pt; color: #333; line-height: 1.05; }
-                    .print-header-info { flex: 1; }
-                    .print-header-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
-                    .print-header-table td { border: none; padding: 1px 3px 1px 0; }
-                    .print-label { font-weight: bold; color: #555; white-space: nowrap; }
-                    .print-value { color: #000; }
-                    .print-nro-ingreso { font-weight: bold; font-size: 10pt; }
-
-                    .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-
-                    .print-section { border: 1px solid #000; padding: 6px; margin-bottom: 6px; page-break-inside: avoid; }
-                    .print-section-title { font-weight: bold; font-size: 9pt; border-bottom: 1px solid #000; margin-bottom: 4px; padding-bottom: 3px; }
-
-                    table { width: 100%; border-collapse: collapse; margin: 2px 0; page-break-inside: avoid; }
-                    table td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; line-height: 1.12; }
-                    table th { background: #ddd; border: 1px solid #999; padding: 2px 3px; font-weight: bold; font-size: 8pt; }
-
-                    .print-item { border-left: 3px solid #0066cc; padding-left: 5px; margin: 3px 0; }
-
-                    .print-ficha img { max-width: 95px !important; margin-bottom: 3px !important; }
-                    .print-ficha .rounded-lg { border-radius: 0 !important; }
-                    .print-ficha .p-4 { padding: 6px !important; }
-                    .print-ficha .p-3 { padding: 5px !important; }
-                    .print-ficha .mb-4 { margin-bottom: 4px !important; }
-                    .print-ficha .mb-3 { margin-bottom: 3px !important; }
-                    .print-ficha .gap-4 { gap: 4px !important; }
-                    .print-ficha .pb-2 { padding-bottom: 2px !important; }
-                    .print-ficha .pb-1 { padding-bottom: 1px !important; }
-                    .print-ficha .space-y-2 > :not([hidden]) ~ :not([hidden]) { margin-top: 2px !important; }
-                    .print-ficha .text-sm { font-size: 8.3pt !important; line-height: 1.15 !important; }
-                    .print-ficha .text-xs { font-size: 7.3pt !important; line-height: 1.1 !important; }
-                    .print-ficha .overflow-x-auto { overflow: visible !important; }
-
-                    @page { size: A4; margin: 4mm; }
+                    @page { size: A4; margin: 5mm; }
                 }
+
+                /* --- Encabezado --- */
+                .print-header { border-bottom: 2.5px solid #000; padding-bottom: 5px; margin-bottom: 7px; }
+                .print-header-row { display: flex; gap: 10px; align-items: center; }
+                .print-header-clinica {
+                    min-width: 128px; display: flex; flex-direction: column;
+                    align-items: center; text-align: center;
+                    border-right: 1px solid #bbb; padding-right: 10px;
+                }
+                .print-header-clinica img { max-width: 110px; margin-bottom: 4px; }
+                .print-header-sub { font-size: 7pt; color: #333; line-height: 1.2; }
+                .print-header-info { flex: 1; }
+                .print-doc-titulo {
+                    font-size: 12pt; font-weight: bold; letter-spacing: 1.4px;
+                    text-transform: uppercase; margin-bottom: 3px;
+                    border-bottom: 1px solid #000; padding-bottom: 2px;
+                }
+                .print-header-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+                .print-header-table td { padding: 2px 4px 2px 0; vertical-align: baseline; }
+                .print-header-table tr + tr td { border-top: 1px dotted #bbb; }
+                .print-label {
+                    font-weight: bold; color: #333; white-space: nowrap;
+                    font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.3px;
+                    width: 1%;
+                }
+                .print-value { color: #000; }
+                .print-paciente-nombre { font-size: 11pt; font-weight: bold; letter-spacing: 0.3px; }
+                .print-nro-ingreso { font-weight: bold; font-size: 10pt; font-family: 'Courier New', monospace; }
+
+                /* --- Secciones --- */
+                .pf-seccion {
+                    border: 1px solid #000;
+                    margin-bottom: 5px;
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+                .pf-seccion-titulo {
+                    background: #e6e6e6;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                    font-size: 8pt; font-weight: bold;
+                    text-transform: uppercase; letter-spacing: 0.8px;
+                    padding: 2.5px 6px;
+                    border-bottom: 1px solid #000;
+                    margin: 0;
+                }
+                .pf-seccion-cuerpo { padding: 3px 6px 4px; display: grid; column-gap: 14px; }
+                .pf-cols-1 { grid-template-columns: 1fr; }
+                .pf-cols-2 { grid-template-columns: 1fr 1fr; }
+                .pf-cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+                /* --- Renglones --- */
+                .pf-fila {
+                    display: flex; align-items: baseline; gap: 4px;
+                    padding: 2px 0 1.5px;
+                    border-bottom: 1px dotted #b0b0b0;
+                    min-height: 13px;
+                }
+                .pf-fila-ancho { grid-column: 1 / -1; }
+                .pf-fila-label {
+                    font-size: 7.3pt; color: #444; text-transform: uppercase;
+                    letter-spacing: 0.3px; white-space: nowrap;
+                }
+                .pf-fila-guia { flex: 1 1 auto; min-width: 6px; }
+                .pf-fila-valor { font-size: 8.6pt; font-weight: bold; text-align: right; }
+
+                /* --- Bloques de texto largo --- */
+                .pf-bloque { grid-column: 1 / -1; padding: 2px 0 3px; }
+                .pf-bloque + .pf-bloque { border-top: 1px dotted #b0b0b0; }
+                .pf-bloque-label {
+                    font-size: 7.3pt; color: #444; text-transform: uppercase;
+                    letter-spacing: 0.3px; margin: 0 0 1px;
+                }
+                .pf-bloque-texto {
+                    font-size: 8.6pt; margin: 0; white-space: pre-line;
+                    border-bottom: 1px solid #ddd; padding-bottom: 2px;
+                }
+
+                /* --- Listas y tablas --- */
+                .pf-lista { grid-column: 1 / -1; }
+                .pf-lista-item { padding: 2px 0; border-bottom: 1px dotted #b0b0b0; }
+                .pf-lista-item p { margin: 0; }
+                .pf-lista-texto { font-size: 8.6pt; }
+                .pf-lista-meta { font-size: 7.3pt; color: #555; }
+
+                .pf-tabla { grid-column: 1 / -1; width: 100%; border-collapse: collapse; }
+                .pf-tabla th {
+                    background: #e6e6e6;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                    font-size: 7.3pt; text-transform: uppercase; letter-spacing: 0.3px;
+                    text-align: left; padding: 2px 4px; border: 1px solid #999;
+                }
+                .pf-tabla td { font-size: 8.2pt; padding: 2px 4px; border: 1px solid #ccc; }
+                .pf-tabla tbody tr:nth-child(even) td {
+                    background: #f4f4f4;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                .pf-num { text-align: right; font-family: 'Courier New', monospace; }
+
+                /* --- Pie de firmas --- */
+                .pf-firmas {
+                    display: grid; grid-template-columns: 1fr 1fr; gap: 28px;
+                    margin-top: 14px; page-break-inside: avoid; break-inside: avoid;
+                }
+                .pf-firma { border-top: 1px solid #000; padding-top: 2px; text-align: center; }
+                .pf-firma span {
+                    font-size: 7.3pt; text-transform: uppercase; letter-spacing: 0.4px; color: #333;
+                }
+
                 @media screen { .print-ficha { display: none !important; } }
             `}</style>
 
             <div className="print-ficha">
                 <div className="print-header">
                     <div className="print-header-row">
-                        <div className="print-header-clinica" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <img src="/logo-clinica.png" alt="Logo Clínica" style={{ maxWidth: 120, marginBottom: 6 }} />
-                            <div className="print-header-sub">Av. Sarmiento 566, Salta Capital, Argentina</div>
+                        <div className="print-header-clinica">
+                            <img src="/logo-clinica.png" alt="Logo Clínica" />
+                            <div className="print-header-sub">Av. Sarmiento 566, Salta Capital</div>
                             <div className="print-header-sub">Tel: 3872537289</div>
                         </div>
                         <div className="print-header-info">
+                            <div className="print-doc-titulo">Ficha de Admisión</div>
                             <table className="print-header-table">
                                 <tbody>
                                     <tr>
-                                        <td className="print-label">Documento:</td>
-                                        <td className="print-value" colSpan={3}>FICHA DE ADMISION</td>
-                                    </tr>
-                                    <tr>
-                                        <td className="print-label">Paciente:</td>
-                                        <td className="print-value" colSpan={3}>
+                                        <td className="print-label">Paciente</td>
+                                        <td className="print-value print-paciente-nombre" colSpan={3}>
                                             {(ingreso.nombre ?? ingreso.paciente?.nombreCompleto ?? '—').toUpperCase()}
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td className="print-label">Nro ingreso:</td>
+                                        <td className="print-label">N° ingreso</td>
                                         <td className="print-value print-nro-ingreso">
                                             {ingreso.tipoIngresoCodigo}-{ingreso.numeroIngreso}
                                         </td>
-                                        <td className="print-label">Historia clínica:</td>
+                                        <td className="print-label">Historia clínica</td>
                                         <td className="print-value print-nro-ingreso">
                                             {ingreso.paciente?.historiaClinica ?? '—'}
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td className="print-label">Fecha ingreso:</td>
-                                        <td className="print-value" colSpan={3}>{formatearFechaHora(ingreso.fechaIngreso)}</td>
+                                        <td className="print-label">Fecha ingreso</td>
+                                        <td className="print-value">{formatearFechaHora(ingreso.fechaIngreso)}</td>
+                                        <td className="print-label">Estado</td>
+                                        <td className="print-value">
+                                            {LABEL_ESTADO[ingreso.estado ?? ''] ?? ingreso.estado ?? '—'}
+                                        </td>
                                     </tr>
                                     <tr>
-                                        <td className="print-label">Cobertura:</td>
+                                        <td className="print-label">Cobertura</td>
                                         <td className="print-value" colSpan={3}>
-                                            {ingreso.obraSocial?.nombre ?? 'Particular'} - {coberturaSecundariaValor}
+                                            {ingreso.obraSocial?.nombre ?? 'Particular'}
+                                            {coberturaSecundariaValor ? ` · ${coberturaSecundariaValor}` : ''}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -206,324 +323,183 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    {/* Información del Paciente */}
-                    <div className="border border-gray-300 rounded-lg p-4">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-2 mb-3">
-                            INFORMACIÓN DEL PACIENTE
-                        </h3>
-                        <dl className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Nombre:</dt>
-                                <dd className="font-medium">{ingreso.nombre ?? ingreso.paciente?.nombreCompleto ?? '—'}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Fecha de Nacimiento:</dt>
-                                <dd className="font-medium">
-                                    {fechaNacimientoPaciente ? formatearFechaCalendario(fechaNacimientoPaciente) : '—'}
-                                </dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Edad:</dt>
-                                <dd className="font-medium">{edad ? `${edad} años` : ingreso.edad ? `${ingreso.edad} años` : '—'}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Documento:</dt>
-                                <dd className="font-medium">
-                                    {ingreso.paciente?.tipoDocumento} {ingreso.paciente?.numeroDocumento ?? '—'}
-                                </dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Historia Clínica:</dt>
-                                <dd className="font-medium">{ingreso.paciente?.historiaClinica ?? '—'}</dd>
-                            </div>
-                        </dl>
-                    </div>
+                <Seccion titulo="Información del paciente">
+                    <Fila label="Nombre" valor={ingreso.nombre ?? ingreso.paciente?.nombreCompleto} />
+                    <Fila
+                        label="Documento"
+                        valor={
+                            ingreso.paciente?.numeroDocumento
+                                ? `${ingreso.paciente?.tipoDocumento ?? ''} ${ingreso.paciente.numeroDocumento}`.trim()
+                                : null
+                        }
+                    />
+                    <Fila
+                        label="Fecha de nacimiento"
+                        valor={fechaNacimientoPaciente ? formatearFechaCalendario(fechaNacimientoPaciente) : null}
+                    />
+                    <Fila
+                        label="Edad"
+                        valor={edad ? `${edad} años` : ingreso.edad ? `${ingreso.edad} años` : null}
+                    />
+                    <Fila label="Historia clínica" valor={ingreso.paciente?.historiaClinica} />
+                    <Fila label="Domicilio" valor={domicilioPaciente} />
+                </Seccion>
 
-                    {/* Datos de la Admisión */}
-                    <div className="border border-gray-300 rounded-lg p-4">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-2 mb-3">
-                            DATOS DE LA ADMISIÓN
-                        </h3>
-                        <dl className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Tipo de Ingreso:</dt>
-                                <dd className="font-medium">
-                                    {ingreso.ingresoSubtipo?.subtipoAdmision?.descripcion
-                                        ?? ingreso.tipoIngreso?.descripcion
-                                        ?? ingreso.tipoIngresoCodigo}
-                                </dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Fecha de Ingreso:</dt>
-                                <dd className="font-medium">{formatearFechaHora(ingreso.fechaIngreso)}</dd>
-                            </div>
-                            {tieneAlta && (
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-600">
-                                        {esAlta ? 'Fecha y Hora de Alta:' : 'Fecha y Hora de Egreso:'}
-                                    </dt>
-                                    <dd className="font-medium">{formatearFechaHora(ingreso.fechaEgreso)}</dd>
-                                </div>
-                            )}
-                            {!esIngresoAmbulatorio && !tieneAlta && (
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-600">Fecha de Egreso:</dt>
-                                    <dd className="font-medium">—</dd>
-                                </div>
-                            )}
-                            {ingreso.motivoEgresoCodigo && (
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-600">Motivo de Egreso:</dt>
-                                    <dd className="font-medium">
-                                        {ingreso.motivoEgreso?.descripcion ?? ingreso.motivoEgresoCodigo}
-                                    </dd>
-                                </div>
-                            )}
-                            {!ocultarEgresoPrevisto && (
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-600">Egreso Previsto:</dt>
-                                    <dd className="font-medium">{formatearFecha(ingreso.fechaEgresoPrevista) ?? '—'}</dd>
-                                </div>
-                            )}
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Estado:</dt>
-                                <dd className="font-medium">{LABEL_ESTADO[ingreso.estado ?? ''] ?? ingreso.estado ?? '—'}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Profesional Guardia:</dt>
-                                <dd className="font-medium">{ingreso.profesionalGuardia?.nombre ?? '—'}</dd>
-                            </div>
-                            {!esGuardia && (
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-600">Profesional Tratante:</dt>
-                                    <dd className="font-medium">{profesionalTratanteNombre ?? '—'}</dd>
-                                </div>
-                            )}
-                            {!esGuardia && (
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-600">Matrícula Tratante:</dt>
-                                    <dd className="font-medium">{profesionalTratanteMatricula ?? '—'}</dd>
-                                </div>
-                            )}
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Profesional Interviniente:</dt>
-                                <dd className="font-medium">{ingreso.profesionalInterviniente?.nombre ?? '—'}</dd>
-                            </div>
-                        </dl>
-                    </div>
-                </div>
+                <Seccion titulo="Datos de la admisión">
+                    <Fila
+                        label="Tipo de ingreso"
+                        valor={
+                            ingreso.ingresoSubtipo?.subtipoAdmision?.descripcion
+                            ?? ingreso.tipoIngreso?.descripcion
+                            ?? ingreso.tipoIngresoCodigo
+                        }
+                    />
+                    <Fila label="Fecha de ingreso" valor={formatearFechaHora(ingreso.fechaIngreso)} />
+                    {tieneAlta && (
+                        <Fila
+                            label={esAlta ? 'Fecha y hora de alta' : 'Fecha y hora de egreso'}
+                            valor={formatearFechaHora(ingreso.fechaEgreso)}
+                        />
+                    )}
+                    {!esIngresoAmbulatorio && !tieneAlta && <Fila label="Fecha de egreso" valor={null} />}
+                    {ingreso.motivoEgresoCodigo && (
+                        <Fila
+                            label="Motivo de egreso"
+                            valor={ingreso.motivoEgreso?.descripcion ?? ingreso.motivoEgresoCodigo}
+                        />
+                    )}
+                    {!ocultarEgresoPrevisto && (
+                        <Fila label="Egreso previsto" valor={formatearFecha(ingreso.fechaEgresoPrevista)} />
+                    )}
+                    <Fila label="Estado" valor={LABEL_ESTADO[ingreso.estado ?? ''] ?? ingreso.estado} />
+                    <Fila label="Profesional guardia" valor={ingreso.profesionalGuardia?.nombre} />
+                    {!esGuardia && <Fila label="Profesional tratante" valor={profesionalTratanteNombre} />}
+                    {!esGuardia && <Fila label="Matrícula tratante" valor={profesionalTratanteMatricula} />}
+                    <Fila label="Profesional interviniente" valor={ingreso.profesionalInterviniente?.nombre} />
+                    {ingreso.cama && (
+                        <Fila
+                            label="Cama"
+                            valor={`${ingreso.cama.identificador} · ${ingreso.cama.sector}${ingreso.cama.habitacion ? ` · ${ingreso.cama.habitacion}` : ''}`}
+                        />
+                    )}
+                </Seccion>
 
-                {/* Información específica del subtipo */}
-                {ingreso.ingresoSubtipo && (() => {
-                    const sub = ingreso.ingresoSubtipo!
-                    const codigo = sub.subtipoAdmisionCodigo
-                    if (codigo === 'DER') return (
-                        <div className="border border-gray-300 rounded-lg p-3 mb-4">
-                            <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
-                                INFORMACIÓN DE DERIVACIÓN
-                            </h3>
-                            <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                                {sub.centroDerivante && <div className="flex justify-between">
-                                    <dt className="text-gray-600">Centro Derivante:</dt>
-                                    <dd className="font-medium">{sub.centroDerivante}</dd>
-                                </div>}
-                                {sub.profesionalDerivanteNombre && <div className="flex justify-between">
-                                    <dt className="text-gray-600">Profesional Derivante:</dt>
-                                    <dd className="font-medium">{sub.profesionalDerivanteNombre}</dd>
-                                </div>}
-                                {sub.motivoDerivacion && <div className="col-span-full flex justify-between">
-                                    <dt className="text-gray-600">Motivo:</dt>
-                                    <dd className="font-medium">{sub.motivoDerivacion}</dd>
-                                </div>}
-                                {sub.diagnosticoDerivacion && <div className="col-span-full flex justify-between">
-                                    <dt className="text-gray-600">Diagnóstico de Derivación:</dt>
-                                    <dd className="font-medium">{sub.diagnosticoDerivacion}</dd>
-                                </div>}
-                            </dl>
-                        </div>
-                    )
-                    if (codigo === 'TUR' || codigo === 'RAY' || codigo === 'PAM') return (
-                        <div className="border border-gray-300 rounded-lg p-3 mb-4">
-                            <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
-                                TURNO / PRÁCTICA
-                            </h3>
-                            <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                                {sub.practicaCodigo && <div className="flex justify-between">
-                                    <dt className="text-gray-600">Práctica:</dt>
-                                    <dd className="font-medium">{sub.practicaCodigo}</dd>
-                                </div>}
-                                {sub.fechaTurno && <div className="flex justify-between">
-                                    <dt className="text-gray-600">Fecha de Turno:</dt>
-                                    <dd className="font-medium">{formatearFechaHora(sub.fechaTurno)}</dd>
-                                </div>}
-                            </dl>
-                        </div>
-                    )
-                    if (codigo === 'IND') return (
-                        <div className="border border-gray-300 rounded-lg p-3 mb-4">
-                            <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
-                                INDICACIÓN MÉDICA
-                            </h3>
-                            <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                                {(ingreso.profesionalInterviniente?.nombre || sub.profesionalIndicadorNombre) && <div className="flex justify-between">
-                                    <dt className="text-gray-600">Profesional Interviniente:</dt>
-                                    <dd className="font-medium">{ingreso.profesionalInterviniente?.nombre ?? sub.profesionalIndicadorNombre}</dd>
-                                </div>}
-                                {sub.tipoIndicacion && <div className="flex justify-between">
-                                    <dt className="text-gray-600">Tipo de Indicación:</dt>
-                                    <dd className="font-medium">{sub.tipoIndicacion}</dd>
-                                </div>}
-                                {sub.descripcionIndicacion && <div className="col-span-full flex justify-between">
-                                    <dt className="text-gray-600">Descripción:</dt>
-                                    <dd className="font-medium">{sub.descripcionIndicacion}</dd>
-                                </div>}
-                            </dl>
-                        </div>
-                    )
-                    return null
-                })()}
+                <Seccion titulo="Cobertura médica" columnas={3}>
+                    <Fila label="Obra social" valor={ingreso.obraSocial?.nombre ?? 'Particular'} />
+                    <Fila label="N° afiliado" valor={ingreso.numeroAfiliado} />
+                    <Fila label="Coseguro" valor={coberturaSecundariaValor} />
+                </Seccion>
 
-                {/* Cobertura Médica */}
-                <div className="border border-gray-300 rounded-lg p-3 mb-4">
-                    <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
-                        COBERTURA MÉDICA
-                    </h3>
-                    <dl className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div className="flex justify-between">
-                            <dt className="text-gray-600">Obra Social:</dt>
-                            <dd className="font-medium">{ingreso.obraSocial?.nombre ?? 'Particular'}</dd>
-                        </div>
-                        <div className="flex justify-between">
-                            <dt className="text-gray-600">Coseguro:</dt>
-                            <dd className="font-medium">{coberturaSecundariaValor}</dd>
-                        </div>
-                        <div className="flex justify-between">
-                            <dt className="text-gray-600">N° Afiliado:</dt>
-                            <dd className="font-medium">{ingreso.numeroAfiliado ?? '—'}</dd>
-                        </div>
-                    </dl>
-                </div>
-
-                {/* Responsable del paciente */}
                 {hayDatosResponsable && (
-                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
-                            RESPONSABLE DEL PACIENTE
-                        </h3>
-                        <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Familiar / Responsable:</dt>
-                                <dd className="font-medium">{responsableNombre ?? '—'}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Teléfono del responsable:</dt>
-                                <dd className="font-medium">{responsableTelefono ?? '—'}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Domicilio:</dt>
-                                <dd className="font-medium">{domicilioPaciente ?? '—'}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-gray-600">Teléfono del paciente:</dt>
-                                <dd className="font-medium">{telefonoPaciente ?? '—'}</dd>
-                            </div>
-                        </dl>
-                    </div>
+                    <Seccion titulo="Responsable del paciente">
+                        <Fila label="Familiar / responsable" valor={responsableNombre} />
+                        <Fila label="Teléfono del responsable" valor={responsableTelefono} />
+                        <Fila label="Domicilio" valor={domicilioPaciente} />
+                        <Fila label="Teléfono del paciente" valor={telefonoPaciente} />
+                    </Seccion>
                 )}
 
-                {/* Diagnóstico */}
+                {sub && codigoSubtipo === 'DER' && (
+                    <Seccion titulo="Información de derivación">
+                        <Fila label="Centro derivante" valor={sub.centroDerivante} />
+                        <Fila label="Profesional derivante" valor={sub.profesionalDerivanteNombre} />
+                        {sub.motivoDerivacion && <Bloque label="Motivo" texto={sub.motivoDerivacion} />}
+                        {sub.diagnosticoDerivacion && (
+                            <Bloque label="Diagnóstico de derivación" texto={sub.diagnosticoDerivacion} />
+                        )}
+                    </Seccion>
+                )}
+
+                {sub && ['TUR', 'RAY', 'PAM'].includes(codigoSubtipo) && (
+                    <Seccion titulo="Turno / práctica">
+                        <Fila label="Práctica" valor={sub.practicaCodigo} />
+                        <Fila label="Fecha de turno" valor={sub.fechaTurno ? formatearFechaHora(sub.fechaTurno) : null} />
+                    </Seccion>
+                )}
+
+                {sub && codigoSubtipo === 'IND' && (
+                    <Seccion titulo="Indicación médica">
+                        <Fila
+                            label="Profesional interviniente"
+                            valor={ingreso.profesionalInterviniente?.nombre ?? sub.profesionalIndicadorNombre}
+                        />
+                        <Fila label="Tipo de indicación" valor={sub.tipoIndicacion} />
+                        {sub.descripcionIndicacion && (
+                            <Bloque label="Descripción" texto={sub.descripcionIndicacion} />
+                        )}
+                    </Seccion>
+                )}
+
                 {(ingreso.descripcionPatologia || ingreso.descripcionPatologiaDefinitiva) && (
-                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
-                            DIAGNÓSTICO
-                        </h3>
+                    <Seccion titulo="Diagnóstico" columnas={1}>
                         {ingreso.descripcionPatologia && (
-                            <div className="mb-3">
-                                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">
-                                    Presuntivo:
-                                </p>
-                                <p className="text-sm text-gray-900">{ingreso.descripcionPatologia}</p>
-                            </div>
+                            <Bloque label="Presuntivo" texto={ingreso.descripcionPatologia} />
                         )}
                         {ingreso.descripcionPatologiaDefinitiva && (
-                            <div>
-                                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">
-                                    Definitivo:
-                                </p>
-                                <p className="text-sm text-gray-900">{ingreso.descripcionPatologiaDefinitiva}</p>
-                            </div>
+                            <Bloque label="Definitivo" texto={ingreso.descripcionPatologiaDefinitiva} />
                         )}
-                    </div>
+                    </Seccion>
                 )}
 
-                {/* Observaciones */}
                 {observacionesLimpias && (
-                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
-                            OBSERVACIONES
-                        </h3>
-                        <p className="text-sm text-gray-900 whitespace-pre-line">{observacionesLimpias}</p>
-                    </div>
+                    <Seccion titulo="Observaciones" columnas={1}>
+                        <Bloque label="Registradas en la admisión" texto={observacionesLimpias} />
+                    </Seccion>
                 )}
 
-                {/* Diagnósticos Registrados */}
                 {ingreso.ingresoPatologias.length > 0 && (
-                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
-                            DIAGNÓSTICOS REGISTRADOS
-                        </h3>
-                        <div className="space-y-2">
+                    <Seccion titulo="Diagnósticos registrados" columnas={1}>
+                        <div className="pf-lista">
                             {ingreso.ingresoPatologias.map((d) => (
-                                <div key={d.id} className="border-l-4 border-blue-500 pl-3 py-2">
-                                    <p className="text-sm text-gray-900">{d.descripcion}</p>
-                                    <p className="text-xs text-gray-500 mt-1">
+                                <div key={d.id} className="pf-lista-item">
+                                    <p className="pf-lista-texto">{d.descripcion}</p>
+                                    <p className="pf-lista-meta">
                                         {formatearFechaHora(d.fecha)}
                                         {d.observaciones && ` · ${d.observaciones}`}
                                     </p>
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </Seccion>
                 )}
 
-                {/* Movimientos */}
                 {ingreso.movimientosIngreso.length > 0 && (
-                    <div className="border border-gray-300 rounded-lg p-3 mb-4">
-                        <h3 className="text-sm font-semibold text-gray-700 border-b pb-1 mb-2">
-                            MOVIMIENTOS DEL INGRESO
-                        </h3>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm border-collapse">
-                                <thead>
-                                    <tr className="border-b border-gray-300">
-                                        <th className="text-left py-2 px-2 text-gray-600">Tipo</th>
-                                        <th className="text-left py-2 px-2 text-gray-600">Fecha</th>
-                                        <th className="text-left py-2 px-2 text-gray-600">Concepto</th>
-                                        <th className="text-right py-2 px-2 text-gray-600">Importe</th>
-                                        <th className="text-right py-2 px-2 text-gray-600">Saldo</th>
+                    <Seccion titulo="Movimientos del ingreso" columnas={1}>
+                        <table className="pf-tabla">
+                            <thead>
+                                <tr>
+                                    <th>Tipo</th>
+                                    <th>Fecha</th>
+                                    <th>Concepto</th>
+                                    <th className="pf-num">Importe</th>
+                                    <th className="pf-num">Saldo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {ingreso.movimientosIngreso.map((m) => (
+                                    <tr key={m.id}>
+                                        <td>{m.tipoMovimiento.descripcion}</td>
+                                        <td>{formatearFecha(m.fecha)}</td>
+                                        <td>{m.concepto ?? '—'}</td>
+                                        <td className="pf-num">
+                                            {m.signo >= 0 ? '+' : ''}{Number(m.importe).toFixed(2)}
+                                        </td>
+                                        <td className="pf-num">{Number(m.saldo).toFixed(2)}</td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {ingreso.movimientosIngreso.map((m) => (
-                                        <tr key={m.id} className="border-b border-gray-100">
-                                            <td className="py-2 px-2 text-gray-700">{m.tipoMovimiento.descripcion}</td>
-                                            <td className="py-2 px-2 text-gray-500">{formatearFecha(m.fecha)}</td>
-                                            <td className="py-2 px-2 text-gray-600">{m.concepto ?? '—'}</td>
-                                            <td className="py-2 px-2 text-right font-mono text-gray-700">
-                                                {m.signo >= 0 ? '+' : ''}{Number(m.importe).toFixed(2)}
-                                            </td>
-                                            <td className="py-2 px-2 text-right font-mono text-gray-700">
-                                                {Number(m.saldo).toFixed(2)}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                                ))}
+                            </tbody>
+                        </table>
+                    </Seccion>
                 )}
 
+                <div className="pf-firmas">
+                    <div className="pf-firma">
+                        <span>Firma del paciente / responsable</span>
+                    </div>
+                    <div className="pf-firma">
+                        <span>Firma y sello — Admisión</span>
+                    </div>
+                </div>
             </div>
         </>
     )

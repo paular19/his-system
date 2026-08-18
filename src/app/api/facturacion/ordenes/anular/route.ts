@@ -22,9 +22,14 @@ export async function POST(req: NextRequest) {
 
         const ip = req.headers.get('x-forwarded-for') ?? undefined
 
-        await anularOrdenFacturacion(parsed.data.puestoNumero, parsed.data.numero, usuario, ip)
+        const resultado = await anularOrdenFacturacion(
+            parsed.data.puestoNumero,
+            parsed.data.numero,
+            usuario,
+            ip
+        )
 
-        return apiOk({ ok: true })
+        return apiOk({ ok: true, practicasDevueltas: resultado.practicasDevueltas })
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Error al anular orden'
         return apiError(message, 500)

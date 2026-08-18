@@ -5,7 +5,12 @@ import { tienePermiso } from '@/lib/auth/rbac'
 import { CrearOrdenSchema, type CrearOrdenInput } from '../schemas'
 import { crearOrdenAmbulatorio, crearOrdenesAmbulatoriasPorPractica } from '../service'
 import { prisma } from '@/lib/db'
-import { claveNomenclador, obtenerDescripcionesNomenclador } from '@/lib/nomenclador'
+import {
+  claveNomenclador,
+  obtenerDescripcionesNomenclador,
+  obtenerValoresNomenclador,
+  type ValoresNomenclador,
+} from '@/lib/nomenclador'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { crearPractica as crearPracticaInternacion } from '@/modules/internacion/service'
@@ -170,6 +175,58 @@ function componentesClasificacion(
     .filter((token): token is ClasificacionComponente =>
       ORDEN_CLASIFICACION_COMPONENTES.includes(token as ClasificacionComponente)
     )
+}
+
+function valorComponenteNomenclador(
+  componente: ClasificacionComponente,
+  valores: ValoresNomenclador | undefined
+): number | null {
+  if (!valores) return null
+  if (componente === 'HE' || componente === 'HP') return valores.valorEspecialista
+  if (componente === 'HA') return valores.valorAnestesista
+  if (componente === 'GA') return valores.valorGastos
+  return valores.valorAyudante
+}
+
+/**
+ * Reparte el importe total de una practica entre los subitems en los que se separa.
+ *
+ * Sin prorrateo cada subitem se llevaba el importe completo, asi que una practica
+ * partida en GA+HE+A1 terminaba facturando tres veces su valor. El reparto usa el
+ * desglose del nomenclador y, si no hay valores cargados, divide en partes iguales.
+ * El ultimo subitem absorbe el redondeo para que la suma cierre exacta.
+ */
+function prorratearImportePorSubitem(
+  importeTotal: number | null,
+  componentes: readonly ClasificacionComponente[],
+  valores: ValoresNomenclador | undefined
+): Array<number | null> {
+  if (componentes.length <= 1) return componentes.map(() => importeTotal)
+  if (importeTotal == null || !Number.isFinite(importeTotal)) {
+    return componentes.map(() => importeTotal)
+  }
+
+  const pesos = componentes.map((componente) => {
+    const valor = valorComponenteNomenclador(componente, valores)
+    return valor != null && Number.isFinite(valor) && valor > 0 ? valor : 0
+  })
+  const sumaPesos = pesos.reduce((suma, peso) => suma + peso, 0)
+  const pesosEfectivos = sumaPesos > 0 ? pesos : componentes.map(() => 1)
+  const sumaEfectiva = pesosEfectivos.reduce((suma, peso) => suma + peso, 0)
+
+  const redondear2 = (value: number) => Number(value.toFixed(2))
+  const importes: number[] = []
+  let acumulado = 0
+  for (let i = 0; i < componentes.length; i += 1) {
+    const esUltimo = i === componentes.length - 1
+    const importe = esUltimo
+      ? redondear2(importeTotal - acumulado)
+      : redondear2((pesosEfectivos[i]! / sumaEfectiva) * importeTotal)
+    acumulado += importe
+    importes.push(importe)
+  }
+
+  return importes
 }
 
 function titularSugeridoParaOrdenAgrupada(items: CrearOrdenInput['items']): string {
@@ -533,6 +590,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
     })
 
     const descripcionesNomenclador = await obtenerDescripcionesNomenclador(practicas)
+    const valoresNomenclador = await obtenerValoresNomenclador(practicas)
 
     const practicasPendientes = practicas
 
@@ -696,8 +754,18 @@ export async function generarOrdenesDesdeInternacionAction(input: {
       const clasificacionesObjetivo = componentesSubitem.length > 0
         ? componentesSubitem
         : [clasificacionBase]
+      const importePracticaTotal =
+        practica.importeTotal != null ? Number(practica.importeTotal) : null
+      const importesPorSubitem = prorratearImportePorSubitem(
+        importePracticaTotal,
+        componentesSubitem,
+        valoresNomenclador.get(claveNomenclador(practica.convenioId, practica.codigoPractica))
+      )
 
       for (const [idxClasificacion, clasificacion] of clasificacionesObjetivo.entries()) {
+        const importeItem = componentesSubitem.length > 0
+          ? importesPorSubitem[idxClasificacion] ?? importePracticaTotal
+          : importePracticaTotal
         const codigoPracticaNormalizado = practica.codigoPractica.trim().slice(0, 8)
         const key = parsed.data.agruparEnUnaOrden
           ? '__AGRUPAR_EN_UNA_ORDEN__'
@@ -787,7 +855,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           clasificacionAgrupacion: esProtocoloBioquimico ? 'HE' : clasificacion,
           efectorMatricula: efectorMatriculaItem,
           numeroAutorizacion: practica.numeroAutorizacion,
-          importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : undefined,
+          importeTotal: importeItem ?? undefined,
         }
 
         const arr = grupos.get(key) ?? []

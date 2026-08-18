@@ -179,16 +179,20 @@ export async function anularOrdenFacturacion(
     usuario: string,
     ip?: string
 ) {
-    await repo.anularOrdenFacturacion(puestoNumero, numero)
+    const { practicasDevueltas } = await repo.anularOrdenFacturacion(puestoNumero, numero)
 
     await registrarAudit({
         usuario,
         accion: 'MODIFICAR',
         entidad: 'Orden',
         registroId: `${puestoNumero}-${numero}`,
-        detalle: `Anulacion de facturacion de orden ${puestoNumero}-${numero}`,
+        detalle:
+            `Anulacion de facturacion de orden ${puestoNumero}-${numero}: ` +
+            `${practicasDevueltas} practica(s) devueltas a pendientes. La orden sigue vigente.`,
         direccionIp: ip,
     })
+
+    return { practicasDevueltas }
 }
 
 export async function crearOrdenDesdePracticaFacturacion(

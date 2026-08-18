@@ -2620,7 +2620,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     async function anularOrden(puestoNumero: number, numero: number) {
         if (!contexto) return
         const ok = window.confirm(
-            `¿Anular la facturación de la Orden ${puestoNumero}-${numero}?\nLas prácticas vinculadas quedarán anuladas y dejarán de mostrarse en esta pantalla.`
+            `¿Anular la facturación de la Orden ${puestoNumero}-${numero}?\nLa orden sigue vigente: las prácticas vinculadas vuelven a pendientes y se pueden volver a facturar.`
         )
         if (!ok) return
 
@@ -2633,10 +2633,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ puestoNumero, numero }),
             })
-            const json = (await res.json()) as ApiResponse<{ ok: boolean }>
-            if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo anular la orden')
+            const json = (await res.json()) as ApiResponse<{ ok: boolean; practicasDevueltas?: number }>
+            if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo anular la facturación')
 
-            setMensaje(`Orden ${puestoNumero}-${numero} anulada. Las prácticas vinculadas se ocultaron de facturación.`)
+            const devueltas = json.data?.practicasDevueltas ?? 0
+            setMensaje(
+                `Facturación de la orden ${puestoNumero}-${numero} anulada. ` +
+                `${devueltas} práctica(s) volvieron a pendientes.`
+            )
             await cargarContexto(contexto.ingreso.id)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al anular orden')
@@ -4376,7 +4380,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             </td>
                                                             <td className="px-3 py-2 text-xs text-gray-700">{orden.items.length} ítems</td>
                                                             <td className="px-3 py-2 text-xs font-semibold text-gray-800">{formatCurrency(orden.total)}</td>
-                                                            <td className="px-3 py-2"><button onClick={() => anularOrden(orden.puesto, orden.numero)} disabled={anulando === orden.key} className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"><XCircle className="h-3.5 w-3.5" />{anulando === orden.key ? 'Anulando...' : 'Anular'}</button></td>
+                                                            <td className="px-3 py-2"><button onClick={() => anularOrden(orden.puesto, orden.numero)} disabled={anulando === orden.key} title="Anula la facturación y devuelve las prácticas a pendientes. La orden sigue vigente." className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"><XCircle className="h-3.5 w-3.5" />{anulando === orden.key ? 'Anulando...' : 'Anular facturación'}</button></td>
                                                             <td className="px-3 py-2 text-xs text-gray-500">Facturada</td>
                                                         </tr>
 

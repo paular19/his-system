@@ -4302,8 +4302,26 @@ export async function actualizarDiferencialesCirugiaFacturacion(
     })
 }
 
-export async function anularOrdenFacturacion(puestoNumero: number, numero: number): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+/**
+ * Anula la FACTURACION de una orden: desvincula sus practicas y las devuelve a
+ * pendientes, dejando la orden intacta.
+ *
+ * Antes esto anulaba la orden (`estado: 'X'`) y ademas marcaba las practicas como
+ * anuladas. Eso tenia dos efectos no deseados:
+ *
+ * 1. La orden desaparecia de ambulatorio (pasaba a la solapa "anuladas") aunque
+ *    seguia siendo una autorizacion valida.
+ * 2. Si una practica estaba vinculada a varias ordenes activas, anularla las
+ *    vaciaba a todas de golpe.
+ *
+ * Ahora solo se corta el vinculo de facturacion: la orden sigue vigente y las
+ * practicas vuelven a aparecer como pendientes, listas para refacturar.
+ */
+export async function anularOrdenFacturacion(
+    puestoNumero: number,
+    numero: number
+): Promise<{ practicasDevueltas: number }> {
+    return prisma.$transaction(async (tx) => {
         const [practicasExplicitas, practicasPorOrdenItem] = await Promise.all([
             tx.practica.findMany({
                 where: { puestoNumero, ordenNumero: numero },
@@ -4328,19 +4346,18 @@ export async function anularOrdenFacturacion(puestoNumero: number, numero: numbe
             ])
         )
 
-        // Cancel linked practices so they no longer reappear as pending in facturacion.
-        if (practicaIds.length > 0) {
-            await tx.practica.updateMany({
-                where: { id: { in: practicaIds } },
-                data: { puestoNumero: null, ordenNumero: null, ordenItem: null, estado: 'X' },
-            })
-        }
+        if (practicaIds.length === 0) return { practicasDevueltas: 0 }
 
-        // Cancel the order
-        await tx.orden.update({
-            where: { puestoNumero_numero: { puestoNumero, numero } },
-            data: { estado: 'X', fechaEstado: new Date() },
+        // Se corta el vinculo puesto/orden/item y se vuelve al estado activo: asi
+        // `practicaFacturada` da false y la practica reaparece en pendientes. El
+        // vinculo por OrdenPractica.practicaId se conserva para que al refacturar
+        // se reenganche con la misma orden.
+        const resultado = await tx.practica.updateMany({
+            where: { id: { in: practicaIds } },
+            data: { puestoNumero: null, ordenNumero: null, ordenItem: null, estado: 'A' },
         })
+
+        return { practicasDevueltas: resultado.count }
     })
 }
 

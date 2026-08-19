@@ -10,7 +10,15 @@ import type {
 } from './types'
 import { generarCodigoBarras } from './types'
 import { normalizarClasificacionAgrupacion } from './clasificacion'
-import { coincideTextoConBusquedaFlexible, obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
+import {
+  calcularUmbralRank,
+  evaluarCoincidenciaOrden,
+  parsearBusquedaOrden,
+  type BusquedaOrdenParseada,
+  type CoincidenciaOrden,
+  type TipoCoincidenciaOrden,
+} from './busqueda'
+import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 import { claveDiaArgentina, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
 
 const PUESTO_NUMERO = 1 // Número de puesto fijo (configurable a futuro)
@@ -542,217 +550,279 @@ export async function obtenerOrden(
 // LISTAR ÓRDENES
 // ============================================
 
-export async function listarOrdenes(params: {
-  skip?: number
-  take?: number
-  pendiente?: boolean
-  estadoTab?: 'pendientes' | 'confirmadas' | 'anuladas'
-  q?: string
-}): Promise<{ ordenes: OrdenListItem[]; total: number }> {
-  const q = params.q?.trim()
-  const qLower = q?.toLowerCase()
-  const qTokens = obtenerTokensBusquedaFlexible(q)
-  const numeroBuscado = q && /^\d+$/.test(q) ? parseInt(q, 10) : null
-  const skip = params.skip ?? 0
-  const take = params.take ?? 20
-  const estadoTab =
-    params.estadoTab ??
-    (params.pendiente === true
-      ? 'pendientes'
-      : params.pendiente === false
-        ? 'confirmadas'
-        : undefined)
+export type TabOrden = 'pendientes' | 'confirmadas' | 'anuladas'
 
-  const mapearResultado = async (rows: Array<OrdenListaRowConItems>, total: number) => {
-    const idsCoseguro = Array.from(
-      new Set(rows.map((o) => o.obraSocialCoseguroId).filter((id): id is number => id != null))
-    )
+export type ResultadoSolapaOrdenes = { ordenes: OrdenListItem[]; total: number }
 
-    const coseguros =
-      idsCoseguro.length > 0
-        ? await prisma.obraSocial.findMany({
-          where: { id: { in: idsCoseguro } },
-          select: { id: true, nombre: true },
-        })
-        : []
+export type ResumenBusquedaOrdenes = {
+  termino: string
+  /** Por que campo matchearon los resultados. Null si no hubo ninguno. */
+  tipoCoincidencia: TipoCoincidenciaOrden | null
+  etiqueta: string | null
+  /** True si el termino se pudo leer como numero de orden. */
+  interpretadaComoNumeroOrden: boolean
+}
 
-    const coseguroPorId = new Map(coseguros.map((c) => [c.id, c.nombre]))
+export type ListadoOrdenesPorSolapa = {
+  pendientes: ResultadoSolapaOrdenes
+  confirmadas: ResultadoSolapaOrdenes
+  anuladas: ResultadoSolapaOrdenes
+  busqueda: ResumenBusquedaOrdenes | null
+}
+
+const SELECT_ORDEN_LISTA = {
+  puestoNumero: true,
+  numero: true,
+  ingresoId: true,
+  nombrePaciente: true,
+  numeroAfiliado: true,
+  obraSocialCoseguroId: true,
+  numeroAutorizacion: true,
+  fechaEmision: true,
+  estado: true,
+  obraSocial: { select: { nombre: true } },
+  _count: { select: { items: true } },
+  items: {
+    select: {
+      item: true,
+      numeroAutorizacion: true,
+      codigoPractica: true,
+      nomencladorPractica: { select: { descripcion: true } },
+    },
+  },
+} satisfies Prisma.OrdenSelect
+
+type FilaOrdenClasificada = {
+  puestoNumero: number
+  numero: number
+  ingresoId: number | null
+  nombrePaciente: string
+  numeroAfiliado: string
+  obraSocialCoseguroId: number | null
+  fechaEmision: Date
+  estado: string | null
+  obraSocialNombre: string
+  cantidadItems: number
+  practicas: Array<{ item: number; codigoPractica: string; descripcionPractica: string }>
+  numeroAutorizacionReal: string | null
+  tab: TabOrden
+  coincidencia: CoincidenciaOrden | null
+}
+
+function clasificarSolapaOrden(
+  estado: string | null,
+  numeroAutorizacionReal: string | null,
+  obraSocialNombre: string | null | undefined
+): TabOrden {
+  if (esEstadoOrdenAnulada(estado)) return 'anuladas'
+  const esPendiente = numeroAutorizacionReal == null && !esObraSocialParticular(obraSocialNombre)
+  return esPendiente ? 'pendientes' : 'confirmadas'
+}
+
+/**
+ * Carga todas las ordenes una sola vez y las deja clasificadas por solapa, con
+ * la autorizacion real ya resuelta y las practicas normalizadas.
+ *
+ * La pagina de autorizaciones necesita el total de las tres solapas en cada
+ * request; antes eso eran tres consultas completas a `Orden` (dos de ellas sin
+ * `where`). Con una sola pasada alcanza.
+ */
+async function cargarOrdenesClasificadas(): Promise<FilaOrdenClasificada[]> {
+  const rows = await prisma.orden.findMany({
+    orderBy: [{ fechaEmision: 'desc' }, { puestoNumero: 'desc' }, { numero: 'desc' }],
+    select: SELECT_ORDEN_LISTA,
+  })
+
+  return rows.map((row) => {
+    const numeroAutorizacionReal = resolverNumeroAutorizacionOrdenLista(row)
+    const obraSocialNombre = row.obraSocial?.nombre ?? ''
 
     return {
-      total,
-      ordenes: rows.map((o) => ({
-        puestoNumero: o.puestoNumero,
-        numero: o.numero,
-        ingresoId: o.ingresoId,
-        nombrePaciente: o.nombrePaciente,
-        obraSocialNombre: o.obraSocial?.nombre ?? '',
-        coseguroNombre: o.obraSocialCoseguroId ? (coseguroPorId.get(o.obraSocialCoseguroId) ?? '-') : '-',
-        fechaEmision: o.fechaEmision,
-        estado: normalizarEstadoOrden(o.estado),
-        cantidadItems: o._count.items,
-        practicas: [...o.items]
-          .sort((a, b) => a.item - b.item)
-          .map((it) => {
-            const codigoPractica = it.codigoPractica.trim()
-            return {
-              item: it.item,
-              codigoPractica,
-              descripcionPractica: it.nomencladorPractica?.descripcion ?? codigoPractica,
-            }
-          }),
-        numeroAutorizacion: o.numeroAutorizacion,
-      })),
-    }
-  }
-
-  if (estadoTab === 'pendientes' || estadoTab === 'confirmadas') {
-    const rows = await prisma.orden.findMany({
-      where: {
-        NOT: [
-          {
-            estado: {
-              contains: 'X',
-              mode: 'insensitive',
-            },
-          },
-        ],
-      },
-      orderBy: [{ fechaEmision: 'desc' }, { puestoNumero: 'desc' }, { numero: 'desc' }],
-      select: {
-        puestoNumero: true,
-        numero: true,
-        ingresoId: true,
-        nombrePaciente: true,
-        numeroAfiliado: true,
-        obraSocialCoseguroId: true,
-        numeroAutorizacion: true,
-        fechaEmision: true,
-        estado: true,
-        obraSocial: { select: { nombre: true } },
-        _count: { select: { items: true } },
-        items: {
-          select: {
-            item: true,
-            numeroAutorizacion: true,
-            codigoPractica: true,
-            nomencladorPractica: { select: { descripcion: true } },
-          },
-        },
-      },
-    })
-
-    const filtradas = rows
-      .map((row) => {
-        const numeroAutorizacionReal = resolverNumeroAutorizacionOrdenLista(row)
-        return {
-          ...row,
-          numeroAutorizacionReal,
-        }
-      })
-      .filter((row) => {
-        if (esEstadoOrdenAnulada(row.estado)) return false
-
-        const esPendiente =
-          row.numeroAutorizacionReal == null &&
-          !esObraSocialParticular(row.obraSocial?.nombre)
-
-        if (estadoTab === 'pendientes' && !esPendiente) return false
-        if (estadoTab === 'confirmadas' && esPendiente) return false
-
-        if (!q || !qLower) return true
-
-        const nombrePaciente = row.nombrePaciente.toLowerCase()
-        const numeroAfiliado = row.numeroAfiliado.toLowerCase()
-        const numeroAutorizacion = row.numeroAutorizacionReal?.toLowerCase() ?? ''
-        const practicas = row.items
-          .map((it) => `${it.codigoPractica.trim()} ${it.nomencladorPractica?.descripcion ?? ''}`)
-          .join(' ')
-          .toLowerCase()
-
-        return (
-          coincideTextoConBusquedaFlexible(row.nombrePaciente, q) ||
-          numeroAfiliado.includes(qLower) ||
-          numeroAutorizacion.includes(qLower) ||
-          practicas.includes(qLower) ||
-          (numeroBuscado != null && row.numero === numeroBuscado)
-        )
-      })
-
-    const total = filtradas.length
-    const pageRows = filtradas.slice(skip, skip + take).map((row) => ({
       puestoNumero: row.puestoNumero,
       numero: row.numero,
       ingresoId: row.ingresoId,
       nombrePaciente: row.nombrePaciente,
+      numeroAfiliado: row.numeroAfiliado,
       obraSocialCoseguroId: row.obraSocialCoseguroId,
-      numeroAutorizacion: row.numeroAutorizacionReal,
       fechaEmision: row.fechaEmision,
       estado: row.estado,
-      obraSocial: row.obraSocial,
-      _count: row._count,
-      items: row.items,
-    }))
+      obraSocialNombre,
+      cantidadItems: row._count.items,
+      practicas: [...row.items]
+        .sort((a, b) => a.item - b.item)
+        .map((it) => {
+          // Los codigos vienen con padding inconsistente desde el sistema viejo.
+          const codigoPractica = it.codigoPractica.trim()
+          return {
+            item: it.item,
+            codigoPractica,
+            descripcionPractica: it.nomencladorPractica?.descripcion ?? codigoPractica,
+          }
+        }),
+      numeroAutorizacionReal,
+      tab: clasificarSolapaOrden(row.estado, numeroAutorizacionReal, obraSocialNombre),
+      coincidencia: null,
+    }
+  })
+}
 
-    return mapearResultado(pageRows, total)
+/**
+ * Aplica la busqueda sobre las filas ya cargadas. Devuelve las filas que
+ * sobreviven al umbral de precision (ver `calcularUmbralRank`) y el resumen de
+ * como se interpreto el termino.
+ */
+function aplicarBusquedaOrdenes(
+  filas: FilaOrdenClasificada[],
+  busqueda: BusquedaOrdenParseada
+): { filas: FilaOrdenClasificada[]; resumen: ResumenBusquedaOrdenes } {
+  const candidatas: FilaOrdenClasificada[] = []
+  let mejorRank: number | null = null
+
+  for (const fila of filas) {
+    const coincidencia = evaluarCoincidenciaOrden(
+      {
+        puestoNumero: fila.puestoNumero,
+        numero: fila.numero,
+        nombrePaciente: fila.nombrePaciente,
+        numeroAfiliado: fila.numeroAfiliado,
+        numeroAutorizacion: fila.numeroAutorizacionReal,
+        practicas: fila.practicas,
+      },
+      busqueda
+    )
+    if (!coincidencia) continue
+
+    candidatas.push({ ...fila, coincidencia })
+    if (mejorRank === null || coincidencia.rank < mejorRank) mejorRank = coincidencia.rank
   }
 
-  const filtroBusqueda = q
-    ? {
-      OR: [
-        {
-          AND: (qTokens.length > 0 ? qTokens : [q]).map((token) => ({
-            nombrePaciente: { contains: token, mode: 'insensitive' as const },
-          })),
-        },
-        { numeroAfiliado: { contains: q, mode: 'insensitive' as const } },
-        { numeroAutorizacion: { contains: q, mode: 'insensitive' as const } },
-        ...(numeroBuscado != null ? [{ numero: numeroBuscado }] : []),
-      ],
-    }
-    : {}
+  const umbral = calcularUmbralRank(mejorRank)
+  const filtradas = candidatas.filter((f) => (f.coincidencia?.rank ?? Number.MAX_SAFE_INTEGER) <= umbral)
 
-  const where: Prisma.OrdenWhereInput =
-    estadoTab === 'anuladas'
-      ? {
-        estado: {
-          contains: 'X',
-          mode: 'insensitive',
-        },
-        ...filtroBusqueda,
-      }
-      : filtroBusqueda
+  // Las coincidencias mas precisas primero; dentro del mismo rank, las mas nuevas.
+  filtradas.sort((a, b) => {
+    const rankA = a.coincidencia?.rank ?? Number.MAX_SAFE_INTEGER
+    const rankB = b.coincidencia?.rank ?? Number.MAX_SAFE_INTEGER
+    if (rankA !== rankB) return rankA - rankB
+    const fechaDiff = b.fechaEmision.getTime() - a.fechaEmision.getTime()
+    if (fechaDiff !== 0) return fechaDiff
+    return b.numero - a.numero
+  })
 
-  const [rows, total] = await Promise.all([
-    prisma.orden.findMany({
-      where,
-      skip,
-      take,
-      orderBy: [{ fechaEmision: 'desc' }, { puestoNumero: 'desc' }, { numero: 'desc' }],
-      select: {
-        puestoNumero: true,
-        numero: true,
-        ingresoId: true,
-        nombrePaciente: true,
-        obraSocialCoseguroId: true,
-        numeroAutorizacion: true,
-        fechaEmision: true,
-        estado: true,
-        obraSocial: { select: { nombre: true } },
-        _count: { select: { items: true } },
-        items: {
-          select: {
-            item: true,
-            numeroAutorizacion: true,
-            codigoPractica: true,
-            nomencladorPractica: { select: { descripcion: true } },
-          },
-        },
-      },
-    }),
-    prisma.orden.count({ where }),
-  ])
+  const mejor = filtradas[0]?.coincidencia ?? null
 
-  return mapearResultado(rows, total)
+  return {
+    filas: filtradas,
+    resumen: {
+      termino: busqueda.original,
+      tipoCoincidencia: mejor?.tipo ?? null,
+      etiqueta: mejor?.etiqueta ?? null,
+      interpretadaComoNumeroOrden: busqueda.numeroOrden !== null,
+    },
+  }
+}
+
+async function mapearFilasAListItems(filas: FilaOrdenClasificada[]): Promise<OrdenListItem[]> {
+  const idsCoseguro = Array.from(
+    new Set(filas.map((f) => f.obraSocialCoseguroId).filter((id): id is number => id != null))
+  )
+
+  const coseguros =
+    idsCoseguro.length > 0
+      ? await prisma.obraSocial.findMany({
+        where: { id: { in: idsCoseguro } },
+        select: { id: true, nombre: true },
+      })
+      : []
+
+  const coseguroPorId = new Map(coseguros.map((c) => [c.id, c.nombre]))
+
+  return filas.map((f) => ({
+    puestoNumero: f.puestoNumero,
+    numero: f.numero,
+    ingresoId: f.ingresoId,
+    nombrePaciente: f.nombrePaciente,
+    obraSocialNombre: f.obraSocialNombre,
+    coseguroNombre: f.obraSocialCoseguroId ? (coseguroPorId.get(f.obraSocialCoseguroId) ?? '-') : '-',
+    fechaEmision: f.fechaEmision,
+    estado: normalizarEstadoOrden(f.estado),
+    cantidadItems: f.cantidadItems,
+    practicas: f.practicas,
+    numeroAutorizacion: f.numeroAutorizacionReal,
+  }))
+}
+
+/**
+ * Devuelve las tres solapas de la pagina de autorizaciones en una sola pasada.
+ * Solo se materializan las filas de la solapa activa; de las otras dos alcanza
+ * con el total para poder avisar que el resultado esta en otra solapa.
+ */
+export async function listarOrdenesPorSolapa(params: {
+  q?: string
+  tabActual: TabOrden
+  skip?: number
+  take?: number
+}): Promise<ListadoOrdenesPorSolapa> {
+  const skip = params.skip ?? 0
+  const take = params.take ?? 20
+  const busqueda = parsearBusquedaOrden(params.q)
+
+  const todas = await cargarOrdenesClasificadas()
+  const { filas, resumen } = busqueda
+    ? aplicarBusquedaOrdenes(todas, busqueda)
+    : { filas: todas, resumen: null }
+
+  const porTab: Record<TabOrden, FilaOrdenClasificada[]> = {
+    pendientes: [],
+    confirmadas: [],
+    anuladas: [],
+  }
+  for (const fila of filas) porTab[fila.tab].push(fila)
+
+  const ordenesActivas = await mapearFilasAListItems(
+    porTab[params.tabActual].slice(skip, skip + take)
+  )
+
+  const construir = (tab: TabOrden): ResultadoSolapaOrdenes => ({
+    ordenes: tab === params.tabActual ? ordenesActivas : [],
+    total: porTab[tab].length,
+  })
+
+  return {
+    pendientes: construir('pendientes'),
+    confirmadas: construir('confirmadas'),
+    anuladas: construir('anuladas'),
+    busqueda: resumen,
+  }
+}
+
+/**
+ * Listado de una sola solapa. Sin `estadoTab` ni `pendiente` devuelve todas las
+ * ordenes (incluidas las anuladas), que es lo que espera `/api/ordenes`.
+ */
+export async function listarOrdenes(params: {
+  skip?: number
+  take?: number
+  pendiente?: boolean
+  estadoTab?: TabOrden
+  q?: string
+}): Promise<ResultadoSolapaOrdenes> {
+  const estadoTab: TabOrden | null =
+    params.estadoTab ??
+    (params.pendiente === true ? 'pendientes' : params.pendiente === false ? 'confirmadas' : null)
+
+  const skip = params.skip ?? 0
+  const take = params.take ?? 20
+  const busqueda = parsearBusquedaOrden(params.q)
+
+  const todas = await cargarOrdenesClasificadas()
+  const filas = busqueda ? aplicarBusquedaOrdenes(todas, busqueda).filas : todas
+  const filtradas = estadoTab ? filas.filter((f) => f.tab === estadoTab) : filas
+
+  return {
+    ordenes: await mapearFilasAListItems(filtradas.slice(skip, skip + take)),
+    total: filtradas.length,
+  }
 }
 
 // ============================================

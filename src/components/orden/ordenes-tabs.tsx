@@ -23,6 +23,7 @@ interface OrdenesTabsProps {
     pagina: number
     porPagina: number
     totalPaginas: number
+    hayBusqueda?: boolean
 }
 
 function FilaOrden({
@@ -270,6 +271,7 @@ export function OrdenesTabs({
     pagina,
     porPagina,
     totalPaginas,
+    hayBusqueda = false,
 }: OrdenesTabsProps) {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -280,6 +282,9 @@ export function OrdenesTabs({
         const params = new URLSearchParams(searchParams.toString())
         params.set('tab', tab)
         params.set('pagina', '1')
+        // El salto automatico es de una sola vez: no se arrastra al cambiar de solapa.
+        params.delete('saltoAuto')
+        params.delete('desde')
         if (!params.get('porPagina')) params.set('porPagina', String(porPagina))
         const query = params.toString()
         return query ? `?${query}` : '?'
@@ -370,11 +375,13 @@ export function OrdenesTabs({
                 <div className="his-card flex flex-col items-center justify-center py-16 text-center space-y-3">
                     <FileText className="h-10 w-10 text-gray-300" />
                     <p className="text-sm text-gray-500">
-                        {tabActual === 'pendientes'
-                            ? 'No hay órdenes pendientes de autorización.'
-                            : tabActual === 'confirmadas'
-                                ? 'No hay órdenes confirmadas.'
-                                : 'No hay órdenes anuladas.'}
+                        {hayBusqueda
+                            ? 'La búsqueda no encontró órdenes en esta solapa.'
+                            : tabActual === 'pendientes'
+                                ? 'No hay órdenes pendientes de autorización.'
+                                : tabActual === 'confirmadas'
+                                    ? 'No hay órdenes confirmadas.'
+                                    : 'No hay órdenes anuladas.'}
                     </p>
                 </div>
             ) : (

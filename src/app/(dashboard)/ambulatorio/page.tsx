@@ -2,16 +2,28 @@ import { Header } from '@/components/layout/header'
 import { getUsuarioSesion } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { redirect } from 'next/navigation'
-import { listarOrdenes } from '@/modules/orden/repository'
+import { listarOrdenesPorSolapa, type TabOrden } from '@/modules/orden/repository'
 import { OrdenesTabs } from '@/components/orden/ordenes-tabs'
+import { BuscadorOrdenes } from '@/components/orden/buscador-ordenes'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Autorizaciones' }
 
+function esTabValido(value: string | undefined): value is TabOrden {
+  return value === 'pendientes' || value === 'confirmadas' || value === 'anuladas'
+}
+
 interface PageProps {
-  searchParams: Promise<{ tab?: string; pagina?: string; porPagina?: string; q?: string }>
+  searchParams: Promise<{
+    tab?: string
+    pagina?: string
+    porPagina?: string
+    q?: string
+    saltoAuto?: string
+    desde?: string
+  }>
 }
 
 export default async function AmbulatorioPage({ searchParams }: PageProps) {
@@ -19,7 +31,7 @@ export default async function AmbulatorioPage({ searchParams }: PageProps) {
   if (!tienePermiso(usuario.rol, 'AMBULATORIO', 'LEER')) redirect('/dashboard')
 
   const params = await searchParams
-  const tabActual =
+  const tabActual: TabOrden =
     params.tab === 'confirmadas'
       ? 'confirmadas'
       : params.tab === 'anuladas'
@@ -31,33 +43,34 @@ export default async function AmbulatorioPage({ searchParams }: PageProps) {
   const q = params.q?.trim() ?? ''
   const skip = (pagina - 1) * porPagina
 
-  const [resPendientes, resConfirmadas, resAnuladas] = await Promise.all([
-    listarOrdenes({
-      estadoTab: 'pendientes',
-      q,
-      skip: tabActual === 'pendientes' ? skip : 0,
-      take: tabActual === 'pendientes' ? porPagina : 0,
-    }),
-    listarOrdenes({
-      estadoTab: 'confirmadas',
-      q,
-      skip: tabActual === 'confirmadas' ? skip : 0,
-      take: tabActual === 'confirmadas' ? porPagina : 0,
-    }),
-    listarOrdenes({
-      estadoTab: 'anuladas',
-      q,
-      skip: tabActual === 'anuladas' ? skip : 0,
-      take: tabActual === 'anuladas' ? porPagina : 0,
-    }),
-  ])
+  const resultado = await listarOrdenesPorSolapa({ q, tabActual, skip, take: porPagina })
+  const { pendientes: resPendientes, confirmadas: resConfirmadas, anuladas: resAnuladas } = resultado
 
-  const totalActual =
-    tabActual === 'pendientes'
-      ? resPendientes.total
-      : tabActual === 'confirmadas'
-        ? resConfirmadas.total
-        : resAnuladas.total
+  const totales: Record<TabOrden, number> = {
+    pendientes: resPendientes.total,
+    confirmadas: resConfirmadas.total,
+    anuladas: resAnuladas.total,
+  }
+  const totalActual = totales[tabActual]
+
+  // Si la busqueda no dio nada en esta solapa pero si en otra, llevamos al
+  // usuario ahi en vez de mostrarle un vacio enganoso. El flag evita rebotes.
+  const solapasConResultados = (['pendientes', 'confirmadas', 'anuladas'] as const).filter(
+    (tab) => totales[tab] > 0
+  )
+  const destino = solapasConResultados[0]
+  if (q && totalActual === 0 && destino && params.saltoAuto !== '1') {
+    const query = new URLSearchParams({
+      tab: destino,
+      q,
+      porPagina: String(porPagina),
+      pagina: '1',
+      saltoAuto: '1',
+      desde: tabActual,
+    })
+    redirect(`/dashboard/ambulatorio?${query.toString()}`)
+  }
+
   const totalPaginas = Math.max(1, Math.ceil(totalActual / porPagina))
 
   const puedeCrear = tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
@@ -86,22 +99,16 @@ export default async function AmbulatorioPage({ searchParams }: PageProps) {
           )}
         </div>
 
-        <form method="GET" className="flex gap-2">
-          <input type="hidden" name="tab" value={tabActual} />
-          <input type="hidden" name="porPagina" value={String(porPagina)} />
-          <input
-            name="q"
-            defaultValue={q}
-            placeholder="Buscar por paciente, afiliado, N° de orden o N° de autorización"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
-          >
-            Buscar
-          </button>
-        </form>
+        <BuscadorOrdenes
+          q={q}
+          tabActual={tabActual}
+          porPagina={porPagina}
+          busqueda={resultado.busqueda}
+          totales={totales}
+          saltoDesde={
+            params.saltoAuto === '1' && esTabValido(params.desde) ? params.desde : null
+          }
+        />
 
         <OrdenesTabs
           pendientes={resPendientes.ordenes}
@@ -115,6 +122,7 @@ export default async function AmbulatorioPage({ searchParams }: PageProps) {
           pagina={pagina}
           porPagina={porPagina}
           totalPaginas={totalPaginas}
+          hayBusqueda={Boolean(q)}
         />
       </div>
     </>

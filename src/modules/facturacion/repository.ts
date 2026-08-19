@@ -716,8 +716,6 @@ type VinculoOrdenExistenteFacturacion = {
     item: number
 }
 
-type EstadoOrdenFacturacion = 'A' | 'X' | string
-
 function incluyeCodigoCompatibleParaVinculo(
     incluyePrestacion: string | null | undefined,
     incluyeOrdenItem: string | null | undefined,
@@ -784,12 +782,15 @@ async function resolverVinculosOrdenExistenteFacturacion(
         prisma.orden.findMany({
             where: {
                 ingresoId,
-                estado: { in: ['A', 'X'] },
+                // Solo ordenes vigentes: una orden anulada desde internacion no es
+                // destino valido de facturacion. Antes se aceptaban tambien las
+                // anuladas y despues se las revivia, resto de cuando anular la
+                // facturacion anulaba la orden.
+                ...buildOrdenNoAnuladaWhere(),
             },
             select: {
                 puestoNumero: true,
                 numero: true,
-                estado: true,
                 numeroAutorizacion: true,
                 items: {
                     select: {
@@ -835,7 +836,6 @@ async function resolverVinculosOrdenExistenteFacturacion(
         incluyeCodigo: string | null
         fecha: Date
         numeroAutorizacion: string | null
-        estadoOrden: EstadoOrdenFacturacion
     }
 
     const candidatos: CandidatoOrdenItem[] = []
@@ -862,7 +862,6 @@ async function resolverVinculosOrdenExistenteFacturacion(
                 incluyeCodigo: normalizarIncluyeCodigo(it.modulo),
                 fecha: it.fecha,
                 numeroAutorizacion,
-                estadoOrden: orden.estado,
             })
         }
     }
@@ -874,14 +873,6 @@ async function resolverVinculosOrdenExistenteFacturacion(
     )
 
     const resultado = new Map<number, VinculoOrdenExistenteFacturacion>()
-
-    const candidatoHabilitado = (
-        candidato: CandidatoOrdenItem,
-        practicaId: number | null
-    ): boolean => {
-        if (candidato.estadoOrden !== 'X') return true
-        return Boolean(practicaId && candidato.practicaId === practicaId)
-    }
 
     const coberturaSubitemsPorOrden = (
         prestacion: PrestacionPreparadaFacturacion,
@@ -921,7 +912,6 @@ async function resolverVinculosOrdenExistenteFacturacion(
         const exactos = candidatos.filter(
             (c) =>
                 c.practicaId === practicaId &&
-                candidatoHabilitado(c, practicaId) &&
                 !usados.has(c.key) &&
                 incluyeCodigoCompatibleParaVinculo(
                     prestacion.incluyeCodigo,
@@ -931,10 +921,6 @@ async function resolverVinculosOrdenExistenteFacturacion(
         )
         const fechaPractica = fechaPorPractica.get(practicaId)?.getTime() ?? Number.POSITIVE_INFINITY
         const exacto = [...exactos].sort((a, b) => {
-            const penalidadEstadoA = a.estadoOrden === 'X' ? 1 : 0
-            const penalidadEstadoB = b.estadoOrden === 'X' ? 1 : 0
-            if (penalidadEstadoA !== penalidadEstadoB) return penalidadEstadoA - penalidadEstadoB
-
             const penalidadCantidadA = a.cantidad === Number(prestacion.cantidad) ? 0 : 1
             const penalidadCantidadB = b.cantidad === Number(prestacion.cantidad) ? 0 : 1
             if (penalidadCantidadA !== penalidadCantidadB) return penalidadCantidadA - penalidadCantidadB
@@ -967,7 +953,6 @@ async function resolverVinculosOrdenExistenteFacturacion(
 
         const compatibles = candidatos.filter(
             (c) =>
-                candidatoHabilitado(c, practicaId) &&
                 !usados.has(c.key) &&
                 c.convenioId === prestacion.convenioId &&
                 c.codigoPractica === codigoPractica &&
@@ -987,10 +972,6 @@ async function resolverVinculosOrdenExistenteFacturacion(
         const fechaPractica = fechaPorPractica.get(practicaId)?.getTime() ?? Number.POSITIVE_INFINITY
 
         const elegido = [...pool].sort((a, b) => {
-            const penalidadEstadoA = a.estadoOrden === 'X' ? 1 : 0
-            const penalidadEstadoB = b.estadoOrden === 'X' ? 1 : 0
-            if (penalidadEstadoA !== penalidadEstadoB) return penalidadEstadoA - penalidadEstadoB
-
             const penalidadCantidadA = a.cantidad === Number(prestacion.cantidad) ? 0 : 1
             const penalidadCantidadB = b.cantidad === Number(prestacion.cantidad) ? 0 : 1
             if (penalidadCantidadA !== penalidadCantidadB) return penalidadCantidadA - penalidadCantidadB
@@ -3177,32 +3158,14 @@ export async function cargarOrdenesDesdePrestaciones(
     )
 
     if (prestacionesConOrdenExistente.length > 0) {
-        const practicaIdsConOrdenExistente = Array.from(
-            new Set(
-                prestacionesConOrdenExistente
-                    .map((prestacion) => prestacion.practicaId)
-                    .filter((id): id is number => Boolean(id))
-            )
-        )
-
-        if (practicaIdsConOrdenExistente.length > 0) {
-            await prisma.orden.updateMany({
-                where: {
-                    ingresoId: data.ingresoId,
-                    estado: 'X',
-                    items: {
-                        some: {
-                            practicaId: { in: practicaIdsConOrdenExistente },
-                        },
-                    },
-                },
-                data: {
-                    estado: 'A',
-                    fechaEstado: new Date(),
-                },
-            })
-        }
-
+        // Facturar no cambia el estado de ninguna orden. Las ordenes se anulan solo
+        // desde la ficha de internacion; anular en facturacion se limita a cortar el
+        // vinculo para que la practica vuelva a pendientes. Aca antes se revivian
+        // (estado X -> A) todas las ordenes anuladas del ingreso que mencionaran
+        // alguna de las practicas a facturar: resto de cuando anular la facturacion
+        // tambien anulaba la orden. Como una practica puede estar mencionada por
+        // varias ordenes, eso resucitaba duplicados y revertia anulaciones hechas a
+        // proposito desde internacion.
         const updatesPractica = prestacionesConOrdenExistente.flatMap((prestacion) => {
             const practicaId = prestacion.practicaId as number
             const vinculo = vinculosOrdenExistente.get(practicaId)

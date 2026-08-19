@@ -8,7 +8,13 @@ import { puedeEditarPrestacionEnLote } from '@/modules/facturacion/editability'
 import { LoteResumenPrint } from './lote-resumen-print'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
-import { aplicaPromediIPS, calcularImportePromediPorCodigo } from '@/modules/facturacion/promedi-rules'
+import { aplicaPromediIPS, aplicaPromediPorObra, calcularImportePromediPorCodigo } from '@/modules/facturacion/promedi-rules'
+import {
+    CATEGORIAS_PRACTICA,
+    CATEGORIA_PRACTICA_LABEL,
+    categoriaPractica,
+    type CategoriaPractica,
+} from '@/modules/facturacion/categorias-practica'
 
 const ESTADO_LABEL: Record<string, { label: string; cls: string }> = {
     PEN: { label: 'Pendiente', cls: 'bg-yellow-100 text-yellow-800' },
@@ -185,6 +191,54 @@ function etiquetaSubitemComputado(
     return 'Derechos/Gastos (GA)'
 }
 
+function FiltroCategoriasPractica({
+    valor,
+    onChange,
+    conteos,
+    totalSinFiltro,
+    etiquetaTodos = 'Todas',
+}: {
+    valor: CategoriaPractica | ''
+    onChange: (valor: CategoriaPractica | '') => void
+    conteos: Partial<Record<CategoriaPractica, number>>
+    totalSinFiltro: number
+    etiquetaTodos?: string
+}) {
+    return (
+        <div className="flex flex-wrap items-center gap-1.5 print:hidden">
+            <span className="text-[11px] text-gray-500 mr-1">Filtrar por:</span>
+            <button
+                type="button"
+                onClick={() => onChange('')}
+                className={`rounded-full border px-2.5 py-0.5 text-[11px] ${!valor
+                    ? 'border-blue-500 bg-blue-600 text-white'
+                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+            >
+                {etiquetaTodos} ({totalSinFiltro})
+            </button>
+            {CATEGORIAS_PRACTICA.map((cat) => {
+                const n = conteos[cat.id] ?? 0
+                const activo = valor === cat.id
+                return (
+                    <button
+                        key={cat.id}
+                        type="button"
+                        disabled={n === 0}
+                        onClick={() => onChange(activo ? '' : cat.id)}
+                        className={`rounded-full border px-2.5 py-0.5 text-[11px] disabled:opacity-40 disabled:cursor-not-allowed ${activo
+                            ? 'border-blue-500 bg-blue-600 text-white'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                            }`}
+                    >
+                        {CATEGORIA_PRACTICA_LABEL[cat.id]} ({n})
+                    </button>
+                )
+            })}
+        </div>
+    )
+}
+
 interface Props { loteId: number }
 
 type OrdenItemEditState = {
@@ -320,6 +374,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const [filtroMedico, setFiltroMedico] = useState('')
     const [filtroMatricula, setFiltroMatricula] = useState('')
     const [filtroPaciente, setFiltroPaciente] = useState('')
+    const [filtroCategoria, setFiltroCategoria] = useState<CategoriaPractica | ''>('')
     const [printIngresoId, setPrintIngresoId] = useState<number | null>(null)
     const [vistaPromedi, setVistaPromedi] = useState(false)
     const printRef = useRef<HTMLDivElement>(null)
@@ -662,9 +717,49 @@ export function LoteDetallePage({ loteId }: Props) {
             { sensitivity: 'base' }
         )
     )
-    const itemsFiltrados = itemsOrdenados.filter((item) =>
-        normalizarTexto(item.paciente?.nombreCompleto ?? item.ingreso.nombre).includes(normalizarTexto(filtroPaciente))
-    )
+    // Categorias presentes en cada ingreso, a partir del detalle ya cargado para impresion.
+    const categoriasPorIngreso = new Map<number, Set<CategoriaPractica>>()
+    const conteoCategoriasLote: Partial<Record<CategoriaPractica, number>> = {}
+    if (!esIPSTxt) {
+        for (const [ingresoIdRaw, ordenesIngreso] of Object.entries(ordenesPorIngreso)) {
+            const ingresoId = Number(ingresoIdRaw)
+            const presentes = new Set<CategoriaPractica>()
+            for (const orden of ordenesIngreso) {
+                if (!orden.incluidaEnLote) continue
+                for (const linea of orden.items) {
+                    const cat = categoriaPractica(linea.codigoPractica)
+                    if (cat) presentes.add(cat)
+                }
+            }
+            categoriasPorIngreso.set(ingresoId, presentes)
+            for (const cat of presentes) {
+                conteoCategoriasLote[cat] = (conteoCategoriasLote[cat] ?? 0) + 1
+            }
+        }
+    }
+
+    // Si ninguna practica del lote esta alcanzada por la regla, aplicar PROMEDI lo dejaria
+    // en cero. Pasa con los lotes de guardia, que se facturan por otra via.
+    const ingresosIncluidos = new Set(lote.items.filter((it) => it.incluido).map((it) => it.ingresoId))
+    const hayPracticasAlcanzadas = esIPSTxt
+        ? true
+        : Object.entries(ordenesPorIngreso).some(([ingresoIdRaw, ordenesIngreso]) =>
+            ingresosIncluidos.has(Number(ingresoIdRaw)) &&
+            ordenesIngreso.some((orden) =>
+                orden.incluidaEnLote &&
+                orden.items.some((linea) =>
+                    aplicaPromediPorObra(linea.codigoPractica, esOsecac ? 'OSECAC' : 'IPS')
+                )
+            )
+        )
+
+    const itemsFiltrados = itemsOrdenados
+        .filter((item) =>
+            normalizarTexto(item.paciente?.nombreCompleto ?? item.ingreso.nombre).includes(normalizarTexto(filtroPaciente))
+        )
+        .filter((item) =>
+            !filtroCategoria || (categoriasPorIngreso.get(item.ingresoId)?.has(filtroCategoria) ?? false)
+        )
     const totalNetoSinPromedi = esIPSTxt
         ? (lote.itemsIPSTxt ?? []).reduce((s, it) => s + it.impTotal, 0)
         : 0
@@ -966,12 +1061,13 @@ export function LoteDetallePage({ loteId }: Props) {
                                     className="border rounded px-2 py-1 text-xs w-24"
                                 />
                             </div>
-                            {(filtroPaciente || filtroMedico || filtroMatricula) && (
+                            {(filtroPaciente || filtroMedico || filtroMatricula || filtroCategoria) && (
                                 <button
                                     onClick={() => {
                                         setFiltroMedico('')
                                         setFiltroMatricula('')
                                         setFiltroPaciente('')
+                                        setFiltroCategoria('')
                                     }}
                                     className="text-xs border border-gray-300 rounded px-2 py-1 hover:bg-gray-50"
                                 >
@@ -979,6 +1075,19 @@ export function LoteDetallePage({ loteId }: Props) {
                                 </button>
                             )}
                         </div>
+                        <FiltroCategoriasPractica
+                            valor={filtroCategoria}
+                            onChange={setFiltroCategoria}
+                            conteos={conteoCategoriasLote}
+                            totalSinFiltro={lote.items.length}
+                            etiquetaTodos="Todos los pacientes"
+                        />
+                        {filtroCategoria && (
+                            <p className="text-[11px] text-gray-500 print:hidden">
+                                Mostrando solo pacientes y prácticas de {CATEGORIA_PRACTICA_LABEL[filtroCategoria]}. Los importes de la
+                                tabla siguen siendo los del ingreso completo.
+                            </p>
+                        )}
                         <div className="overflow-x-auto rounded-lg border border-gray-200">
                             <table className="w-full text-sm">
                                 <thead className="bg-gray-50 text-gray-600">
@@ -1075,7 +1184,12 @@ export function LoteDetallePage({ loteId }: Props) {
                             ) : (
                                 <div className="space-y-3">
                                     {(() => {
-                                        const ordenesOrdenadas = [...ordenes].sort((a, b) => {
+                                        const ordenesDeCategoria = filtroCategoria
+                                            ? ordenes.filter((orden) =>
+                                                orden.items.some((it) => categoriaPractica(it.codigoPractica) === filtroCategoria)
+                                            )
+                                            : ordenes
+                                        const ordenesOrdenadas = [...ordenesDeCategoria].sort((a, b) => {
                                             const diffTipo = Number(Boolean(b.esCirugia)) - Number(Boolean(a.esCirugia))
                                             if (diffTipo !== 0) return diffTipo
                                             const fechaA = new Date(a.fechaEmision).getTime()
@@ -1085,18 +1199,29 @@ export function LoteDetallePage({ loteId }: Props) {
                                         })
                                         const hayCirugiaMultiple = ordenesOrdenadas.some((orden) => Boolean(orden.esCirugiaMultiple))
 
+                                        if (ordenesOrdenadas.length === 0) {
+                                            return (
+                                                <div className="p-4 text-center text-gray-400 text-sm rounded border bg-gray-50">
+                                                    Este paciente no tiene prácticas de {CATEGORIA_PRACTICA_LABEL[filtroCategoria as CategoriaPractica]}
+                                                </div>
+                                            )
+                                        }
+
                                         return ordenesOrdenadas.map((orden, index) => {
                                             const keyOrden = `${orden.puestoNumero}-${orden.numero}`
                                             const keyOrdenEdicion = `${orden.puestoNumero}:${orden.numero}`
                                             const draftOrden = editOrdenes[keyOrdenEdicion] ?? buildOrdenEditState(orden)
                                             const porcentajePromediOrden = esIPSTxt || esIps ? 0.36 : 0.20
+                                            const itemsOrden = filtroCategoria
+                                                ? orden.items.filter((it) => categoriaPractica(it.codigoPractica) === filtroCategoria)
+                                                : orden.items
                                             const itemsTabla = agruparItemsOrdenParaTabla(
-                                                orden.items,
+                                                itemsOrden,
                                                 porcentajePromediOrden,
                                                 esOsecac,
                                                 orden.profesional?.nombre
                                             )
-                                            const totalCantidadOrden = orden.items.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)
+                                            const totalCantidadOrden = itemsOrden.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)
                                             const limitePracticas = 4
                                             const abierta = ordenesAbiertas[keyOrden] ?? false
                                             const editandoOrden = ordenesEnEdicion[keyOrden] ?? false
@@ -1237,7 +1362,7 @@ export function LoteDetallePage({ loteId }: Props) {
 
                                                             {esPendiente && editandoOrden ? (
                                                                 <div className="mt-2 divide-y divide-gray-200 border-y border-gray-200">
-                                                                    {orden.items.map((it) => {
+                                                                    {itemsOrden.map((it) => {
                                                                         const key = keyOrdenItem(orden.puestoNumero, orden.numero, it.item)
                                                                         const draft = editItems[key] ?? buildOrdenItemEditState(it)
                                                                         const guardando = guardandoItemKey === key
@@ -1345,8 +1470,15 @@ export function LoteDetallePage({ loteId }: Props) {
                         </div>
                         <div className="px-5 py-4 space-y-3">
                             <p className="text-sm text-gray-700">
-                                ¿Generar resumen PROMEDI ({porcentajePromediLabel}%)? Los códigos fuera de regla conservan el 100%.
+                                ¿Generar resumen PROMEDI ({porcentajePromediLabel}%)? Los códigos fuera de regla no se facturan.
                             </p>
+                            {!hayPracticasAlcanzadas && (
+                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                                    Ninguna práctica de este lote está alcanzada por la regla PROMEDI, así que el resumen
+                                    quedaría en <strong>cero</strong>. Es lo esperable en los lotes de guardia, que se
+                                    facturan por otra vía: en ese caso no hace falta aplicar PROMEDI.
+                                </div>
+                            )}
                             {errorPromedi && (
                                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                                     {errorPromedi}
@@ -1386,8 +1518,19 @@ export function LoteDetallePage({ loteId }: Props) {
 // ============================================================
 
 function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle[]; esPendiente: boolean }) {
-    const totalBruto = items.reduce((s, it) => s + it.impTotal, 0)
-    const totalPromedi = items.reduce((s, it) => s + (it.importePromedi ?? 0), 0)
+    const [filtroCategoria, setFiltroCategoria] = useState<CategoriaPractica | ''>('')
+
+    const conteoPorCategoria = items.reduce((acc, it) => {
+        const cat = categoriaPractica(it.servicioCodigo)
+        if (cat) acc[cat] = (acc[cat] ?? 0) + 1
+        return acc
+    }, {} as Partial<Record<CategoriaPractica, number>>)
+
+    const itemsVisibles = filtroCategoria
+        ? items.filter((it) => categoriaPractica(it.servicioCodigo) === filtroCategoria)
+        : items
+    const totalBruto = itemsVisibles.reduce((s, it) => s + it.impTotal, 0)
+    const totalPromedi = itemsVisibles.reduce((s, it) => s + (it.importePromedi ?? 0), 0)
 
     return (
         <div className="space-y-2 print:space-y-0">
@@ -1399,6 +1542,12 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                     </span>
                 )}
             </div>
+            <FiltroCategoriasPractica
+                valor={filtroCategoria}
+                onChange={setFiltroCategoria}
+                conteos={conteoPorCategoria}
+                totalSinFiltro={items.length}
+            />
             <p className="text-xs text-gray-500 print:hidden">
                 Al resumen solo entran los códigos alcanzados por la regla PROMEDI; los demás no se facturan.
             </p>
@@ -1433,7 +1582,7 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {items.map((it) => {
+                        {itemsVisibles.map((it) => {
                             const importeAplicado = it.importePromedi !== null ? Number(it.importePromedi) : null
                             const aplicaCodigoPromedi = aplicaPromediIPS(it.servicioCodigo)
                             const aplicaDescuentoPromedi = importeAplicado !== null && importeAplicado < Number(it.impTotal)
@@ -1478,10 +1627,10 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                             </tr>
                             )
                         })}
-                        {items.length === 0 && (
+                        {itemsVisibles.length === 0 && (
                             <tr>
                                 <td colSpan={11} className="px-3 py-6 text-center text-gray-400">
-                                    Sin registros
+                                    {filtroCategoria ? 'Sin registros para el filtro' : 'Sin registros'}
                                 </td>
                             </tr>
                         )}

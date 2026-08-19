@@ -53,8 +53,9 @@ export function calcularImportePromediPorCodigo(
     obraSocial: ObraSocialPromedi
 ): number {
     const importeBase = Number.isFinite(importeTotal) ? redondear2(importeTotal) : 0
+    // Lo que no esta alcanzado por la regla no entra al resumen: no se factura.
     if (!aplicaPromediPorObra(codigoPractica, obraSocial)) {
-        return importeBase
+        return 0
     }
 
     const porcentajeNormalizado = Math.abs(porcentajePromedi) > 1 ? porcentajePromedi / 100 : porcentajePromedi

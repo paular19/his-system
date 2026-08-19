@@ -5832,10 +5832,13 @@ export async function aplicarPromediLote(
             if (!orden.ingresoId) continue
 
             const importeBase = Number(item.importeTotal ?? 0)
+            // Al resumen solo entran las practicas alcanzadas por la regla de promedi.
+            // El resto (oxigeno, radiografias, ecografias, guardia, 431101, y en OSECAC
+            // ademas 70116 y 70607) no se factura en este lote.
             const aplica = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
             const importeFacturable = aplica
                 ? redondear2Repo(importeBase * porcentajePromedi)
-                : redondear2Repo(importeBase)
+                : 0
 
             const actual = importePorIngreso.get(orden.ingresoId) ?? 0
             importePorIngreso.set(orden.ingresoId, redondear2Repo(actual + importeFacturable))

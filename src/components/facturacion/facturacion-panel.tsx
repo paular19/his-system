@@ -22,6 +22,7 @@ import { fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/a
 import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 import { normalizarTextoBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
+import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
 
 type AutorizacionVinculadaExtendida = {
     ordenPuestoNumero: number
@@ -1578,7 +1579,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setFormIngresoNombre(data.ingreso.nombre ?? '')
         setFormDescripcionPatologia(data.ingreso.descripcionPatologia ?? '')
         setFormNumeroAfiliado(data.ingreso.numeroAfiliado ?? '')
-        setFormObservaciones(data.ingreso.observaciones ?? '')
+        setFormObservaciones(limpiarObservacionesAdmision(data.ingreso.observaciones) ?? '')
         setFormPacienteNombreCompleto(data.paciente?.nombreCompleto ?? '')
         setFormPacienteCelular(data.paciente?.celular1 ?? '')
         setFormPacienteEmail(data.paciente?.email ?? '')

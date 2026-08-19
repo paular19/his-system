@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { calcularEdad } from '@/lib/utils'
 import { construirObservacionBloqueoHabitacion } from '@/lib/internacion/bloqueo-habitacion'
+import { fusionarObservacionesConMeta } from '@/modules/internacion/observaciones-meta'
 import type {
   CrearIngresoInput,
   ActualizarIngresoInput,
@@ -838,6 +839,19 @@ export async function actualizarIngreso(
     if (data[campo] !== undefined) {
       updateData[campo] = data[campo]
     }
+  }
+
+  // Los formularios editan solo el texto libre: hay que reponer el bloque meta
+  // (checklist documental, ARM/O2, depositos) para no borrarlo al guardar.
+  if (data.observaciones !== undefined) {
+    const ingresoActual = await prisma.ingreso.findUnique({
+      where: { id },
+      select: { observaciones: true },
+    })
+    updateData.observaciones = fusionarObservacionesConMeta(
+      ingresoActual?.observaciones,
+      data.observaciones
+    )
   }
 
   // Campos que viven en IngresoSubtipo (derivacion, turno/practica, indicacion medica).

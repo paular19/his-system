@@ -5,6 +5,9 @@ import { Printer } from 'lucide-react'
 import { formatearFechaCalendario } from '@/lib/utils'
 import { formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import { limpiarBloqueMetaInternacion } from '@/modules/internacion/observaciones-meta'
+import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
+import { SECTOR_LABEL } from '@/modules/internacion/types'
+import { TIPO_TRASPASO_UTI_LABEL, type TipoTraspasoUti } from '@/modules/internacion/traspasos'
 
 type PacientePrintData = {
     id: number
@@ -44,6 +47,15 @@ type IngresoPrintData = {
     obraSocial: { nombre: string } | null
     cama: { identificador: string; sector: string | null; habitacion: string | null } | null
     ingresoPatologias: Array<{ id: number; descripcion: string | null; fecha: Date | string | null }>
+    transferencias: Array<{
+        id: number
+        fecha: Date | string | null
+        motivo: string | null
+        tipoTraspaso: TipoTraspasoUti
+        camaOrigen: { identificador: string; sector: string | null; habitacion: string | null } | null
+        camaDestino: { identificador: string; sector: string | null; habitacion: string | null } | null
+        profesional: { nombre: string } | null
+    }>
     practicas: Array<{
         id: number
         codigoPractica: string
@@ -73,6 +85,17 @@ function labelSexo(sexo: string | null | undefined) {
     if (sexo === 'M') return 'Masculino'
     if (sexo === 'F') return 'Femenino'
     return '-'
+}
+
+function labelCama(
+    cama: { identificador: string; sector: string | null; habitacion: string | null } | null | undefined
+) {
+    if (!cama) return 'Sin cama'
+    const sector = cama.sector ? (SECTOR_LABEL[cama.sector] ?? cama.sector) : null
+    const detalle = [sector, cama.habitacion ? `Hab. ${cama.habitacion}` : null]
+        .filter(Boolean)
+        .join(' · ')
+    return detalle ? `${cama.identificador} (${detalle})` : cama.identificador
 }
 
 function labelEstadoIngreso(estado: string | null | undefined) {
@@ -240,14 +263,44 @@ export function PacienteHospitalizacionPrint({ paciente, ingresos }: PacienteHos
                                 <div><strong>Fecha ingreso:</strong> {fmtFechaHora(ing.fechaIngreso)}</div>
                                 <div><strong>Fecha egreso:</strong> {fmtFechaHora(ing.fechaEgreso)}</div>
                                 <div><strong>Egreso previsto:</strong> {fmtFecha(ing.fechaEgresoPrevista)}</div>
-                                <div><strong>Cama:</strong> {ing.cama ? `${ing.cama.identificador} (${ing.cama.sector ?? '-'}${ing.cama.habitacion ? ` · ${ing.cama.habitacion}` : ''})` : '-'}</div>
+                                <div><strong>Cama:</strong> {ing.cama ? labelCama(ing.cama) : '-'}</div>
                                 <div><strong>Profesional guardia:</strong> {ing.profesionalGuardia?.nombre ?? '-'}</div>
                                 <div><strong>Profesional tratante:</strong> {ing.profesionalTratante?.nombre ?? '-'}</div>
                                 <div><strong>Obra social:</strong> {ing.obraSocial?.nombre ?? '-'}</div>
                                 <div style={{ gridColumn: '1 / -1' }}><strong>Diagnóstico presuntivo:</strong> {diagnosticoPresuntivo}</div>
                                 <div style={{ gridColumn: '1 / -1' }}><strong>Diagnóstico definitivo:</strong> {ing.descripcionPatologiaDefinitiva ?? '-'}</div>
-                                <div style={{ gridColumn: '1 / -1' }}><strong>Observaciones:</strong> {ing.observaciones ?? '-'}</div>
+                                <div style={{ gridColumn: '1 / -1' }}><strong>Observaciones:</strong> {limpiarObservacionesAdmision(ing.observaciones) ?? '-'}</div>
                             </div>
+
+                            {ing.transferencias.length > 0 && (
+                                <div style={{ marginBottom: 8 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Traspasos entre piso y UTI</div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ border: '1px solid #aaa', padding: 4, textAlign: 'left' }}>Traspaso</th>
+                                                <th style={{ border: '1px solid #aaa', padding: 4, textAlign: 'left' }}>Fecha</th>
+                                                <th style={{ border: '1px solid #aaa', padding: 4, textAlign: 'left' }}>Desde</th>
+                                                <th style={{ border: '1px solid #aaa', padding: 4, textAlign: 'left' }}>Hacia</th>
+                                                <th style={{ border: '1px solid #aaa', padding: 4, textAlign: 'left' }}>Profesional</th>
+                                                <th style={{ border: '1px solid #aaa', padding: 4, textAlign: 'left' }}>Motivo</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {ing.transferencias.map((t) => (
+                                                <tr key={t.id}>
+                                                    <td style={{ border: '1px solid #aaa', padding: 4 }}>{TIPO_TRASPASO_UTI_LABEL[t.tipoTraspaso]}</td>
+                                                    <td style={{ border: '1px solid #aaa', padding: 4 }}>{fmtFechaHora(t.fecha)}</td>
+                                                    <td style={{ border: '1px solid #aaa', padding: 4 }}>{t.camaOrigen ? labelCama(t.camaOrigen) : '—'}</td>
+                                                    <td style={{ border: '1px solid #aaa', padding: 4 }}>{labelCama(t.camaDestino)}</td>
+                                                    <td style={{ border: '1px solid #aaa', padding: 4 }}>{t.profesional?.nombre ?? '-'}</td>
+                                                    <td style={{ border: '1px solid #aaa', padding: 4 }}>{t.motivo ?? '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
 
                             {ing.ingresoPatologias.length > 0 && (
                                 <div style={{ marginBottom: 8 }}>

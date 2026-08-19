@@ -43,6 +43,7 @@ import {
     aplicaPromediOsecac,
     CODIGOS_PROMEDI_BASE,
 } from './promedi-rules'
+import { fusionarObservacionesConMeta } from '@/modules/internacion/observaciones-meta'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 const NOMBRE_MATRICULA_9110_DEFAULT = 'CLINICA SAN RAFAEL'
@@ -2985,13 +2986,26 @@ export async function actualizarContextoFacturacion(
 ): Promise<void> {
     await prisma.$transaction(async (tx) => {
         if (data.ingreso) {
+            // El panel edita solo el texto libre: se repone el bloque meta guardado.
+            let observaciones = data.ingreso.observaciones
+            if (observaciones !== undefined) {
+                const ingresoActual = await tx.ingreso.findUnique({
+                    where: { id: ingresoId },
+                    select: { observaciones: true },
+                })
+                observaciones = fusionarObservacionesConMeta(
+                    ingresoActual?.observaciones,
+                    observaciones
+                )
+            }
+
             await tx.ingreso.update({
                 where: { id: ingresoId },
                 data: {
                     nombre: data.ingreso.nombre,
                     descripcionPatologia: data.ingreso.descripcionPatologia,
                     numeroAfiliado: data.ingreso.numeroAfiliado,
-                    observaciones: data.ingreso.observaciones,
+                    observaciones,
                     obraSocialId: data.ingreso.obraSocialId,
                     planId: data.ingreso.planId,
                     fechaEstado: new Date(),

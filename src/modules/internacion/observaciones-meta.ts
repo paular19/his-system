@@ -395,3 +395,24 @@ export function serializarObservacionesInternacion(data: {
 export function limpiarBloqueMetaInternacion(rawValue: string | null | undefined): string | null {
   return parseObservacionesInternacion(rawValue).observaciones
 }
+
+/**
+ * Reemplaza solo el texto libre y conserva el bloque meta que ya estaba guardado.
+ * Los formularios que editan observaciones ven el texto limpio, asi que guardar
+ * ese texto tal cual borraria checklist documental, ARM/O2 y depositos.
+ */
+export function fusionarObservacionesConMeta(
+  rawExistente: string | null | undefined,
+  textoLibre: string | null | undefined
+): string | null {
+  const previo = parseObservacionesInternacion(rawExistente)
+
+  return serializarObservacionesInternacion({
+    observaciones: textoLibre,
+    clinicaDerivante: previo.clinicaDerivante,
+    checklistDocumental: previo.checklistDocumental,
+    armRegistros: previo.armRegistros,
+    oxigenoterapiaRegistros: previo.oxigenoterapiaRegistros,
+    depositosRegistros: previo.depositosRegistros,
+  })
+}

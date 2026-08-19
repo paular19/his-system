@@ -5,6 +5,9 @@ import { redirect, notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { formatearFecha, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import { limpiarBloqueMetaInternacion } from '@/modules/internacion/observaciones-meta'
+import { SECTOR_LABEL } from '@/modules/internacion/types'
+import { filtrarTraspasosUti, TIPO_TRASPASO_UTI_LABEL } from '@/modules/internacion/traspasos'
+import { formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import Link from 'next/link'
 import { ChevronRight, Pencil, ClipboardList, BedDouble } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -150,6 +153,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
     obrasRows,
     planesRows,
     camasRows,
+    transferenciasRows,
   ] = await Promise.all([
     ingresoIds.length > 0
       ? prisma.ingresoPatologia.findMany({
@@ -219,6 +223,21 @@ export default async function FichaPacientePage({ params }: PageProps) {
       ? prisma.cama.findMany({
         where: { id: { in: camaIds } },
         select: { id: true, identificador: true, sector: true, habitacion: true, estado: true },
+      })
+      : Promise.resolve([]),
+    ingresoIds.length > 0
+      ? prisma.transferenciaIngreso.findMany({
+        where: { ingresoId: { in: ingresoIds } },
+        select: {
+          id: true,
+          ingresoId: true,
+          fecha: true,
+          motivo: true,
+          camaOrigen: { select: { identificador: true, sector: true, habitacion: true } },
+          camaDestino: { select: { identificador: true, sector: true, habitacion: true } },
+          profesional: { select: { nombre: true } },
+        },
+        orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
       })
       : Promise.resolve([]),
   ])
@@ -297,6 +316,13 @@ export default async function FichaPacientePage({ params }: PageProps) {
     planesRows.map((row) => [row.id, { descripcion: row.descripcion }])
   )
 
+  const transferenciasByIngreso = new Map<number, Array<(typeof transferenciasRows)[number]>>()
+  for (const row of transferenciasRows) {
+    const lista = transferenciasByIngreso.get(row.ingresoId) ?? []
+    lista.push(row)
+    transferenciasByIngreso.set(row.ingresoId, lista)
+  }
+
   const camaById = new Map(
     camasRows.map((row) => [row.id, {
       identificador: row.identificador,
@@ -332,6 +358,7 @@ export default async function FichaPacientePage({ params }: PageProps) {
         : null,
     ingresoPatologias: patologiasByIngreso.get(ing.id) ?? [],
     practicas: practicasByIngreso.get(ing.id) ?? [],
+    transferencias: filtrarTraspasosUti(transferenciasByIngreso.get(ing.id) ?? []),
   }))
 
   const ingresosPrint = ingresos.map((ing) => ({
@@ -606,6 +633,24 @@ export default async function FichaPacientePage({ params }: PageProps) {
                         {ing.fechaIngreso ? `Ingreso ${formatearFecha(ing.fechaIngreso)}` : 'Sin fecha de ingreso'}
                         {ing.fechaEgreso ? ` · Alta ${formatearFecha(ing.fechaEgreso)}` : ''}
                       </p>
+                      {ing.transferencias.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                            Traspasos entre piso y UTI
+                          </p>
+                          <ul className="mt-1 space-y-1">
+                            {ing.transferencias.map((t) => (
+                              <li key={t.id} className="text-sm text-gray-600">
+                                <span className="font-medium text-gray-900">{TIPO_TRASPASO_UTI_LABEL[t.tipoTraspaso]}</span>
+                                {' · '}{formatearFechaHoraArgentina(t.fecha)}
+                                {t.camaOrigen ? ` · ${descripcionCama(t.camaOrigen)} → ${descripcionCama(t.camaDestino)}` : ` · ${descripcionCama(t.camaDestino)}`}
+                                {t.motivo ? ` · ${t.motivo}` : ''}
+                                {t.profesional ? ` · ${t.profesional.nombre}` : ''}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {puedeConfirmarReserva(ing) && (
@@ -656,6 +701,17 @@ function DataItem({
       <dd className="mt-0.5 text-sm text-gray-900">{value ?? '-'}</dd>
     </div>
   )
+}
+
+function descripcionCama(
+  cama: { identificador: string; sector: string | null; habitacion: string | null } | null
+): string {
+  if (!cama) return 'Sin cama'
+  const sector = cama.sector ? (SECTOR_LABEL[cama.sector] ?? cama.sector) : null
+  const detalle = [sector, cama.habitacion ? `Hab. ${cama.habitacion}` : null]
+    .filter(Boolean)
+    .join(' · ')
+  return detalle ? `${cama.identificador} (${detalle})` : cama.identificador
 }
 
 function normalizarCodigo(valor: string | null | undefined): string {

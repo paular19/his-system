@@ -3,6 +3,8 @@ import { PrintButton } from '@/components/ui/print-button'
 import { getUsuarioSesion } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { prisma } from '@/lib/db'
+import { getProfesionalesActivosCatalogo } from '@/lib/catalogos/atencion-cache'
+import { nombreProfesionalParaMostrar } from '@/lib/profesionales'
 import { FichaQuirurgicaNotasCirujano } from '@/components/internacion/ficha-quirurgica-notas-cirujano'
 import { FichaQuirurgicaAltaCirugia } from '@/components/internacion/ficha-quirurgica-alta-cirugia'
 import { AnularFichaQuirurgicaButton } from '@/components/internacion/anular-ficha-quirurgica-button'
@@ -79,6 +81,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
       },
       profesionalTratante: {
         select: {
+          id: true,
           nombre: true,
           matricula: true,
         },
@@ -113,6 +116,8 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
   })
 
   if (!ingreso || ingreso.tipoIngresoCodigo !== 'INT') notFound()
+
+  const profesionales = await getProfesionalesActivosCatalogo()
 
   const cirugias = ingreso.cirugiasProgramadas.map((cirugia) => {
     const diferencialesConsolidados = cirugia.diferenciales.reduce(
@@ -277,10 +282,16 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
                   pacienteNombre={ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? null}
                   pacienteDni={ingreso.paciente?.numeroDocumento != null ? String(ingreso.paciente.numeroDocumento) : null}
                   obraSocial={ingreso.obraSocial?.nombre ?? null}
-                  cirujanoInicial={ingreso.profesionalTratante?.nombre ?? null}
+                  cirujanoInicial={
+                    ingreso.profesionalTratante
+                      ? nombreProfesionalParaMostrar(ingreso.profesionalTratante.nombre)
+                      : null
+                  }
                   diagnosticoInicial={cirugia.diagnosticoInicial}
                   observacionesIniciales={cirugia.observacionesIniciales}
                   cirujanoMatricula={ingreso.profesionalTratante?.matricula ?? null}
+                  cirujanoIdInicial={ingreso.profesionalTratante?.id ?? null}
+                  profesionales={profesionales}
                 />
               </article>
             ))

@@ -1,12 +1,20 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
+import {
+  nombreProfesionalParaMostrar,
+  normalizarTextoBusqueda,
+  type ProfesionalBasico,
+} from '@/lib/profesionales'
 
 type CamposNotasCirujano = {
   apellidoNombre: string
   dni: string
   obraSocial: string
   cirujano: string
+  cirujanoId: string
+  cirujanoMatricula: string
   ayudantePrimero: string
   ayudanteSegundo: string
   ayudanteTercero: string
@@ -43,28 +51,51 @@ interface FichaQuirurgicaNotasCirujanoProps {
   diagnosticoInicial?: string | null
   observacionesIniciales?: string | null
   cirujanoMatricula?: number | null
+  cirujanoIdInicial?: number | null
+  profesionales?: ProfesionalBasico[]
 }
 
 function storageKey(ingresoId: number, cirugiaId: number): string {
   return `ficha-quirurgica:notas:${ingresoId}:${cirugiaId}`
 }
 
-function buildInitialState(
-  pacienteNombre?: string | null,
-  pacienteDni?: string | null,
-  obraSocial?: string | null,
-  fechaCirugiaInput?: string | null,
-  cirugiasMultiplesInicial?: boolean,
-  tipoCirugiaMultipleInicial?: '' | 'MISMA_VIA_MISMA_PATOLOGIA' | 'MISMA_VIA_DISTINTA_PATOLOGIA' | 'DISTINTA_VIA_DISTINTA_PATOLOGIA',
-  cirujanoInicial?: string | null,
-  diagnosticoInicial?: string | null,
+interface EstadoInicialInput {
+  pacienteNombre?: string | null
+  pacienteDni?: string | null
+  obraSocial?: string | null
+  fechaCirugiaInput?: string | null
+  cirugiasMultiplesInicial?: boolean
+  tipoCirugiaMultipleInicial?: '' | 'MISMA_VIA_MISMA_PATOLOGIA' | 'MISMA_VIA_DISTINTA_PATOLOGIA' | 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
+  cirujanoInicial?: string | null
+  diagnosticoInicial?: string | null
   observacionesIniciales?: string | null
-): CamposNotasCirujano {
+  cirujanoIdInicial?: number | null
+  cirujanoMatriculaInicial?: number | null
+}
+
+function buildInitialState({
+  pacienteNombre,
+  pacienteDni,
+  obraSocial,
+  fechaCirugiaInput,
+  cirugiasMultiplesInicial,
+  tipoCirugiaMultipleInicial,
+  cirujanoInicial,
+  diagnosticoInicial,
+  observacionesIniciales,
+  cirujanoIdInicial,
+  cirujanoMatriculaInicial,
+}: EstadoInicialInput): CamposNotasCirujano {
   return {
     apellidoNombre: (pacienteNombre ?? '').trim(),
     dni: (pacienteDni ?? '').trim(),
     obraSocial: (obraSocial ?? '').trim(),
     cirujano: (cirujanoInicial ?? '').trim(),
+    cirujanoId: cirujanoIdInicial != null ? String(cirujanoIdInicial) : '',
+    cirujanoMatricula:
+      cirujanoMatriculaInicial != null && cirujanoMatriculaInicial > 0
+        ? String(cirujanoMatriculaInicial)
+        : '',
     ayudantePrimero: '',
     ayudanteSegundo: '',
     ayudanteTercero: '',
@@ -108,11 +139,22 @@ function mergeCampos(
     .filter((item): item is string => Boolean(item && item.length > 0))
     .join('\n\n')
 
+  const cirujano = parsed.cirujano ?? fallback.cirujano
+
+  // Fichas guardadas antes del selector no tienen cirujanoId ni matricula propia: solo
+  // heredan los del tratante si el nombre guardado sigue siendo el mismo. Si difiere, la
+  // matricula queda en blanco en vez de imprimir la de otro profesional.
+  const mismoCirujanoQueFallback =
+    normalizarTextoBusqueda(cirujano) === normalizarTextoBusqueda(fallback.cirujano)
+
   return {
     apellidoNombre: parsed.apellidoNombre ?? fallback.apellidoNombre,
     dni: parsed.dni ?? fallback.dni,
     obraSocial: parsed.obraSocial ?? fallback.obraSocial,
-    cirujano: parsed.cirujano ?? fallback.cirujano,
+    cirujano,
+    cirujanoId: parsed.cirujanoId ?? (mismoCirujanoQueFallback ? fallback.cirujanoId : ''),
+    cirujanoMatricula:
+      parsed.cirujanoMatricula ?? (mismoCirujanoQueFallback ? fallback.cirujanoMatricula : ''),
     ayudantePrimero: parsed.ayudantePrimero ?? fallback.ayudantePrimero,
     ayudanteSegundo: parsed.ayudanteSegundo ?? fallback.ayudanteSegundo,
     ayudanteTercero: parsed.ayudanteTercero ?? fallback.ayudanteTercero,
@@ -159,6 +201,8 @@ export function FichaQuirurgicaNotasCirujano({
   diagnosticoInicial,
   observacionesIniciales,
   cirujanoMatricula,
+  cirujanoIdInicial,
+  profesionales = [],
 }: FichaQuirurgicaNotasCirujanoProps) {
   const tipoCirugiaMultipleLabel: Record<NonNullable<CamposNotasCirujano['tipoCirugiaMultiple']>, string> = {
     '': 'No especificada',
@@ -169,7 +213,7 @@ export function FichaQuirurgicaNotasCirujano({
 
   const fallback = useMemo(
     () =>
-      buildInitialState(
+      buildInitialState({
         pacienteNombre,
         pacienteDni,
         obraSocial,
@@ -178,8 +222,10 @@ export function FichaQuirurgicaNotasCirujano({
         tipoCirugiaMultipleInicial,
         cirujanoInicial,
         diagnosticoInicial,
-        observacionesIniciales
-      ),
+        observacionesIniciales,
+        cirujanoIdInicial,
+        cirujanoMatriculaInicial: cirujanoMatricula,
+      }),
     [
       pacienteNombre,
       pacienteDni,
@@ -190,6 +236,8 @@ export function FichaQuirurgicaNotasCirujano({
       cirujanoInicial,
       diagnosticoInicial,
       observacionesIniciales,
+      cirujanoIdInicial,
+      cirujanoMatricula,
     ]
   )
 
@@ -261,6 +309,24 @@ export function FichaQuirurgicaNotasCirujano({
   const updateCampo = <T extends keyof CamposNotasCirujano>(field: T, value: CamposNotasCirujano[T]) => {
     setEstadoCondicional(null)
     setCampos((prev) => ({ ...prev, [field]: value }))
+  }
+
+  // El nombre y la matricula del cirujano salen siempre del profesional elegido, para que la
+  // firma impresa no quede con la matricula del tratante cuando opera otro medico.
+  const seleccionarCirujano = (profesionalId: string) => {
+    setEstadoCondicional(null)
+
+    const elegido = profesionales.find((profesional) => String(profesional.id) === profesionalId)
+
+    setCampos((prev) => ({
+      ...prev,
+      cirujanoId: profesionalId,
+      cirujano: elegido ? nombreProfesionalParaMostrar(elegido.nombre) : '',
+      cirujanoMatricula:
+        elegido && typeof elegido.matricula === 'number' && elegido.matricula > 0
+          ? String(elegido.matricula)
+          : '',
+    }))
   }
 
   const limpiar = () => {
@@ -396,12 +462,16 @@ export function FichaQuirurgicaNotasCirujano({
 
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Cirujano</label>
-          <input
-            type="text"
-            value={campos.cirujano}
-            onChange={(e) => updateCampo('cirujano', e.target.value)}
-            className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+          <ProfesionalSelect
+            profesionales={profesionales}
+            value={campos.cirujanoId}
+            onChange={seleccionarCirujano}
+            permitirCargaManual
+            selectClassName="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
           />
+          <p className="mt-1 text-[11px] text-slate-500">
+            Matricula: {campos.cirujanoMatricula || 'sin matricula registrada'}
+          </p>
         </div>
 
         <div>
@@ -786,7 +856,7 @@ export function FichaQuirurgicaNotasCirujano({
                 <div className="border-b border-black" />
                 <p className="mt-1 text-[10px] font-semibold">Firma y sello del cirujano</p>
                 <p className="text-[10px]">Nombre: {campos.cirujano || '________________'}</p>
-                <p className="text-[10px]">Matricula: {cirujanoMatricula ? String(cirujanoMatricula) : '________________'}</p>
+                <p className="text-[10px]">Matricula: {campos.cirujanoMatricula.trim() || '________________'}</p>
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { registrarAudit } from '@/lib/security/audit'
 import * as repo from './repository'
+import { clasificarTraspasoUti } from './traspasos'
 import type {
   ActualizarCamaInput,
   BusquedaInternacionInput,
@@ -320,6 +321,30 @@ export async function transferirCama(
     detalle: `Transferencia: cama ${transferencia.camaOrigen?.identificador ?? 'N/A'} → ${transferencia.camaDestino.identificador}`,
     direccionIp: ip,
   })
+
+  // Solo los movimientos que cruzan entre piso y UTI arrastran cambio de medico
+  // tratante. Los cambios dentro del mismo sector no lo tocan.
+  const tipoTraspaso = clasificarTraspasoUti(transferencia)
+  const cruzaPisoUti = tipoTraspaso === 'PISO_A_UTI' || tipoTraspaso === 'UTI_A_PISO'
+
+  if (cruzaPisoUti && data.profesionalId) {
+    try {
+      await actualizarTratanteInternacion(
+        {
+          ingresoId: data.ingresoId,
+          profesionalTratanteId: data.profesionalId,
+          fecha: transferencia.fecha,
+        },
+        usuario,
+        ip
+      )
+    } catch (err) {
+      const motivo = err instanceof Error ? err.message : 'error desconocido'
+      throw new Error(
+        `La cama se cambio correctamente, pero no se pudo actualizar el medico tratante: ${motivo}`
+      )
+    }
+  }
 
   return transferencia
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Stethoscope } from 'lucide-react'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
@@ -54,6 +54,12 @@ export function TratanteSection({
     const [guardando, setGuardando] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [fechaCambioTratante, setFechaCambioTratante] = useState(() => ahoraLocalDateTimeInput())
+
+    // El tratante puede cambiar desde la tarjeta de camas (traspaso piso <-> UTI):
+    // sincronizar el select cuando el server component se refresca.
+    useEffect(() => {
+        setTratanteSeleccionado(tratanteActualId ? String(tratanteActualId) : '')
+    }, [tratanteActualId])
 
     const cambiosDetectados = useMemo(
         () => (tratanteActualId ? String(tratanteActualId) !== tratanteSeleccionado : Boolean(tratanteSeleccionado)),

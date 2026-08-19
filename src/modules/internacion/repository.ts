@@ -23,6 +23,7 @@ import type {
   CirugiaUrgenciaItem,
 } from './types'
 import { SECTOR_CAMA, SECTOR_LABEL } from './types'
+import { clasificarTraspasoUti } from './traspasos'
 import type {
   ActualizarCamaInput,
   BusquedaInternacionInput,
@@ -3103,7 +3104,7 @@ export async function transferirCama(
     select: {
       id: true,
       camaId: true,
-      cama: { select: { estado: true } },
+      cama: { select: { estado: true, sector: true } },
     },
   })
   if (!ingreso) throw new Error('Internación no encontrada')
@@ -3111,6 +3112,20 @@ export async function transferirCama(
   const camaDestino = await prisma.cama.findUnique({ where: { id: data.camaDestinoId } })
   if (!camaDestino) throw new Error('Cama destino no encontrada')
   if (camaDestino.estado !== 'DISPONIBLE') throw new Error('La cama destino no está disponible')
+
+  // Un traspaso entre piso y UTI exige designar el nuevo medico tratante.
+  const tipoTraspaso = clasificarTraspasoUti({
+    camaOrigen: ingreso.cama ? { sector: ingreso.cama.sector } : null,
+    camaDestino: { sector: camaDestino.sector },
+  })
+  if (
+    (tipoTraspaso === 'PISO_A_UTI' || tipoTraspaso === 'UTI_A_PISO') &&
+    !data.profesionalId
+  ) {
+    throw new Error(
+      'En un traspaso entre piso y UTI es obligatorio indicar el nuevo profesional tratante'
+    )
+  }
 
   const transferencia = await prisma.$transaction(async (tx) => {
     const ahora = new Date()

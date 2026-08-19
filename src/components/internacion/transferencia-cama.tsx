@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowRightLeft } from 'lucide-react'
 import type { TransferenciaItem, CamaConOcupante } from '@/modules/internacion/types'
 import { SECTOR_LABEL } from '@/modules/internacion/types'
+import { clasificarTraspasoUti } from '@/modules/internacion/traspasos'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
@@ -131,6 +132,26 @@ export function TransferenciaCama({
 
     // Refresh camas disponibles (excluir la cama actual del listado)
     const camasParaTransferir = camasDisponibles.filter((c) => c.id !== cama?.id)
+
+    // El tratante solo se cambia cuando el movimiento cruza entre piso y UTI.
+    const camaDestinoSeleccionada = useMemo(
+        () => camasParaTransferir.find((c) => String(c.id) === camaDestinoId) ?? null,
+        [camasParaTransferir, camaDestinoId]
+    )
+    const traspasoUti = useMemo(() => {
+        if (esAsignacionInicial || !cama || !camaDestinoSeleccionada) return null
+        return clasificarTraspasoUti({
+            camaOrigen: { sector: cama.sector },
+            camaDestino: { sector: camaDestinoSeleccionada.sector },
+        })
+    }, [cama, camaDestinoSeleccionada, esAsignacionInicial])
+    const cambiaTratante = traspasoUti === 'PISO_A_UTI' || traspasoUti === 'UTI_A_PISO'
+
+    useEffect(() => {
+        if (!cambiaTratante && profesionalId) {
+            setProfesionalId('')
+        }
+    }, [cambiaTratante, profesionalId])
     const opcionesCamasHistorial = useMemo(() => {
         const map = new Map<number, { id: number; identificador: string; sector: string; habitacion: string | null }>()
 
@@ -246,6 +267,11 @@ export function TransferenciaCama({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!camaDestinoId) return
+        if (cambiaTratante && !profesionalId) {
+            setError('En un traspaso entre piso y UTI es obligatorio indicar el nuevo profesional tratante.')
+            return
+        }
+        const cambioDeTratante = cambiaTratante && Boolean(profesionalId)
         setGuardando(true); setError(null)
 
         try {
@@ -266,8 +292,16 @@ export function TransferenciaCama({
             setCama(data.camaDestino)
             setCamaDestinoId(''); setMotivo(''); setProfesionalId(''); setFechaTransferencia(ahoraLocalDateTimeInput())
             setMostrarFormulario(false)
+            if (cambioDeTratante) {
+                // Refrescar para que la tarjeta de medico tratante y su historico muestren el cambio.
+                router.refresh()
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error desconocido')
+            if (cambioDeTratante) {
+                // El cambio de cama pudo haberse aplicado antes de fallar el tratante.
+                router.refresh()
+            }
         } finally {
             setGuardando(false)
         }
@@ -494,16 +528,26 @@ export function TransferenciaCama({
                                 ))}
                             </select>
                         </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Profesional</label>
-                            <ProfesionalSelect
-                                profesionales={profesionales}
-                                value={profesionalId}
-                                onChange={setProfesionalId}
-                                placeholderOption="— Sin asignar —"
-                                selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
-                            />
-                        </div>
+                        {cambiaTratante && (
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Nuevo profesional tratante <span className="text-red-500">*</span>
+                                </label>
+                                <ProfesionalSelect
+                                    profesionales={profesionales}
+                                    value={profesionalId}
+                                    onChange={setProfesionalId}
+                                    required
+                                    placeholderOption="— Seleccionar nuevo tratante —"
+                                    selectClassName="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                                />
+                                <p className="mt-1 text-[11px] text-gray-500">
+                                    {traspasoUti === 'PISO_A_UTI' ? 'Traspaso de piso a UTI' : 'Traspaso de UTI a piso'}: es
+                                    obligatorio indicar el nuevo medico tratante. El cambio queda registrado en el historico
+                                    de medicos tratantes.
+                                </p>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                                 {esAsignacionInicial ? 'Fecha y hora de asignacion' : 'Fecha y hora del cambio'} <span className="text-red-500">*</span>

@@ -6,6 +6,7 @@ import { ChevronRight } from 'lucide-react'
 import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItemDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
 import { puedeEditarPrestacionEnLote } from '@/modules/facturacion/editability'
 import { LoteResumenPrint } from './lote-resumen-print'
+import { descargarResumenPdf } from './lote-resumen-pdf'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
 import {
@@ -373,7 +374,10 @@ export function LoteDetallePage({ loteId }: Props) {
     const [filtroMatricula, setFiltroMatricula] = useState('')
     const [filtroPaciente, setFiltroPaciente] = useState('')
     const [filtroCategoria, setFiltroCategoria] = useState<CategoriaPractica | ''>('')
+    const [filtroCategoriaIPS, setFiltroCategoriaIPS] = useState<CategoriaPractica | ''>('')
     const [printIngresoId, setPrintIngresoId] = useState<number | null>(null)
+    const [generandoPdf, setGenerandoPdf] = useState(false)
+    const [errorPdf, setErrorPdf] = useState('')
     const [vistaPromedi, setVistaPromedi] = useState(false)
     const printRef = useRef<HTMLDivElement>(null)
     const [ordenesPorIngreso, setOrdenesPorIngreso] = useState<Record<number, OrdenAutorizadaLote[]>>({})
@@ -789,11 +793,26 @@ export function LoteDetallePage({ loteId }: Props) {
             return s + importeMostrado
         }, 0)
 
-    const detalleParaImpresion = !esIPSTxt
-        ? itemsOrdenados.filter((item) => printIngresoId === null || item.ingresoId === printIngresoId).map((item) => {
+    // Al resumen IPS solo van las practicas alcanzadas por la regla, y ademas hay que
+    // respetar el filtro de categoria de la tabla.
+    const itemsIPSTxtParaResumen = esIPSTxt
+        ? (lote.itemsIPSTxt ?? [])
+            .filter((it) => aplicaPromediIPS(it.servicioCodigo))
+            .filter((it) => !filtroCategoriaIPS || categoriaPractica(it.servicioCodigo) === filtroCategoriaIPS)
+        : []
+
+    // El resumen impreso o exportado tiene que respetar el filtro de categoria de la
+    // pantalla: si se filtra por radiografias, no puede salir el lote entero.
+    const detalleIngresosBase = !esIPSTxt
+        ? itemsOrdenados.filter((item) =>
+            !filtroCategoria || (categoriasPorIngreso.get(item.ingresoId)?.has(filtroCategoria) ?? false)
+        ).map((item) => {
             const ordenesIngreso = ordenesPorIngreso[item.ingresoId] ?? []
             const lineasBase = ordenesIngreso.filter((orden) => orden.incluidaEnLote).flatMap((orden) =>
-                orden.items.map((linea) => {
+                (filtroCategoria
+                    ? orden.items.filter((it) => categoriaPractica(it.codigoPractica) === filtroCategoria)
+                    : orden.items
+                ).map((linea) => {
                     const subitemLinea = resolverSubitemPromedi({
                         codigoPractica: linea.codigoPractica,
                         modulo: linea.modulo,
@@ -885,6 +904,53 @@ export function LoteDetallePage({ loteId }: Props) {
         })
         : []
 
+    const detalleParaImpresion = printIngresoId === null
+        ? detalleIngresosBase
+        : detalleIngresosBase.filter((item) => item.ingresoId === printIngresoId)
+
+    const filtroResumenActivo = esIPSTxt ? filtroCategoriaIPS : filtroCategoria
+    const etiquetaFiltroCategoria = filtroResumenActivo
+        ? CATEGORIA_PRACTICA_LABEL[filtroResumenActivo]
+        : null
+
+    // Con filtro activo el total del lote entero no aplica: hay que totalizar lo filtrado.
+    const totalResumen = !filtroResumenActivo
+        ? totalIncluido
+        : esIPSTxt
+            ? itemsIPSTxtParaResumen.reduce(
+                (s, it) => s + (it.importePromedi !== null ? Number(it.importePromedi) : Number(it.impTotal)),
+                0
+            )
+            : detalleIngresosBase.reduce((s, ing) => s + ing.totalIngreso, 0)
+
+    // Genera el PDF sin pasar por el dialogo de impresion del navegador.
+    async function descargarPdf(ingresoId: number | null = null) {
+        setErrorPdf('')
+        setGenerandoPdf(true)
+        try {
+            const detalle = ingresoId === null
+                ? detalleIngresosBase
+                : detalleIngresosBase.filter((item) => item.ingresoId === ingresoId)
+            const totalPdf = ingresoId === null
+                ? totalResumen
+                : (detalle[0]?.totalIngreso ?? 0)
+
+            await descargarResumenPdf({
+                lote: lote!,
+                totalIncluido: totalPdf,
+                detalleIngresos: detalle,
+                itemsIPSTxt: itemsIPSTxtParaResumen,
+                filtroCategoria: etiquetaFiltroCategoria,
+                pacienteUnico: ingresoId === null ? null : (detalle[0]?.paciente ?? null),
+            })
+        } catch (e) {
+            console.error('[descargarPdf]', e)
+            setErrorPdf('No se pudo generar el PDF')
+        } finally {
+            setGenerandoPdf(false)
+        }
+    }
+
     return (
         <div className="p-6 space-y-5 print:p-0 lote-detalle-print-root">
             {/* Encabezado */}
@@ -930,6 +996,13 @@ export function LoteDetallePage({ loteId }: Props) {
                             className="border border-gray-300 text-gray-600 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
                         >
                             🖨 Imprimir general
+                        </button>
+                        <button
+                            onClick={() => descargarPdf(null)}
+                            disabled={generandoPdf}
+                            className="border border-gray-300 text-gray-600 px-3 py-1.5 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            {generandoPdf ? 'Generando PDF...' : '⬇ Descargar PDF'}
                         </button>
                         {puedeAplicarPromedi && (
                             <button
@@ -978,6 +1051,12 @@ export function LoteDetallePage({ loteId }: Props) {
                         </button>
                     </div>
                 </div>
+
+                {errorPdf && (
+                    <div className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 print:hidden">
+                        {errorPdf}
+                    </div>
+                )}
 
                 <div className="mt-3 space-y-1 text-sm text-gray-600 print:hidden">
                     {lote.concepto && <div><strong>Concepto:</strong> {lote.concepto}</div>}
@@ -1035,6 +1114,8 @@ export function LoteDetallePage({ loteId }: Props) {
                     <TablaIPSTxtItems
                         items={lote.itemsIPSTxt ?? []}
                         esPendiente={esPendiente}
+                        filtroCategoria={filtroCategoriaIPS}
+                        onFiltroCategoriaChange={setFiltroCategoriaIPS}
                     />
 
                     <div className="hidden print:block border-t border-gray-300 mt-3 pt-2 text-[10px] text-gray-500 text-center">
@@ -1185,6 +1266,13 @@ export function LoteDetallePage({ loteId }: Props) {
                                     className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
                                 >
                                     Imprimir paciente
+                                </button>
+                                <button
+                                    onClick={() => descargarPdf(selectedIngresoId)}
+                                    disabled={generandoPdf}
+                                    className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                >
+                                    {generandoPdf ? 'Generando...' : 'PDF paciente'}
                                 </button>
                                 <button
                                     onClick={() => { setSelectedIngresoId(null); setOrdenes([]) }}
@@ -1475,9 +1563,11 @@ export function LoteDetallePage({ loteId }: Props) {
                 <LoteResumenPrint
                     lote={lote}
                     totalIncluido={printIngresoId === null
-                        ? totalIncluido
+                        ? totalResumen
                         : (detalleParaImpresion.find((item) => item.ingresoId === printIngresoId)?.totalIngreso ?? 0)}
                     detalleIngresos={detalleParaImpresion}
+                    itemsIPSTxt={esIPSTxt ? itemsIPSTxtParaResumen : undefined}
+                    filtroCategoria={etiquetaFiltroCategoria}
                 />
                 </div>
 
@@ -1536,8 +1626,19 @@ export function LoteDetallePage({ loteId }: Props) {
 // Tabla items IPS TXT
 // ============================================================
 
-function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle[]; esPendiente: boolean }) {
-    const [filtroCategoria, setFiltroCategoria] = useState<CategoriaPractica | ''>('')
+function TablaIPSTxtItems({
+    items,
+    esPendiente,
+    filtroCategoria,
+    onFiltroCategoriaChange,
+}: {
+    items: LoteIPSTxtItemDetalle[]
+    esPendiente: boolean
+    // El filtro vive en el padre: la impresion y el PDF tienen que respetarlo.
+    filtroCategoria: CategoriaPractica | ''
+    onFiltroCategoriaChange: (valor: CategoriaPractica | '') => void
+}) {
+    const setFiltroCategoria = onFiltroCategoriaChange
 
     const conteoPorCategoria = items.reduce((acc, it) => {
         const cat = categoriaPractica(it.servicioCodigo)

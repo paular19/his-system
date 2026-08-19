@@ -27,6 +27,10 @@ interface Props {
     lote: LoteFacturacionDetalle
     totalIncluido: number
     detalleIngresos?: LoteResumenIngresoDetalle[]
+    // Items IPS ya filtrados por el padre (regla de promedi + filtro de categoria).
+    itemsIPSTxt?: LoteFacturacionDetalle['itemsIPSTxt']
+    // Etiqueta de la categoria filtrada, para dejar constancia de que es parcial.
+    filtroCategoria?: string | null
 }
 
 interface LoteResumenIngresoLinea {
@@ -74,11 +78,19 @@ function totalMonto(items: Array<{ importeTotal: number }>) {
     return items.reduce((acc, item) => acc + item.importeTotal, 0)
 }
 
-export function LoteResumenPrint({ lote, totalIncluido, detalleIngresos = [] }: Props) {
+export function LoteResumenPrint({
+    lote,
+    totalIncluido,
+    detalleIngresos = [],
+    itemsIPSTxt,
+    filtroCategoria,
+}: Props) {
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const esIPSTxt = lote.origen === 'IPS_TXT'
-    // Al resumen solo van las practicas alcanzadas por la regla de promedi.
-    const itemsIPSFacturables = (lote.itemsIPSTxt ?? []).filter((it) => aplicaPromediIPS(it.servicioCodigo))
+    // Al resumen solo van las practicas alcanzadas por la regla de promedi. Si el padre
+    // ya mando la lista filtrada, se respeta tal cual.
+    const itemsIPSFacturables = itemsIPSTxt
+        ?? (lote.itemsIPSTxt ?? []).filter((it) => aplicaPromediIPS(it.servicioCodigo))
     const cantidadRegistros = esIPSTxt ? itemsIPSFacturables.length : itemsIncluidos.length
 
     return (
@@ -119,6 +131,9 @@ export function LoteResumenPrint({ lote, totalIncluido, detalleIngresos = [] }: 
                     <p><strong>Tipo:</strong> {TIPO_LABEL[lote.tipo]}</p>
                     <p><strong>Estado:</strong> {ESTADO_LABEL[lote.estado]}</p>
                     <p><strong>Cantidad de registros:</strong> {cantidadRegistros}</p>
+                    {filtroCategoria && (
+                        <p><strong>Filtrado por:</strong> {filtroCategoria} (resumen parcial)</p>
+                    )}
                 </div>
             </div>
 

@@ -1,4 +1,5 @@
 import type { LoteFacturacionDetalle, LoteIPSTxtItemDetalle } from '@/modules/facturacion/types'
+import { formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 const TIPO_LABEL: Record<string, string> = {
     PRACTICAS: 'Practicas',
@@ -69,7 +70,8 @@ function formatFecha(value: Date | string | null | undefined): string {
     if (!value) return '-'
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return '-'
-    return date.toLocaleDateString('es-AR')
+    // Sin el helper, un timestamp a medianoche UTC se muestra un dia antes en Argentina.
+    return formatearFechaArgentina(date)
 }
 
 function formatPeriodo(periodo: string): string {
@@ -130,8 +132,8 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
     const datos = [
         `Cliente: ${lote.obraSocial?.nombre ?? 'Particular'}`,
         `Periodo: ${formatPeriodo(lote.periodo)}`,
-        `Fecha: ${new Date(lote.fecha).toLocaleDateString('es-AR')}`,
-        `Generado: ${new Date().toLocaleString('es-AR')}`,
+        `Fecha: ${formatearFechaArgentina(lote.fecha)}`,
+        `Generado: ${formatearFechaHoraArgentina(new Date())}`,
     ]
     doc.text(datos.join('   |   '), margen, 21, { maxWidth: anchoPagina - margen * 2 })
 

@@ -1,5 +1,6 @@
 import type { LoteFacturacionDetalle } from '@/modules/facturacion/types'
 import { aplicaPromediIPS } from '@/modules/facturacion/promedi-rules'
+import { formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 const TIPO_LABEL: Record<string, string> = {
     PRACTICAS: 'Prácticas',
@@ -59,7 +60,8 @@ function formatDate(value: Date | string | null | undefined) {
     if (!value) return '-'
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return '-'
-    return date.toLocaleDateString('es-AR')
+    // Sin el helper, un timestamp a medianoche UTC se muestra un dia antes en Argentina.
+    return formatearFechaArgentina(date)
 }
 
 function formatCantidad(value: number) {
@@ -106,10 +108,10 @@ export function LoteResumenPrint({
                     <p className="text-gray-600 mt-1">Lote #{lote.numero} · {TIPO_LABEL[lote.tipo]}</p>
                 </div>
                 <div className="text-right text-sm text-gray-600 space-y-1">
-                    <p>Fecha: {new Date(lote.fecha).toLocaleDateString('es-AR')}</p>
+                    <p>Fecha: {formatearFechaArgentina(lote.fecha)}</p>
                     <p>Período: {formatPeriodo(lote.periodo)}</p>
                     <p>Estado: {ESTADO_LABEL[lote.estado]}</p>
-                    <p>Impreso: {new Date().toLocaleString('es-AR')}</p>
+                    <p>Impreso: {formatearFechaHoraArgentina(new Date())}</p>
                 </div>
             </div>
 

@@ -7,7 +7,7 @@ import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItem
 import { puedeEditarPrestacionEnLote } from '@/modules/facturacion/editability'
 import { LoteResumenPrint } from './lote-resumen-print'
 import { descargarResumenPdf } from './lote-resumen-pdf'
-import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
+import { fechaHoraAInputLocal, formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
 import {
     aplicaPromediIPS,
@@ -971,7 +971,7 @@ export function LoteDetallePage({ loteId }: Props) {
                             </div>
                         )}
                         <div className="text-sm text-gray-600 space-x-4">
-                            <span>Fecha: {new Date(lote.fecha).toLocaleDateString('es-AR')}</span>
+                            <span>Fecha: {formatearFechaArgentina(lote.fecha)}</span>
                             <span>Período: {formatPeriodo(lote.periodo)}</span>
                             <span>Sede: {lote.sedeId ?? '-'}</span>
                         </div>
@@ -1105,8 +1105,8 @@ export function LoteDetallePage({ loteId }: Props) {
                             </div>
                             <div className="text-right">
                                 <p className="text-xl font-mono font-bold text-blue-700">Lote #{lote.numero}</p>
-                                <p className="text-[11px] text-gray-600">Fecha: {new Date(lote.fecha).toLocaleDateString('es-AR')}</p>
-                                <p className="text-[11px] text-gray-600">Emitido: {new Date().toLocaleString('es-AR')}</p>
+                                <p className="text-[11px] text-gray-600">Fecha: {formatearFechaArgentina(lote.fecha)}</p>
+                                <p className="text-[11px] text-gray-600">Emitido: {formatearFechaHoraArgentina(new Date())}</p>
                             </div>
                         </div>
                     </div>
@@ -1446,7 +1446,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                 </>
                                                             ) : (
                                                                 <>
-                                                                    <span>Fecha de emisión: <strong>{new Date(orden.fechaEmision).toLocaleString('es-AR')}</strong></span>
+                                                                    <span>Fecha de emisión: <strong>{formatearFechaHoraArgentina(orden.fechaEmision)}</strong></span>
                                                                     <span>Total: <strong>{formatMonto(orden.importeTotal)}</strong></span>
                                                                     <span>Cantidad: <strong>{totalCantidadOrden}</strong></span>
                                                                     {orden.descripcion && <span className="sm:col-span-3">Descripción: <strong>{orden.descripcion}</strong></span>}
@@ -1531,7 +1531,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                                     )}
                                                                                 </div>
                                                                                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 sm:col-span-2">
-                                                                                    <span>{new Date(it.fecha).toLocaleString('es-AR')}</span>
+                                                                                    <span>{formatearFechaHoraArgentina(it.fecha)}</span>
                                                                                     <span>Cant. {it.cantidad}</span>
                                                                                     <span className="text-blue-700">Aut. {it.numeroAutorizacion ?? '—'}</span>
                                                                                     <span>Subitem: {it.subitemComputado}</span>
@@ -1715,7 +1715,7 @@ function TablaIPSTxtItems({
                                 </td>
                                 <td className="px-3 py-2 font-mono text-gray-600">{it.nroOrden}</td>
                                 <td className="px-3 py-2 text-gray-500">
-                                    {it.fechaRealiz ? new Date(it.fechaRealiz).toLocaleDateString('es-AR') : '-'}
+                                    {it.fechaRealiz ? formatearFechaArgentina(it.fechaRealiz) : '-'}
                                 </td>
                                 <td className="px-3 py-2">
                                     <div className="text-gray-800 leading-tight wrap-break-word">{it.servicioNombre}</div>

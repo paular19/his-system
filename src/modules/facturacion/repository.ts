@@ -630,6 +630,27 @@ function practicaMarcadaComoFacturada(estado: string | null | undefined): boolea
     return (estado ?? '').trim().toUpperCase() === 'F'
 }
 
+type VinculoOrdenPractica = {
+    estado: string | null
+    puestoNumero: number | null
+    ordenNumero: number | null
+    ordenItem: number | null
+} | null | undefined
+
+// Un item de orden cuenta como facturado solo si la practica vinculada apunta a
+// ESTA orden. Una misma practica puede quedar referenciada por varias ordenes
+// (renumeraciones, ordenes regeneradas), pero facturada esta en una sola: la que
+// guarda en Practica.puestoNumero/ordenNumero. Sin este chequeo, las ordenes
+// viejas se arrastran junto con la vigente y duplican el importe.
+function practicaFacturadaEnOrden(
+    practica: VinculoOrdenPractica,
+    orden: { puestoNumero: number; numero: number }
+): boolean {
+    if (!practicaMarcadaComoFacturada(practica?.estado)) return false
+    if (!practica?.puestoNumero || !practica.ordenNumero || !practica.ordenItem) return false
+    return practica.puestoNumero === orden.puestoNumero && practica.ordenNumero === orden.numero
+}
+
 function resolverNumeroAutorizacion(
     numeroAutorizacionItem: string | null | undefined,
     numeroAutorizacionOrden: string | null | undefined
@@ -5009,12 +5030,7 @@ export async function obtenerLote(
             .flatMap((orden) => {
             const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
             return orden.items.filter((ordenItem) =>
-                practicaMarcadaComoFacturada(ordenItem.practica?.estado) &&
-                Boolean(
-                    ordenItem.practica?.puestoNumero &&
-                    ordenItem.practica.ordenNumero &&
-                    ordenItem.practica.ordenItem
-                ) &&
+                practicaFacturadaEnOrden(ordenItem.practica, orden) &&
                 (ordenConAutorizacion || tieneNumeroAutorizacionValido(ordenItem.numeroAutorizacion))
             )
         }).reduce((total, ordenItem) => total + Number(ordenItem.importeTotal ?? 0), 0)
@@ -5119,6 +5135,8 @@ export async function crearLote(
                         fechaEmision: { gte: desde, lt: hasta },
                     },
                     select: {
+                        puestoNumero: true,
+                        numero: true,
                         numeroAutorizacion: true,
                         items: {
                             select: {
@@ -5151,6 +5169,8 @@ export async function crearLote(
         let importe = 0
         if (data.tipo === 'PRACTICAS' && ing.ordenes) {
             const ordenes = ing.ordenes as unknown as Array<{
+                puestoNumero: number
+                numero: number
                 numeroAutorizacion: string | null
                 items: Array<{
                     importeTotal: unknown
@@ -5167,12 +5187,7 @@ export async function crearLote(
             const itemsFacturados = ordenes.flatMap((o) => {
                 const ordenConAutorizacion = tieneNumeroAutorizacionValido(o.numeroAutorizacion)
                 return o.items.filter((it) =>
-                    practicaMarcadaComoFacturada(it.practica?.estado) &&
-                    Boolean(
-                        it.practica?.puestoNumero &&
-                        it.practica.ordenNumero &&
-                        it.practica.ordenItem
-                    ) &&
+                    practicaFacturadaEnOrden(it.practica, o) &&
                     (ordenConAutorizacion || tieneNumeroAutorizacionValido(it.numeroAutorizacion))
                 )
             })
@@ -5517,12 +5532,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
             const itemsConEfector = o.items
                 .filter(
                     (it) =>
-                        practicaMarcadaComoFacturada(it.practica?.estado) &&
-                        Boolean(
-                            it.practica?.puestoNumero &&
-                            it.practica.ordenNumero &&
-                            it.practica.ordenItem
-                        ) &&
+                        practicaFacturadaEnOrden(it.practica, o) &&
                         tieneNumeroAutorizacionValido(
                             resolverNumeroAutorizacion(it.numeroAutorizacion, o.numeroAutorizacion)
                         )
@@ -5839,8 +5849,7 @@ export async function aplicarPromediLote(
     for (const orden of ordenes) {
         if (clavesOrdenesExcluidas.has(`${orden.puestoNumero}:${orden.numero}`)) continue
         for (const item of orden.items) {
-            if (!practicaMarcadaComoFacturada(item.practica?.estado)) continue
-            if (!item.practica?.puestoNumero || !item.practica.ordenNumero || !item.practica.ordenItem) continue
+            if (!practicaFacturadaEnOrden(item.practica, orden)) continue
             const numeroAutorizacion = resolverNumeroAutorizacion(item.numeroAutorizacion, orden.numeroAutorizacion)
             if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
             if (!orden.ingresoId) continue

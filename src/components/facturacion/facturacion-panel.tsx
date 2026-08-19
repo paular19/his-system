@@ -1500,11 +1500,21 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             .sort((a, b) => b.cirugiaId - a.cirugiaId)
     }, [contexto])
 
-    const diferencialesCirugiaCongelados = useMemo(() => {
-        if (!contexto) return false
-        return contexto.prestaciones.some(
-            (p) => (p.tipo === 'PRACTICA' && p.facturada) || p.tipo === 'ORDEN_ITEM'
-        )
+    // El congelamiento es por cirugia, no por ingreso: solo se bloquea la cirugia
+    // cuyas propias practicas ya se facturaron. Que el ingreso tenga otras ordenes
+    // facturadas (consultas, radiologia, otra cirugia) no debe impedir cargar el
+    // diferencial de una cirugia que todavia esta pendiente.
+    const cirugiasCongeladas = useMemo(() => {
+        const congeladas = new Set<number>()
+        if (!contexto) return congeladas
+        for (const p of contexto.prestaciones) {
+            if (p.tipo !== 'PRACTICA') continue
+            if (!p.facturada) continue
+            const cirugiaId = p.origen.cirugiaProgramadaId
+            if (!cirugiaId) continue
+            congeladas.add(cirugiaId)
+        }
+        return congeladas
     }, [contexto])
 
     useEffect(() => {
@@ -2550,8 +2560,8 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
     async function guardarDiferencialesCirugia(cirugia: CirugiaEditableGroup) {
         if (!contexto) return
-        if (diferencialesCirugiaCongelados) {
-            setError('Los diferenciales de cirugía están congelados porque ya se facturó el paciente.')
+        if (cirugiasCongeladas.has(cirugia.cirugiaId)) {
+            setError('Los diferenciales de esta cirugía están congelados porque ya se facturaron sus prácticas.')
             return
         }
 
@@ -3153,16 +3163,15 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                         <p className="text-xs text-amber-700">
                                             Feriado y nocturna impactan montos en facturación según las reglas de diferenciales.
                                         </p>
-                                        {diferencialesCirugiaCongelados && (
-                                            <p className="mt-1 text-xs font-medium text-amber-800">
-                                                Diferenciales congelados: el paciente ya tiene facturación registrada.
-                                            </p>
-                                        )}
+                                        <p className="text-xs text-amber-700">
+                                            Si la ficha quirúrgica no cargó el diferencial, se puede seleccionar acá mientras la cirugía no esté facturada.
+                                        </p>
                                     </div>
 
                                     {cirugiasEditables.map((cirugia) => {
                                         const draft = diferencialesCirugiaEdit[cirugia.cirugiaId] ?? buildDiferencialesCirugiaState(cirugia)
                                         const etiquetasAplicadas = etiquetasCamposDiferencialCirugia(draft)
+                                        const congelada = cirugiasCongeladas.has(cirugia.cirugiaId)
 
                                         return (
                                             <div key={cirugia.cirugiaId} className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-3">
@@ -3172,12 +3181,18 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     </div>
                                                     <button
                                                         onClick={() => guardarDiferencialesCirugia(cirugia)}
-                                                        disabled={diferencialesCirugiaCongelados || guardandoDiferencialCirugiaId === cirugia.cirugiaId}
+                                                        disabled={congelada || guardandoDiferencialCirugiaId === cirugia.cirugiaId}
                                                         className="rounded border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-60"
                                                     >
                                                         {guardandoDiferencialCirugiaId === cirugia.cirugiaId ? 'Guardando...' : 'Guardar diferenciales'}
                                                     </button>
                                                 </div>
+
+                                                {congelada && (
+                                                    <div className="rounded border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800">
+                                                        Diferenciales congelados: esta cirugía ya tiene prácticas facturadas.
+                                                    </div>
+                                                )}
 
                                                 <div className="rounded border border-amber-200 bg-white px-2 py-2 text-xs text-amber-900">
                                                     <span className="font-semibold">Campos con diferencial:</span>{' '}
@@ -3189,7 +3204,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         <input
                                                             type="checkbox"
                                                             checked={draft.esFeriado}
-                                                            disabled={diferencialesCirugiaCongelados}
+                                                            disabled={congelada}
                                                             onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
                                                                 ...prev,
                                                                 [cirugia.cirugiaId]: { ...draft, esFeriado: e.target.checked },
@@ -3201,7 +3216,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         <input
                                                             type="checkbox"
                                                             checked={draft.esNocturna}
-                                                            disabled={diferencialesCirugiaCongelados}
+                                                            disabled={congelada}
                                                             onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
                                                                 ...prev,
                                                                 [cirugia.cirugiaId]: { ...draft, esNocturna: e.target.checked },
@@ -3213,7 +3228,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         <input
                                                             type="checkbox"
                                                             checked={draft.mismaViaPatologia}
-                                                            disabled={diferencialesCirugiaCongelados}
+                                                            disabled={congelada}
                                                             onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
                                                                 ...prev,
                                                                 [cirugia.cirugiaId]: { ...draft, mismaViaPatologia: e.target.checked },
@@ -3225,7 +3240,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         <input
                                                             type="checkbox"
                                                             checked={draft.diferentesViasPatologia}
-                                                            disabled={diferencialesCirugiaCongelados}
+                                                            disabled={congelada}
                                                             onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
                                                                 ...prev,
                                                                 [cirugia.cirugiaId]: { ...draft, diferentesViasPatologia: e.target.checked },
@@ -3237,7 +3252,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         <input
                                                             type="checkbox"
                                                             checked={draft.diferentesViasDiferentesPatologia}
-                                                            disabled={diferencialesCirugiaCongelados}
+                                                            disabled={congelada}
                                                             onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
                                                                 ...prev,
                                                                 [cirugia.cirugiaId]: { ...draft, diferentesViasDiferentesPatologia: e.target.checked },
@@ -3249,10 +3264,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         <input
                                                             type="checkbox"
                                                             checked={draft.dobleCirugia}
-                                                            disabled={diferencialesCirugiaCongelados || cirugia.practicas.length < 2}
+                                                            disabled={congelada || cirugia.practicas.length < 2}
                                                             onChange={(e) => {
                                                                 if (cirugia.practicas.length < 2) return
-                                                                if (diferencialesCirugiaCongelados) return
+                                                                if (congelada) return
                                                                 const checked = e.target.checked
                                                                 const practicaBaseDefault =
                                                                     draft.practicaBaseId || String(cirugia.practicas[0]?.practicaId ?? '')
@@ -3309,7 +3324,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     }
                                                                 })
                                                             }}
-                                                            disabled={diferencialesCirugiaCongelados || !draft.dobleCirugia}
+                                                            disabled={congelada || !draft.dobleCirugia}
                                                             className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs disabled:bg-amber-100"
                                                         >
                                                             <option value="">-- Seleccionar práctica principal --</option>
@@ -3328,7 +3343,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 ...prev,
                                                                 [cirugia.cirugiaId]: { ...draft, practicaSecundariaId: e.target.value },
                                                             }))}
-                                                            disabled={diferencialesCirugiaCongelados || !draft.dobleCirugia}
+                                                            disabled={congelada || !draft.dobleCirugia}
                                                             className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs disabled:bg-amber-100"
                                                         >
                                                             <option value="">-- Seleccionar práctica secundaria --</option>

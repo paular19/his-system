@@ -1400,7 +1400,7 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                 )}
             </div>
             <p className="text-xs text-gray-500 print:hidden">
-                PROMEDI aplica solo a códigos alcanzados por regla; los demás quedan al 100%.
+                Al resumen solo entran los códigos alcanzados por la regla PROMEDI; los demás no se facturan.
             </p>
             <div className="ips-print-table overflow-x-auto rounded-lg border border-gray-200 print:rounded-none print:border-0">
                 <table className="w-full text-xs print:text-[9px]">
@@ -1459,7 +1459,7 @@ function TablaIPSTxtItems({ items, esPendiente }: { items: LoteIPSTxtItemDetalle
                                                     : 'bg-gray-100 text-gray-600'
                                                     }`}
                                             >
-                                                {aplicaCodigoPromedi ? 'PROMEDI 36%' : 'Sin PROMEDI'}
+                                                {aplicaCodigoPromedi ? 'PROMEDI 36%' : 'No se factura'}
                                             </span>
                                         )}
                                     </div>

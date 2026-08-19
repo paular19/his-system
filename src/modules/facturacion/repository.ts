@@ -5702,10 +5702,16 @@ export async function aplicarPromediLote(
                 COALESCE(NULLIF(regexp_replace(trim("LipServCod"), '[^0-9]', '', 'g'), ''), '0')::integer
             `
 
-            // Base 100% para todos los items del lote.
+            const codigoEntraEnResumenSql = Prisma.sql`(
+                ${servicioCodigoNumericoSql} IN (${Prisma.join(CODIGOS_PROMEDI_BASE_ARRAY)})
+                OR ${servicioCodigoNumericoSql} BETWEEN 10101 AND 130304
+                OR ${servicioCodigoNumericoSql} BETWEEN 720201 AND 722238
+            )`
+
+            // Lo que no esta alcanzado por la regla no se factura en el resumen.
             await tx.$executeRaw`
                 UPDATE "LoteIPSTxtItem"
-                SET "LipImpPromedi" = ROUND("LipImpTotal", 2)
+                SET "LipImpPromedi" = 0
                 WHERE "LotID" = ${loteId}
             `
 
@@ -5714,20 +5720,22 @@ export async function aplicarPromediLote(
                 UPDATE "LoteIPSTxtItem"
                 SET "LipImpPromedi" = ROUND("LipImpTotal" * ${PORCENTAJE_PROMEDI_IPS}, 2)
                 WHERE "LotID" = ${loteId}
-                  AND (
-                    ${servicioCodigoNumericoSql} IN (${Prisma.join(CODIGOS_PROMEDI_BASE_ARRAY)})
-                    OR ${servicioCodigoNumericoSql} BETWEEN 10101 AND 130304
-                    OR ${servicioCodigoNumericoSql} BETWEEN 720201 AND 722238
-                  )
+                  AND ${codigoEntraEnResumenSql}
             `
 
-            const [sumResult, itemsCount] = await Promise.all([
+            const [sumResult, conteo] = await Promise.all([
                 tx.loteIPSTxtItem.aggregate({
                     where: { loteId },
                     _sum: { importePromedi: true },
                 }),
-                tx.loteIPSTxtItem.count({ where: { loteId } }),
+                tx.$queryRaw<{ count: bigint }[]>`
+                    SELECT COUNT(*)::bigint AS count
+                    FROM "LoteIPSTxtItem"
+                    WHERE "LotID" = ${loteId}
+                      AND ${codigoEntraEnResumenSql}
+                `,
             ])
+            const itemsCount = Number(conteo[0]?.count ?? 0)
 
             const total = redondear2Repo(Number(sumResult._sum.importePromedi ?? 0))
 

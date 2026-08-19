@@ -1,4 +1,5 @@
 import type { LoteFacturacionDetalle } from '@/modules/facturacion/types'
+import { aplicaPromediIPS } from '@/modules/facturacion/promedi-rules'
 
 const TIPO_LABEL: Record<string, string> = {
     PRACTICAS: 'Prácticas',
@@ -76,7 +77,9 @@ function totalMonto(items: Array<{ importeTotal: number }>) {
 export function LoteResumenPrint({ lote, totalIncluido, detalleIngresos = [] }: Props) {
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const esIPSTxt = lote.origen === 'IPS_TXT'
-    const cantidadRegistros = esIPSTxt ? (lote.itemsIPSTxt?.length ?? 0) : itemsIncluidos.length
+    // Al resumen solo van las practicas alcanzadas por la regla de promedi.
+    const itemsIPSFacturables = (lote.itemsIPSTxt ?? []).filter((it) => aplicaPromediIPS(it.servicioCodigo))
+    const cantidadRegistros = esIPSTxt ? itemsIPSFacturables.length : itemsIncluidos.length
 
     return (
         <div className="font-sans text-[11px] text-gray-900 p-6">
@@ -125,8 +128,8 @@ export function LoteResumenPrint({ lote, totalIncluido, detalleIngresos = [] }: 
                     <div className="text-xs text-gray-500">{esIPSTxt ? 'Registros IPS' : 'Pacientes en lote'}</div>
                 </div>
                 <div className="text-center">
-                    <div className="text-2xl font-bold">{itemsIncluidos.length}</div>
-                    <div className="text-xs text-gray-500">Incluidos</div>
+                    <div className="text-2xl font-bold">{esIPSTxt ? itemsIPSFacturables.length : itemsIncluidos.length}</div>
+                    <div className="text-xs text-gray-500">{esIPSTxt ? 'Prácticas facturadas' : 'Incluidos'}</div>
                 </div>
                 <div className="text-center">
                     <div className="text-2xl font-bold">{formatMonto(totalIncluido)}</div>
@@ -218,7 +221,7 @@ export function LoteResumenPrint({ lote, totalIncluido, detalleIngresos = [] }: 
                         </tr>
                     </thead>
                     <tbody>
-                        {lote.itemsIPSTxt.map((it, i) => (
+                        {itemsIPSFacturables.map((it, i) => (
                             <tr key={it.id} className={i % 2 === 0 ? 'bg-white border-b border-gray-200' : 'bg-gray-50 border-b border-gray-200'}>
                                 <td className="px-2 py-1">{it.afiliadoNom}</td>
                                 <td className="px-2 py-1">{it.afiliadoDoc}</td>
@@ -239,7 +242,7 @@ export function LoteResumenPrint({ lote, totalIncluido, detalleIngresos = [] }: 
                     <tfoot>
                         <tr className="border-t-2 border-gray-800 bg-gray-50 font-semibold">
                             <td colSpan={11} className="px-2 py-1 text-right">Total bruto</td>
-                            <td className="px-2 py-1 text-right">{formatMonto(totalMonto(lote.itemsIPSTxt.map((it) => ({ importeTotal: it.impTotal }))))}</td>
+                            <td className="px-2 py-1 text-right">{formatMonto(totalMonto(itemsIPSFacturables.map((it) => ({ importeTotal: it.impTotal }))))}</td>
                             <td className="px-2 py-1 text-right">{formatMonto(totalIncluido)}</td>
                         </tr>
                     </tfoot>

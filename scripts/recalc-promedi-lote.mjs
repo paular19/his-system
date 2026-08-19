@@ -36,6 +36,56 @@ function aplicaPromediOsecac(codigoPractica) {
   return CODIGOS_PROMEDI_BASE.has(codigo) || codigoEnRangoPromedi(codigo)
 }
 
+// Espejo de resolverSubitemPromedi / subitemEntraEnPromedi en
+// src/modules/facturacion/promedi-rules.ts. Si cambia alla, cambiar aca.
+const CODIGO_PROMEDI_TODOS_LOS_SUBITEMS = 400101
+
+function normalizarTextoPromedi(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+}
+
+const MATRICULAS_CLINICA = new Set([9995, 9110])
+const MARCADORES_PROFESIONAL_CLINICA = ['CLINICASANRAFAEL', 'SANRAFAELSA']
+
+function esProfesionalClinica(profesional) {
+  const limpio = normalizarTextoPromedi(profesional).replace(/[^A-Z0-9]/g, '')
+  if (!limpio) return false
+  return MARCADORES_PROFESIONAL_CLINICA.some((marcador) => limpio.includes(marcador))
+}
+
+function resolverSubitemPromedi(linea) {
+  const codigoNorm = normalizarTextoPromedi(linea.codigoPractica)
+  const moduloNorm = normalizarTextoPromedi(linea.modulo)
+
+  if (moduloNorm.includes('A1')) return 'A1'
+  if (moduloNorm.includes('A2')) return 'A2'
+  if (moduloNorm.includes('A3')) return 'A3'
+  if (moduloNorm.includes('HE')) return 'HE'
+  if (moduloNorm.includes('HA')) return 'HA'
+  if (moduloNorm.includes('GA')) return 'GA'
+
+  if (linea.efectorMatricula != null) {
+    return MATRICULAS_CLINICA.has(linea.efectorMatricula) ? 'GA' : 'HE'
+  }
+
+  const profesionalNorm = normalizarTextoPromedi(linea.profesional)
+  if (profesionalNorm.includes('ANEST')) return 'HA'
+  if (esProfesionalClinica(linea.profesional)) return 'GA'
+
+  if (codigoNorm.includes('A1')) return 'A1'
+  if (codigoNorm.includes('A2')) return 'A2'
+  if (codigoNorm.includes('A3')) return 'A3'
+  if (codigoNorm.includes('HA')) return 'HA'
+  if (codigoNorm.includes('GA')) return 'GA'
+
+  return 'HE'
+}
+
+function subitemEntraEnPromedi(codigoPractica, subitem) {
+  if (parseCodigoPromedi(codigoPractica) === CODIGO_PROMEDI_TODOS_LOS_SUBITEMS) return true
+  return subitem === 'GA'
+}
+
 function tieneNumeroAutorizacionValido(valor) {
   return typeof valor === 'string' ? valor.trim().length > 0 : Boolean(valor)
 }
@@ -124,9 +174,12 @@ async function main() {
       puestoNumero: true,
       numero: true,
       numeroAutorizacion: true,
+      profesional: { select: { nombre: true } },
       items: {
         select: {
           codigoPractica: true,
+          modulo: true,
+          efectorMatricula: true,
           importeTotal: true,
           numeroAutorizacion: true,
           practica: {
@@ -154,8 +207,17 @@ async function main() {
       if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
       if (!orden.ingresoId) continue
       const importeBase = Number(item.importeTotal ?? 0)
-      const aplica = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
-      const importeFacturable = aplica ? round2(importeBase * porcentajePromedi) : round2(importeBase)
+      const aplicaCodigo = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
+      // Solo el subitem de gastos (GA) entra al resumen; el 400101 impacta todos.
+      const subitem = resolverSubitemPromedi({
+        codigoPractica: item.codigoPractica,
+        modulo: item.modulo,
+        efectorMatricula: item.efectorMatricula,
+        profesional: orden.profesional?.nombre,
+      })
+      const aplica = aplicaCodigo && subitemEntraEnPromedi(item.codigoPractica, subitem)
+      // Lo que no esta alcanzado no se factura en este lote.
+      const importeFacturable = aplica ? round2(importeBase * porcentajePromedi) : 0
       const actual = importePorIngreso.get(orden.ingresoId) ?? 0
       importePorIngreso.set(orden.ingresoId, round2(actual + importeFacturable))
     }

@@ -8,7 +8,14 @@ import { puedeEditarPrestacionEnLote } from '@/modules/facturacion/editability'
 import { LoteResumenPrint } from './lote-resumen-print'
 import { fechaHoraAInputLocal } from '@/lib/utils/argentina-date'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
-import { aplicaPromediIPS, aplicaPromediPorObra, calcularImportePromediPorCodigo } from '@/modules/facturacion/promedi-rules'
+import {
+    aplicaPromediIPS,
+    aplicaPromediPorObraYSubitem,
+    calcularImportePromediPorCodigo,
+    resolverSubitemPromedi,
+    type LineaSubitemPromedi,
+    type SubitemPromedi,
+} from '@/modules/facturacion/promedi-rules'
 import {
     CATEGORIAS_PRACTICA,
     CATEGORIA_PRACTICA_LABEL,
@@ -147,42 +154,19 @@ function esObraSocialIps(nombre: string | null | undefined): boolean {
     return limpio.includes('IPS') || limpio.includes('IPSS')
 }
 
-function importePromediAplicado(codigoRaw: string, importe: number, porcentaje: number, esOsecac: boolean): number {
+function importePromediAplicado(
+    codigoRaw: string,
+    importe: number,
+    porcentaje: number,
+    esOsecac: boolean,
+    subitem: SubitemPromedi
+): number {
     // El PROMEDI debe evaluarse por práctica/item y no por paciente o ingreso.
-    return calcularImportePromediPorCodigo(codigoRaw, importe, porcentaje, esOsecac ? 'OSECAC' : 'IPS')
+    return calcularImportePromediPorCodigo(codigoRaw, importe, porcentaje, esOsecac ? 'OSECAC' : 'IPS', subitem)
 }
 
-function resolverCodigoSubitemComputado(
-    codigoRaw: string,
-    moduloRaw: string | null | undefined,
-    profesionalRaw: string | null | undefined
-): 'HE' | 'HA' | 'GA' | 'A1' | 'A2' | 'A3' {
-    const codigo = normalizarTexto(codigoRaw)
-    const modulo = normalizarTexto(moduloRaw)
-    const profesional = normalizarTexto(profesionalRaw)
-
-    if (modulo.includes('A1')) return 'A1'
-    if (modulo.includes('A2')) return 'A2'
-    if (modulo.includes('A3')) return 'A3'
-    if (modulo.includes('HE')) return 'HE'
-    if (modulo.includes('HA') || profesional.includes('ANEST')) return 'HA'
-    if (modulo.includes('GA') || profesional.includes('CLINICA SAN RAFAEL')) return 'GA'
-
-    if (codigo.includes('A1')) return 'A1'
-    if (codigo.includes('A2')) return 'A2'
-    if (codigo.includes('A3')) return 'A3'
-    if (codigo.includes('HA')) return 'HA'
-    if (codigo.includes('GA')) return 'GA'
-
-    return 'HE'
-}
-
-function etiquetaSubitemComputado(
-    codigoRaw: string,
-    moduloRaw: string | null | undefined,
-    profesionalRaw: string | null | undefined
-): string {
-    const subitem = resolverCodigoSubitemComputado(codigoRaw, moduloRaw, profesionalRaw)
+function etiquetaSubitemComputado(linea: LineaSubitemPromedi): string {
+    const subitem = resolverSubitemPromedi(linea)
     if (subitem === 'A1' || subitem === 'A2' || subitem === 'A3') {
         return `Ayudante (${subitem})`
     }
@@ -333,23 +317,37 @@ function agruparItemsOrdenParaTabla(
     esOsecac: boolean,
     profesionalNombre: string | null | undefined
 ): OrdenItemAgrupadoTabla[] {
-    return items.map((item) => ({
-        key: [
-            item.item,
-            fechaToGroupingKey(item.fecha),
-            (item.codigoPractica ?? '').trim(),
-            item.numeroAutorizacion ?? '',
-            item.descripcion ?? '',
-        ].join('|'),
-        fecha: item.fecha,
-        codigoPractica: item.codigoPractica,
-        descripcion: item.descripcion,
-        subitemComputado: etiquetaSubitemComputado(item.codigoPractica, item.modulo, profesionalNombre),
-        cantidad: item.cantidad,
-        numeroAutorizacion: item.numeroAutorizacion,
-        importeTotal: item.importeTotal,
-        importePromedi: importePromediAplicado(item.codigoPractica, item.importeTotal, porcentajePromedi, esOsecac),
-    }))
+    return items.map((item) => {
+        const linea = {
+            codigoPractica: item.codigoPractica,
+            modulo: item.modulo,
+            efectorMatricula: item.efectorMatricula,
+            profesional: profesionalNombre,
+        }
+        return {
+            key: [
+                item.item,
+                fechaToGroupingKey(item.fecha),
+                (item.codigoPractica ?? '').trim(),
+                item.numeroAutorizacion ?? '',
+                item.descripcion ?? '',
+            ].join('|'),
+            fecha: item.fecha,
+            codigoPractica: item.codigoPractica,
+            descripcion: item.descripcion,
+            subitemComputado: etiquetaSubitemComputado(linea),
+            cantidad: item.cantidad,
+            numeroAutorizacion: item.numeroAutorizacion,
+            importeTotal: item.importeTotal,
+            importePromedi: importePromediAplicado(
+                item.codigoPractica,
+                item.importeTotal,
+                porcentajePromedi,
+                esOsecac,
+                resolverSubitemPromedi(linea)
+            ),
+        }
+    })
 }
 
 export function LoteDetallePage({ loteId }: Props) {
@@ -748,7 +746,16 @@ export function LoteDetallePage({ loteId }: Props) {
             ordenesIngreso.some((orden) =>
                 orden.incluidaEnLote &&
                 orden.items.some((linea) =>
-                    aplicaPromediPorObra(linea.codigoPractica, esOsecac ? 'OSECAC' : 'IPS')
+                    aplicaPromediPorObraYSubitem(
+                        linea.codigoPractica,
+                        esOsecac ? 'OSECAC' : 'IPS',
+                        resolverSubitemPromedi({
+                            codigoPractica: linea.codigoPractica,
+                            modulo: linea.modulo,
+                            efectorMatricula: linea.efectorMatricula,
+                            profesional: orden.profesional?.nombre,
+                        })
+                    )
                 )
             )
         )
@@ -787,8 +794,20 @@ export function LoteDetallePage({ loteId }: Props) {
             const ordenesIngreso = ordenesPorIngreso[item.ingresoId] ?? []
             const lineasBase = ordenesIngreso.filter((orden) => orden.incluidaEnLote).flatMap((orden) =>
                 orden.items.map((linea) => {
+                    const subitemLinea = resolverSubitemPromedi({
+                        codigoPractica: linea.codigoPractica,
+                        modulo: linea.modulo,
+                        efectorMatricula: linea.efectorMatricula,
+                        profesional: orden.profesional?.nombre,
+                    })
                     const importeLinea = vistaPromedi
-                        ? importePromediAplicado(linea.codigoPractica, linea.importeTotal, porcentajePromediDecimal, esOsecac)
+                        ? importePromediAplicado(
+                            linea.codigoPractica,
+                            linea.importeTotal,
+                            porcentajePromediDecimal,
+                            esOsecac,
+                            subitemLinea
+                        )
                         : linea.importeTotal
                     const desglose = desglosarImportesPorCodigo(
                         linea.codigoPractica,

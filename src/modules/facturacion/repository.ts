@@ -41,6 +41,8 @@ import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
 import {
     aplicaPromediIPS,
     aplicaPromediOsecac,
+    resolverSubitemPromedi,
+    subitemEntraEnPromedi,
     CODIGOS_PROMEDI_BASE,
 } from './promedi-rules'
 import { fusionarObservacionesConMeta } from '@/modules/internacion/observaciones-meta'
@@ -5788,9 +5790,12 @@ export async function aplicarPromediLote(
             puestoNumero: true,
             numero: true,
             numeroAutorizacion: true,
+            profesional: { select: { nombre: true } },
             items: {
                 select: {
                     codigoPractica: true,
+                    modulo: true,
+                    efectorMatricula: true,
                     importeTotal: true,
                     numeroAutorizacion: true,
                     practica: {
@@ -5821,7 +5826,16 @@ export async function aplicarPromediLote(
             // Al resumen solo entran las practicas alcanzadas por la regla de promedi.
             // El resto (oxigeno, radiografias, ecografias, guardia, 431101, y en OSECAC
             // ademas 70116 y 70607) no se factura en este lote.
-            const aplica = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
+            const aplicaCodigo = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
+            // Y dentro de esos codigos, solo impacta el subitem de gastos (GA).
+            // Unica excepcion: el 400101, que impacta todos los subitems.
+            const subitem = resolverSubitemPromedi({
+                codigoPractica: item.codigoPractica,
+                modulo: item.modulo,
+                efectorMatricula: item.efectorMatricula,
+                profesional: orden.profesional?.nombre,
+            })
+            const aplica = aplicaCodigo && subitemEntraEnPromedi(item.codigoPractica, subitem)
             const importeFacturable = aplica
                 ? redondear2Repo(importeBase * porcentajePromedi)
                 : 0

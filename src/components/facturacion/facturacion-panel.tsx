@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { CalendarDays, ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, ListFilter, Loader2, Plus, Search, Upload, X, XCircle } from 'lucide-react'
+import { AlertTriangle, CalendarDays, ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, ListFilter, Loader2, Plus, Search, Upload, X, XCircle } from 'lucide-react'
 import type { AdmisionFacturacionListItem, FacturacionContexto, PrestacionFacturableItem } from '@/modules/facturacion/types'
 import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
 import {
@@ -65,6 +65,13 @@ type PrestacionOrdenInput = {
     matriculaEspecialista?: number | null
     matriculaAnestesista?: number | null
     grupoOrden?: number | null
+}
+
+type ConfirmacionPendiente = {
+    titulo: string
+    mensaje: string
+    detalle: string[]
+    resolver: (confirmado: boolean) => void
 }
 
 type DiferencialesCirugiaEditState = {
@@ -1185,6 +1192,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const [guardandoDiferencialCirugiaId, setGuardandoDiferencialCirugiaId] = useState<number | null>(null)
     const [mostrarImportadorNomenclador, setMostrarImportadorNomenclador] = useState(false)
     const [creandoOrdenPracticaUid, setCreandoOrdenPracticaUid] = useState<string | null>(null)
+    const [confirmacion, setConfirmacion] = useState<ConfirmacionPendiente | null>(null)
 
     // Component selection per practice uid
     const [compSeleccion, setCompSeleccion] = useState<Record<string, ComponenteSeleccion>>({})
@@ -2409,10 +2417,39 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setRowEditMode((prev) => ({ ...prev, [p.uid]: false }))
     }
 
+    function pedirConfirmacion(params: {
+        titulo: string
+        mensaje: string
+        detalle?: string[]
+    }): Promise<boolean> {
+        return new Promise((resolve) => {
+            setConfirmacion({
+                titulo: params.titulo,
+                mensaje: params.mensaje,
+                detalle: params.detalle ?? [],
+                resolver: resolve,
+            })
+        })
+    }
+
+    function responderConfirmacion(confirmado: boolean) {
+        confirmacion?.resolver(confirmado)
+        setConfirmacion(null)
+    }
+
     async function guardarPrestacion(p: PrestacionFacturableItem) {
         const draft = editRows[p.uid]
         if (!draft) return
         if (p.tipo !== 'PRACTICA' && p.tipo !== 'ORDEN_ITEM') return
+
+        const cantidadAnterior = Number(p.cantidad)
+        const cantidadNueva = Number(draft.cantidad || 1)
+        const cambiaCantidad =
+            Number.isFinite(cantidadNueva) && Math.abs(cantidadNueva - cantidadAnterior) > 0.0001
+
+        const importeAnterior = Number(p.importeTotal ?? 0)
+        const importeNuevo = Number(draft.importeTotal || 0)
+        const cambiaImporte = Math.abs(importeNuevo - importeAnterior) > 0.009
         const ordenParaEdicionGlobal = obtenerOrdenParaOrdenamiento(p)
         const aplicarOrdenCompleta = Boolean(
             aplicarOrdenCompletaPorFila[p.uid] && ordenParaEdicionGlobal
@@ -2422,9 +2459,35 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         flushSync(() => {})
 
         if (p.tipo === 'PRACTICA' && p.facturada) {
-            const ok = window.confirm(
-                `Esta práctica ya fue facturada (Ord. ${p.ordenPuestoNumero}-${p.ordenNumero}).\nAl guardar los cambios se desvinculará de esa orden y quedará como pendiente.\n¿Continuar?`
-            )
+            const ok = await pedirConfirmacion({
+                titulo: 'Esta práctica ya fue facturada',
+                mensaje:
+                    `Al guardar se desvinculará de la orden ${formatOrderNumber(p.ordenPuestoNumero, p.ordenNumero)} ` +
+                    'y volverá a quedar pendiente de facturación.',
+                detalle: cambiaCantidad
+                    ? [`Cantidad: ${cantidadAnterior} → ${cantidadNueva}`]
+                    : [],
+            })
+            if (!ok) return
+        }
+
+        // Editar un item ya facturado recalcula lo que se cobra. Antes esto se
+        // guardaba sin aviso: asi fue como en el ingreso 192 se bajaron los dias
+        // de 5 a 2 sin que nadie lo notara hasta meses despues.
+        if (p.tipo === 'ORDEN_ITEM' && (cambiaCantidad || cambiaImporte)) {
+            const detalle: string[] = []
+            if (cambiaCantidad) detalle.push(`Cantidad: ${cantidadAnterior} → ${cantidadNueva}`)
+            if (cambiaImporte) {
+                detalle.push(`Importe: ${formatCurrency(importeAnterior)} → ${formatCurrency(importeNuevo)}`)
+            }
+
+            const ok = await pedirConfirmacion({
+                titulo: 'Estás modificando una prestación ya facturada',
+                mensaje:
+                    `Pertenece a la orden ${formatOrderNumber(p.origen.ordenPuestoNumero ?? null, p.origen.ordenNumero ?? null)}. ` +
+                    'Al confirmar se recalculan los montos de la orden y del lote, y el cambio se propaga a la práctica vinculada.',
+                detalle,
+            })
             if (!ok) return
         }
 
@@ -3144,6 +3207,46 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     </div>
                 </div>
             </div>
+
+            {confirmacion && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+                    <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl">
+                        <div className="flex items-start gap-3 border-b border-gray-100 px-5 py-4">
+                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                            <h3 className="text-base font-semibold text-gray-900">{confirmacion.titulo}</h3>
+                        </div>
+
+                        <div className="space-y-3 px-5 py-4">
+                            <p className="text-sm text-gray-600">{confirmacion.mensaje}</p>
+
+                            {confirmacion.detalle.length > 0 && (
+                                <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                                    {confirmacion.detalle.map((linea) => (
+                                        <div key={linea} className="text-sm font-medium text-amber-900">{linea}</div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-3">
+                            <button
+                                type="button"
+                                onClick={() => responderConfirmacion(false)}
+                                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => responderConfirmacion(true)}
+                                className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700"
+                            >
+                                Confirmar cambios
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {mensaje && (
                 <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl bg-green-700 px-4 py-3 text-sm text-white shadow-2xl">

@@ -252,34 +252,55 @@ function buildBusquedaStateKey(state: BusquedaFacturacionState): string {
     ].join('|')
 }
 
-function calcularRecargosDiferencial(diferenciales: PrestacionFacturableItem['diferenciales'] | null | undefined): {
+/**
+ * Devuelve el porcentaje FINAL que se paga de cada componente, no un recargo.
+ * 100 = sin cambios, 30 = se paga el 30%, 120 = se paga un 20% de mas.
+ * Tiene que quedar alineado con aplicarDiferencialesAValores.
+ */
+function calcularPorcentajesDiferencial(diferenciales: PrestacionFacturableItem['diferenciales'] | null | undefined): {
     especialista: number
     gastos: number
 } {
-    if (!diferenciales) return { especialista: 0, gastos: 0 }
-    if (diferenciales.aplicaDiferencial === false) return { especialista: 0, gastos: 0 }
+    if (!diferenciales) return { especialista: 100, gastos: 100 }
+    if (diferenciales.aplicaDiferencial === false) return { especialista: 100, gastos: 100 }
 
     const esPrincipalDobleCirugia = Boolean(diferenciales.dobleCirugia && diferenciales.esPracticaBase)
-    const recargoHorario =
-        (!esPrincipalDobleCirugia && diferenciales.esFeriado ? 20 : 0) +
-        (!esPrincipalDobleCirugia && diferenciales.esNocturna ? 20 : 0)
+    if (esPrincipalDobleCirugia) return { especialista: 100, gastos: 100 }
 
-    // El recargo depende solo de la via: misma via 30/0, distinta via 50/75.
     const mismaVia = Boolean(diferenciales.mismaViaPatologia || diferenciales.mismaViaMismaPatologia)
     const distintaVia = Boolean(
         diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia
     )
 
-    const especialista =
-        (!esPrincipalDobleCirugia && distintaVia ? 75 : 0) +
-        recargoHorario
+    const factorGastos = mismaVia ? 0.3 : distintaVia ? 0.5 : 1
+    const factorEspecialista = mismaVia ? 0 : distintaVia ? 0.75 : 1
+    const factorHorario =
+        1 +
+        (diferenciales.esFeriado ? 0.2 : 0) +
+        (diferenciales.esNocturna ? 0.2 : 0)
 
-    const gastos =
-        (!esPrincipalDobleCirugia && mismaVia ? 30 : 0) +
-        (!esPrincipalDobleCirugia && distintaVia ? 50 : 0) +
-        recargoHorario
+    return {
+        especialista: Math.round(factorEspecialista * factorHorario * 100),
+        gastos: Math.round(factorGastos * factorHorario * 100),
+    }
+}
 
-    return { especialista, gastos }
+/**
+ * El diferencial de cirugia solo recalcula gastos y honorario de especialista
+ * (ver aplicarDiferencialesAValores: ayudante y anestesista quedan en null).
+ * Una fila facturada de HA o A1 no queda desactualizada si se cambia el
+ * diferencial, asi que no tiene por que congelarlo.
+ *
+ * Sin incluyeCodigo la practica es completa, o sea que arrastra gastos y
+ * especialista: esa si cuenta.
+ */
+function componenteAfectadoPorDiferencial(incluyeCodigo: string | null | undefined): boolean {
+    const normalizado = (incluyeCodigo ?? '').trim().toUpperCase()
+    if (!normalizado) return true
+    return normalizado
+        .split('+')
+        .map((parte) => parte.trim())
+        .some((parte) => parte === 'GA' || parte === 'HE' || parte === 'HP')
 }
 
 function etiquetasCamposDiferencial(
@@ -287,14 +308,14 @@ function etiquetasCamposDiferencial(
 ): string[] {
     if (!diferenciales) return []
 
-    const recargos = calcularRecargosDiferencial(diferenciales)
-    if (recargos.especialista === 0 && recargos.gastos === 0) {
+    const porcentajes = calcularPorcentajesDiferencial(diferenciales)
+    if (porcentajes.especialista === 100 && porcentajes.gastos === 100) {
         return ['Base 100%']
     }
 
     const etiquetas: string[] = []
-    if (recargos.especialista > 0) etiquetas.push(`Especialista +${recargos.especialista}%`)
-    if (recargos.gastos > 0) etiquetas.push(`Gastos +${recargos.gastos}%`)
+    if (porcentajes.especialista !== 100) etiquetas.push(`Especialista al ${porcentajes.especialista}%`)
+    if (porcentajes.gastos !== 100) etiquetas.push(`Gastos al ${porcentajes.gastos}%`)
     return etiquetas
 }
 
@@ -302,20 +323,16 @@ function etiquetasCamposDiferencialCirugia(draft: DiferencialesCirugiaEditState)
     const mismaVia = draft.mismaViaPatologia || draft.mismaViaMismaPatologia
     const distintaVia = draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia
 
-    const recargosEspecialista =
-        (distintaVia ? 75 : 0) +
-        (draft.esFeriado ? 20 : 0) +
-        (draft.esNocturna ? 20 : 0)
+    const factorGastos = mismaVia ? 0.3 : distintaVia ? 0.5 : 1
+    const factorEspecialista = mismaVia ? 0 : distintaVia ? 0.75 : 1
+    const factorHorario = 1 + (draft.esFeriado ? 0.2 : 0) + (draft.esNocturna ? 0.2 : 0)
 
-    const recargosGastos =
-        (mismaVia ? 30 : 0) +
-        (distintaVia ? 50 : 0) +
-        (draft.esFeriado ? 20 : 0) +
-        (draft.esNocturna ? 20 : 0)
+    const porcentajeEspecialista = Math.round(factorEspecialista * factorHorario * 100)
+    const porcentajeGastos = Math.round(factorGastos * factorHorario * 100)
 
     const etiquetas: string[] = []
-    if (recargosEspecialista > 0) etiquetas.push(`Especialista +${recargosEspecialista}%`)
-    if (recargosGastos > 0) etiquetas.push(`Gastos +${recargosGastos}%`)
+    if (porcentajeEspecialista !== 100) etiquetas.push(`Especialista al ${porcentajeEspecialista}%`)
+    if (porcentajeGastos !== 100) etiquetas.push(`Gastos al ${porcentajeGastos}%`)
     return etiquetas
 }
 
@@ -1512,10 +1529,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             .sort((a, b) => b.cirugiaId - a.cirugiaId)
     }, [contexto])
 
-    // El congelamiento es por cirugia, no por ingreso: solo se bloquea la cirugia
-    // cuyas propias practicas ya se facturaron. Que el ingreso tenga otras ordenes
-    // facturadas (consultas, radiologia, otra cirugia) no debe impedir cargar el
-    // diferencial de una cirugia que todavia esta pendiente.
+    // El congelamiento es por cirugia y por componente, no por ingreso.
+    //
+    // Solo bloquea una practica facturada que el diferencial efectivamente
+    // modificaria: gastos (GA) u honorario de especialista (HE/HP). Si lo
+    // facturado fue el anestesista, un ayudante, o una practica de otra cirugia
+    // u otra orden del ingreso, el diferencial sigue siendo editable porque no
+    // cambia esos importes.
     const cirugiasCongeladas = useMemo(() => {
         const congeladas = new Set<number>()
         if (!contexto) return congeladas
@@ -1524,6 +1544,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             if (!p.facturada) continue
             const cirugiaId = p.origen.cirugiaProgramadaId
             if (!cirugiaId) continue
+            if (!componenteAfectadoPorDiferencial(p.incluyeCodigo)) continue
             congeladas.add(cirugiaId)
         }
         return congeladas
@@ -3203,7 +3224,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
                                                 {congelada && (
                                                     <div className="rounded border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800">
-                                                        Diferenciales congelados: esta cirugía ya tiene prácticas facturadas.
+                                                        Diferenciales congelados: ya se facturaron gastos u honorarios de especialista de esta cirugía. Para cambiarlos hay que anular la facturación de esas órdenes.
                                                     </div>
                                                 )}
 
@@ -3248,7 +3269,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Misma vía / distinta patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos +30%)</span>
+                                                        <span className="text-[10px] text-amber-700">(Gastos al 30%, Esp. al 0%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3261,7 +3282,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Misma vía / misma patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos +30%)</span>
+                                                        <span className="text-[10px] text-amber-700">(Gastos al 30%, Esp. al 0%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3274,7 +3295,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Distinta vía / misma patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos +50%, Esp. +75%)</span>
+                                                        <span className="text-[10px] text-amber-700">(Gastos al 50%, Esp. al 75%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3287,7 +3308,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Distinta vía / distinta patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos +50%, Esp. +75%)</span>
+                                                        <span className="text-[10px] text-amber-700">(Gastos al 50%, Esp. al 75%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2 font-semibold">
                                                         <input

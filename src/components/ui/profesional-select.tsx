@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   coincideBusquedaProfesional,
   nombreProfesionalParaMostrar,
@@ -110,6 +110,9 @@ export function ProfesionalSelect({
   const [matriculaManual, setMatriculaManual] = useState('')
   const [errorManual, setErrorManual] = useState<string | null>(null)
   const [guardandoManual, setGuardandoManual] = useState(false)
+  // El usuario vacio el buscador a proposito para escribir otra busqueda: no volvemos
+  // a escribir la etiqueta del seleccionado hasta que elija otro o salga del campo.
+  const busquedaVaciadaRef = useRef(false)
 
   useEffect(() => {
     if (manuales.length === 0) return
@@ -138,6 +141,7 @@ export function ProfesionalSelect({
   useEffect(() => {
     if (!profesionalSeleccionado) return
     if (termino.trim()) return
+    if (busquedaVaciadaRef.current) return
 
     setTermino(etiquetaProfesional(profesionalSeleccionado))
   }, [profesionalSeleccionado, termino])
@@ -232,6 +236,7 @@ export function ProfesionalSelect({
       })
 
       onProfesionalCreado?.(creado)
+      busquedaVaciadaRef.current = false
       onChange(String(creado.id))
       setTermino(etiquetaProfesional(creado))
       setMostrarCargaManual(false)
@@ -247,7 +252,9 @@ export function ProfesionalSelect({
     setTermino(nextTermino)
 
     if (!autoSelectOnSearch) {
-      if (!nextTermino.trim()) onChange('')
+      // Vaciar el buscador solo limpia el filtro. La seleccion se cambia eligiendo otra
+      // opcion en el desplegable (o la opcion vacia), nunca borrando el texto.
+      busquedaVaciadaRef.current = !nextTermino.trim()
       return
     }
 
@@ -262,6 +269,7 @@ export function ProfesionalSelect({
         value={termino}
         onChange={(e) => handleTerminoChange(e.target.value)}
         onBlur={() => {
+          busquedaVaciadaRef.current = false
           if (!value) return
           if (profesionalSeleccionado) {
             setTermino(etiquetaProfesional(profesionalSeleccionado))
@@ -278,6 +286,7 @@ export function ProfesionalSelect({
         value={value}
         onChange={(e) => {
           const next = e.target.value
+          busquedaVaciadaRef.current = false
           onChange(next)
           if (!next) {
             setTermino('')

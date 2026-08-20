@@ -12,6 +12,7 @@ export const COSEGUROS_IPSS = [
     'SOEM',
     'SOEME',
     'NOVAMED',
+    'SUPRA SALUD',
 ]
 
 export function normalizarNombreObraSocial(nombre: string): string {

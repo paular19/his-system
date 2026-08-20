@@ -36,6 +36,9 @@ export interface ValoresNomencladorFacturacion {
  * porcentajeEspecialista / porcentajeGastos son el porcentaje FINAL que se paga
  * sobre el valor de nomenclador, no un recargo que se suma. 100 = sin cambios,
  * 30 = se paga el 30%, 120 = se paga un 20% de mas.
+ *
+ * porcentajeEspecialista aplica tambien al ayudante: las reglas del especialista
+ * se extienden a los honorarios de ayudantia.
  */
 export interface ValoresConDiferencial extends ValoresNomencladorFacturacion {
     porcentajeEspecialista: number
@@ -116,10 +119,12 @@ export function aplicarDiferencialesAValores(
 
     return {
         valorEspecialista: aplicar(baseEspecialista, factorMultipleEspecialista * factorHorario),
-        // La reduccion por cirugia multiple solo alcanza a gastos y especialista.
-        // Si no hay cirugia multiple, ayudante y anestesista igual arrastran el
-        // recargo horario; antes se anulaban y la practica los perdia.
-        valorAyudante: hayReduccionPorMultiple ? null : aplicar(baseAyudante, factorHorario),
+        // El ayudante sigue la misma regla que el especialista: si al especialista
+        // se le paga el 75%, al ayudante tambien; si al especialista no se le paga
+        // (misma via), al ayudante tampoco.
+        valorAyudante: aplicar(baseAyudante, factorMultipleEspecialista * factorHorario),
+        // El anestesista no entra en la reduccion por cirugia multiple: cuando hay
+        // multiple no se paga, y si no la hay arrastra el recargo horario.
         valorAnestesista: hayReduccionPorMultiple ? null : aplicar(baseAnestesista, factorHorario),
         valorGastos: aplicar(baseGastos, factorMultipleGastos * factorHorario),
         porcentajeEspecialista,

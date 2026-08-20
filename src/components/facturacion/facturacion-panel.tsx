@@ -321,7 +321,7 @@ function etiquetasCamposDiferencial(
     }
 
     const etiquetas: string[] = []
-    if (porcentajes.especialista !== 100) etiquetas.push(`Especialista al ${porcentajes.especialista}%`)
+    if (porcentajes.especialista !== 100) etiquetas.push(`Especialista y ayudante al ${porcentajes.especialista}%`)
     if (porcentajes.gastos !== 100) etiquetas.push(`Gastos al ${porcentajes.gastos}%`)
     return etiquetas
 }
@@ -338,7 +338,7 @@ function etiquetasCamposDiferencialCirugia(draft: DiferencialesCirugiaEditState)
     const porcentajeGastos = Math.round(factorGastos * factorHorario * 100)
 
     const etiquetas: string[] = []
-    if (porcentajeEspecialista !== 100) etiquetas.push(`Especialista al ${porcentajeEspecialista}%`)
+    if (porcentajeEspecialista !== 100) etiquetas.push(`Especialista y ayudante al ${porcentajeEspecialista}%`)
     if (porcentajeGastos !== 100) etiquetas.push(`Gastos al ${porcentajeGastos}%`)
     return etiquetas
 }
@@ -3372,7 +3372,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Misma vía / distinta patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos al 30%, Esp. al 0%)</span>
+                                                        <span className="text-[10px] text-amber-700">(Gastos al 30%; especialista y ayudante no se pagan)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3385,7 +3385,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Misma vía / misma patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos al 30%, Esp. al 0%)</span>
+                                                        <span className="text-[10px] text-amber-700">(Gastos al 30%; especialista y ayudante no se pagan)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3398,7 +3398,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Distinta vía / misma patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos al 50%, Esp. al 75%)</span>
+                                                        <span className="text-[10px] text-amber-700">(Gastos al 50%; especialista y ayudante al 75%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3411,7 +3411,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Distinta vía / distinta patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos al 50%, Esp. al 75%)</span>
+                                                        <span className="text-[10px] text-amber-700">(Gastos al 50%; especialista y ayudante al 75%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2 font-semibold">
                                                         <input

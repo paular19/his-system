@@ -503,6 +503,15 @@ export function CirugiaUrgenciaSection({
                                     ? Number(practica.cantidad)
                                     : 0
                             }
+                            // El grupo tomaba la autorizacion de la primera practica
+                            // que lo creaba. Si esa venia sin numero -por ejemplo una
+                            // interconsulta que comparte orden con la quirurgica- el
+                            // grupo entero se mostraba sin autorizar aunque el resto
+                            // de sus practicas si la tuviera.
+                            if (!existente.numeroAutorizacion) {
+                                existente.numeroAutorizacion =
+                                    normalizarNumeroAutorizacion(orden.numeroAutorizacion) ?? numeroManual
+                            }
                             continue
                         }
 

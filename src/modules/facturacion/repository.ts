@@ -31,6 +31,12 @@ import type {
     OrdenFacturacionResultado,
     PrestacionFacturableItem,
 } from './types'
+import { categoriaPractica, type CategoriaPractica } from './categorias-practica'
+import {
+    claveOrdenLote,
+    repartirOrdenesDeIngreso,
+    type OrdenParaReparto,
+} from './reparto-lotes'
 import { calcularImporteFacturable, resolverReglaFacturacion } from './cobertura'
 import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './diferenciales'
 import { puedeEditarPrestacionEnLote } from './editability'
@@ -5035,6 +5041,67 @@ export async function obtenerLote(
     }
 }
 
+/**
+ * Ordenes que ya factura otro lote pendiente o confirmado del mismo tipo y periodo.
+ *
+ * El lote no guarda sus ordenes: se derivan de sus ingresos incluidos y despues se le
+ * restan las de LoteFacturacionOrdenExcluida. Hay que reproducir esa derivacion para
+ * saber que quedo tomado.
+ */
+async function obtenerOrdenesTomadasEnLotes(
+    tipo: string,
+    periodo: string,
+    excluirLoteId?: number
+): Promise<Set<string>> {
+    const { desde, hasta } = periodoToDateRange(periodo)
+
+    const lotes = await prisma.loteFacturacion.findMany({
+        where: {
+            tipo,
+            periodo,
+            estado: { in: ['PEN', 'CON'] },
+            ...(excluirLoteId ? { id: { not: excluirLoteId } } : {}),
+        },
+        select: {
+            ordenesExcluidas: { select: { puestoNumero: true, ordenNumero: true } },
+            items: {
+                where: { incluido: true },
+                select: {
+                    ingreso: {
+                        select: {
+                            ordenes: {
+                                where: {
+                                    AND: [
+                                        buildOrdenNoAnuladaWhere(),
+                                        { fechaEmision: { gte: desde, lt: hasta } },
+                                        buildOrdenFacturadaWhere(),
+                                    ],
+                                },
+                                select: { puestoNumero: true, numero: true },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+
+    const tomadas = new Set<string>()
+    for (const lote of lotes) {
+        const excluidas = new Set(
+            lote.ordenesExcluidas.map((o) => claveOrdenLote(o.puestoNumero, o.ordenNumero))
+        )
+        for (const item of lote.items) {
+            for (const orden of item.ingreso.ordenes) {
+                const clave = claveOrdenLote(orden.puestoNumero, orden.numero)
+                if (!excluidas.has(clave)) tomadas.add(clave)
+            }
+        }
+    }
+
+    return tomadas
+}
+
 export async function crearLote(
     data: CrearLoteFacturacionInput,
     usuario: string
@@ -5053,14 +5120,20 @@ export async function crearLote(
     // Build where for ingreso resolution
     const whereIngreso: Prisma.IngresoWhereInput = {
         estado: { in: ['A', 'E'] },
-        lotesItems: {
+    }
+    // En PRACTICAS un mismo paciente puede ir en varios lotes a la vez, porque cada lote
+    // factura categorias distintas. El reparto se resuelve por orden mas abajo, asi que
+    // aca no se bloquea al ingreso entero. En MEDICAMENTOS no hay ordenes que repartir,
+    // se mantiene el bloqueo.
+    if (data.tipo === 'MEDICAMENTOS') {
+        whereIngreso.lotesItems = {
             none: {
                 lote: {
                     estado: { in: ['PEN', 'CON'] },
                     tipo: data.tipo,
                 },
             },
-        },
+        }
     }
     if (data.tipoIngresoCodigo) whereIngreso.tipoIngresoCodigo = data.tipoIngresoCodigo
     if (data.clienteTipo === 'PARTICULAR') {
@@ -5115,6 +5188,7 @@ export async function crearLote(
                             select: {
                                 importeTotal: true,
                                 numeroAutorizacion: true,
+                                codigoPractica: true,
                                 practica: {
                                     select: {
                                         estado: true,
@@ -5137,8 +5211,19 @@ export async function crearLote(
         },
     })
 
+    // Ordenes que ya factura otro lote pendiente o confirmado del mismo periodo.
+    const ordenesTomadas =
+        data.tipo === 'PRACTICAS'
+            ? await obtenerOrdenesTomadasEnLotes(data.tipo, data.periodo)
+            : new Set<string>()
+
+    const categoriasSeleccionadas = new Set<CategoriaPractica>(data.categorias ?? [])
+    // Ordenes que quedan fuera del lote: las de otra categoria y las ya tomadas. Se
+    // guardan para que el detalle del lote las descuente igual que las exclusiones manuales.
+    const ordenesExcluidas: Array<{ puestoNumero: number; ordenNumero: number }> = []
+
     // Compute importe per ingreso
-    const itemsData = ingresos.map((ing) => {
+    const itemsData = ingresos.flatMap((ing) => {
         let importe = 0
         if (data.tipo === 'PRACTICAS' && ing.ordenes) {
             const ordenes = ing.ordenes as unknown as Array<{
@@ -5148,6 +5233,7 @@ export async function crearLote(
                 items: Array<{
                     importeTotal: unknown
                     numeroAutorizacion: string | null
+                    codigoPractica: string | null
                     practica: {
                         estado: string | null
                         puestoNumero: number | null
@@ -5157,16 +5243,45 @@ export async function crearLote(
                 }>
             }>
 
-            const itemsFacturados = ordenes.flatMap((o) => {
+            const ordenesParaReparto: OrdenParaReparto[] = []
+            for (const o of ordenes) {
                 const ordenConAutorizacion = tieneNumeroAutorizacionValido(o.numeroAutorizacion)
-                return o.items.filter((it) =>
+                const itemsFacturados = o.items.filter((it) =>
                     practicaFacturadaEnOrden(it.practica, o) &&
                     (ordenConAutorizacion || tieneNumeroAutorizacionValido(it.numeroAutorizacion))
                 )
-            })
+                // Sin practicas facturadas la orden no aparece en el detalle: no hay nada
+                // que excluir ni que sumar.
+                if (itemsFacturados.length === 0) continue
 
-            importe += itemsFacturados
-                .reduce((s: number, i) => s + Number(i.importeTotal ?? 0), 0)
+                const categorias = [
+                    ...new Set(
+                        itemsFacturados
+                            .map((it) => categoriaPractica(it.codigoPractica?.trim()))
+                            .filter((c): c is CategoriaPractica => c !== null)
+                    ),
+                ]
+
+                ordenesParaReparto.push({
+                    puestoNumero: o.puestoNumero,
+                    ordenNumero: o.numero,
+                    categorias,
+                    importe: itemsFacturados.reduce(
+                        (s: number, i) => s + Number(i.importeTotal ?? 0),
+                        0
+                    ),
+                })
+            }
+
+            const reparto = repartirOrdenesDeIngreso(
+                ordenesParaReparto,
+                categoriasSeleccionadas,
+                ordenesTomadas
+            )
+            // Si no le quedo ninguna orden libre de la categoria pedida, el ingreso no entra.
+            if (!reparto.entra) return []
+            importe = reparto.importe
+            ordenesExcluidas.push(...reparto.ordenesExcluidas)
         }
         if (data.tipo === 'MEDICAMENTOS' && ing.medicaciones) {
             importe += (ing.medicaciones as Array<{ nombre: string }>).reduce(
@@ -5178,6 +5293,16 @@ export async function crearLote(
     })
 
     const totalLote = itemsData.reduce((s, it) => s + it.importeTotal, 0)
+
+    // ordenesExcluidas solo acumula ingresos que entraron al lote. Se deduplica por las
+    // dudas: (puestoNumero, ordenNumero) es unico en LoteFacturacionOrdenExcluida.
+    const clavesExcluidas = new Set<string>()
+    const exclusionesData = ordenesExcluidas.filter((o) => {
+        const clave = claveOrdenLote(o.puestoNumero, o.ordenNumero)
+        if (clavesExcluidas.has(clave)) return false
+        clavesExcluidas.add(clave)
+        return true
+    })
 
     const lote = await prisma.loteFacturacion.create({
         data: {
@@ -5198,6 +5323,9 @@ export async function crearLote(
             fechaEstado: now,
             usuario: usuarioCod,
             items: { create: itemsData },
+            ...(exclusionesData.length > 0
+                ? { ordenesExcluidas: { create: exclusionesData } }
+                : {}),
         },
         select: { id: true, numero: true },
     })

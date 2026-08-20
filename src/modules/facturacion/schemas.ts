@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CATEGORIAS_PRACTICA_IDS } from './categorias-practica'
 
 export const BusquedaFacturacionSchema = z.object({
     q: z.string().trim().max(200).optional(),
@@ -266,6 +267,9 @@ export const CrearLoteFacturacionSchema = z.object({
     sedeId: z.number().int().positive().optional().nullable(),
     descripcion: z.string().trim().max(500).optional().nullable(),
     concepto: z.string().trim().max(200).optional().nullable(),
+    // Categorias de practica que factura el lote. Vacio o ausente = todas las que
+    // no haya tomado ya otro lote pendiente o confirmado del mismo periodo.
+    categorias: z.array(z.enum(CATEGORIAS_PRACTICA_IDS)).optional().nullable(),
 })
 
 export type CrearLoteFacturacionInput = z.infer<typeof CrearLoteFacturacionSchema>

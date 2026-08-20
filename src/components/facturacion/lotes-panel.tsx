@@ -6,6 +6,11 @@ import type { LoteFacturacionListItem, LotePracticaFacturadaProfesionalItem } fr
 import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Skeleton } from '@/components/ui/skeleton'
 import { fechaAInputLocal, periodoAInputLocal } from '@/lib/utils/argentina-date'
+import {
+    CATEGORIAS_PRACTICA,
+    CATEGORIA_PRACTICA_LABEL,
+    type CategoriaPractica,
+} from '@/modules/facturacion/categorias-practica'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
 
@@ -480,9 +485,13 @@ function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
         descripcion: '',
         concepto: '',
     })
+    const [categorias, setCategorias] = useState<CategoriaPractica[]>([])
     const [obrasSociales, setObrasSociales] = useState<Array<{ id: number; nombre: string }>>([])
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+
+    const toggleCategoria = (id: CategoriaPractica) =>
+        setCategorias((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]))
 
     useEffect(() => {
         fetch('/api/facturacion/obras-sociales?porPagina=300')
@@ -514,6 +523,7 @@ function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
                 rangoHasta: form.rangoHasta ? Number(form.rangoHasta) : null,
                 descripcion: form.descripcion || null,
                 concepto: form.concepto || null,
+                categorias: form.tipo === 'PRACTICAS' && categorias.length > 0 ? categorias : null,
             }
             const res = await fetch('/api/facturacion/lotes', {
                 method: 'POST',
@@ -618,6 +628,37 @@ function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
                             className="w-full border rounded px-3 py-1.5 text-sm"
                         />
                     </div>
+
+                    {form.tipo === 'PRACTICAS' && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Categorías a facturar (opcional)
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                                {CATEGORIAS_PRACTICA.map((cat) => {
+                                    const activa = categorias.includes(cat.id)
+                                    return (
+                                        <button
+                                            key={cat.id}
+                                            type="button"
+                                            onClick={() => toggleCategoria(cat.id)}
+                                            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${activa
+                                                ? 'border-blue-600 bg-blue-600 text-white'
+                                                : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                                                }`}
+                                        >
+                                            {CATEGORIA_PRACTICA_LABEL[cat.id]}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                            <p className="mt-1 text-xs text-gray-500">
+                                {categorias.length === 0
+                                    ? 'Sin selección: entra todo lo que no haya tomado otro lote pendiente o confirmado del período.'
+                                    : 'Solo entran las órdenes de estas categorías que estén libres. Las órdenes no se parten: van enteras a un solo lote.'}
+                            </p>
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">

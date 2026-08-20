@@ -19,6 +19,12 @@ export const CATEGORIAS_PRACTICA: DefinicionCategoria[] = [
     { id: 'GUARDIA', label: 'Guardia', codigos: [420101] },
 ]
 
+// Tupla no vacia para poder derivar el enum de Zod sin repetir los ids a mano.
+export const CATEGORIAS_PRACTICA_IDS = CATEGORIAS_PRACTICA.map((c) => c.id) as [
+    CategoriaPractica,
+    ...CategoriaPractica[],
+]
+
 export const CATEGORIA_PRACTICA_LABEL: Record<CategoriaPractica, string> = {
     OXIGENO: 'Oxígeno',
     RADIOGRAFIA: 'Radiografías',

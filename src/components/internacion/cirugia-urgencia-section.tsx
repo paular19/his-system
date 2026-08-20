@@ -9,6 +9,7 @@ import { fechaAInputLocal, fechaHoraAInputLocal, formatearFechaArgentina } from 
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import { useBackgroundRefresh } from '@/lib/utils/client-mutation'
+import { resolverPracticaInternacionPorPracticaCirugia } from '@/lib/internacion/practicas-cirugia'
 import {
     abrirVentanaImpresionPendiente,
     cerrarVentanaImpresion,
@@ -394,60 +395,31 @@ export function CirugiaUrgenciaSection({
 
     const estadoPracticaCirugiaPorId = useMemo(() => {
         const estadoPorId = new Map<number, EstadoPracticaCirugia>()
-        const practicasInternacionPorCodigo = new Map<string, PracticaInternacionItem[]>()
+        const practicaInternacionPorId = new Map(
+            practicasInternacion.map((practica) => [practica.id, practica] as const)
+        )
+        const matcheo = resolverPracticaInternacionPorPracticaCirugia(cirugias, practicasInternacion)
 
-        for (const practica of practicasInternacion) {
-            const estado = (practica.estado ?? 'A').trim().toUpperCase()
-            if (estado === 'X') continue
+        for (const [practicaCirugiaId, practicaInternacionId] of matcheo) {
+            const candidata = practicaInternacionPorId.get(practicaInternacionId)
+            if (!candidata) continue
 
-            const codigo = practica.codigoPractica.trim().toUpperCase()
-            if (!codigo) continue
+            const ordenesGeneradas = (candidata.ordenPractica ?? [])
+                .map((orden) => ({
+                    puestoNumero: orden.puestoNumero,
+                    ordenNumero: orden.ordenNumero,
+                    item: orden.item,
+                    numeroAutorizacion: orden.numeroAutorizacion,
+                }))
+                .filter(
+                    (orden) => !ordenesAnuladasTemporalSet.has(`${orden.puestoNumero}:${orden.ordenNumero}`)
+                )
 
-            const bucket = practicasInternacionPorCodigo.get(codigo) ?? []
-            bucket.push(practica)
-            practicasInternacionPorCodigo.set(codigo, bucket)
-        }
-
-        for (const bucket of practicasInternacionPorCodigo.values()) {
-            bucket.sort((a, b) => a.id - b.id)
-        }
-
-        for (const cirugia of cirugias) {
-            const usadosPorCodigo = new Set<number>()
-
-            for (const practicaCirugia of cirugia.practicas) {
-                const codigoCirugia = practicaCirugia.codigo.trim().toUpperCase()
-                const candidatas = practicasInternacionPorCodigo.get(codigoCirugia) ?? []
-
-                const candidataPrioritaria = candidatas.find((item) => {
-                    if (usadosPorCodigo.has(item.id)) return false
-                    const usuario = (item.usuario ?? '').trim().toUpperCase()
-                    return usuario === 'CIRUGIA'
-                })
-                const candidataFallback = candidatas.find((item) => !usadosPorCodigo.has(item.id))
-                const candidata = candidataPrioritaria ?? candidataFallback
-
-                if (!candidata) continue
-
-                usadosPorCodigo.add(candidata.id)
-
-                const ordenesGeneradas = (candidata.ordenPractica ?? [])
-                    .map((orden) => ({
-                        puestoNumero: orden.puestoNumero,
-                        ordenNumero: orden.ordenNumero,
-                        item: orden.item,
-                        numeroAutorizacion: orden.numeroAutorizacion,
-                    }))
-                    .filter(
-                        (orden) => !ordenesAnuladasTemporalSet.has(`${orden.puestoNumero}:${orden.ordenNumero}`)
-                    )
-
-                estadoPorId.set(practicaCirugia.id, {
-                    pendiente: ordenesGeneradas.length === 0 && !practicaInternacionTuvoOrdenGenerada(candidata),
-                    practicaInternacionId: candidata.id,
-                    ordenesGeneradas,
-                })
-            }
+            estadoPorId.set(practicaCirugiaId, {
+                pendiente: ordenesGeneradas.length === 0 && !practicaInternacionTuvoOrdenGenerada(candidata),
+                practicaInternacionId: candidata.id,
+                ordenesGeneradas,
+            })
         }
 
         return estadoPorId

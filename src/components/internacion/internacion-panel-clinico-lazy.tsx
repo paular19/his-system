@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PracticaSection } from '@/components/internacion/practica-section'
 import { CirugiaUrgenciaSection } from '@/components/internacion/cirugia-urgencia-section'
+import { resolverPracticaIdsDeCirugia } from '@/lib/internacion/practicas-cirugia'
 import Link from 'next/link'
 
 type SectorPracticaFiltro = 'UTI' | 'PISO'
@@ -312,6 +313,22 @@ export function InternacionPanelClinicoLazy({
     return Array.from(map.values())
   }, [practicas, practicasCirugiaEspejo])
 
+  // Las practicas que ya se muestran dentro de una cirugia no se repiten en la
+  // seccion de practicas: ahi quedan solo las que no pertenecen a ninguna.
+  const practicaIdsEnCirugia = useMemo(
+    () =>
+      resolverPracticaIdsDeCirugia(
+        cirugias.map((cirugia) => ({ id: cirugia.id, practicas: cirugia.practicas })),
+        practicasInternacionParaCirugia
+      ),
+    [cirugias, practicasInternacionParaCirugia]
+  )
+
+  const practicasFueraDeCirugia = useMemo(
+    () => practicas.filter((practica) => !practicaIdsEnCirugia.has(practica.id)),
+    [practicas, practicaIdsEnCirugia]
+  )
+
   const sectorPorPracticaId = useMemo(() => {
     return Object.fromEntries(
       practicasInternacionParaCirugia.map((practica) => [
@@ -375,7 +392,7 @@ export function InternacionPanelClinicoLazy({
           convenioId={convenioId}
           sectorInternacionActual={sectorInternacionActual}
           sectorPorPracticaId={sectorPorPracticaId}
-          practicas={practicas.map((item) => ({
+          practicas={practicasFueraDeCirugia.map((item) => ({
             ...item,
             fecha: new Date(item.fecha),
             ordenPractica: (item.ordenPractica ?? []).map((orden) => ({

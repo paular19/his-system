@@ -3977,6 +3977,7 @@ export async function actualizarPrestacionFacturacion(
             numeroAutorizacion: true,
             cantidad: true,
             importeTotal: true,
+            practicaId: true,
         },
     })
     if (!actualItem) throw new Error('Ítem de orden no encontrado')
@@ -4046,6 +4047,26 @@ export async function actualizarPrestacionFacturacion(
                 where: {
                     id: { in: Array.from(practicaIdsGlobal) },
                 },
+                data: {
+                    fecha: data.fecha,
+                    convenioId: resolved.convenioId,
+                    codigoPractica: resolved.codigoPractica.trim(),
+                    cantidad: data.cantidad,
+                    numeroAutorizacion: data.numeroAutorizacion ?? null,
+                    importeTotal: importeTotalFinal,
+                    matriculaEspecialista: matriculaEspecialistaFinal,
+                    matriculaAnestesista: data.matriculaAnestesista ?? null,
+                },
+            })
+        } else if (actualItem.practicaId != null) {
+            // Editar un subitem desde facturacion tambien baja el cambio a SU
+            // practica vinculada. Facturacion es la fuente de verdad del importe:
+            // si no se propaga, la practica queda con el valor viejo y la
+            // diferencia no la ve nadie. Antes esto solo pasaba con
+            // `aplicarOrdenCompleta`, que ademas pisaba TODAS las practicas de la
+            // orden, asi que en la practica nunca se usaba.
+            await tx.practica.update({
+                where: { id: actualItem.practicaId },
                 data: {
                     fecha: data.fecha,
                     convenioId: resolved.convenioId,

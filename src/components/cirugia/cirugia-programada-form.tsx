@@ -112,6 +112,7 @@ export function CirugiaProgramadaForm({
     const [esFeriado, setEsFeriado] = useState(false)
     const [esNocturna, setEsNocturna] = useState(false)
     const [mismaViaPatologia, setMismaViaPatologia] = useState(false)
+    const [mismaViaMismaPatologia, setMismaViaMismaPatologia] = useState(false)
     const [diferentesViasPatologia, setDiferentesViasPatologia] = useState(false)
     const [diferentesViasDiferentesPatologia, setDiferentesViasDiferentesPatologia] = useState(false)
     const [dobleCirugia, setDobleCirugia] = useState(false)
@@ -371,6 +372,7 @@ export function CirugiaProgramadaForm({
                     esFeriado,
                     esNocturna,
                     mismaViaPatologia,
+                    mismaViaMismaPatologia,
                     diferentesViasPatologia,
                     diferentesViasDiferentesPatologia,
                     dobleCirugia,
@@ -800,6 +802,18 @@ export function CirugiaProgramadaForm({
                         />
                         <label htmlFor="mismaViaPatologia" className="text-sm text-gray-700">
                             Misma vía, diferentes patologías
+                        </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            id="mismaViaMismaPatologia"
+                            checked={mismaViaMismaPatologia}
+                            onChange={(e) => setMismaViaMismaPatologia(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 rounded"
+                        />
+                        <label htmlFor="mismaViaMismaPatologia" className="text-sm text-gray-700">
+                            Misma vía, misma patología
                         </label>
                     </div>
                     <div className="flex items-center gap-2">

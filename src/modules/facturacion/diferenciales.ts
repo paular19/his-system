@@ -2,9 +2,27 @@ export interface DiferencialesFacturacion {
     esFeriado: boolean
     esNocturna: boolean
     mismaViaPatologia: boolean
+    mismaViaMismaPatologia?: boolean
     diferentesViasPatologia: boolean
     diferentesViasDiferentesPatologia: boolean
     dobleCirugia?: boolean
+}
+
+/**
+ * El recargo depende SOLO de la via, no de la patologia:
+ *   misma via    -> 30% gastos, 0% especialista
+ *   distinta via -> 50% gastos, 75% especialista
+ */
+export function esMismaVia(diferenciales?: DiferencialesFacturacion | null): boolean {
+    if (!diferenciales) return false
+    return Boolean(diferenciales.mismaViaPatologia || diferenciales.mismaViaMismaPatologia)
+}
+
+export function esDistintaVia(diferenciales?: DiferencialesFacturacion | null): boolean {
+    if (!diferenciales) return false
+    return Boolean(
+        diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia
+    )
 }
 
 export interface ValoresNomencladorFacturacion {
@@ -28,9 +46,8 @@ export function tieneDiferencialesActivos(diferenciales?: DiferencialesFacturaci
     return Boolean(
         diferenciales.esFeriado ||
         diferenciales.esNocturna ||
-        diferenciales.mismaViaPatologia ||
-        diferenciales.diferentesViasPatologia ||
-        diferenciales.diferentesViasDiferentesPatologia ||
+        esMismaVia(diferenciales) ||
+        esDistintaVia(diferenciales) ||
         diferenciales.dobleCirugia
     )
 }
@@ -56,13 +73,13 @@ export function aplicarDiferencialesAValores(
     }
 
     const recargoEspecialista =
-        (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia ? 75 : 0) +
+        (esDistintaVia(diferenciales) ? 75 : 0) +
         (diferenciales.esFeriado ? 20 : 0) +
         (diferenciales.esNocturna ? 20 : 0)
 
     const recargoGastos =
-        (diferenciales.mismaViaPatologia ? 30 : 0) +
-        (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia ? 50 : 0) +
+        (esMismaVia(diferenciales) ? 30 : 0) +
+        (esDistintaVia(diferenciales) ? 50 : 0) +
         (diferenciales.esFeriado ? 20 : 0) +
         (diferenciales.esNocturna ? 20 : 0)
 
@@ -92,7 +109,8 @@ export function resumenDiferenciales(diferenciales?: DiferencialesFacturacion | 
     if (diferenciales.esFeriado) etiquetas.push('Feriado')
     if (diferenciales.esNocturna) etiquetas.push('Nocturna')
     if (diferenciales.mismaViaPatologia) etiquetas.push('Misma vía / distinta patología')
-    if (diferenciales.diferentesViasPatologia) etiquetas.push('Misma vía / misma patología')
+    if (diferenciales.mismaViaMismaPatologia) etiquetas.push('Misma vía / misma patología')
+    if (diferenciales.diferentesViasPatologia) etiquetas.push('Distinta vía / misma patología')
     if (diferenciales.diferentesViasDiferentesPatologia) etiquetas.push('Distinta vía / distinta patología')
     if (diferenciales.dobleCirugia) etiquetas.push('Doble cirugía')
     return etiquetas

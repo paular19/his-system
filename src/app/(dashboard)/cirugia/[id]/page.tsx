@@ -216,6 +216,7 @@ export default async function CirugiaProgramadaDetallePage({ params }: CirugiaPr
                                     {d.esFeriado && <span className="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded">Feriado</span>}
                                     {d.esNocturna && <span className="inline-block bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">CirugÃ­a nocturna</span>}
                                     {d.mismaViaPatologia && <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">Misma vÃ­a, diferentes patologÃ­as</span>}
+                                    {d.mismaViaMismaPatologia && <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">Misma via, misma patologia</span>}
                                     {d.diferentesViasPatologia && <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">Diferentes vÃ­as, misma patologÃ­a</span>}
                                     {d.diferentesViasDiferentesPatologia && <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">Diferentes vÃ­as y patologÃ­as</span>}
                                     {d.dobleCirugia && <span className="inline-block bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded">Doble cirugÃ­a</span>}

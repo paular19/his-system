@@ -1557,6 +1557,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         esFeriado: true,
                         esNocturna: true,
                         mismaViaPatologia: true,
+                        mismaViaMismaPatologia: true,
                         diferentesViasPatologia: true,
                         diferentesViasDiferentesPatologia: true,
                         dobleCirugia: true,
@@ -1894,12 +1895,17 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const practicaBaseId =
             cirugia.diferenciales.find((d) => d.practicaBaseId != null)?.practicaBaseId ?? null
         const mismaViaPatologia = cirugia.diferenciales.some((d) => d.mismaViaPatologia)
+        const mismaViaMismaPatologia = cirugia.diferenciales.some((d) => d.mismaViaMismaPatologia)
         const diferentesViasPatologia = cirugia.diferenciales.some((d) => d.diferentesViasPatologia)
         const diferentesViasDiferentesPatologia = cirugia.diferenciales.some((d) => d.diferentesViasDiferentesPatologia)
         const dobleCirugia = cirugia.diferenciales.some((d) => d.dobleCirugia)
+        // Doble cirugia sin tipo de via cargado se asume misma via / misma
+        // patologia (30% gastos, 0% especialista). Antes caia en el campo de
+        // distinta via y cobraba 50% + 75%.
         const fallbackMismaViaMismaPatologia =
             dobleCirugia &&
             !mismaViaPatologia &&
+            !mismaViaMismaPatologia &&
             !diferentesViasPatologia &&
             !diferentesViasDiferentesPatologia
         const practicaSecundariaId =
@@ -1911,7 +1917,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             esFeriado: cirugia.diferenciales.some((d) => d.esFeriado),
             esNocturna: cirugia.diferenciales.some((d) => d.esNocturna),
             mismaViaPatologia,
-            diferentesViasPatologia: diferentesViasPatologia || fallbackMismaViaMismaPatologia,
+            mismaViaMismaPatologia: mismaViaMismaPatologia || fallbackMismaViaMismaPatologia,
+            diferentesViasPatologia,
             diferentesViasDiferentesPatologia,
             dobleCirugia,
             practicaBaseId,
@@ -4274,6 +4281,7 @@ export async function actualizarDiferencialesCirugiaFacturacion(
             esFeriado: data.esFeriado,
             esNocturna: data.esNocturna,
             mismaViaPatologia: data.mismaViaPatologia,
+            mismaViaMismaPatologia: data.mismaViaMismaPatologia,
             diferentesViasPatologia: data.diferentesViasPatologia,
             diferentesViasDiferentesPatologia: data.diferentesViasDiferentesPatologia,
             dobleCirugia: data.dobleCirugia,
@@ -5348,6 +5356,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
                     esFeriado: true,
                     esNocturna: true,
                     mismaViaPatologia: true,
+                    mismaViaMismaPatologia: true,
                     diferentesViasPatologia: true,
                     diferentesViasDiferentesPatologia: true,
                     dobleCirugia: true,
@@ -5370,6 +5379,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
                 esFeriado: boolean
                 esNocturna: boolean
                 mismaViaPatologia: boolean
+                mismaViaMismaPatologia: boolean
                 diferentesViasPatologia: boolean
                 diferentesViasDiferentesPatologia: boolean
                 dobleCirugia: boolean
@@ -5384,6 +5394,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
                 esFeriado: boolean
                 esNocturna: boolean
                 mismaViaPatologia: boolean
+                mismaViaMismaPatologia: boolean
                 diferentesViasPatologia: boolean
                 diferentesViasDiferentesPatologia: boolean
                 dobleCirugia: boolean
@@ -5396,6 +5407,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
             esFeriado: cirugia.diferenciales.some((d) => d.esFeriado),
             esNocturna: cirugia.diferenciales.some((d) => d.esNocturna),
             mismaViaPatologia: cirugia.diferenciales.some((d) => d.mismaViaPatologia),
+            mismaViaMismaPatologia: cirugia.diferenciales.some((d) => d.mismaViaMismaPatologia),
             diferentesViasPatologia: cirugia.diferenciales.some((d) => d.diferentesViasPatologia),
             diferentesViasDiferentesPatologia: cirugia.diferenciales.some(
                 (d) => d.diferentesViasDiferentesPatologia
@@ -5515,12 +5527,16 @@ export async function obtenerOrdenesAutorizadasIngreso(
                         const esCirugiaMultiple = Boolean(
                             diferenciales?.dobleCirugia ||
                                 diferenciales?.mismaViaPatologia ||
+                                diferenciales?.mismaViaMismaPatologia ||
                                 diferenciales?.diferentesViasPatologia ||
                                 diferenciales?.diferentesViasDiferentesPatologia
                         )
                         const etiquetasCirugia: string[] = []
                         if (diferenciales?.mismaViaPatologia) {
                             etiquetasCirugia.push('Misma vía / distinta patología')
+                        }
+                        if (diferenciales?.mismaViaMismaPatologia) {
+                            etiquetasCirugia.push('Misma vía / misma patología')
                         }
                         if (diferenciales?.diferentesViasPatologia) {
                             etiquetasCirugia.push('Distintas vías / misma patología')

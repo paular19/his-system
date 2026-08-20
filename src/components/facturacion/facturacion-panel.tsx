@@ -71,6 +71,7 @@ type DiferencialesCirugiaEditState = {
     esFeriado: boolean
     esNocturna: boolean
     mismaViaPatologia: boolean
+    mismaViaMismaPatologia: boolean
     diferentesViasPatologia: boolean
     diferentesViasDiferentesPatologia: boolean
     dobleCirugia: boolean
@@ -263,13 +264,19 @@ function calcularRecargosDiferencial(diferenciales: PrestacionFacturableItem['di
         (!esPrincipalDobleCirugia && diferenciales.esFeriado ? 20 : 0) +
         (!esPrincipalDobleCirugia && diferenciales.esNocturna ? 20 : 0)
 
+    // El recargo depende solo de la via: misma via 30/0, distinta via 50/75.
+    const mismaVia = Boolean(diferenciales.mismaViaPatologia || diferenciales.mismaViaMismaPatologia)
+    const distintaVia = Boolean(
+        diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia
+    )
+
     const especialista =
-        (!esPrincipalDobleCirugia && (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia) ? 75 : 0) +
+        (!esPrincipalDobleCirugia && distintaVia ? 75 : 0) +
         recargoHorario
 
     const gastos =
-        (!esPrincipalDobleCirugia && diferenciales.mismaViaPatologia ? 30 : 0) +
-        (!esPrincipalDobleCirugia && (diferenciales.diferentesViasPatologia || diferenciales.diferentesViasDiferentesPatologia) ? 50 : 0) +
+        (!esPrincipalDobleCirugia && mismaVia ? 30 : 0) +
+        (!esPrincipalDobleCirugia && distintaVia ? 50 : 0) +
         recargoHorario
 
     return { especialista, gastos }
@@ -292,14 +299,17 @@ function etiquetasCamposDiferencial(
 }
 
 function etiquetasCamposDiferencialCirugia(draft: DiferencialesCirugiaEditState): string[] {
+    const mismaVia = draft.mismaViaPatologia || draft.mismaViaMismaPatologia
+    const distintaVia = draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia
+
     const recargosEspecialista =
-        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 75 : 0) +
+        (distintaVia ? 75 : 0) +
         (draft.esFeriado ? 20 : 0) +
         (draft.esNocturna ? 20 : 0)
 
     const recargosGastos =
-        (draft.mismaViaPatologia ? 30 : 0) +
-        (draft.diferentesViasPatologia || draft.diferentesViasDiferentesPatologia ? 50 : 0) +
+        (mismaVia ? 30 : 0) +
+        (distintaVia ? 50 : 0) +
         (draft.esFeriado ? 20 : 0) +
         (draft.esNocturna ? 20 : 0)
 
@@ -849,6 +859,7 @@ function esPrestacionCirugiaMultiple(p: PrestacionFacturableItem): boolean {
     return Boolean(
         diferenciales.dobleCirugia ||
         diferenciales.mismaViaPatologia ||
+        diferenciales.mismaViaMismaPatologia ||
         diferenciales.diferentesViasPatologia ||
         diferenciales.diferentesViasDiferentesPatologia
     )
@@ -1041,6 +1052,7 @@ function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): Diferenc
         esFeriado: Boolean(cirugia.diferenciales?.esFeriado),
         esNocturna: Boolean(cirugia.diferenciales?.esNocturna),
         mismaViaPatologia: Boolean(cirugia.diferenciales?.mismaViaPatologia),
+        mismaViaMismaPatologia: Boolean(cirugia.diferenciales?.mismaViaMismaPatologia),
         diferentesViasPatologia: Boolean(cirugia.diferenciales?.diferentesViasPatologia),
         diferentesViasDiferentesPatologia: Boolean(cirugia.diferenciales?.diferentesViasDiferentesPatologia),
         dobleCirugia,
@@ -2610,6 +2622,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     esFeriado: draft.esFeriado,
                     esNocturna: draft.esNocturna,
                     mismaViaPatologia: draft.mismaViaPatologia,
+                    mismaViaMismaPatologia: draft.mismaViaMismaPatologia,
                     diferentesViasPatologia: draft.diferentesViasPatologia,
                     diferentesViasDiferentesPatologia: draft.diferentesViasDiferentesPatologia,
                     dobleCirugia: draft.dobleCirugia,
@@ -3235,6 +3248,20 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Misma vía / distinta patología
+                                                        <span className="text-[10px] text-amber-700">(Gastos +30%)</span>
+                                                    </label>
+                                                    <label className="inline-flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={draft.mismaViaMismaPatologia}
+                                                            disabled={congelada}
+                                                            onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
+                                                                ...prev,
+                                                                [cirugia.cirugiaId]: { ...draft, mismaViaMismaPatologia: e.target.checked },
+                                                            }))}
+                                                        />
+                                                        Misma vía / misma patología
+                                                        <span className="text-[10px] text-amber-700">(Gastos +30%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3246,7 +3273,8 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 [cirugia.cirugiaId]: { ...draft, diferentesViasPatologia: e.target.checked },
                                                             }))}
                                                         />
-                                                        Misma vía / misma patología
+                                                        Distinta vía / misma patología
+                                                        <span className="text-[10px] text-amber-700">(Gastos +50%, Esp. +75%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3259,6 +3287,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Distinta vía / distinta patología
+                                                        <span className="text-[10px] text-amber-700">(Gastos +50%, Esp. +75%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2 font-semibold">
                                                         <input

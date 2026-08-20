@@ -15,6 +15,7 @@ export const DiferencialesSchema = z.object({
     esFeriado: z.boolean().default(false),
     esNocturna: z.boolean().default(false),
     mismaViaPatologia: z.boolean().default(false),
+    mismaViaMismaPatologia: z.boolean().default(false),
     diferentesViasPatologia: z.boolean().default(false),
     diferentesViasDiferentesPatologia: z.boolean().default(false),
     dobleCirugia: z.boolean().default(false),

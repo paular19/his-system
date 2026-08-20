@@ -1059,6 +1059,7 @@ export async function obtenerInternacionDetalle(
               esFeriado: true,
               esNocturna: true,
               mismaViaPatologia: true,
+              mismaViaMismaPatologia: true,
               diferentesViasPatologia: true,
               diferentesViasDiferentesPatologia: true,
               dobleCirugia: true,
@@ -2629,6 +2630,7 @@ export async function crearCirugiaUrgencia(
             esFeriado: true,
             esNocturna: true,
             mismaViaPatologia: true,
+            mismaViaMismaPatologia: true,
             diferentesViasPatologia: true,
             diferentesViasDiferentesPatologia: true,
             dobleCirugia: true,
@@ -2707,6 +2709,7 @@ export async function crearCirugiaSimpleConDescripcion(
           esFeriado: true,
           esNocturna: true,
           mismaViaPatologia: true,
+          mismaViaMismaPatologia: true,
           diferentesViasPatologia: true,
           diferentesViasDiferentesPatologia: true,
           dobleCirugia: true,
@@ -2877,9 +2880,12 @@ export async function guardarCondicionalCirugiaMultiple(
       throw new Error('Cirugia no encontrada para el ingreso indicado')
     }
 
+    // Cada opcion va a su propio campo. Antes "misma via / misma patologia" se
+    // guardaba en diferentesViasPatologia (distinta via), y eso le aplicaba
+    // 50% de gastos + 75% de especialista en vez de 30% y 0%.
     const mismaViaPatologia =
       data.cirugiasMultiples && data.tipoCirugiaMultiple === 'MISMA_VIA_DISTINTA_PATOLOGIA'
-    const diferentesViasPatologia =
+    const mismaViaMismaPatologia =
       data.cirugiasMultiples && data.tipoCirugiaMultiple === 'MISMA_VIA_MISMA_PATOLOGIA'
     const diferentesViasDiferentesPatologia =
       data.cirugiasMultiples && data.tipoCirugiaMultiple === 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
@@ -2888,7 +2894,10 @@ export async function guardarCondicionalCirugiaMultiple(
       esFeriado: false,
       esNocturna: false,
       mismaViaPatologia,
-      diferentesViasPatologia,
+      mismaViaMismaPatologia,
+      // La ficha quirurgica no ofrece "distinta via / misma patologia": esa
+      // combinacion solo se carga desde cirugia programada o facturacion.
+      diferentesViasPatologia: false,
       diferentesViasDiferentesPatologia,
       dobleCirugia: data.cirugiasMultiples,
       practicaBaseId: null,

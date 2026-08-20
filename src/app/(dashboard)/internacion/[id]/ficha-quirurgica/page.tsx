@@ -105,6 +105,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
           diferenciales: {
             select: {
               mismaViaPatologia: true,
+              mismaViaMismaPatologia: true,
               diferentesViasPatologia: true,
               diferentesViasDiferentesPatologia: true,
               dobleCirugia: true,
@@ -123,6 +124,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
     const diferencialesConsolidados = cirugia.diferenciales.reduce(
       (acc, row) => ({
         mismaViaPatologia: acc.mismaViaPatologia || row.mismaViaPatologia,
+        mismaViaMismaPatologia: acc.mismaViaMismaPatologia || row.mismaViaMismaPatologia,
         diferentesViasPatologia: acc.diferentesViasPatologia || row.diferentesViasPatologia,
         diferentesViasDiferentesPatologia:
           acc.diferentesViasDiferentesPatologia || row.diferentesViasDiferentesPatologia,
@@ -130,6 +132,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
       }),
       {
         mismaViaPatologia: false,
+        mismaViaMismaPatologia: false,
         diferentesViasPatologia: false,
         diferentesViasDiferentesPatologia: false,
         dobleCirugia: false,
@@ -140,7 +143,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
       ? 'DISTINTA_VIA_DISTINTA_PATOLOGIA'
       : diferencialesConsolidados.mismaViaPatologia
         ? 'MISMA_VIA_DISTINTA_PATOLOGIA'
-        : diferencialesConsolidados.diferentesViasPatologia
+        : diferencialesConsolidados.mismaViaMismaPatologia
           ? 'MISMA_VIA_MISMA_PATOLOGIA'
           : ''
 
@@ -153,6 +156,7 @@ export default async function FichaQuirurgicaPage({ params }: PageProps) {
     const cirugiasMultiplesInicial =
       diferencialesConsolidados.dobleCirugia ||
       diferencialesConsolidados.mismaViaPatologia ||
+      diferencialesConsolidados.mismaViaMismaPatologia ||
       diferencialesConsolidados.diferentesViasPatologia ||
       diferencialesConsolidados.diferentesViasDiferentesPatologia
 

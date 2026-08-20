@@ -69,6 +69,7 @@ export interface PrestacionFacturableItem {
         esFeriado: boolean
         esNocturna: boolean
         mismaViaPatologia: boolean
+        mismaViaMismaPatologia: boolean
         diferentesViasPatologia: boolean
         diferentesViasDiferentesPatologia: boolean
         dobleCirugia?: boolean

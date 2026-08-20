@@ -729,7 +729,10 @@ model CirugiaDiferencial {
   descripcion                       String  @db.VarChar(500)
   esFeriado                         Boolean @default(false)
   esNocturna                        Boolean @default(false)
+  // Misma via: 30% gastos, 0% especialista (da igual la patologia).
   mismaViaPatologia                 Boolean @default(false)
+  mismaViaMismaPatologia            Boolean @default(false)
+  // Distinta via: 50% gastos, 75% especialista (da igual la patologia).
   diferentesViasPatologia           Boolean @default(false)
   diferentesViasDiferentesPatologia Boolean @default(false)
   dobleCirugia                      Boolean @default(false)

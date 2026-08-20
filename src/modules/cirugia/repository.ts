@@ -17,6 +17,7 @@ interface GuardarCirugiaParams {
         esFeriado: boolean
         esNocturna: boolean
         mismaViaPatologia: boolean
+        mismaViaMismaPatologia: boolean
         diferentesViasPatologia: boolean
         diferentesViasDiferentesPatologia: boolean
         dobleCirugia: boolean
@@ -143,6 +144,7 @@ export async function guardarCirugiaProgramada(data: GuardarCirugiaParams) {
                         esFeriado: data.diferenciales.esFeriado,
                         esNocturna: data.diferenciales.esNocturna,
                         mismaViaPatologia: data.diferenciales.mismaViaPatologia,
+                        mismaViaMismaPatologia: data.diferenciales.mismaViaMismaPatologia,
                         diferentesViasPatologia: data.diferenciales.diferentesViasPatologia,
                         diferentesViasDiferentesPatologia: data.diferenciales.diferentesViasDiferentesPatologia,
                         dobleCirugia: data.diferenciales.dobleCirugia,

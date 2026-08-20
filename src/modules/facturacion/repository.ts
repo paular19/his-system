@@ -38,7 +38,11 @@ import {
     type OrdenParaReparto,
 } from './reparto-lotes'
 import { calcularImporteFacturable, resolverReglaFacturacion } from './cobertura'
-import { aplicarDiferencialesAValores, tieneDiferencialesActivos } from './diferenciales'
+import {
+    aplicarDiferencialesAValores,
+    esCodigoAccesorioCirugia,
+    tieneDiferencialesActivos,
+} from './diferenciales'
 import { puedeEditarPrestacionEnLote } from './editability'
 import { crearOrdenAmbulatorio } from '@/modules/orden/service'
 import { claveDiaArgentina } from '@/lib/utils/argentina-date'
@@ -2034,6 +2038,46 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         practicaSecundariaAutomaticaPorCirugia.set(cirugiaId, candidata.practicaId)
     }
 
+    // Sin doble cirugia el diferencial (feriado, nocturna, via) va solo a la
+    // practica quirurgica. Los codigos accesorios que igual se cargan dentro de
+    // la cirugia -cama, descartable, derecho de quirofano, interconsulta,
+    // radioscopia, anatomia patologica- se facturan al valor de nomenclador.
+    //
+    // Si el administrador eligio la practica principal en el panel, esa
+    // seleccion manda; si no, se toma todo lo de la cirugia que no sea
+    // accesorio. En doble cirugia no aplica: ahi el diferencial ya queda
+    // acotado a la practica secundaria.
+    const codigoPorPracticaId = new Map<number, string>()
+    for (const practicaIngreso of ingreso.practicas) {
+        codigoPorPracticaId.set(
+            practicaIngreso.id,
+            normalizarCodigoPractica(practicaIngreso.codigoPractica)
+        )
+    }
+
+    const codigosConDiferencialPorCirugia = new Map<number, Set<string>>()
+    for (const cirugia of ingreso.cirugiasProgramadas) {
+        if (cirugia.diferenciales.some((d) => d.dobleCirugia)) continue
+
+        const practicaBaseId =
+            cirugia.diferenciales.find((d) => d.practicaBaseId != null)?.practicaBaseId ?? null
+        const codigoElegido =
+            practicaBaseId != null ? (codigoPorPracticaId.get(practicaBaseId) ?? null) : null
+
+        const codigos = new Set<string>()
+        if (codigoElegido) {
+            codigos.add(codigoElegido)
+        } else {
+            for (const practica of cirugia.practicas) {
+                const codigo = normalizarCodigoPractica(practica.codigo)
+                if (esCodigoAccesorioCirugia(codigo)) continue
+                codigos.add(codigo)
+            }
+        }
+
+        codigosConDiferencialPorCirugia.set(cirugia.id, codigos)
+    }
+
     for (const o of ingreso.ordenes) {
         const claveOrden = `${o.puestoNumero}:${o.numero}`
         matriculaPorOrden.set(claveOrden, o.profesional?.matricula ?? null)
@@ -2433,7 +2477,17 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 return esPracticaSecundariaDobleCirugia ? diferencialesCirugiaRaw : null
             }
 
-            return diferencialesCirugiaRaw
+            // Sin doble cirugía va solo a la práctica quirúrgica (ver
+            // codigosConDiferencialPorCirugia): la cama, el descartable y demás
+            // accesorios no llevan recargo aunque estén dentro de la cirugía.
+            const codigosConDiferencial = diferencialCirugia
+                ? codigosConDiferencialPorCirugia.get(diferencialCirugia.cirugiaId)
+                : null
+            if (!codigosConDiferencial) return diferencialesCirugiaRaw
+
+            return codigosConDiferencial.has(normalizarCodigoPractica(p.codigoPractica))
+                ? diferencialesCirugiaRaw
+                : null
         })()
         const aplicarDiferencialesCirugia = tieneDiferencialesActivos(diferencialesCirugiaCalculados)
 
@@ -2464,9 +2518,14 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const importeFromDb = p.importeTotal != null ? Number(String(p.importeTotal)) : null
         const cant = Number(p.cantidad)
         const precioUnitarioDesdeDb = importeFromDb !== null && cant > 0 ? Number((importeFromDb / cant).toFixed(2)) : null
+        // La inferencia va contra el desglose SIN diferencial: Practica.importeTotal
+        // guarda el importe base de nomenclador, no el facturado. Si se compara
+        // contra el desglose ya recargado, ninguna fila matchea su componente y
+        // todas caen en "practica completa", asi que un feriado multiplicaba el
+        // total por la cantidad de filas (GA, HE, HA, A1) en vez de recargarlas.
         const incluyeCodigoInferido = !incluyeCodigoPracticaBase
             ? inferirIncluyeCodigoDesdeImporte({
-                desglose: desgloseConDiferencial,
+                desglose: desgloseBase,
                 precioUnitarioDesdeDb,
             })
             : null
@@ -4312,7 +4371,9 @@ export async function actualizarDiferencialesCirugiaFacturacion(
             diferentesViasPatologia: data.diferentesViasPatologia,
             diferentesViasDiferentesPatologia: data.diferentesViasDiferentesPatologia,
             dobleCirugia: data.dobleCirugia,
-            practicaBaseId: data.dobleCirugia ? (data.practicaBaseId ?? null) : null,
+            // Sin doble cirugia la practica base ya no es descartable: identifica
+            // la practica quirurgica a la que se le suma el feriado / nocturna.
+            practicaBaseId: data.practicaBaseId ?? null,
         }
 
         const existentes = await tx.cirugiaDiferencial.count({

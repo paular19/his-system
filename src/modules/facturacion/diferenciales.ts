@@ -25,6 +25,34 @@ export function esDistintaVia(diferenciales?: DiferencialesFacturacion | null): 
     )
 }
 
+/**
+ * Codigos que se cargan dentro de una cirugia pero NO son el acto quirurgico:
+ * cama, material descartable, derecho de quirofano, interconsulta, radioscopia
+ * y anatomia patologica.
+ *
+ * El recargo de feriado / nocturna se suma solo a la practica quirurgica. Antes
+ * se aplicaba a todo lo matcheado contra la cirugia, asi que un feriado
+ * recargaba tambien la cama y el descartable. En las cirugias dobles eso nunca
+ * se vio porque ahi el diferencial ya quedaba acotado a la practica secundaria.
+ *
+ * Si el administrador elige explicitamente la practica quirurgica en el panel
+ * de facturacion, esa seleccion pisa esta lista.
+ */
+const CODIGOS_ACCESORIOS_CIRUGIA = new Set([
+    '430101', // Cama
+    '431001', // Uso de material descartable
+    '431101', // Intervencion quirurgica con anestesia general (derecho de quirofano)
+    '420301', // Interconsulta
+    '420303', // Interconsulta especializada en internacion
+    '340907', // Radioscopia en quirofano
+    '150102', // Estudio macro y microscopico de pieza operatoria
+])
+
+export function esCodigoAccesorioCirugia(codigo: string | null | undefined): boolean {
+    if (!codigo) return false
+    return CODIGOS_ACCESORIOS_CIRUGIA.has(codigo.trim())
+}
+
 export interface ValoresNomencladorFacturacion {
     valorEspecialista: number | null
     valorAyudante: number | null

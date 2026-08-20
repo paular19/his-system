@@ -2701,7 +2701,12 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 body: JSON.stringify({
                     ingresoId: contexto.ingreso.id,
                     cirugiaProgramadaId: cirugia.cirugiaId,
-                    practicaBaseId: draft.dobleCirugia ? practicaBaseId : null,
+                    // Sin doble cirugia la practica principal es opcional: si el
+                    // administrador no elige ninguna, el recargo de feriado /
+                    // nocturna va a todos los codigos no accesorios de la cirugia.
+                    practicaBaseId: draft.dobleCirugia
+                        ? practicaBaseId
+                        : (draft.practicaBaseId ? practicaBaseId : null),
                     practicaSecundariaId: draft.dobleCirugia ? practicaSecundariaId : null,
                     esFeriado: draft.esFeriado,
                     esNocturna: draft.esNocturna,
@@ -3309,6 +3314,16 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                         const draft = diferencialesCirugiaEdit[cirugia.cirugiaId] ?? buildDiferencialesCirugiaState(cirugia)
                                         const etiquetasAplicadas = etiquetasCamposDiferencialCirugia(draft)
                                         const congelada = cirugiasCongeladas.has(cirugia.cirugiaId)
+                                        // Sin doble cirugia el selector de practica principal sigue
+                                        // sirviendo: acota a que codigo se le suma el feriado / nocturna.
+                                        const hayDiferencialSinDoble =
+                                            !draft.dobleCirugia &&
+                                            (draft.esFeriado ||
+                                                draft.esNocturna ||
+                                                draft.mismaViaPatologia ||
+                                                draft.mismaViaMismaPatologia ||
+                                                draft.diferentesViasPatologia ||
+                                                draft.diferentesViasDiferentesPatologia)
 
                                         return (
                                             <div key={cirugia.cirugiaId} className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-3">
@@ -3454,9 +3469,20 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     </div>
                                                 )}
 
+                                                {hayDiferencialSinDoble && (
+                                                    <div className="text-[11px] text-amber-800">
+                                                        El recargo se suma solo a las prácticas quirúrgicas. Cama, material
+                                                        descartable, derecho de quirófano, interconsulta, radioscopía y anatomía
+                                                        patológica se facturan al valor de nomenclador aunque estén cargadas en
+                                                        esta cirugía. Para acotarlo a un solo código, elegilo abajo.
+                                                    </div>
+                                                )}
+
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
                                                     <label className="text-xs text-amber-900">
-                                                        Práctica principal (100% quirúrgico)
+                                                        {draft.dobleCirugia
+                                                            ? 'Práctica principal (100% quirúrgico)'
+                                                            : 'Práctica quirúrgica con recargo (opcional)'}
                                                         <select
                                                             value={draft.practicaBaseId}
                                                             onChange={(e) => {
@@ -3477,10 +3503,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     }
                                                                 })
                                                             }}
-                                                            disabled={congelada || !draft.dobleCirugia}
+                                                            disabled={congelada || (!draft.dobleCirugia && !hayDiferencialSinDoble)}
                                                             className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs disabled:bg-amber-100"
                                                         >
-                                                            <option value="">-- Seleccionar práctica principal --</option>
+                                                            <option value="">
+                                                                {draft.dobleCirugia
+                                                                    ? '-- Seleccionar práctica principal --'
+                                                                    : '-- Todas las prácticas quirúrgicas --'}
+                                                            </option>
                                                             {cirugia.practicas.map((practica) => (
                                                                 <option key={practica.practicaId} value={String(practica.practicaId)}>
                                                                     {practica.descripcion} · Total cirugía {formatCurrency(practica.importeTotalReferencia)}

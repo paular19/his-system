@@ -16,7 +16,7 @@ import {
     descripcionComponentes,
 } from '@/components/ui/componente-selector'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
-import { resumenDiferenciales } from '@/modules/facturacion/diferenciales'
+import { esCodigoAccesorioCirugia, resumenDiferenciales } from '@/modules/facturacion/diferenciales'
 import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/practicas-subitems'
 import { fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
@@ -1537,22 +1537,59 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             .sort((a, b) => b.cirugiaId - a.cirugiaId)
     }, [contexto])
 
-    // El congelamiento es por cirugia y por componente, no por ingreso.
+    // El congelamiento es por cirugia, por componente y por codigo, no por ingreso.
     //
     // Solo bloquea una practica facturada que el diferencial efectivamente
-    // modificaria: gastos (GA) u honorario de especialista (HE/HP). Si lo
-    // facturado fue el anestesista, un ayudante, o una practica de otra cirugia
-    // u otra orden del ingreso, el diferencial sigue siendo editable porque no
-    // cambia esos importes.
+    // modificaria: gastos (GA) u honorario de especialista (HE/HP) de un codigo
+    // que el diferencial alcanza. Si lo facturado fue el anestesista, un
+    // ayudante, una practica de otra cirugia u otra orden del ingreso, o un
+    // codigo accesorio (cama, descartable, anatomia patologica), el diferencial
+    // sigue siendo editable porque no cambia esos importes.
+    //
+    // El alcance por codigo replica codigosConDiferencialPorCirugia del
+    // repository: con doble cirugia solo la practica secundaria elegida; sin
+    // doble cirugia, la practica principal elegida, y si no hay eleccion,
+    // cualquier codigo no accesorio.
     const cirugiasCongeladas = useMemo(() => {
         const congeladas = new Set<number>()
         if (!contexto) return congeladas
+
+        const codigoPorPracticaId = new Map<number, string>()
+        for (const p of contexto.prestaciones) {
+            if (p.tipo !== 'PRACTICA') continue
+            if (!p.origen.practicaId) continue
+            codigoPorPracticaId.set(p.origen.practicaId, (p.codigoPractica ?? '').trim())
+        }
+
+        const codigoElegidoPorCirugia = new Map<number, string>()
+        for (const p of contexto.prestaciones) {
+            const cirugiaId = p.origen.cirugiaProgramadaId
+            if (!cirugiaId || codigoElegidoPorCirugia.has(cirugiaId)) continue
+            const diferenciales = p.diferenciales
+            if (!diferenciales) continue
+            const practicaElegidaId = diferenciales.dobleCirugia
+                ? diferenciales.practicaSecundariaId
+                : diferenciales.practicaBaseId
+            if (!practicaElegidaId) continue
+            const codigoElegido = codigoPorPracticaId.get(practicaElegidaId)
+            if (codigoElegido) codigoElegidoPorCirugia.set(cirugiaId, codigoElegido)
+        }
+
         for (const p of contexto.prestaciones) {
             if (p.tipo !== 'PRACTICA') continue
             if (!p.facturada) continue
             const cirugiaId = p.origen.cirugiaProgramadaId
             if (!cirugiaId) continue
             if (!componenteAfectadoPorDiferencial(p.incluyeCodigo)) continue
+
+            const codigo = (p.codigoPractica ?? '').trim()
+            const codigoElegido = codigoElegidoPorCirugia.get(cirugiaId)
+            if (codigoElegido) {
+                if (codigo !== codigoElegido) continue
+            } else if (esCodigoAccesorioCirugia(codigo)) {
+                continue
+            }
+
             congeladas.add(cirugiaId)
         }
         return congeladas

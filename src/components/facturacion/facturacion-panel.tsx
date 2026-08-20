@@ -557,6 +557,77 @@ function resumenSubitemsIncluidos(incluyeCodigo: string | null | undefined): str
     return partes.length > 0 ? partes.join(' · ') : ''
 }
 
+type LineaPrestaciones = {
+    key: string
+    items: PrestacionFacturableItem[]
+    cantidadTotal: number
+    importeTotal: number
+}
+
+// Firma de una prestacion pendiente: dos filas con la misma firma son intercambiables
+// (mismo codigo, misma fecha, mismo importe, mismas matriculas, misma autorizacion...)
+// y por lo tanto se muestran como una sola linea con la cantidad sumada.
+function firmaPrestacionDuplicable(p: PrestacionFacturableItem): string | null {
+    if (p.tipo !== 'PRACTICA' || p.facturada) return null
+
+    const autorizaciones = [...(p.autorizacionesVinculadas ?? [])]
+        .map((aut) => `${aut.ordenPuestoNumero}-${aut.ordenNumero}-${aut.ordenItem}-${aut.numeroAutorizacion ?? ''}`)
+        .sort()
+        .join('|')
+
+    return [
+        p.convenioId ?? '',
+        (p.codigoPractica ?? '').trim(),
+        (p.descripcion ?? '').trim(),
+        new Date(p.fecha).getTime(),
+        p.cantidad,
+        p.precioUnitario ?? '',
+        p.importeTotal ?? '',
+        p.importeTotalOriginal ?? '',
+        (p.incluyeCodigo ?? '').trim(),
+        (p.numeroAutorizacion ?? '').trim(),
+        p.matriculaProfesional ?? '',
+        p.matriculaEspecialista ?? '',
+        p.matriculaAnestesista ?? '',
+        p.esPracticaCirugia ? '1' : '0',
+        p.origen.cirugiaProgramadaId ?? '',
+        p.origen.ordenPuestoNumero ?? '',
+        p.origen.ordenNumero ?? '',
+        p.origen.ordenItem ?? '',
+        autorizaciones,
+        JSON.stringify(p.diferenciales ?? null),
+        JSON.stringify(p.desglose ?? null),
+    ].join('~')
+}
+
+function agruparLineasDuplicadas(items: PrestacionFacturableItem[]): LineaPrestaciones[] {
+    const lineas: LineaPrestaciones[] = []
+    const indicePorFirma = new Map<string, number>()
+
+    for (const p of items) {
+        const firma = firmaPrestacionDuplicable(p)
+        const idx = firma != null ? indicePorFirma.get(firma) : undefined
+        const linea = idx != null ? lineas[idx] : undefined
+
+        if (!linea) {
+            if (firma != null) indicePorFirma.set(firma, lineas.length)
+            lineas.push({
+                key: p.uid,
+                items: [p],
+                cantidadTotal: Number(p.cantidad ?? 0),
+                importeTotal: Number(p.importeTotal ?? 0),
+            })
+            continue
+        }
+
+        linea.items.push(p)
+        linea.cantidadTotal += Number(p.cantidad ?? 0)
+        linea.importeTotal = Number((linea.importeTotal + Number(p.importeTotal ?? 0)).toFixed(2))
+    }
+
+    return lineas
+}
+
 function incluyeTieneAyudante(incluyeCodigo: string | null | undefined): boolean {
     const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
     return Boolean(seleccion && seleccion.ayudante > 0)
@@ -1185,6 +1256,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const [guardandoRowUid, setGuardandoRowUid] = useState<string | null>(null)
     const [ordenesExpand, setOrdenesExpand] = useState<Record<string, boolean>>({})
     const [ordenesPendientesExpand, setOrdenesPendientesExpand] = useState<Record<string, boolean>>({})
+    const [lineasDuplicadasExpand, setLineasDuplicadasExpand] = useState<Record<string, boolean>>({})
     const [filtroPrestaciones, setFiltroPrestaciones] = useState('')
     const [paginaPrestaciones, setPaginaPrestaciones] = useState(1)
     const [porPaginaPrestaciones, setPorPaginaPrestaciones] = useState(PRESTACIONES_POR_PAGINA_DEFAULT)
@@ -3952,9 +4024,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             </td>
                                                         </tr>
 
-                                                        {grupoExpandido && grupo.items.map((p) => {
+                                                        {grupoExpandido && agruparLineasDuplicadas(grupo.items).flatMap((linea) => {
+                                                const lineaExpandida = Boolean(lineasDuplicadasExpand[linea.key])
+                                                const resumenDuplicados = linea.items.length > 1 && !lineaExpandida
+                                                const itemsVisibles = resumenDuplicados ? linea.items.slice(0, 1) : linea.items
+                                                return itemsVisibles.map((p) => {
+                                                const uidsLinea = resumenDuplicados ? linea.items.map((it) => it.uid) : [p.uid]
                                                 const draft = editRows[p.uid] ?? buildEditState(p)
-                                                const filaEnEdicion = Boolean(rowEditMode[p.uid])
+                                                const filaEnEdicion = !resumenDuplicados && Boolean(rowEditMode[p.uid])
                                                 const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
                                                 const autorizacionesVinculadasOrdenadas =
                                                     p.tipo === 'PRACTICA' && !p.facturada
@@ -4044,7 +4121,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const aplicaOrdenCompleta = Boolean(
                                                     aplicarOrdenCompletaPorFila[p.uid] && ordenParaEdicionGlobal
                                                 )
-                                                const practicaSeleccionada = Boolean(seleccion[p.uid])
+                                                const practicaSeleccionada = uidsLinea.every((uid) => Boolean(seleccion[uid]))
                                                 return (
                                                     <Fragment key={p.uid}>
                                                         <tr className={yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
@@ -4064,10 +4141,11 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                 checked={practicaSeleccionada}
                                                                                 onChange={(e) => {
                                                                                     const nextChecked = e.target.checked
-                                                                                    setSeleccion((prev) => ({
-                                                                                        ...prev,
-                                                                                        [p.uid]: nextChecked,
-                                                                                    }))
+                                                                                    setSeleccion((prev) => {
+                                                                                        const next = { ...prev }
+                                                                                        for (const uid of uidsLinea) next[uid] = nextChecked
+                                                                                        return next
+                                                                                    })
                                                                                 }}
                                                                             />
                                                                             {practicaSeleccionada ? 'Práctica incluida' : 'Seleccionar práctica'}
@@ -4121,6 +4199,18 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 )}
                                                                 {p.tipo === 'PRACTICA' && (
                                                                     <div className="mt-1 flex flex-wrap gap-1">
+                                                                        {linea.items.length > 1 && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setLineasDuplicadasExpand((prev) => ({ ...prev, [linea.key]: !lineaExpandida }))}
+                                                                                className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-800 hover:bg-indigo-200"
+                                                                                title={resumenDuplicados ? 'Ver las lineas individuales' : 'Agrupar las lineas repetidas'}
+                                                                            >
+                                                                                {resumenDuplicados
+                                                                                    ? `x${linea.items.length} · ver lineas`
+                                                                                    : `x${linea.items.length} · agrupar`}
+                                                                            </button>
+                                                                        )}
                                                                         {resumenIncluye && (
                                                                             <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
                                                                                 Incluye: {resumenIncluye}
@@ -4190,6 +4280,8 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: actualizarCantidadPrestacion(draft, e.target.value) }))}
                                                                         className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
                                                                     />
+                                                                ) : resumenDuplicados ? (
+                                                                    <span className="text-xs font-semibold text-gray-800">{linea.cantidadTotal}</span>
                                                                 ) : (
                                                                     <span className="text-xs text-gray-700">{draft.cantidad || '—'}</span>
                                                                 )}
@@ -4203,7 +4295,11 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     />
                                                                 ) : (
                                                                     <div className="space-y-0.5">
-                                                                        <span className="text-xs font-semibold text-gray-800">{Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}</span>
+                                                                        <span className="text-xs font-semibold text-gray-800">
+                                                                            {resumenDuplicados
+                                                                                ? formatCurrency(linea.importeTotal)
+                                                                                : (Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—')}
+                                                                        </span>
                                                                         {mostrarDeltaDiferencial && importeOriginal !== null && deltaDiferencial !== null && (
                                                                             <div className="text-[10px] text-amber-700">
                                                                                 Base {formatCurrency(importeOriginal)} · Dif {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}
@@ -4220,7 +4316,18 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                             <button onClick={() => cancelarEdicionFila(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cancelar</button>
                                                                         </div>
                                                                     ) : (
-                                                                        <button onClick={() => habilitarEdicionFila(p)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Editar</button>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                if (resumenDuplicados) {
+                                                                                    setLineasDuplicadasExpand((prev) => ({ ...prev, [linea.key]: true }))
+                                                                                    return
+                                                                                }
+                                                                                habilitarEdicionFila(p)
+                                                                            }}
+                                                                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                        >
+                                                                            Editar
+                                                                        </button>
                                                                     )
                                                                 ) : (
                                                                     <span className="text-xs text-gray-400">No aplica</span>
@@ -4229,7 +4336,12 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             <td className="px-3 py-2 align-top">
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => setDetallePrestacionesExpand((prev) => ({ ...prev, [p.uid]: !detalleAbierto }))}
+                                                                    onClick={() => {
+                                                                        if (resumenDuplicados) {
+                                                                            setLineasDuplicadasExpand((prev) => ({ ...prev, [linea.key]: true }))
+                                                                        }
+                                                                        setDetallePrestacionesExpand((prev) => ({ ...prev, [p.uid]: !detalleAbierto }))
+                                                                    }}
                                                                     className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded border px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
                                                                 >
                                                                     {detalleAbierto ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -4551,6 +4663,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         )}
                                                     </Fragment>
                                                 )
+                                            })
                                             })}
 
                                                     </Fragment>

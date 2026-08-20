@@ -829,8 +829,10 @@ export async function generarOrdenesDesdeInternacionAction(input: {
               ? MATRICULA_GASTOS_INTERNACION_DEFAULT
               : esClasificacionSoloAnestesista
               ? MATRICULA_ANESTESISTA_INTERNACION_DEFAULT
+              // El efector cargado en la practica manda: el firmante global de la pantalla
+              // (o el tratante) solo se usa cuando la practica no tiene matricula propia.
               : esClasificacionConEspecialista
-              ? (matriculaFirmanteManual ?? matriculaTratante ?? matriculaEspecialistaPractica ?? matriculaAnestesistaPractica ?? null)
+              ? (matriculaEspecialistaPractica ?? matriculaFirmanteManual ?? matriculaTratante ?? matriculaAnestesistaPractica ?? null)
               : esClasificacionSoloAyudante
               ? matriculaAyudanteAsignada
               : (matriculaEspecialistaPractica ?? matriculaAnestesistaPractica ?? matriculaTratante ?? null)

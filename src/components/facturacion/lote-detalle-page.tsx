@@ -35,6 +35,8 @@ const TIPO_LABEL: Record<string, string> = {
     MEDICAMENTOS: 'Medicamentos',
 }
 
+const TITULO_PACIENTE_DESTILDADO = 'El paciente está destildado: no se imprime ni se exporta'
+
 function formatMonto(n: number) {
     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(n)
 }
@@ -895,6 +897,7 @@ export function LoteDetallePage({ loteId }: Props) {
 
             return {
                 ingresoId: item.ingresoId,
+                incluido: item.incluido,
                 numeroIngreso: item.ingreso.numeroIngreso,
                 paciente: item.paciente?.nombreCompleto ?? item.ingreso.nombre ?? '-',
                 numeroAfiliado: item.ingreso.numeroAfiliado,
@@ -904,9 +907,19 @@ export function LoteDetallePage({ loteId }: Props) {
         })
         : []
 
+    // Al resumen del lote entero solo van los pacientes tildados. Destildar uno lo sacaba
+    // del total en pantalla pero seguia saliendo impreso.
+    const detalleIngresosIncluidos = detalleIngresosBase.filter((item) => item.incluido)
+
+    const pacienteSeleccionadoIncluido =
+        selectedIngresoId === null
+            ? false
+            : (lote.items.find((it) => it.ingresoId === selectedIngresoId)?.incluido ?? false)
+
+    // Un paciente destildado no sale impreso nunca, ni en el resumen del lote ni solo.
     const detalleParaImpresion = printIngresoId === null
-        ? detalleIngresosBase
-        : detalleIngresosBase.filter((item) => item.ingresoId === printIngresoId)
+        ? detalleIngresosIncluidos
+        : detalleIngresosIncluidos.filter((item) => item.ingresoId === printIngresoId)
 
     const filtroResumenActivo = esIPSTxt ? filtroCategoriaIPS : filtroCategoria
     const etiquetaFiltroCategoria = filtroResumenActivo
@@ -921,7 +934,7 @@ export function LoteDetallePage({ loteId }: Props) {
                 (s, it) => s + (it.importePromedi !== null ? Number(it.importePromedi) : Number(it.impTotal)),
                 0
             )
-            : detalleIngresosBase.reduce((s, ing) => s + ing.totalIngreso, 0)
+            : detalleIngresosIncluidos.reduce((s, ing) => s + ing.totalIngreso, 0)
 
     // Genera el PDF sin pasar por el dialogo de impresion del navegador.
     async function descargarPdf(ingresoId: number | null = null) {
@@ -929,8 +942,8 @@ export function LoteDetallePage({ loteId }: Props) {
         setGenerandoPdf(true)
         try {
             const detalle = ingresoId === null
-                ? detalleIngresosBase
-                : detalleIngresosBase.filter((item) => item.ingresoId === ingresoId)
+                ? detalleIngresosIncluidos
+                : detalleIngresosIncluidos.filter((item) => item.ingresoId === ingresoId)
             const totalPdf = ingresoId === null
                 ? totalResumen
                 : (detalle[0]?.totalIngreso ?? 0)
@@ -1263,14 +1276,17 @@ export function LoteDetallePage({ loteId }: Props) {
                                 </h3>
                                 <button
                                     onClick={() => imprimir(selectedIngresoId)}
-                                    className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                                    disabled={!pacienteSeleccionadoIncluido}
+                                    title={pacienteSeleccionadoIncluido ? undefined : TITULO_PACIENTE_DESTILDADO}
+                                    className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     Imprimir paciente
                                 </button>
                                 <button
                                     onClick={() => descargarPdf(selectedIngresoId)}
-                                    disabled={generandoPdf}
-                                    className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                    disabled={generandoPdf || !pacienteSeleccionadoIncluido}
+                                    title={pacienteSeleccionadoIncluido ? undefined : TITULO_PACIENTE_DESTILDADO}
+                                    className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {generandoPdf ? 'Generando...' : 'PDF paciente'}
                                 </button>

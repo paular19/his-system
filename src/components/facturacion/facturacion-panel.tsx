@@ -108,7 +108,22 @@ type CirugiaEditableGroup = {
     // Cantidad de la practica quirurgica: con 2 son dos cirugias cargadas en
     // una sola linea y se puede dejar una al 100% y la otra con diferencial.
     cantidadQuirurgica: number
+    practicaQuirurgicaId: number | null
     unidadesConDiferencialGuardadas: number | null
+}
+
+// Sufijo del value del select cuando la cirugia secundaria es la segunda
+// unidad de la misma practica y no otra practica distinta.
+const SUFIJO_SEGUNDA_UNIDAD = '#U2'
+
+function esSegundaUnidad(value: string): boolean {
+    return value.endsWith(SUFIJO_SEGUNDA_UNIDAD)
+}
+
+function practicaIdDesdeValueSecundaria(value: string): number | null {
+    const limpio = value.replace(SUFIJO_SEGUNDA_UNIDAD, '')
+    const parsed = Number.parseInt(limpio, 10)
+    return Number.isFinite(parsed) ? parsed : null
 }
 
 type ClasificacionToken = 'GA' | 'HE' | 'HA' | 'HP' | 'A1' | 'A2' | 'A3'
@@ -1211,6 +1226,26 @@ function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): Diferenc
             .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)
             .find((practica) => practica.practicaId !== (baseIdActual ?? baseIdPorMayorTotal))?.practicaId ??
         null
+    // Reparto por unidades: se guarda sin dobleCirugia (hay una sola practica),
+    // pero en pantalla se muestra igual que una doble cirugia para que el select
+    // de secundaria quede visible con la 2a unidad elegida.
+    const unidadesGuardadas = cirugia.unidadesConDiferencialGuardadas ?? 0
+    const reparteUnidades = unidadesGuardadas > 0 && cirugia.practicaQuirurgicaId != null
+    if (reparteUnidades) {
+        return {
+            esFeriado: Boolean(cirugia.diferenciales?.esFeriado),
+            esNocturna: Boolean(cirugia.diferenciales?.esNocturna),
+            mismaViaPatologia: Boolean(cirugia.diferenciales?.mismaViaPatologia),
+            mismaViaMismaPatologia: Boolean(cirugia.diferenciales?.mismaViaMismaPatologia),
+            diferentesViasPatologia: Boolean(cirugia.diferenciales?.diferentesViasPatologia),
+            diferentesViasDiferentesPatologia: Boolean(cirugia.diferenciales?.diferentesViasDiferentesPatologia),
+            dobleCirugia: true,
+            practicaBaseId: String(cirugia.practicaQuirurgicaId),
+            practicaSecundariaId: `${cirugia.practicaQuirurgicaId}${SUFIJO_SEGUNDA_UNIDAD}`,
+            unidadesConDiferencial: String(unidadesGuardadas),
+        }
+    }
+
     const dobleCirugia = Boolean(cirugia.diferenciales?.dobleCirugia)
     const baseIdFinal = dobleCirugia ? (baseIdActual ?? baseIdPorMayorTotal) : baseIdActual
     const secundariaIdFinal =
@@ -1660,11 +1695,15 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     practicas: [practica],
                     diferenciales: p.diferenciales ?? null,
                     cantidadQuirurgica: cantidadQuirurgicaFila,
+                    practicaQuirurgicaId: cantidadQuirurgicaFila > 1 ? p.origen.practicaId : null,
                     unidadesConDiferencialGuardadas: p.diferenciales?.unidadesConDiferencial ?? null,
                 })
                 continue
             }
 
+            if (cantidadQuirurgicaFila > existente.cantidadQuirurgica) {
+                existente.practicaQuirurgicaId = p.origen.practicaId
+            }
             existente.cantidadQuirurgica = Math.max(existente.cantidadQuirurgica, cantidadQuirurgicaFila)
             if (existente.unidadesConDiferencialGuardadas == null && p.diferenciales?.unidadesConDiferencial != null) {
                 existente.unidadesConDiferencialGuardadas = p.diferenciales.unidadesConDiferencial
@@ -1692,16 +1731,30 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
 
         return Array.from(map.values())
-            .map((cirugia) => ({
-                ...cirugia,
-                practicas: [...cirugia.practicas]
+            .map((cirugia) => {
+                const practicas = [...cirugia.practicas]
                     .sort((a, b) => {
                         if (b.importeTotalReferencia !== a.importeTotalReferencia) {
                             return b.importeTotalReferencia - a.importeTotalReferencia
                         }
                         return a.practicaId - b.practicaId
-                    }),
-            }))
+                    })
+
+                // Los selects trabajan con el id del renglon agrupado, que no
+                // tiene por que ser el de la fila donde se leyo la cantidad.
+                const renglonQuirurgico = cirugia.practicaQuirurgicaId != null
+                    ? practicas.find((practica) =>
+                        practica.practicaId === cirugia.practicaQuirurgicaId ||
+                        practica.practicaIdsAgrupadas.includes(cirugia.practicaQuirurgicaId!)
+                    )
+                    : undefined
+
+                return {
+                    ...cirugia,
+                    practicas,
+                    practicaQuirurgicaId: renglonQuirurgico?.practicaId ?? null,
+                }
+            })
             .sort((a, b) => b.cirugiaId - a.cirugiaId)
     }, [contexto])
 
@@ -2874,32 +2927,47 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)[0]?.practicaId ??
                 cirugia.practicas[0]?.practicaId ??
                 null)
+        // La secundaria puede ser la segunda unidad de la misma practica: dos
+        // cirugias del mismo codigo van en una sola linea con cantidad 2. En ese
+        // caso no hay dos practicas que enfrentar, se reparte por unidades.
+        const secundariaEsSegundaUnidad = esSegundaUnidad(draft.practicaSecundariaId)
         const practicaSecundariaId = draft.practicaSecundariaId
-            ? Number.parseInt(draft.practicaSecundariaId, 10)
+            ? practicaIdDesdeValueSecundaria(draft.practicaSecundariaId)
             : (cirugia.practicas
                 .slice()
                 .sort((a, b) => b.importeTotalReferencia - a.importeTotalReferencia)
                 .find((p) => p.practicaId !== practicaBaseId)?.practicaId ??
                 null)
 
-        if (draft.dobleCirugia && (!practicaBaseId || !cirugia.practicas.some((p) => p.practicaId === practicaBaseId))) {
+        if (secundariaEsSegundaUnidad && cirugia.cantidadQuirurgica < 2) {
+            setError('Esta práctica no tiene una segunda unidad para aplicarle el diferencial')
+            return
+        }
+
+        if (draft.dobleCirugia && !secundariaEsSegundaUnidad && (!practicaBaseId || !cirugia.practicas.some((p) => p.practicaId === practicaBaseId))) {
             setError('Debe seleccionar la práctica principal para aplicar doble cirugía')
             return
         }
 
-        if (draft.dobleCirugia && (!practicaSecundariaId || !cirugia.practicas.some((p) => p.practicaId === practicaSecundariaId))) {
+        if (draft.dobleCirugia && !secundariaEsSegundaUnidad && (!practicaSecundariaId || !cirugia.practicas.some((p) => p.practicaId === practicaSecundariaId))) {
             setError('Debe seleccionar la práctica secundaria para aplicar doble cirugía')
             return
         }
 
-        if (draft.dobleCirugia && practicaBaseId && practicaSecundariaId && practicaBaseId === practicaSecundariaId) {
+        if (draft.dobleCirugia && !secundariaEsSegundaUnidad && practicaBaseId && practicaSecundariaId && practicaBaseId === practicaSecundariaId) {
             setError('La práctica principal y la secundaria deben ser distintas')
             return
         }
 
-        const unidadesConDiferencial = draft.unidadesConDiferencial
-            ? Number.parseInt(draft.unidadesConDiferencial, 10)
-            : 0
+        // Elegir la 2a unidad equivale a repartir: una al 100% y una con
+        // diferencial. Doble cirugia queda en false porque el motor de doble
+        // cirugia necesita dos practicas distintas y aca hay una sola.
+        const unidadesConDiferencial = secundariaEsSegundaUnidad
+            ? 1
+            : (draft.unidadesConDiferencial
+                ? Number.parseInt(draft.unidadesConDiferencial, 10)
+                : 0)
+        const dobleCirugiaFinal = secundariaEsSegundaUnidad ? false : draft.dobleCirugia
 
         if (unidadesConDiferencial > 0 && unidadesConDiferencial >= cirugia.cantidadQuirurgica) {
             setError(
@@ -2920,18 +2988,20 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     // Sin doble cirugia la practica principal es opcional: si el
                     // administrador no elige ninguna, el recargo de feriado /
                     // nocturna va a todos los codigos no accesorios de la cirugia.
-                    practicaBaseId: draft.dobleCirugia
-                        ? practicaBaseId
-                        : (draft.practicaBaseId ? practicaBaseId : null),
-                    practicaSecundariaId: draft.dobleCirugia ? practicaSecundariaId : null,
+                    practicaBaseId: secundariaEsSegundaUnidad
+                        ? cirugia.practicaQuirurgicaId
+                        : (dobleCirugiaFinal
+                            ? practicaBaseId
+                            : (draft.practicaBaseId ? practicaBaseId : null)),
+                    practicaSecundariaId: dobleCirugiaFinal ? practicaSecundariaId : null,
                     esFeriado: draft.esFeriado,
                     esNocturna: draft.esNocturna,
                     mismaViaPatologia: draft.mismaViaPatologia,
                     mismaViaMismaPatologia: draft.mismaViaMismaPatologia,
                     diferentesViasPatologia: draft.diferentesViasPatologia,
                     diferentesViasDiferentesPatologia: draft.diferentesViasDiferentesPatologia,
-                    dobleCirugia: draft.dobleCirugia,
-                    unidadesConDiferencial: draft.dobleCirugia
+                    dobleCirugia: dobleCirugiaFinal,
+                    unidadesConDiferencial: dobleCirugiaFinal
                         ? null
                         : (unidadesConDiferencial > 0 ? unidadesConDiferencial : null),
                 }),
@@ -3781,6 +3851,22 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs disabled:bg-amber-100"
                                                         >
                                                             <option value="">-- Seleccionar práctica secundaria --</option>
+                                                            {/* Dos cirugias del mismo codigo se cargan como UNA practica con
+                                                                cantidad 2, asi que la segunda no existe como fila propia y el
+                                                                select no tenia nada que ofrecer. Se agrega como unidad. */}
+                                                            {cirugia.cantidadQuirurgica > 1 && cirugia.practicaQuirurgicaId != null && (() => {
+                                                                const practicaQuirurgica = cirugia.practicas.find(
+                                                                    (practica) => practica.practicaId === cirugia.practicaQuirurgicaId
+                                                                )
+                                                                if (!practicaQuirurgica) return null
+                                                                return (
+                                                                    <option
+                                                                        value={`${cirugia.practicaQuirurgicaId}${SUFIJO_SEGUNDA_UNIDAD}`}
+                                                                    >
+                                                                        {practicaQuirurgica.descripcion} · 2ª de las {cirugia.cantidadQuirurgica} cargadas en esta línea
+                                                                    </option>
+                                                                )
+                                                            })()}
                                                             {cirugia.practicas
                                                                 .filter((practica) => String(practica.practicaId) !== draft.practicaBaseId)
                                                                 .map((practica) => (

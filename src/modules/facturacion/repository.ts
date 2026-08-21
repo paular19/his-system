@@ -1572,6 +1572,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         diferentesViasDiferentesPatologia: true,
                         dobleCirugia: true,
                         practicaBaseId: true,
+                        unidadesConDiferencial: true,
                     },
                 },
                 practicas: {
@@ -1923,6 +1924,15 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 .map((d) => parsePracticaSecundariaIdDesdeDescripcion(d.descripcion))
                 .find((id) => id != null) ??
             null
+        // Cirugia multiple cargada como cantidad de una sola practica (dos
+        // resecciones = una practica con cantidad 2). No hay practica
+        // secundaria que elegir: el diferencial va a N unidades y el resto se
+        // factura al 100%.
+        const unidadesConDiferencial =
+            cirugia.diferenciales
+                .map((d) => d.unidadesConDiferencial)
+                .find((unidades) => unidades != null && unidades > 0) ?? null
+
         const diferenciales: NonNullable<PrestacionFacturableItem['diferenciales']> = {
             esFeriado: cirugia.diferenciales.some((d) => d.esFeriado),
             esNocturna: cirugia.diferenciales.some((d) => d.esNocturna),
@@ -1936,6 +1946,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             esPracticaBase: false,
             esPracticaSecundaria: false,
             aplicaDiferencial: false,
+            unidadesConDiferencial,
         }
 
         for (const practica of cirugia.practicas) {
@@ -2574,22 +2585,64 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const totalUnitarioDesglose = desgloseFiltradoPorIncluye
             ? calcularTotalUnitarioDesglose(desgloseFiltradoPorIncluye, incluyeCodigoPractica)
             : null
+
+        // Cirugia multiple cargada como cantidad: dos resecciones son una
+        // practica con cantidad 2, no dos practicas, asi que no hay secundaria
+        // que elegir. El diferencial va a N unidades y el resto se factura al
+        // 100%, y eso se reparte en cada componente por separado — con misma
+        // via, la fila de gastos cobra una unidad entera + una al 30%, y la de
+        // especialista una entera + una en cero.
+        const unidadesConDiferencialCirugia =
+            aplicarDiferencialesCirugia && !diferencialesCirugiaRaw?.dobleCirugia
+                ? (diferencialesCirugiaCalculados?.unidadesConDiferencial ?? null)
+                : null
+        const unidadesConDiferencialPractica =
+            unidadesConDiferencialCirugia != null && unidadesConDiferencialCirugia > 0
+                ? Math.min(unidadesConDiferencialCirugia, cant)
+                : null
+        const unidadesSinDiferencialPractica =
+            unidadesConDiferencialPractica != null
+                ? cant - unidadesConDiferencialPractica
+                : null
+        const desgloseBaseFiltradoPorIncluye = desgloseBase
+            ? aplicarIncluyeCodigoADesglose(desgloseBase, incluyeCodigoPractica, p.codigoPractica)
+            : null
+        const totalUnitarioSinDiferencial = desgloseBaseFiltradoPorIncluye
+            ? calcularTotalUnitarioDesglose(desgloseBaseFiltradoPorIncluye, incluyeCodigoPractica)
+            : null
+        const partirPorUnidades = Boolean(
+            unidadesSinDiferencialPractica != null &&
+            unidadesSinDiferencialPractica > 0 &&
+            totalUnitarioDesglose !== null &&
+            totalUnitarioSinDiferencial !== null
+        )
         const totalUnitarioCirugiaReferencia = desgloseBase
             ? calcularTotalUnitarioDesglose(desgloseBase, null)
             : null
         const importeTotalCirugiaReferencia = totalUnitarioCirugiaReferencia !== null
             ? Number((totalUnitarioCirugiaReferencia * cant).toFixed(2))
             : (importeFromDb ?? null)
-        const precioUnitario = totalUnitarioDesglose !== null
+        const precioUnitarioSinPartir = totalUnitarioDesglose !== null
             ? totalUnitarioDesglose
             : (incluyeCodigoPractica && precioUnitarioDesdeDb !== null
                 ? precioUnitarioDesdeDb
                 : (coberturaBase.precioUnitarioFacturable > 0
                     ? coberturaBase.precioUnitarioFacturable
                     : (precioUnitarioDesdeDb ?? coberturaBase.precioUnitarioFacturable)))
-        const importeTotalCalculado = totalUnitarioDesglose !== null
-            ? Number((totalUnitarioDesglose * cant).toFixed(2))
-            : coberturaBase.importeTotalFacturable
+        const importeTotalCalculado = partirPorUnidades
+            ? Number((
+                totalUnitarioSinDiferencial! * unidadesSinDiferencialPractica! +
+                totalUnitarioDesglose! * unidadesConDiferencialPractica!
+            ).toFixed(2))
+            : (totalUnitarioDesglose !== null
+                ? Number((totalUnitarioDesglose * cant).toFixed(2))
+                : coberturaBase.importeTotalFacturable)
+        // Partida, la fila deja de tener un unitario uniforme: las unidades al
+        // 100% y las que llevan diferencial valen distinto. Se muestra el
+        // promedio para que unitario x cantidad siga cerrando contra el total.
+        const precioUnitario = partirPorUnidades && cant > 0
+            ? Number((importeTotalCalculado / cant).toFixed(2))
+            : precioUnitarioSinPartir
         const importeTotalFacturacion = diferencialCirugia
             ? importeTotalCalculado
             : (incluyeCodigoPractica && totalUnitarioDesglose !== null
@@ -2625,6 +2678,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 esPracticaBase: esPracticaBaseDobleCirugia,
                 esPracticaSecundaria: esPracticaSecundariaDobleCirugia,
                 aplicaDiferencial: aplicarDiferencialesCirugia,
+                // El valor guardado va crudo para que el panel lo muestre aunque
+                // todavia no haya diferencial activo que aplicar; el reparto
+                // efectivo de esta fila viaja en unidadesSinDiferencial.
+                unidadesConDiferencial: diferencialCirugia.diferenciales.unidadesConDiferencial ?? null,
+                unidadesSinDiferencial: partirPorUnidades ? unidadesSinDiferencialPractica : null,
             }
             : null
         if (diferencialesPractica) {
@@ -4301,6 +4359,33 @@ export async function actualizarDiferencialesCirugiaFacturacion(
             throw new Error('La cirugía principal y secundaria deben ser prácticas distintas')
         }
 
+        // Repartir por unidades solo tiene sentido si la practica quirurgica
+        // trae cantidad: con cantidad 2 se puede dejar una al 100% y mandar la
+        // otra al diferencial, con cantidad 1 no hay nada que repartir.
+        if (data.unidadesConDiferencial != null && data.unidadesConDiferencial > 0) {
+            if (data.dobleCirugia) {
+                throw new Error(
+                    'Doble cirugía reparte entre dos prácticas distintas: no se combina con el reparto por cantidad'
+                )
+            }
+
+            const cantidadQuirurgicaMaxima = cirugia.practicas
+                .filter((practica) => !esCodigoAccesorioCirugia(practica.codigo))
+                .reduce((maxima, practica) => Math.max(maxima, Number(practica.cantidad) || 0), 0)
+
+            if (cantidadQuirurgicaMaxima < 2) {
+                throw new Error(
+                    'La práctica quirúrgica de esta cirugía tiene cantidad 1: no hay unidades para repartir'
+                )
+            }
+
+            if (data.unidadesConDiferencial >= cantidadQuirurgicaMaxima) {
+                throw new Error(
+                    `Al menos una unidad tiene que facturarse al 100%: como máximo ${cantidadQuirurgicaMaxima - 1} con diferencial`
+                )
+            }
+        }
+
         const validarPracticaEnCirugia = async (
             practicaId: number,
             etiqueta: 'principal' | 'secundaria'
@@ -4374,6 +4459,12 @@ export async function actualizarDiferencialesCirugiaFacturacion(
             // Sin doble cirugia la practica base ya no es descartable: identifica
             // la practica quirurgica a la que se le suma el feriado / nocturna.
             practicaBaseId: data.practicaBaseId ?? null,
+            // Solo aplica cuando la cirugia multiple viene como cantidad de una
+            // sola practica. Con doble cirugia hay dos practicas distintas y el
+            // reparto lo resuelve practicaSecundariaId.
+            unidadesConDiferencial: data.dobleCirugia
+                ? null
+                : (data.unidadesConDiferencial ?? null),
         }
 
         const existentes = await tx.cirugiaDiferencial.count({

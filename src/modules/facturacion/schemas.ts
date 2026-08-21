@@ -243,6 +243,9 @@ export const ActualizarDiferencialesCirugiaFacturacionSchema = z.object({
     diferentesViasPatologia: z.boolean().default(false),
     diferentesViasDiferentesPatologia: z.boolean().default(false),
     dobleCirugia: z.boolean().default(false),
+    // Cirugia multiple cargada como cantidad de una sola practica: cuantas
+    // unidades llevan diferencial. El resto se factura al 100%.
+    unidadesConDiferencial: z.coerce.number().int().min(0).optional().nullable(),
 })
 
 export type ActualizarDiferencialesCirugiaFacturacionInput = z.infer<typeof ActualizarDiferencialesCirugiaFacturacionSchema>

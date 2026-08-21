@@ -737,6 +737,11 @@ model CirugiaDiferencial {
   diferentesViasDiferentesPatologia Boolean @default(false)
   dobleCirugia                      Boolean @default(false)
   practicaBaseId                    Int?
+  // Cirugia multiple cargada como cantidad de una sola practica: dos
+  // resecciones son una practica con cantidad 2, no dos practicas. Guarda
+  // cuantas unidades llevan el diferencial; el resto se factura al 100%.
+  // Null o 0 = el diferencial va a todas las unidades (comportamiento previo).
+  unidadesConDiferencial            Int?
 
   cirugia CirugiaProgramada @relation(fields: [cirugiaId], references: [id], onDelete: Cascade)
 

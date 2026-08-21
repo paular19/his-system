@@ -78,6 +78,11 @@ export interface PrestacionFacturableItem {
         esPracticaBase?: boolean
         esPracticaSecundaria?: boolean
         aplicaDiferencial?: boolean
+        // Cirugia multiple cargada como cantidad: cuantas unidades de la
+        // practica llevan diferencial. El resto se factura al 100%.
+        unidadesConDiferencial?: number | null
+        // Unidades que esta fila factura al 100% (cantidad - unidadesConDiferencial).
+        unidadesSinDiferencial?: number | null
     } | null
     desglose?: {
         valorEspecialista: number | null

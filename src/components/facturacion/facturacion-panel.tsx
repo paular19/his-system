@@ -84,6 +84,9 @@ type DiferencialesCirugiaEditState = {
     dobleCirugia: boolean
     practicaBaseId: string
     practicaSecundariaId: string
+    // Cirugia multiple cargada como cantidad: cuantas unidades llevan
+    // diferencial. Vacio o '0' = todas las unidades al mismo porcentaje.
+    unidadesConDiferencial: string
 }
 
 type CirugiaPracticaEditable = {
@@ -102,6 +105,10 @@ type CirugiaEditableGroup = {
     cirugiaId: number
     practicas: CirugiaPracticaEditable[]
     diferenciales: PrestacionFacturableItem['diferenciales']
+    // Cantidad de la practica quirurgica: con 2 son dos cirugias cargadas en
+    // una sola linea y se puede dejar una al 100% y la otra con diferencial.
+    cantidadQuirurgica: number
+    unidadesConDiferencialGuardadas: number | null
 }
 
 type ClasificacionToken = 'GA' | 'HE' | 'HA' | 'HP' | 'A1' | 'A2' | 'A3'
@@ -1191,6 +1198,10 @@ function buildDiferencialesCirugiaState(cirugia: CirugiaEditableGroup): Diferenc
         dobleCirugia,
         practicaBaseId: baseIdFinal ? String(baseIdFinal) : '',
         practicaSecundariaId: secundariaIdFinal ? String(secundariaIdFinal) : '',
+        unidadesConDiferencial:
+            cirugia.unidadesConDiferencialGuardadas != null && cirugia.unidadesConDiferencialGuardadas > 0
+                ? String(cirugia.unidadesConDiferencialGuardadas)
+                : '',
     }
 }
 
@@ -1604,14 +1615,27 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 aplicaDiferencial: Boolean(p.diferenciales?.aplicaDiferencial),
             }
 
+            // La cantidad que importa es la de la practica quirurgica: la cama
+            // o el descartable pueden traer cantidad propia y no se reparten.
+            const cantidadQuirurgicaFila = esCodigoAccesorioCirugia(p.codigoPractica)
+                ? 0
+                : Number(p.cantidad) || 0
+
             const existente = map.get(cirugiaId)
             if (!existente) {
                 map.set(cirugiaId, {
                     cirugiaId,
                     practicas: [practica],
                     diferenciales: p.diferenciales ?? null,
+                    cantidadQuirurgica: cantidadQuirurgicaFila,
+                    unidadesConDiferencialGuardadas: p.diferenciales?.unidadesConDiferencial ?? null,
                 })
                 continue
+            }
+
+            existente.cantidadQuirurgica = Math.max(existente.cantidadQuirurgica, cantidadQuirurgicaFila)
+            if (existente.unidadesConDiferencialGuardadas == null && p.diferenciales?.unidadesConDiferencial != null) {
+                existente.unidadesConDiferencialGuardadas = p.diferenciales.unidadesConDiferencial
             }
 
             const indexExistente = existente.practicas.findIndex((actual) => actual.claveAgrupacion === claveAgrupacion)
@@ -2841,6 +2865,17 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             return
         }
 
+        const unidadesConDiferencial = draft.unidadesConDiferencial
+            ? Number.parseInt(draft.unidadesConDiferencial, 10)
+            : 0
+
+        if (unidadesConDiferencial > 0 && unidadesConDiferencial >= cirugia.cantidadQuirurgica) {
+            setError(
+                `Al menos una unidad tiene que facturarse al 100%: como máximo ${cirugia.cantidadQuirurgica - 1} con diferencial`
+            )
+            return
+        }
+
         setGuardandoDiferencialCirugiaId(cirugia.cirugiaId)
         setError(null)
         try {
@@ -2864,6 +2899,9 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     diferentesViasPatologia: draft.diferentesViasPatologia,
                     diferentesViasDiferentesPatologia: draft.diferentesViasDiferentesPatologia,
                     dobleCirugia: draft.dobleCirugia,
+                    unidadesConDiferencial: draft.dobleCirugia
+                        ? null
+                        : (unidadesConDiferencial > 0 ? unidadesConDiferencial : null),
                 }),
             })
 
@@ -3611,6 +3649,42 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 {cirugia.practicas.length < 2 && (
                                                     <div className="text-[11px] text-amber-800">
                                                         Doble cirugía requiere al menos 2 prácticas quirúrgicas en esta cirugía.
+                                                    </div>
+                                                )}
+
+                                                {!draft.dobleCirugia && cirugia.cantidadQuirurgica > 1 && (
+                                                    <div className="rounded border border-amber-300 bg-white px-2 py-2 space-y-1">
+                                                        <label className="flex flex-wrap items-center gap-2 text-xs text-amber-900">
+                                                            <span className="font-semibold">
+                                                                La práctica quirúrgica viene con cantidad {cirugia.cantidadQuirurgica}:
+                                                            </span>
+                                                            aplicar el diferencial a
+                                                            <select
+                                                                value={draft.unidadesConDiferencial}
+                                                                disabled={congelada}
+                                                                onChange={(e) => setDiferencialesCirugiaEdit((prev) => ({
+                                                                    ...prev,
+                                                                    [cirugia.cirugiaId]: { ...draft, unidadesConDiferencial: e.target.value },
+                                                                }))}
+                                                                className="rounded border border-amber-300 bg-white px-2 py-1 text-xs disabled:bg-amber-100"
+                                                            >
+                                                                <option value="">todas las unidades</option>
+                                                                {Array.from(
+                                                                    { length: Math.max(0, cirugia.cantidadQuirurgica - 1) },
+                                                                    (_, i) => i + 1
+                                                                ).map((unidades) => (
+                                                                    <option key={unidades} value={String(unidades)}>
+                                                                        {unidades} de {cirugia.cantidadQuirurgica}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </label>
+                                                        <p className="text-[11px] text-amber-800">
+                                                            Son {cirugia.cantidadQuirurgica} cirugías cargadas en una sola línea. Eligiendo
+                                                            {' '}{cirugia.cantidadQuirurgica - 1} de {cirugia.cantidadQuirurgica}, una se factura
+                                                            al 100% y el resto lleva el diferencial, y el reparto se hace en cada honorario por
+                                                            separado (gastos, especialista, ayudante y anestesista).
+                                                        </p>
                                                     </div>
                                                 )}
 

@@ -570,8 +570,10 @@ type LineaPrestaciones = {
 function firmaPrestacionDuplicable(p: PrestacionFacturableItem): string | null {
     if (p.tipo !== 'PRACTICA' || p.facturada) return null
 
+    // El item de orden queda fuera de la firma: dos practicas identicas de la misma orden
+    // ocupan items distintos y aun asi son la misma linea con cantidad 2.
     const autorizaciones = [...(p.autorizacionesVinculadas ?? [])]
-        .map((aut) => `${aut.ordenPuestoNumero}-${aut.ordenNumero}-${aut.ordenItem}-${aut.numeroAutorizacion ?? ''}`)
+        .map((aut) => `${aut.ordenPuestoNumero}-${aut.ordenNumero}-${aut.numeroAutorizacion ?? ''}`)
         .sort()
         .join('|')
 
@@ -593,7 +595,6 @@ function firmaPrestacionDuplicable(p: PrestacionFacturableItem): string | null {
         p.origen.cirugiaProgramadaId ?? '',
         p.origen.ordenPuestoNumero ?? '',
         p.origen.ordenNumero ?? '',
-        p.origen.ordenItem ?? '',
         autorizaciones,
         JSON.stringify(p.diferenciales ?? null),
         JSON.stringify(p.desglose ?? null),
@@ -1472,7 +1473,9 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 ? `CIR:${cirugiaProgramadaId}`
                 : (orden
                     ? `ORD:${orden.puestoNumero}:${orden.ordenNumero}`
-                    : `SIN:${p.uid}`)
+                    // Sin orden: las practicas intercambiables comparten grupo para poder
+                    // mostrarse como una sola linea con la cantidad sumada.
+                    : `SIN:${firmaPrestacionDuplicable(p) ?? p.uid}`)
             const ordenesRelacionadas = obtenerOrdenesRelacionadasPrestacion(p)
             const etiquetasCirugiaPrestacion = resumenDiferenciales(p.diferenciales)
 

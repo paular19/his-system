@@ -318,6 +318,33 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
         : detalle.practicas
 
+    // Firmante (cabecera) de cada orden activa del ingreso, para poder editarlo desde la lista.
+    const ordenesConFirmante = await prisma.orden.findMany({
+        where: { ingresoId, NOT: { estado: 'X' } },
+        select: {
+            puestoNumero: true,
+            numero: true,
+            profesionalId: true,
+            profesional: { select: { id: true, nombre: true, matricula: true } },
+        },
+    })
+
+    const firmantesOrden = ordenesConFirmante.map((orden) => ({
+        puestoNumero: orden.puestoNumero,
+        ordenNumero: orden.numero,
+        profesionalId: orden.profesional?.id ?? orden.profesionalId ?? null,
+        nombre: orden.profesional?.nombre?.trim() ?? null,
+        matricula: orden.profesional?.matricula ?? null,
+    }))
+
+    const tratanteActual = detalle.profesionalTratante
+        ? {
+            id: detalle.profesionalTratante.id,
+            nombre: detalle.profesionalTratante.nombre,
+            matricula: detalle.profesionalTratante.matricula ?? null,
+        }
+        : null
+
     return (
         <>
             <Header titulo={contextoCirugia ? 'Practicas de cirugia' : 'Practicas de internacion'} />
@@ -364,6 +391,8 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                     convenioId={detalle.obraSocial?.id ?? null}
                     sectorInternacionActual={detalle.cama?.sector ?? null}
                     matriculaTratanteDefault={detalle.profesionalTratante?.matricula ?? null}
+                    tratanteActual={tratanteActual}
+                    firmantesOrdenIniciales={firmantesOrden}
                     puedeCrear={puedeCrear}
                     practicasIniciales={practicasPagina}
                     contextoCirugia={contextoCirugia}

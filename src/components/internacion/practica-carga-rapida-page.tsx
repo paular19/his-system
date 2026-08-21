@@ -3738,9 +3738,9 @@ export function PracticaCargaRapidaPage({
             </div>
 
             {practicaEditando && draftPracticaEditando && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-                    <div className="w-full max-w-2xl rounded-xl border border-blue-200 bg-white p-4 shadow-xl">
-                        <div className="flex items-start justify-between gap-3">
+                <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/35 p-4 sm:items-center">
+                    <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl border border-blue-200 bg-white shadow-xl">
+                        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3">
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-900">Editar practica</h3>
                                 <p className="text-xs text-gray-600">
@@ -3757,7 +3757,8 @@ export function PracticaCargaRapidaPage({
                             </button>
                         </div>
 
-                        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="flex-1 overflow-y-auto px-4 py-3">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <label className="text-xs text-gray-600">
                                 Codigo
                                 <input
@@ -3967,8 +3968,9 @@ export function PracticaCargaRapidaPage({
                             />
                             Facturable
                         </label>
+                        </div>
 
-                        <div className="mt-3 flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-4 py-3">
                             <button
                                 type="button"
                                 onClick={cerrarEdicionPractica}

@@ -2614,7 +2614,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             unidadesSinDiferencialPractica != null &&
             unidadesSinDiferencialPractica > 0 &&
             totalUnitarioDesglose !== null &&
-            totalUnitarioSinDiferencial !== null
+            totalUnitarioSinDiferencial !== null &&
+            // Si el componente de la fila no cambia con el diferencial no hay
+            // nada que repartir: anunciarlo igual llena la grilla de "1 de 2 al
+            // 100%" en filas cuyo importe es el mismo con o sin diferencial.
+            Math.abs(totalUnitarioDesglose - totalUnitarioSinDiferencial) > 0.005
         )
         const totalUnitarioCirugiaReferencia = desgloseBase
             ? calcularTotalUnitarioDesglose(desgloseBase, null)

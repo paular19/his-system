@@ -332,19 +332,81 @@ function componenteAfectadoPorDiferencial(incluyeCodigo: string | null | undefin
         .some((parte) => parte === 'GA' || parte === 'HE' || parte === 'HP')
 }
 
+/**
+ * Total de la fila abierto en sus dos precios cuando la cantidad se reparte:
+ * unas unidades enteras y el resto con diferencial.
+ */
+function detalleRepartoUnidades(
+    p: PrestacionFacturableItem,
+    importeOriginal: number | null
+): string | null {
+    const sinDiferencial = p.diferenciales?.unidadesSinDiferencial ?? 0
+    const conDiferencial = p.diferenciales?.unidadesConDiferencial ?? 0
+    if (sinDiferencial <= 0 || conDiferencial <= 0) return null
+    if (importeOriginal == null) return null
+
+    const cantidad = sinDiferencial + conDiferencial
+    if (cantidad <= 0) return null
+
+    const unitarioBase = importeOriginal / cantidad
+    const totalConDiferencial = Number(p.importeTotal ?? 0) - unitarioBase * sinDiferencial
+    const unitarioConDiferencial = totalConDiferencial / conDiferencial
+
+    // El importe guardado en la practica no siempre corresponde al componente
+    // de la fila; cuando no cierra, el reparto da negativo y es mejor callarlo
+    // que mostrar un numero inventado.
+    if (unitarioConDiferencial < 0) return null
+
+    return `${sinDiferencial} × ${formatCurrency(unitarioBase)} + ${conDiferencial} × ${formatCurrency(unitarioConDiferencial)}`
+}
+
 function etiquetasCamposDiferencial(
-    diferenciales: PrestacionFacturableItem['diferenciales'] | null | undefined
+    diferenciales: PrestacionFacturableItem['diferenciales'] | null | undefined,
+    incluyeCodigo?: string | null
 ): string[] {
     if (!diferenciales) return []
+
+    // Una fila que solo trae gastos no tiene por que anunciar el porcentaje del
+    // especialista, y al reves: el diferencial solo le toca su propio componente.
+    const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
+    const afectaEspecialista = !seleccion || seleccion.especialista > 0 || seleccion.ayudante > 0
+    const afectaGastos = !seleccion || seleccion.gastos > 0
 
     const porcentajes = calcularPorcentajesDiferencial(diferenciales)
     if (porcentajes.especialista === 100 && porcentajes.gastos === 100) {
         return ['Base 100%']
     }
 
+    // Con reparto por cantidad el porcentaje no vale para toda la fila: unas
+    // unidades se facturan enteras y solo el resto lleva el diferencial. Sin
+    // decirlo, "Gastos al 30%" se lee como si las dos cirugias fueran al 30%.
+    const sinDiferencial = diferenciales.unidadesSinDiferencial ?? 0
+    const conDiferencial = diferenciales.unidadesConDiferencial ?? 0
+    if (sinDiferencial > 0 && conDiferencial > 0) {
+        const total = sinDiferencial + conDiferencial
+        const etiquetasReparto = [`${sinDiferencial} de ${total} al 100%`]
+        const detalle: string[] = []
+        if (afectaEspecialista && porcentajes.especialista !== 100) {
+            detalle.push(`especialista y ayudante al ${porcentajes.especialista}%`)
+        }
+        if (afectaGastos && porcentajes.gastos !== 100) {
+            detalle.push(`gastos al ${porcentajes.gastos}%`)
+        }
+        etiquetasReparto.push(
+            detalle.length > 0
+                ? `${conDiferencial} de ${total} con ${detalle.join(' y ')}`
+                : `${conDiferencial} de ${total} con diferencial`
+        )
+        return etiquetasReparto
+    }
+
     const etiquetas: string[] = []
-    if (porcentajes.especialista !== 100) etiquetas.push(`Especialista y ayudante al ${porcentajes.especialista}%`)
-    if (porcentajes.gastos !== 100) etiquetas.push(`Gastos al ${porcentajes.gastos}%`)
+    if (afectaEspecialista && porcentajes.especialista !== 100) {
+        etiquetas.push(`Especialista y ayudante al ${porcentajes.especialista}%`)
+    }
+    if (afectaGastos && porcentajes.gastos !== 100) {
+        etiquetas.push(`Gastos al ${porcentajes.gastos}%`)
+    }
     return etiquetas
 }
 
@@ -4324,7 +4386,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 if (p.diferenciales?.dobleCirugia && p.diferenciales?.esPracticaSecundaria && p.diferenciales?.aplicaDiferencial) {
                                                     diferencialesActivos.push('Secundaria con diferencial')
                                                 }
-                                                const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
+                                                const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales, p.incluyeCodigo)
                                                 const fechaDraft = draft.fecha ? new Date(draft.fecha) : null
                                                 const fechaResumen = fechaDraft && !Number.isNaN(fechaDraft.getTime())
                                                     ? fechaDraft.toLocaleString('es-AR')
@@ -4535,6 +4597,15 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                 Base {formatCurrency(importeOriginal)} · Dif {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}
                                                                             </div>
                                                                         )}
+                                                                        {/* Con reparto por cantidad el total sale de dos precios
+                                                                            distintos: mostrarlos evita tener que deducirlos. */}
+                                                                        {(() => {
+                                                                            const detalle = detalleRepartoUnidades(p, importeOriginal)
+                                                                            if (!detalle) return null
+                                                                            return (
+                                                                                <div className="text-[10px] text-amber-700">{detalle}</div>
+                                                                            )
+                                                                        })()}
                                                                     </div>
                                                                 )}
                                                             </td>
@@ -4942,7 +5013,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
                                                             const desgloseSelector = obtenerDesgloseSelector(p)
                                                             const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo) || resumenSubitemsDesdeDesglose(p)
-                                                            const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
+                                                            const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales, p.incluyeCodigo)
                                                             const fechaDraft = draft.fecha ? new Date(draft.fecha) : null
                                                             const fechaResumen = fechaDraft && !Number.isNaN(fechaDraft.getTime())
                                                                 ? fechaDraft.toLocaleString('es-AR')

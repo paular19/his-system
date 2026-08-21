@@ -252,6 +252,8 @@ export const ActualizarPracticaSchema = z.object({
   importeBaseUnitario: z.coerce.number().positive().optional().nullable(),
   matriculaEspecialista: z.number().int().positive().optional().nullable(),
   matriculaAnestesista: z.number().int().positive().optional().nullable(),
+  /** Medico que suscribe: se aplica a la cabecera de las ordenes que contienen la practica. */
+  firmanteMatricula: z.number().int().positive().optional().nullable(),
 })
 
 export type ActualizarPracticaInput = z.infer<typeof ActualizarPracticaSchema>

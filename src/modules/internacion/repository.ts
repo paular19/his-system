@@ -1907,6 +1907,33 @@ export async function actualizarPractica(
           },
         })
       }
+
+      // Medico que suscribe: se aplica a la cabecera de cada orden de esta practica.
+      if (data.firmanteMatricula != null) {
+        const firmante = await tx.profesional.findFirst({
+          where: { matricula: data.firmanteMatricula },
+          orderBy: { id: 'asc' },
+          select: { id: true },
+        })
+
+        if (!firmante) {
+          throw new Error(
+            `No hay un profesional cargado con la matricula ${data.firmanteMatricula}`
+          )
+        }
+
+        for (const clave of ordenesRecalcular) {
+          const [puestoRaw, numeroRaw] = clave.split(':')
+          const puestoNumero = Number.parseInt(puestoRaw ?? '0', 10)
+          const ordenNumero = Number.parseInt(numeroRaw ?? '0', 10)
+          if (!Number.isFinite(puestoNumero) || !Number.isFinite(ordenNumero)) continue
+
+          await tx.orden.update({
+            where: { puestoNumero_numero: { puestoNumero, numero: ordenNumero } },
+            data: { profesionalId: firmante.id },
+          })
+        }
+      }
     }
 
     const ordenesPracticaActualizada = await tx.ordenPractica.findMany({

@@ -151,8 +151,17 @@ type PracticaEditDraft = {
     diagnosticoLaboratorio: string
     matriculaEspecialista: string
     matriculaAnestesista: string
+    /** Medico que suscribe la orden que contiene la practica. */
+    firmanteMatricula: string
     facturable: boolean
     importeBaseUnitario: string
+}
+
+type FirmanteOrden = {
+    puestoNumero: number
+    ordenNumero: number
+    nombre: string | null
+    matricula: number | null
 }
 
 interface PracticaCargaRapidaPageProps {
@@ -160,6 +169,7 @@ interface PracticaCargaRapidaPageProps {
     convenioId: number | null
     sectorInternacionActual?: string | null
     matriculaTratanteDefault?: number | null
+    firmantesOrden?: FirmanteOrden[]
     puedeCrear: boolean
     practicasIniciales: PracticaItem[]
     contextoCirugia?: {
@@ -431,6 +441,7 @@ export function PracticaCargaRapidaPage({
     convenioId,
     sectorInternacionActual,
     matriculaTratanteDefault,
+    firmantesOrden = [],
     puedeCrear,
     practicasIniciales,
     contextoCirugia,
@@ -2089,6 +2100,19 @@ export function PracticaCargaRapidaPage({
         setDiagnosticoLaboratorio('')
     }
 
+    /** Firmante de la primera orden activa que contiene la practica. */
+    const firmanteDePractica = (practica: PracticaItem): FirmanteOrden | null => {
+        for (const orden of practica.ordenPractica ?? []) {
+            const firmante = firmantesOrden.find(
+                (item) =>
+                    item.puestoNumero === orden.puestoNumero &&
+                    item.ordenNumero === orden.ordenNumero
+            )
+            if (firmante) return firmante
+        }
+        return null
+    }
+
     const abrirEdicionPractica = (practica: PracticaItem) => {
         const cantidad = Number.isFinite(Number(practica.cantidad)) && Number(practica.cantidad) > 0
             ? Number(practica.cantidad)
@@ -2111,6 +2135,10 @@ export function PracticaCargaRapidaPage({
             diagnosticoLaboratorio: practica.diagnosticoLaboratorio ?? '',
             matriculaEspecialista: practica.matriculaEspecialista != null ? String(practica.matriculaEspecialista) : '',
             matriculaAnestesista: practica.matriculaAnestesista != null ? String(practica.matriculaAnestesista) : '',
+            firmanteMatricula: (() => {
+                const matricula = firmanteDePractica(practica)?.matricula
+                return matricula != null ? String(matricula) : ''
+            })(),
             facturable: practica.facturable,
             importeBaseUnitario: importeBaseUnitario != null && Number.isFinite(importeBaseUnitario)
                 ? String(Number(importeBaseUnitario.toFixed(2)))
@@ -2171,6 +2199,10 @@ export function PracticaCargaRapidaPage({
                 draftPracticaEditando.matriculaAnestesista.trim() !== ''
                     ? Number(draftPracticaEditando.matriculaAnestesista)
                     : null,
+            firmanteMatricula:
+                draftPracticaEditando.firmanteMatricula.trim() !== ''
+                    ? Number(draftPracticaEditando.firmanteMatricula)
+                    : null,
         }
 
         setMensajeError(null)
@@ -2208,6 +2240,8 @@ export function PracticaCargaRapidaPage({
             }
 
             cerrarEdicionPractica()
+            // El firmante vive en la cabecera de la orden: lo trae el server component.
+            router.refresh()
         } catch {
             setMensajeError('Error de conexion al editar la practica')
         } finally {
@@ -3785,6 +3819,75 @@ export function PracticaCargaRapidaPage({
                                     } : prev)}
                                     className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
                                 />
+                            </label>
+                            <label className="text-xs text-gray-600 md:col-span-2">
+                                Medico que ejecuta la practica
+                                <ProfesionalSelect
+                                    profesionales={profesionalesConMatricula}
+                                    value={(() => {
+                                        const matricula = Number.parseInt(draftPracticaEditando.matriculaEspecialista, 10)
+                                        if (!Number.isFinite(matricula) || matricula <= 0) return ''
+                                        const profesional = profesionalesConMatricula.find(
+                                            (item) => item.matricula === matricula
+                                        )
+                                        return profesional ? String(profesional.id) : ''
+                                    })()}
+                                    onChange={(nextValue) => {
+                                        const profesionalId = Number.parseInt(nextValue, 10)
+                                        const profesional = Number.isFinite(profesionalId)
+                                            ? profesionalesConMatricula.find((item) => item.id === profesionalId)
+                                            : null
+                                        setDraftPracticaEditando((prev) => prev ? {
+                                            ...prev,
+                                            matriculaEspecialista: profesional ? String(profesional.matricula) : '',
+                                        } : prev)
+                                    }}
+                                    permitirCargaManual
+                                    textoBotonCargaManual="Agregar profesional manual (nombre + matricula)"
+                                    onProfesionalCreado={registrarProfesionalCreado}
+                                    autoSelectOnSearch={false}
+                                    placeholderOption="-- Sin efector --"
+                                    searchPlaceholder="Buscar por nombre o matricula"
+                                    disabled={guardandoPracticaEditando}
+                                    selectClassName="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-900 disabled:bg-gray-100"
+                                    searchClassName="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-[11px] text-gray-700 disabled:bg-gray-100"
+                                />
+                            </label>
+                            <label className="text-xs text-gray-600 md:col-span-2">
+                                Medico que suscribe la orden
+                                <ProfesionalSelect
+                                    profesionales={profesionalesConMatricula}
+                                    value={(() => {
+                                        const matricula = Number.parseInt(draftPracticaEditando.firmanteMatricula, 10)
+                                        if (!Number.isFinite(matricula) || matricula <= 0) return ''
+                                        const profesional = profesionalesConMatricula.find(
+                                            (item) => item.matricula === matricula
+                                        )
+                                        return profesional ? String(profesional.id) : ''
+                                    })()}
+                                    onChange={(nextValue) => {
+                                        const profesionalId = Number.parseInt(nextValue, 10)
+                                        const profesional = Number.isFinite(profesionalId)
+                                            ? profesionalesConMatricula.find((item) => item.id === profesionalId)
+                                            : null
+                                        setDraftPracticaEditando((prev) => prev ? {
+                                            ...prev,
+                                            firmanteMatricula: profesional ? String(profesional.matricula) : '',
+                                        } : prev)
+                                    }}
+                                    permitirCargaManual
+                                    textoBotonCargaManual="Agregar profesional manual (nombre + matricula)"
+                                    onProfesionalCreado={registrarProfesionalCreado}
+                                    autoSelectOnSearch={false}
+                                    placeholderOption="-- Sin cambios --"
+                                    searchPlaceholder="Buscar por nombre o matricula"
+                                    disabled={guardandoPracticaEditando}
+                                    selectClassName="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-900 disabled:bg-gray-100"
+                                    searchClassName="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-[11px] text-gray-700 disabled:bg-gray-100"
+                                />
+                                <span className="mt-1 block text-[10px] text-gray-500">
+                                    Es quien firma el imprimible. Se aplica a la orden que contiene esta practica.
+                                </span>
                             </label>
                             <label className="text-xs text-gray-600">
                                 Matricula especialista

@@ -318,6 +318,23 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
             .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
         : detalle.practicas
 
+    // Medico que suscribe cada orden activa, para poder editarlo al editar la practica.
+    const ordenesConFirmante = await prisma.orden.findMany({
+        where: { ingresoId, NOT: { estado: 'X' } },
+        select: {
+            puestoNumero: true,
+            numero: true,
+            profesional: { select: { id: true, nombre: true, matricula: true } },
+        },
+    })
+
+    const firmantesOrden = ordenesConFirmante.map((orden) => ({
+        puestoNumero: orden.puestoNumero,
+        ordenNumero: orden.numero,
+        nombre: orden.profesional?.nombre?.trim() ?? null,
+        matricula: orden.profesional?.matricula ?? null,
+    }))
+
     return (
         <>
             <Header titulo={contextoCirugia ? 'Practicas de cirugia' : 'Practicas de internacion'} />
@@ -364,6 +381,7 @@ export default async function InternacionPracticasRapidasPage({ params, searchPa
                     convenioId={detalle.obraSocial?.id ?? null}
                     sectorInternacionActual={detalle.cama?.sector ?? null}
                     matriculaTratanteDefault={detalle.profesionalTratante?.matricula ?? null}
+                    firmantesOrden={firmantesOrden}
                     puedeCrear={puedeCrear}
                     practicasIniciales={practicasPagina}
                     contextoCirugia={contextoCirugia}

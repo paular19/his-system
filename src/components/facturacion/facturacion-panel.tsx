@@ -99,6 +99,21 @@ type CirugiaPracticaEditable = {
     esPracticaBase: boolean
     esPracticaSecundaria: boolean
     aplicaDiferencial: boolean
+    // Filas reales que quedaron detras del renglon agrupado. Se listan en la
+    // tabla del panel para poder ver que orden y que honorario esta entrando
+    // en el diferencial, igual que en la grilla de pendientes.
+    filas: CirugiaFilaDetalle[]
+}
+
+type CirugiaFilaDetalle = {
+    practicaId: number
+    ordenPuestoNumero: number | null
+    ordenNumero: number | null
+    incluyeCodigo: string | null
+    cantidad: number
+    importeTotal: number
+    facturada: boolean
+    desglose: PrestacionFacturableItem['desglose'] | null
 }
 
 type CirugiaEditableGroup = {
@@ -1613,6 +1628,20 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 esPracticaBase: Boolean(p.diferenciales?.esPracticaBase),
                 esPracticaSecundaria: Boolean(p.diferenciales?.esPracticaSecundaria),
                 aplicaDiferencial: Boolean(p.diferenciales?.aplicaDiferencial),
+                filas: [{
+                    practicaId: p.origen.practicaId,
+                    // Una practica de cirugia rara vez trae ordenNumero propio:
+                    // el vinculo con su orden vive en autorizacionesVinculadas.
+                    ordenPuestoNumero:
+                        p.origen.ordenPuestoNumero ?? p.autorizacionesVinculadas?.[0]?.ordenPuestoNumero ?? null,
+                    ordenNumero:
+                        p.origen.ordenNumero ?? p.autorizacionesVinculadas?.[0]?.ordenNumero ?? null,
+                    incluyeCodigo: p.incluyeCodigo ?? null,
+                    cantidad: Number(p.cantidad) || 0,
+                    importeTotal: Number(p.importeTotal ?? 0),
+                    facturada: Boolean(p.facturada),
+                    desglose: p.desglose ?? null,
+                }],
             }
 
             // La cantidad que importa es la de la practica quirurgica: la cama
@@ -1651,6 +1680,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     actual.esPracticaSecundaria = actual.esPracticaSecundaria || Boolean(p.diferenciales?.esPracticaSecundaria)
                     actual.aplicaDiferencial = actual.aplicaDiferencial || Boolean(p.diferenciales?.aplicaDiferencial)
                     actual.practicaId = Math.min(actual.practicaId, p.origen.practicaId)
+                    actual.filas.push(...practica.filas)
                 }
             }
 
@@ -3536,6 +3566,55 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 <div className="rounded border border-amber-200 bg-white px-2 py-2 text-xs text-amber-900">
                                                     <span className="font-semibold">Campos con diferencial:</span>{' '}
                                                     {etiquetasAplicadas.length > 0 ? etiquetasAplicadas.join(' · ') : 'Base 100%'}
+                                                </div>
+
+                                                {/* Que orden y que honorario entra en el diferencial. Sin esto
+                                                    el renglon agrupado no deja ver si una fila esta entrando
+                                                    como gastos, como ayudante o como practica completa. */}
+                                                <div className="rounded border border-amber-200 bg-white overflow-x-auto">
+                                                    <table className="w-full text-[11px]">
+                                                        <thead className="bg-amber-100 text-amber-900">
+                                                            <tr>
+                                                                <th className="px-2 py-1 text-left font-semibold">Orden</th>
+                                                                <th className="px-2 py-1 text-left font-semibold">Práctica</th>
+                                                                <th className="px-2 py-1 text-right font-semibold">Cant</th>
+                                                                <th className="px-2 py-1 text-left font-semibold">Incluye</th>
+                                                                <th className="px-2 py-1 text-right font-semibold">Esp</th>
+                                                                <th className="px-2 py-1 text-right font-semibold">Ayu</th>
+                                                                <th className="px-2 py-1 text-right font-semibold">Ane</th>
+                                                                <th className="px-2 py-1 text-right font-semibold">Gto</th>
+                                                                <th className="px-2 py-1 text-right font-semibold">Importe</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {cirugia.practicas.flatMap((practica) =>
+                                                                practica.filas.map((fila) => (
+                                                                    <tr key={fila.practicaId} className="border-t border-amber-100 text-amber-900">
+                                                                        <td className="px-2 py-1 whitespace-nowrap">
+                                                                            {fila.ordenPuestoNumero != null && fila.ordenNumero != null
+                                                                                ? formatOrderNumber(fila.ordenPuestoNumero, fila.ordenNumero)
+                                                                                : 'Pendiente'}
+                                                                            {fila.facturada && (
+                                                                                <span className="ml-1 text-green-700 font-medium">· facturada</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-2 py-1">{practica.descripcion}</td>
+                                                                        <td className="px-2 py-1 text-right">{fila.cantidad}</td>
+                                                                        <td className="px-2 py-1 whitespace-nowrap">
+                                                                            {fila.incluyeCodigo ?? (
+                                                                                <span className="text-amber-700 italic">práctica completa</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-2 py-1 text-right">{fila.desglose?.valorEspecialista != null ? formatCurrency(fila.desglose.valorEspecialista) : '—'}</td>
+                                                                        <td className="px-2 py-1 text-right">{fila.desglose?.valorAyudante != null ? formatCurrency(fila.desglose.valorAyudante) : '—'}</td>
+                                                                        <td className="px-2 py-1 text-right">{fila.desglose?.valorAnestesista != null ? formatCurrency(fila.desglose.valorAnestesista) : '—'}</td>
+                                                                        <td className="px-2 py-1 text-right">{fila.desglose?.valorGastos != null ? formatCurrency(fila.desglose.valorGastos) : '—'}</td>
+                                                                        <td className="px-2 py-1 text-right font-medium">{formatCurrency(fila.importeTotal)}</td>
+                                                                    </tr>
+                                                                ))
+                                                            )}
+                                                        </tbody>
+                                                    </table>
                                                 </div>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 text-xs text-amber-900">

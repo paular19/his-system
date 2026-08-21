@@ -3853,18 +3853,31 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                 <div className="overflow-hidden">
                                     <table className="w-full table-fixed text-sm">
                                         <thead>
-                                            <tr className="border-b bg-white text-left">
-                                                <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Orden</th>
-                                                <th className="w-40 px-3 py-2 text-xs font-medium text-gray-500">Fecha</th>
-                                                <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Código</th>
-                                                <th className="px-3 py-2 text-xs font-medium text-gray-500">Descripción</th>
-                                                <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">N° orden</th>
-                                                <th className="w-36 px-3 py-2 text-xs font-medium text-gray-500">Matrícula ejec.</th>
-                                                <th className="w-16 px-3 py-2 text-xs font-medium text-gray-500">Cant</th>
-                                                <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">Importe</th>
-                                                <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">Acción</th>
-                                                <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Detalle</th>
-                                            </tr>
+                                            {esVistaFacturadas ? (
+                                                <tr className="border-b bg-white text-left">
+                                                    <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Orden</th>
+                                                    <th className="w-40 px-3 py-2 text-xs font-medium text-gray-500">Fecha</th>
+                                                    <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Código</th>
+                                                    <th className="px-3 py-2 text-xs font-medium text-gray-500">Descripción</th>
+                                                    <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">N° orden</th>
+                                                    <th className="w-36 px-3 py-2 text-xs font-medium text-gray-500">Matrícula ejec.</th>
+                                                    <th className="w-16 px-3 py-2 text-xs font-medium text-gray-500">Cant</th>
+                                                    <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">Importe</th>
+                                                    <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">Acción</th>
+                                                    <th className="w-24 px-3 py-2 text-xs font-medium text-gray-500">Detalle</th>
+                                                </tr>
+                                            ) : (
+                                                <tr className="border-b bg-white text-left">
+                                                    <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">Práctica</th>
+                                                    <th className="px-3 py-2 text-xs font-medium text-gray-500">Descripción</th>
+                                                    <th className="w-40 px-3 py-2 text-xs font-medium text-gray-500">Fecha</th>
+                                                    <th className="w-32 px-3 py-2 text-xs font-medium text-gray-500">N° autorización</th>
+                                                    <th className="w-40 px-3 py-2 text-xs font-medium text-gray-500">Matrícula ejec.</th>
+                                                    <th className="w-16 px-3 py-2 text-xs font-medium text-gray-500">Cant</th>
+                                                    <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">Importe</th>
+                                                    <th className="w-28 px-3 py-2 text-xs font-medium text-gray-500">Acción</th>
+                                                </tr>
+                                            )}
                                         </thead>
                                         <tbody className="divide-y">
                                             {!esVistaFacturadas && gruposPrestacionesNoOrdenadasPaginadas.map((grupo) => {
@@ -3908,7 +3921,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 return (
                                                     <Fragment key={grupo.key}>
                                                         <tr className="bg-slate-100">
-                                                            <td colSpan={10} className="border-t-4 border-slate-300 px-3 pb-1 pt-2">
+                                                            <td colSpan={8} className="border-t-4 border-slate-300 px-3 pb-1 pt-2">
                                                                 <div className="flex flex-wrap items-center gap-2 rounded-t border border-b-0 border-slate-300 bg-white px-2 py-1.5 shadow-sm">
                                                                     <button
                                                                         type="button"
@@ -4040,7 +4053,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const uidsLinea = resumenDuplicados ? linea.items.map((it) => it.uid) : [p.uid]
                                                 const draft = editRows[p.uid] ?? buildEditState(p)
                                                 const filaEnEdicion = !resumenDuplicados && Boolean(rowEditMode[p.uid])
-                                                const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
                                                 const autorizacionesVinculadasOrdenadas =
                                                     p.tipo === 'PRACTICA' && !p.facturada
                                                         ? [...((p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[])].sort((a, b) => {
@@ -4105,9 +4117,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     importeOriginal !== null &&
                                                     Math.abs(deltaDiferencial ?? 0) > 0.009
                                                 )
-                                                const numeroOrdenLinea = obtenerNumeroOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
-                                                const destinoOrdenLinea = obtenerDestinoOrdenPrestacion(p, autorizacionesVinculadasOrdenadas)
-                                                const ordenAgrupada = Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
                                                 const itemsOrdenRelacionados = obtenerItemsOrdenRelacionados(p, autorizacionesVinculadasOrdenadas)
                                                 const itemOrdenPrincipalKey =
                                                     p.origen.ordenPuestoNumero && p.origen.ordenNumero && p.origen.ordenItem
@@ -4130,70 +4139,63 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     aplicarOrdenCompletaPorFila[p.uid] && ordenParaEdicionGlobal
                                                 )
                                                 const practicaSeleccionada = uidsLinea.every((uid) => Boolean(seleccion[uid]))
+                                                const autorizacionesUnicas = Array.from(
+                                                    new Set(
+                                                        autorizacionesVinculadasOrdenadas
+                                                            .map((aut) => aut.numeroAutorizacion?.trim())
+                                                            .filter((valor): valor is string => Boolean(valor))
+                                                    )
+                                                )
+                                                const autorizacionResumen =
+                                                    autorizacionesUnicas.length > 0
+                                                        ? autorizacionesUnicas.join(' · ')
+                                                        : (draft.numeroAutorizacion.trim() || '')
                                                 return (
                                                     <Fragment key={p.uid}>
                                                         <tr className={`${CARRIL_PRACTICA_PENDIENTE} ${yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}`}>
                                                             <td className="px-3 py-2 align-top">
-                                                                {yaFacturada ? (
-                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>
-                                                                ) : seleccionable ? (
-                                                                    <div className="flex flex-wrap items-center gap-2">
-                                                                        {p.esPracticaCirugia && (
-                                                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800" title={diferencialesActivos.join(' · ') || 'Práctica vinculada a cirugía'}>
-                                                                                Cirugía
-                                                                            </span>
-                                                                        )}
-                                                                        <label className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${practicaSeleccionada ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-white text-slate-700'}`}>
+                                                                <div className="flex items-start gap-2">
+                                                                    {seleccionable && !yaFacturada && (
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={practicaSeleccionada}
+                                                                            title={practicaSeleccionada ? 'Práctica incluida' : 'Seleccionar práctica'}
+                                                                            className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600"
+                                                                            onChange={(e) => {
+                                                                                const nextChecked = e.target.checked
+                                                                                setSeleccion((prev) => {
+                                                                                    const next = { ...prev }
+                                                                                    for (const uid of uidsLinea) next[uid] = nextChecked
+                                                                                    return next
+                                                                                })
+                                                                            }}
+                                                                        />
+                                                                    )}
+                                                                    <div className="min-w-0 flex-1 space-y-1">
+                                                                        {filaEnEdicion ? (
                                                                             <input
-                                                                                type="checkbox"
-                                                                                checked={practicaSeleccionada}
-                                                                                onChange={(e) => {
-                                                                                    const nextChecked = e.target.checked
-                                                                                    setSeleccion((prev) => {
-                                                                                        const next = { ...prev }
-                                                                                        for (const uid of uidsLinea) next[uid] = nextChecked
-                                                                                        return next
-                                                                                    })
-                                                                                }}
+                                                                                value={draft.codigoPractica}
+                                                                                onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))}
+                                                                                className="w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs"
                                                                             />
-                                                                            {practicaSeleccionada ? 'Práctica incluida' : 'Seleccionar práctica'}
-                                                                        </label>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        ) : (
+                                                                            <span className="font-mono text-xs font-semibold text-gray-800">{draft.codigoPractica || '—'}</span>
+                                                                        )}
+                                                                        {yaFacturada && (
+                                                                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">✓ Facturada</span>
+                                                                        )}
                                                                         {p.esPracticaCirugia && (
                                                                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800" title={diferencialesActivos.join(' · ') || 'Práctica vinculada a cirugía'}>
                                                                                 Cirugía
                                                                             </span>
                                                                         )}
-                                                                        <span className="text-[11px] font-medium text-amber-700">
-                                                                            {practicaSinOrdenVinculada ? 'Sin orden generada' : 'Sin autorización'}
-                                                                        </span>
+                                                                        {!yaFacturada && !seleccionable && (
+                                                                            <span className="block text-[10px] font-medium text-amber-700">
+                                                                                {practicaSinOrdenVinculada ? 'Sin orden generada' : 'Sin autorización'}
+                                                                            </span>
+                                                                        )}
                                                                     </div>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2 align-top">
-                                                                {filaEnEdicion ? (
-                                                                    <input
-                                                                        type="datetime-local"
-                                                                        value={draft.fecha}
-                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))}
-                                                                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                                                                    />
-                                                                ) : (
-                                                                    <div className="text-xs text-gray-700">{fechaResumen}</div>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2 align-top">
-                                                                {filaEnEdicion ? (
-                                                                    <input
-                                                                        value={draft.codigoPractica}
-                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))}
-                                                                        className="w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs"
-                                                                    />
-                                                                ) : (
-                                                                    <span className="font-mono text-xs text-gray-700">{draft.codigoPractica || '—'}</span>
-                                                                )}
+                                                                </div>
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
                                                                 {filaEnEdicion ? (
@@ -4203,7 +4205,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
                                                                     />
                                                                 ) : (
-                                                                    <div className="truncate text-xs text-gray-700" title={draft.descripcion || ''}>{draft.descripcion || '—'}</div>
+                                                                    <div className="text-xs leading-snug text-gray-800">{draft.descripcion || '—'}</div>
                                                                 )}
                                                                 {p.tipo === 'PRACTICA' && (
                                                                     <div className="mt-1 flex flex-wrap gap-1">
@@ -4224,20 +4226,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                 Incluye: {resumenIncluye}
                                                                             </span>
                                                                         )}
-                                                                        {autorizacionesVinculadasOrdenadas.slice(0, 2).map((aut) => (
-                                                                            <span
-                                                                                key={`${p.uid}:resumen:${aut.ordenPuestoNumero}:${aut.ordenNumero}:${aut.ordenItem}`}
-                                                                                className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800"
-                                                                                title={`Orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · Item ${aut.ordenItem}`}
-                                                                            >
-                                                                                {formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} · {aut.numeroAutorizacion ?? 'S/A'}
-                                                                            </span>
-                                                                        ))}
-                                                                        {autorizacionesVinculadasOrdenadas.length > 2 && (
-                                                                            <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
-                                                                                +{autorizacionesVinculadasOrdenadas.length - 2} más
-                                                                            </span>
-                                                                        )}
                                                                         {p.esPracticaCirugia && etiquetasDiferencial.map((etq) => (
                                                                             <span
                                                                                 key={`${p.uid}:resumen-diferencial:${etq}`}
@@ -4250,20 +4238,30 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 )}
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
-                                                                {ordenAgrupada ? (
-                                                                    <span className="text-[11px] text-gray-400">↳</span>
-                                                                ) : destinoOrdenLinea ? (
-                                                                    <Link
-                                                                        href={destinoOrdenLinea}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
-                                                                        title="Abrir orden"
-                                                                    >
-                                                                        {numeroOrdenLinea}
-                                                                    </Link>
+                                                                {filaEnEdicion ? (
+                                                                    <input
+                                                                        type="datetime-local"
+                                                                        value={draft.fecha}
+                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))}
+                                                                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                                                                    />
                                                                 ) : (
-                                                                    <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{numeroOrdenLinea}</span>
+                                                                    <div className="text-xs text-gray-700">{fechaResumen}</div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 align-top">
+                                                                {filaEnEdicion && !tieneAutorizacionesVinculadas ? (
+                                                                    <input
+                                                                        value={draft.numeroAutorizacion}
+                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, numeroAutorizacion: e.target.value } }))}
+                                                                        disabled={practicaSinOrdenVinculada}
+                                                                        placeholder={practicaSinOrdenVinculada ? 'Requiere orden' : 'Nro autorización'}
+                                                                        className="w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs disabled:bg-gray-100 disabled:text-gray-500"
+                                                                    />
+                                                                ) : autorizacionResumen ? (
+                                                                    <span className="font-mono text-xs text-gray-800" title="Número de autorización">{autorizacionResumen}</span>
+                                                                ) : (
+                                                                    <span className="text-[11px] font-medium text-amber-700">S/A</span>
                                                                 )}
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
@@ -4341,28 +4339,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     <span className="text-xs text-gray-400">No aplica</span>
                                                                 )}
                                                             </td>
-                                                            <td className="px-3 py-2 align-top">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        if (resumenDuplicados) {
-                                                                            setLineasDuplicadasExpand((prev) => ({ ...prev, [linea.key]: true }))
-                                                                        }
-                                                                        setDetallePrestacionesExpand((prev) => ({ ...prev, [p.uid]: !detalleAbierto }))
-                                                                    }}
-                                                                    className="inline-flex items-center justify-center gap-1 whitespace-nowrap rounded border px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                                                                >
-                                                                    {detalleAbierto ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                                                    {detalleAbierto ? 'Ocultar' : 'Ver'}
-                                                                </button>
-                                                            </td>
                                                         </tr>
 
-                                                        {detalleAbierto && (
+                                                        {filaEnEdicion && (
                                                             <tr className={`${CARRIL_PRACTICA_PENDIENTE} bg-slate-50`}>
-                                                                <td colSpan={10} className="px-4 py-3">
+                                                                <td colSpan={8} className="px-4 py-3">
                                                                     <div className="mb-3 flex items-center justify-between gap-2">
-                                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Detalle de prestación</p>
+                                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Componentes, matrículas y autorizaciones</p>
                                                                         {filaEnEdicion ? (
                                                                             <div className="flex items-center gap-2">
                                                                                 {ordenParaEdicionGlobal && (
@@ -4405,61 +4388,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         )}
                                                                     </div>
                                                                     <div className="grid gap-3 lg:grid-cols-12">
-                                                                        <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-5">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Datos de prestación</p>
-                                                                            <div className="mt-1 grid gap-2">
-                                                                                <label className="text-[11px] text-gray-600">
-                                                                                    Fecha
-                                                                                    <input
-                                                                                        type="datetime-local"
-                                                                                        value={draft.fecha}
-                                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, fecha: e.target.value } }))}
-                                                                                        disabled={!filaEnEdicion}
-                                                                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                    />
-                                                                                </label>
-                                                                                <label className="text-[11px] text-gray-600">
-                                                                                    Código
-                                                                                    <input
-                                                                                        value={draft.codigoPractica}
-                                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, codigoPractica: e.target.value } }))}
-                                                                                        disabled={!filaEnEdicion}
-                                                                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                    />
-                                                                                </label>
-                                                                                <label className="text-[11px] text-gray-600">
-                                                                                    Descripción
-                                                                                    <input
-                                                                                        value={draft.descripcion}
-                                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, descripcion: e.target.value } }))}
-                                                                                        disabled={!filaEnEdicion}
-                                                                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                    />
-                                                                                </label>
-                                                                                <div className="grid grid-cols-2 gap-2">
-                                                                                    <label className="text-[11px] text-gray-600">
-                                                                                        Cantidad
-                                                                                        <input
-                                                                                            value={draft.cantidad}
-                                                                                            onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: actualizarCantidadPrestacion(draft, e.target.value) }))}
-                                                                                            disabled={!filaEnEdicion}
-                                                                                            className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                        />
-                                                                                    </label>
-                                                                                    <label className="text-[11px] text-gray-600">
-                                                                                        Importe total
-                                                                                        <input
-                                                                                            value={draft.importeTotal}
-                                                                                            onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))}
-                                                                                            disabled={!filaEnEdicion}
-                                                                                            className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-500"
-                                                                                        />
-                                                                                    </label>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-
-                                                                        <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-4">
+                                                                        <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-6">
                                                                             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Autorizaciones</p>
                                                                             <div className="mt-1 space-y-2">
                                                                                 <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700">
@@ -4534,7 +4463,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                             </div>
                                                                         </div>
 
-                                                                        <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-3">
+                                                                        <div className="rounded-md border border-slate-200 bg-white p-2 lg:col-span-6">
                                                                             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Matrículas</p>
                                                                             <div className="mt-1 grid gap-2">
                                                                                 <label className="text-[11px] text-gray-600">
@@ -4680,7 +4609,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
                                             {!esVistaFacturadas && prestacionesNoOrdenadasFiltradas.length === 0 && prestacionesNoOrdenadas.length > 0 && (
                                                 <tr>
-                                                    <td colSpan={10} className="px-3 py-4 text-center text-xs text-gray-500">
+                                                    <td colSpan={8} className="px-3 py-4 text-center text-xs text-gray-500">
                                                         No hay prestaciones pendientes para el filtro aplicado.
                                                     </td>
                                                 </tr>
@@ -5067,7 +4996,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     )}
                                                     {!esVistaFacturadas && gruposPrestacionesNoOrdenadasFiltradas.length === 0 && (
                                                         <tr>
-                                                            <td colSpan={10} className="px-3 py-6 text-center text-sm text-gray-500">
+                                                            <td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-500">
                                                                 Sin prestaciones pendientes
                                                             </td>
                                                         </tr>

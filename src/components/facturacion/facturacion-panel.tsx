@@ -570,13 +570,10 @@ type LineaPrestaciones = {
 function firmaPrestacionDuplicable(p: PrestacionFacturableItem): string | null {
     if (p.tipo !== 'PRACTICA' || p.facturada) return null
 
-    // El item de orden queda fuera de la firma: dos practicas identicas de la misma orden
-    // ocupan items distintos y aun asi son la misma linea con cantidad 2.
-    const autorizaciones = [...(p.autorizacionesVinculadas ?? [])]
-        .map((aut) => `${aut.ordenPuestoNumero}-${aut.ordenNumero}-${aut.numeroAutorizacion ?? ''}`)
-        .sort()
-        .join('|')
-
+    // La orden y el numero de autorizacion quedan fuera de la firma: en cirugia cada
+    // repeticion de la practica cuelga de una orden distinta (una por componente) y aun
+    // asi es la misma linea con cantidad 2. Lo que identifica a la practica es el resto:
+    // codigo, fecha, importe, componente y matriculas.
     return [
         p.convenioId ?? '',
         (p.codigoPractica ?? '').trim(),
@@ -587,15 +584,11 @@ function firmaPrestacionDuplicable(p: PrestacionFacturableItem): string | null {
         p.importeTotal ?? '',
         p.importeTotalOriginal ?? '',
         (p.incluyeCodigo ?? '').trim(),
-        (p.numeroAutorizacion ?? '').trim(),
         p.matriculaProfesional ?? '',
         p.matriculaEspecialista ?? '',
         p.matriculaAnestesista ?? '',
         p.esPracticaCirugia ? '1' : '0',
         p.origen.cirugiaProgramadaId ?? '',
-        p.origen.ordenPuestoNumero ?? '',
-        p.origen.ordenNumero ?? '',
-        autorizaciones,
         JSON.stringify(p.diferenciales ?? null),
         JSON.stringify(p.desglose ?? null),
     ].join('~')
@@ -627,6 +620,44 @@ function agruparLineasDuplicadas(items: PrestacionFacturableItem[]): LineaPresta
     }
 
     return lineas
+}
+
+// Las practicas de cirugia llegan sin `incluyeCodigo`: el componente que cobra la fila se
+// deduce del desglose. Cuando el desglose trae varios componentes hay que ver cual de ellos
+// explica el importe de la fila, porque el desglose describe la practica completa y la fila
+// puede estar cobrando uno solo (una fila por profesional).
+function resumenSubitemsDesdeDesglose(p: PrestacionFacturableItem): string {
+    const desglose = p.desglose
+    if (!desglose) return ''
+
+    const componentes: Array<[string, number]> = ([
+        ['GA', desglose.valorGastos],
+        ['HE', desglose.valorEspecialista],
+        ['HA', desglose.valorAnestesista],
+        ['Ayudante', desglose.valorAyudante],
+    ] as Array<[string, number | null]>).filter(
+        (entrada): entrada is [string, number] => entrada[1] != null
+    )
+
+    if (componentes.length === 0) return ''
+    if (componentes.length === 1) return `${componentes[0]![0]} x1`
+
+    const cantidad = Number(p.cantidad ?? 1) || 1
+    const total = componentes.reduce((suma, [, valor]) => suma + valor, 0)
+    const candidatos = [Number(p.importeTotalOriginal ?? NaN), Number(p.importeTotal ?? NaN)]
+        .filter((valor) => Number.isFinite(valor) && valor > 0)
+        .flatMap((valor) => [valor, valor / cantidad])
+
+    for (const base of candidatos) {
+        const unico = componentes.find(([, valor]) => Math.abs(base - valor) < 0.05)
+        if (unico) return `${unico[0]} x1`
+        if (Math.abs(base - total) < 0.05) {
+            return componentes.map(([nombre]) => `${nombre} x1`).join(' · ')
+        }
+    }
+
+    // Si el importe no se explica con el desglose, no inventamos el subitem.
+    return ''
 }
 
 function incluyeTieneAyudante(incluyeCodigo: string | null | undefined): boolean {
@@ -3505,7 +3536,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Misma vía / distinta patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos al 30%; especialista y ayudante no se pagan)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3518,7 +3548,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Misma vía / misma patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos al 30%; especialista y ayudante no se pagan)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3531,7 +3560,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Distinta vía / misma patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos al 50%; especialista y ayudante al 75%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -3544,7 +3572,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             }))}
                                                         />
                                                         Distinta vía / distinta patología
-                                                        <span className="text-[10px] text-amber-700">(Gastos al 50%; especialista y ayudante al 75%)</span>
                                                     </label>
                                                     <label className="inline-flex items-center gap-2 font-semibold">
                                                         <input
@@ -4093,7 +4120,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             p.codigoPractica
                                                         )
                                                         : null
-                                                const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
+                                                const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo) || resumenSubitemsDesdeDesglose(p)
                                                 const diferencialesActivos = resumenDiferenciales(p.diferenciales)
                                                 if (p.diferenciales?.dobleCirugia && p.diferenciales?.esPracticaBase) {
                                                     diferencialesActivos.push('Principal (100% quirúrgico en doble cirugía)')
@@ -4139,10 +4166,16 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     aplicarOrdenCompletaPorFila[p.uid] && ordenParaEdicionGlobal
                                                 )
                                                 const practicaSeleccionada = uidsLinea.every((uid) => Boolean(seleccion[uid]))
+                                                // En una linea agrupada la autorizacion se muestra para todas las
+                                                // practicas que colapsa, no solo para la representante.
                                                 const autorizacionesUnicas = Array.from(
                                                     new Set(
-                                                        autorizacionesVinculadasOrdenadas
-                                                            .map((aut) => aut.numeroAutorizacion?.trim())
+                                                        (resumenDuplicados ? linea.items : [p])
+                                                            .flatMap((it) => [
+                                                                ...((it.autorizacionesVinculadas ?? []).map((aut) => aut.numeroAutorizacion)),
+                                                                it.numeroAutorizacion,
+                                                            ])
+                                                            .map((valor) => valor?.trim())
                                                             .filter((valor): valor is string => Boolean(valor))
                                                     )
                                                 )
@@ -4183,11 +4216,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         )}
                                                                         {yaFacturada && (
                                                                             <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">✓ Facturada</span>
-                                                                        )}
-                                                                        {p.esPracticaCirugia && (
-                                                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800" title={diferencialesActivos.join(' · ') || 'Práctica vinculada a cirugía'}>
-                                                                                Cirugía
-                                                                            </span>
                                                                         )}
                                                                         {!yaFacturada && !seleccionable && (
                                                                             <span className="block text-[10px] font-medium text-amber-700">
@@ -4681,7 +4709,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             const filaEnEdicion = Boolean(rowEditMode[p.uid])
                                                             const detalleAbierto = Boolean(detallePrestacionesExpand[p.uid])
                                                             const desgloseSelector = obtenerDesgloseSelector(p)
-                                                            const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo)
+                                                            const resumenIncluye = resumenSubitemsIncluidos(p.incluyeCodigo) || resumenSubitemsDesdeDesglose(p)
                                                             const etiquetasDiferencial = etiquetasCamposDiferencial(p.diferenciales)
                                                             const fechaDraft = draft.fecha ? new Date(draft.fecha) : null
                                                             const fechaResumen = fechaDraft && !Number.isNaN(fechaDraft.getTime())

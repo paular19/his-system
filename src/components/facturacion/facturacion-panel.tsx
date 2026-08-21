@@ -1054,6 +1054,12 @@ const MATRICULA_AYUDANTE_DEFAULT = 995
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const ADMISIONES_POR_PAGINA_DEFAULT = 12
 const PRESTACIONES_POR_PAGINA_DEFAULT = 12
+
+// Carril vertical que cuelga las practicas de la cabecera de su orden.
+const CARRIL_PRACTICA_PENDIENTE =
+    '[&>td:first-child]:border-l-4 [&>td:first-child]:border-slate-300 [&>td:first-child]:pl-5'
+const CARRIL_PRACTICA_FACTURADA =
+    '[&>td:first-child]:border-l-4 [&>td:first-child]:border-green-300 [&>td:first-child]:pl-5'
 const CRITERIOS_BUSQUEDA_PACIENTE: Array<{ value: CriterioBusquedaPaciente; label: string; placeholder: string }> = [
     { value: 'NOMBRE', label: 'Nombre paciente', placeholder: 'Ej: Perez, Ana' },
     { value: 'HC', label: 'Nro HC', placeholder: 'Ej: 10234' },
@@ -3901,9 +3907,9 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
                                                 return (
                                                     <Fragment key={grupo.key}>
-                                                        <tr className="bg-slate-50">
-                                                            <td colSpan={10} className="px-3 py-2">
-                                                                <div className="flex flex-wrap items-center gap-2 rounded border border-slate-200 bg-white px-2 py-1">
+                                                        <tr className="bg-slate-100">
+                                                            <td colSpan={10} className="border-t-4 border-slate-300 px-3 pb-1 pt-2">
+                                                                <div className="flex flex-wrap items-center gap-2 rounded-t border border-b-0 border-slate-300 bg-white px-2 py-1.5 shadow-sm">
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => setOrdenesPendientesExpand((prev) => ({ ...prev, [grupo.key]: !grupoExpandido }))}
@@ -3911,7 +3917,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     >
                                                                         {grupoExpandido ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                                                                     </button>
-                                                                    <span className="text-xs font-medium text-slate-700">
+                                                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                                                                         {esGrupoCirugia ? 'Cirugía' : 'Orden'}
                                                                     </span>
                                                                     {destinoOrdenGrupo ? (
@@ -3919,13 +3925,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                             href={destinoOrdenGrupo}
                                                                             target="_blank"
                                                                             rel="noopener noreferrer"
-                                                                            className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                                                                            className="inline-flex rounded bg-blue-50 px-2 py-0.5 font-mono text-sm font-semibold text-blue-800 hover:bg-blue-100"
                                                                             title="Abrir orden en nueva pestaña"
                                                                         >
                                                                             {etiquetaOrden}
                                                                         </Link>
                                                                     ) : (
-                                                                        <span className="text-xs font-medium text-slate-600">{etiquetaOrden}</span>
+                                                                        <span className="font-mono text-sm font-semibold text-slate-700">{etiquetaOrden}</span>
                                                                     )}
                                                                     {grupo.esCirugia && (
                                                                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
@@ -3942,12 +3948,11 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                             {etq}
                                                                         </span>
                                                                     ))}
-                                                                    <span className="text-[11px] text-slate-500">
-                                                                        ({grupo.items.length} práctica{grupo.items.length === 1 ? '' : 's'}
+                                                                    <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                                                                        {grupo.items.length} práctica{grupo.items.length === 1 ? '' : 's'}
                                                                         {esGrupoCirugia
                                                                             ? ` · ${grupo.ordenesRelacionadas.length} orden${grupo.ordenesRelacionadas.length === 1 ? '' : 'es'}`
                                                                             : ''}
-                                                                        )
                                                                     </span>
                                                                     {esGrupoCirugia && grupo.ordenesRelacionadas.length > 0 && (
                                                                         <div className="flex flex-wrap items-center gap-1">
@@ -4127,7 +4132,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const practicaSeleccionada = uidsLinea.every((uid) => Boolean(seleccion[uid]))
                                                 return (
                                                     <Fragment key={p.uid}>
-                                                        <tr className={yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
+                                                        <tr className={`${CARRIL_PRACTICA_PENDIENTE} ${yaFacturada ? 'bg-green-50' : p.esPracticaCirugia ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}`}>
                                                             <td className="px-3 py-2 align-top">
                                                                 {yaFacturada ? (
                                                                     <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>
@@ -4354,7 +4359,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                         </tr>
 
                                                         {detalleAbierto && (
-                                                            <tr className="bg-slate-50">
+                                                            <tr className={`${CARRIL_PRACTICA_PENDIENTE} bg-slate-50`}>
                                                                 <td colSpan={10} className="px-4 py-3">
                                                                     <div className="mb-3 flex items-center justify-between gap-2">
                                                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Detalle de prestación</p>
@@ -4692,12 +4697,18 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const guardandoAutorizacionOrden = guardandoAutorizacionOrdenKey === authOrdenKey
                                                 return (
                                                     <Fragment key={orden.key}>
-                                                        <tr key={`head-${orden.key}`} className="bg-green-50">
+                                                        <tr key={`head-${orden.key}`} className="bg-green-50 [&>td]:border-t-4 [&>td]:border-green-300">
                                                             <td className="px-3 py-2" colSpan={6}>
-                                                                <button onClick={() => setOrdenesExpand((prev) => ({ ...prev, [orden.key]: !expand }))} className="inline-flex items-center gap-2 text-xs font-semibold text-green-800">
-                                                                    {expand ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                                <button onClick={() => setOrdenesExpand((prev) => ({ ...prev, [orden.key]: !expand }))} className="inline-flex flex-wrap items-center gap-2">
+                                                                    {expand ? <ChevronDown className="h-3.5 w-3.5 text-green-800" /> : <ChevronRight className="h-3.5 w-3.5 text-green-800" />}
                                                                     <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ Facturada</span>
-                                                                    Orden {formatOrderNumber(orden.puesto, orden.numero)}
+                                                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-green-700">Orden</span>
+                                                                    <span className="rounded bg-green-100 px-2 py-0.5 font-mono text-sm font-semibold text-green-900">
+                                                                        {formatOrderNumber(orden.puesto, orden.numero)}
+                                                                    </span>
+                                                                    <span className="inline-flex items-center rounded-full border border-green-300 bg-white px-2 py-0.5 text-[11px] font-medium text-green-800">
+                                                                        {orden.items.length} práctica{orden.items.length === 1 ? '' : 's'}
+                                                                    </span>
                                                                 </button>
                                                                 <div className="mt-2 flex flex-wrap items-end gap-2">
                                                                     <label className="text-[11px] text-gray-600">
@@ -4777,9 +4788,9 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
                                                             return (
                                                                 <Fragment key={p.uid}>
-                                                                    <tr className="hover:bg-gray-50">
+                                                                    <tr className={`${CARRIL_PRACTICA_FACTURADA} hover:bg-gray-50`}>
                                                                         <td className="px-3 py-2 align-top text-xs text-gray-500">
-                                                                            Item {p.origen.ordenItem}
+                                                                            <span className="mr-1 text-gray-400">↳</span>Item {p.origen.ordenItem}
                                                                         </td>
                                                                         <td className="px-3 py-2 align-top">
                                                                             {filaEnEdicion ? (
@@ -4897,7 +4908,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     </tr>
 
                                                                     {detalleAbierto && (
-                                                                        <tr className="bg-slate-50">
+                                                                        <tr className={`${CARRIL_PRACTICA_FACTURADA} bg-slate-50`}>
                                                                             <td colSpan={10} className="px-4 py-3">
                                                                                 <div className="mb-3 flex items-center justify-between gap-2">
                                                                                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Detalle de prestación</p>

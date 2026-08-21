@@ -1496,3 +1496,196 @@ async function enriquecerPracticasConValor(
         : (fallbackDesglosePorCodigo.get(practica.codigo.trim())?.valorGastos ?? null),
   }))
 }
+
+// ============================================
+// CAMBIO DE PROFESIONAL FIRMANTE DE UNA ORDEN
+// ============================================
+
+export type CambioProfesionalOrden = {
+  puestoNumero: number
+  numero: number
+  profesionalAnterior: { id: number; nombre: string; matricula: number | null } | null
+  profesionalNuevo: { id: number; nombre: string; matricula: number | null }
+  itemsEfectorActualizados: number
+  practicasEspecialistaActualizadas: number
+}
+
+/**
+ * Cambia el profesional que suscribe una orden ya generada (con o sin numero de
+ * autorizacion) siempre que no este anulada ni facturada.
+ *
+ * Cuando `actualizarEfectorEspecialista` es true, arrastra el cambio al honorario
+ * especialista: los items cuya matricula de efector coincide con la del profesional
+ * anterior pasan a la matricula del nuevo, junto con la practica vinculada. Los items
+ * de gastos (9995), anestesia (6) o de otro efector quedan intactos.
+ */
+export async function cambiarProfesionalOrden(params: {
+  puestoNumero: number
+  numero: number
+  profesionalId: number
+  actualizarEfectorEspecialista?: boolean
+}): Promise<CambioProfesionalOrden> {
+  const { puestoNumero, numero, profesionalId } = params
+  const actualizarEfector = params.actualizarEfectorEspecialista ?? true
+
+  return prisma.$transaction(async (tx) => {
+    const orden = await tx.orden.findUnique({
+      where: { puestoNumero_numero: { puestoNumero, numero } },
+      select: {
+        puestoNumero: true,
+        numero: true,
+        estado: true,
+        profesionalId: true,
+        profesional: { select: { id: true, nombre: true, matricula: true } },
+        items: {
+          select: {
+            item: true,
+            efectorMatricula: true,
+            practicaId: true,
+            practica: {
+              select: {
+                id: true,
+                estado: true,
+                puestoNumero: true,
+                ordenNumero: true,
+                ordenItem: true,
+                matriculaEspecialista: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!orden) throw new Error('Orden no encontrada')
+
+    if ((orden.estado ?? '').trim().toUpperCase() === 'X') {
+      throw new Error('La orden esta anulada: no se puede cambiar el profesional')
+    }
+
+    // Facturada = alguna practica de la orden quedo en estado F apuntando a ESTA orden.
+    const facturada = orden.items.some((it) => {
+      const practica = it.practica
+      if (!practica) return false
+      if ((practica.estado ?? '').trim().toUpperCase() !== 'F') return false
+      return practica.puestoNumero === puestoNumero && practica.ordenNumero === numero
+    })
+
+    if (facturada) {
+      throw new Error(
+        'La orden ya esta facturada: anula la facturacion antes de cambiar el profesional'
+      )
+    }
+
+    const nuevo = await tx.profesional.findUnique({
+      where: { id: profesionalId },
+      select: { id: true, nombre: true, matricula: true },
+    })
+
+    if (!nuevo) throw new Error('El profesional seleccionado no existe')
+
+    const anterior = orden.profesional
+      ? {
+        id: orden.profesional.id,
+        nombre: orden.profesional.nombre,
+        matricula: orden.profesional.matricula,
+      }
+      : null
+
+    let itemsEfectorActualizados = 0
+    let practicasEspecialistaActualizadas = 0
+
+    if (orden.profesionalId !== profesionalId) {
+      await tx.orden.update({
+        where: { puestoNumero_numero: { puestoNumero, numero } },
+        data: { profesionalId },
+      })
+    }
+
+    const matriculaAnterior = anterior?.matricula ?? null
+    const matriculaNueva = nuevo.matricula ?? null
+
+    if (
+      actualizarEfector &&
+      typeof matriculaAnterior === 'number' &&
+      typeof matriculaNueva === 'number' &&
+      matriculaAnterior !== matriculaNueva
+    ) {
+      const itemsACambiar = orden.items.filter((it) => it.efectorMatricula === matriculaAnterior)
+
+      for (const it of itemsACambiar) {
+        await tx.ordenPractica.update({
+          where: {
+            puestoNumero_ordenNumero_item: {
+              puestoNumero,
+              ordenNumero: numero,
+              item: it.item,
+            },
+          },
+          data: { efectorMatricula: matriculaNueva },
+        })
+        itemsEfectorActualizados += 1
+      }
+
+      const practicaIds = Array.from(
+        new Set(
+          itemsACambiar
+            .map((it) => it.practica?.id ?? it.practicaId)
+            .filter((id): id is number => typeof id === 'number')
+        )
+      )
+
+      if (practicaIds.length > 0) {
+        const resultado = await tx.practica.updateMany({
+          where: { id: { in: practicaIds }, matriculaEspecialista: matriculaAnterior },
+          data: { matriculaEspecialista: matriculaNueva },
+        })
+        practicasEspecialistaActualizadas = resultado.count
+      }
+    }
+
+    return {
+      puestoNumero,
+      numero,
+      profesionalAnterior: anterior,
+      profesionalNuevo: { id: nuevo.id, nombre: nuevo.nombre, matricula: nuevo.matricula },
+      itemsEfectorActualizados,
+      practicasEspecialistaActualizadas,
+    }
+  })
+}
+
+/**
+ * Motivo por el que una orden no admite cambio de profesional, o null si se puede editar.
+ * Se usa para decidir si la UI muestra el boton de cambio.
+ */
+export async function motivoBloqueoCambioProfesional(
+  puestoNumero: number,
+  numero: number
+): Promise<string | null> {
+  const orden = await prisma.orden.findUnique({
+    where: { puestoNumero_numero: { puestoNumero, numero } },
+    select: {
+      estado: true,
+      items: {
+        select: {
+          practica: {
+            select: { estado: true, puestoNumero: true, ordenNumero: true },
+          },
+        },
+      },
+    },
+  })
+
+  if (!orden) return 'Orden no encontrada'
+  if ((orden.estado ?? '').trim().toUpperCase() === 'X') return 'Orden anulada'
+
+  const facturada = orden.items.some((it) => {
+    const practica = it.practica
+    if (!practica) return false
+    if ((practica.estado ?? '').trim().toUpperCase() !== 'F') return false
+    return practica.puestoNumero === puestoNumero && practica.ordenNumero === numero
+  })
+
+  return facturada ? 'Orden facturada' : null
+}

@@ -59,5 +59,13 @@ export const CrearOrdenSchema = z.object({
   items: z.array(OrdenPracticaItemSchema).min(1, 'Debe agregar al menos una práctica'),
 })
 
+export const CambiarProfesionalOrdenSchema = z.object({
+  profesionalId: z.number().int().positive(),
+  // Arrastra el cambio al honorario especialista de los items que hoy apuntan al
+  // profesional anterior. Los items de gastos o anestesia nunca se tocan.
+  actualizarEfectorEspecialista: z.boolean().optional().default(true),
+})
+
 export type CrearOrdenInput = z.infer<typeof CrearOrdenSchema>
 export type OrdenPracticaItemInput = z.infer<typeof OrdenPracticaItemSchema>
+export type CambiarProfesionalOrdenInput = z.infer<typeof CambiarProfesionalOrdenSchema>

@@ -3836,13 +3836,38 @@ export async function actualizarPrestacionFacturacion(
                 },
             })
 
-            if (data.matriculaEjecutante !== undefined) {
+            // Solo pisa el efector de todos los items si vino explicito en el payload.
+            if (data.matriculaEjecutante != null) {
                 await tx.ordenPractica.updateMany({
                     where: {
                         puestoNumero: data.puestoNumero,
                         ordenNumero: data.ordenNumero,
                     },
                     data: { efectorMatricula: data.matriculaEjecutante },
+                })
+            }
+
+            if (data.matriculaProfesional != null) {
+                const profesional = await tx.profesional.findFirst({
+                    where: { matricula: data.matriculaProfesional },
+                    orderBy: { id: 'asc' },
+                    select: { id: true },
+                })
+
+                if (!profesional) {
+                    throw new Error(
+                        `No hay un profesional cargado con la matricula ${data.matriculaProfesional}`
+                    )
+                }
+
+                await tx.orden.update({
+                    where: {
+                        puestoNumero_numero: {
+                            puestoNumero: data.puestoNumero,
+                            numero: data.ordenNumero,
+                        },
+                    },
+                    data: { profesionalId: profesional.id },
                 })
             }
         })

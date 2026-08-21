@@ -179,6 +179,8 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
         descripcion: z.string().trim().max(255).optional().nullable(),
         numeroAutorizacion: z.string().trim().max(15).optional().nullable(),
         matriculaEjecutante: z.number().int().positive().optional().nullable(),
+        /** Medico que suscribe la orden (cabecera). */
+        matriculaProfesional: z.number().int().positive().optional().nullable(),
     }),
     z.object({
         tipo: z.literal('PRACTICA'),

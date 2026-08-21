@@ -20,7 +20,6 @@ import { claveDiaArgentina, formatearFechaArgentina } from '@/lib/utils/argentin
 import { normalizarClasificacionAgrupacion, tituloDesdeClasificacion } from '@/modules/orden/clasificacion'
 import {
     anularOrdenAction,
-    actualizarFirmanteOrdenAction,
     actualizarNumeroAutorizacionAction,
     crearPedidoLaboratorioAction,
     generarOrdenesDesdeInternacionAction,
@@ -156,21 +155,11 @@ type PracticaEditDraft = {
     importeBaseUnitario: string
 }
 
-type FirmanteOrden = {
-    puestoNumero: number
-    ordenNumero: number
-    profesionalId: number | null
-    nombre: string | null
-    matricula: number | null
-}
-
 interface PracticaCargaRapidaPageProps {
     ingresoId: number
     convenioId: number | null
     sectorInternacionActual?: string | null
     matriculaTratanteDefault?: number | null
-    tratanteActual?: { id: number; nombre: string; matricula: number | null } | null
-    firmantesOrdenIniciales?: FirmanteOrden[]
     puedeCrear: boolean
     practicasIniciales: PracticaItem[]
     contextoCirugia?: {
@@ -442,8 +431,6 @@ export function PracticaCargaRapidaPage({
     convenioId,
     sectorInternacionActual,
     matriculaTratanteDefault,
-    tratanteActual = null,
-    firmantesOrdenIniciales = [],
     puedeCrear,
     practicasIniciales,
     contextoCirugia,
@@ -474,16 +461,6 @@ export function PracticaCargaRapidaPage({
     const [ordenEditandoAutorizacionKey, setOrdenEditandoAutorizacionKey] = useState<string | null>(null)
     const [borradorNumeroAutorizacion, setBorradorNumeroAutorizacion] = useState('')
     const [guardandoAutorizacionOrdenKey, setGuardandoAutorizacionOrdenKey] = useState<string | null>(null)
-    const [firmantesOrden, setFirmantesOrden] = useState<FirmanteOrden[]>(firmantesOrdenIniciales)
-    const [ordenEditandoFirmanteKey, setOrdenEditandoFirmanteKey] = useState<string | null>(null)
-    const [borradorFirmanteId, setBorradorFirmanteId] = useState('')
-    const [guardandoFirmanteOrdenKey, setGuardandoFirmanteOrdenKey] = useState<string | null>(null)
-    const [tratanteSeleccionadoId, setTratanteSeleccionadoId] = useState(
-        tratanteActual ? String(tratanteActual.id) : ''
-    )
-    const [tratanteVigente, setTratanteVigente] = useState(tratanteActual)
-    const [guardandoTratante, setGuardandoTratante] = useState(false)
-    const [editandoTratante, setEditandoTratante] = useState(false)
     const [mostrarOrdenesHistoricas, setMostrarOrdenesHistoricas] = useState(true)
     const [busquedaHistorico, setBusquedaHistorico] = useState('')
     const [paginaHistorico, setPaginaHistorico] = useState(1)
@@ -536,16 +513,6 @@ export function PracticaCargaRapidaPage({
     useEffect(() => {
         setGenerandoOrdenes(hayGeneracionesEnBackground)
     }, [hayGeneracionesEnBackground])
-
-    // El server component se refresca al generar o anular ordenes: resincronizar firmantes.
-    useEffect(() => {
-        setFirmantesOrden(firmantesOrdenIniciales)
-    }, [firmantesOrdenIniciales])
-
-    useEffect(() => {
-        setTratanteVigente(tratanteActual)
-        setTratanteSeleccionadoId(tratanteActual ? String(tratanteActual.id) : '')
-    }, [tratanteActual])
 
     useEffect(() => {
         let cancelled = false
@@ -2336,115 +2303,6 @@ export function PracticaCargaRapidaPage({
         }
     }
 
-    const claveFirmanteOrden = (puestoNumero: number, ordenNumero: number) => `${puestoNumero}:${ordenNumero}`
-
-    const firmantePorOrden = useMemo(() => {
-        const map = new Map<string, FirmanteOrden>()
-        for (const firmante of firmantesOrden) {
-            map.set(claveFirmanteOrden(firmante.puestoNumero, firmante.ordenNumero), firmante)
-        }
-        return map
-    }, [firmantesOrden])
-
-    const iniciarEdicionFirmanteOrden = (grupo: GrupoPracticasAutorizadas) => {
-        if (grupo.tipo !== 'orden' || grupo.puestoNumero == null || grupo.ordenNumero == null) return
-        const firmante = firmantePorOrden.get(claveFirmanteOrden(grupo.puestoNumero, grupo.ordenNumero))
-        setMensajeError(null)
-        setOrdenEditandoFirmanteKey(grupo.key)
-        setBorradorFirmanteId(firmante?.profesionalId != null ? String(firmante.profesionalId) : '')
-    }
-
-    const cancelarEdicionFirmanteOrden = () => {
-        if (guardandoFirmanteOrdenKey) return
-        setOrdenEditandoFirmanteKey(null)
-        setBorradorFirmanteId('')
-    }
-
-    const guardarFirmanteOrden = async (grupo: GrupoPracticasAutorizadas) => {
-        if (grupo.tipo !== 'orden' || grupo.puestoNumero == null || grupo.ordenNumero == null) return
-
-        const profesionalId = Number.parseInt(borradorFirmanteId, 10)
-        if (!Number.isFinite(profesionalId) || profesionalId <= 0) {
-            setMensajeError('Selecciona un medico firmante para guardar')
-            return
-        }
-
-        const puestoNumero = grupo.puestoNumero
-        const ordenNumero = grupo.ordenNumero
-
-        setMensajeError(null)
-        setGuardandoFirmanteOrdenKey(grupo.key)
-        try {
-            const result = await actualizarFirmanteOrdenAction(puestoNumero, ordenNumero, profesionalId)
-
-            if (result?.error) {
-                setMensajeError(result.error)
-                return
-            }
-
-            const profesional = result?.profesional ?? null
-            setFirmantesOrden((prev) => {
-                const clave = claveFirmanteOrden(puestoNumero, ordenNumero)
-                const siguiente: FirmanteOrden = {
-                    puestoNumero,
-                    ordenNumero,
-                    profesionalId: profesional?.id ?? profesionalId,
-                    nombre: profesional?.nombre?.trim() ?? null,
-                    matricula: profesional?.matricula ?? null,
-                }
-                const sinOrden = prev.filter(
-                    (item) => claveFirmanteOrden(item.puestoNumero, item.ordenNumero) !== clave
-                )
-                return [...sinOrden, siguiente]
-            })
-
-            setOrdenEditandoFirmanteKey(null)
-            setBorradorFirmanteId('')
-        } catch {
-            setMensajeError('No se pudo guardar el medico firmante de la orden')
-        } finally {
-            setGuardandoFirmanteOrdenKey(null)
-        }
-    }
-
-    const guardarTratanteInternacion = async () => {
-        const profesionalId = Number.parseInt(tratanteSeleccionadoId, 10)
-        if (!Number.isFinite(profesionalId) || profesionalId <= 0) {
-            setMensajeError('Selecciona un medico tratante para guardar')
-            return
-        }
-
-        setMensajeError(null)
-        setGuardandoTratante(true)
-        try {
-            const res = await fetch(`/api/internacion/${ingresoId}/tratante`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ profesionalTratanteId: profesionalId }),
-                cache: 'no-store',
-            })
-
-            const json = await res.json().catch(() => null)
-            if (!res.ok || !json?.ok) {
-                setMensajeError(json?.error ?? 'No se pudo actualizar el medico tratante')
-                return
-            }
-
-            const profesional = profesionalesConMatricula.find((item) => item.id === profesionalId) ?? null
-            setTratanteVigente(
-                profesional
-                    ? { id: profesional.id, nombre: profesional.nombre, matricula: profesional.matricula }
-                    : { id: profesionalId, nombre: `Profesional ${profesionalId}`, matricula: null }
-            )
-            setEditandoTratante(false)
-            router.refresh()
-        } catch {
-            setMensajeError('Error de conexion al actualizar el medico tratante')
-        } finally {
-            setGuardandoTratante(false)
-        }
-    }
-
     const iniciarEdicionAutorizacionOrden = (grupo: GrupoPracticasAutorizadas) => {
         if (grupo.tipo !== 'orden' || grupo.puestoNumero == null || grupo.ordenNumero == null) return
         setMensajeError(null)
@@ -2798,15 +2656,6 @@ export function PracticaCargaRapidaPage({
             grupo.tipo === 'orden' &&
             grupo.puestoNumero != null &&
             grupo.ordenNumero != null
-        const editandoFirmante = ordenEditandoFirmanteKey === grupo.key
-        const guardandoFirmanteOrden = guardandoFirmanteOrdenKey === grupo.key
-        const firmanteOrden =
-            grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null
-                ? (firmantePorOrden.get(claveFirmanteOrden(grupo.puestoNumero, grupo.ordenNumero)) ?? null)
-                : null
-        const firmanteTexto = firmanteOrden?.nombre
-            ? `${firmanteOrden.nombre}${firmanteOrden.matricula != null ? ` · MP ${firmanteOrden.matricula}` : ''}`
-            : 'Sin firmante'
         const limitePracticas = 3
         const practicasVisibles = expandida ? grupo.practicas : grupo.practicas.slice(0, limitePracticas)
         const restantes = Math.max(0, grupo.practicas.length - practicasVisibles.length)
@@ -2982,19 +2831,6 @@ export function PracticaCargaRapidaPage({
                                     {grupo.numeroAutorizacion ? 'Editar N° autorizacion' : 'Agregar N° autorizacion'}
                                 </button>
                             )}
-                            {grupoPermiteEditarAutorizacion && (
-                                <button
-                                    type="button"
-                                    onClick={() => iniciarEdicionFirmanteOrden(grupo)}
-                                    disabled={guardandoFirmanteOrden}
-                                    title={`Firma: ${firmanteTexto}`}
-                                    className={generadaEnSesion
-                                        ? 'inline-flex items-center rounded-full border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-800 hover:bg-blue-50 disabled:opacity-50'
-                                        : 'inline-flex items-center rounded-full border border-emerald-300 bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50'}
-                                >
-                                    Cambiar firmante
-                                </button>
-                            )}
                             {puedeCrear && grupo.tipo === 'orden' && grupo.puestoNumero != null && grupo.ordenNumero != null && (
                                 <button
                                     type="button"
@@ -3010,50 +2846,7 @@ export function PracticaCargaRapidaPage({
                             <span className={badgeEstadoClase}>
                                 Estado: {grupoTieneNumeroAutorizacion(grupo) ? 'Autorizada' : 'Pendiente de autorizacion'}
                             </span>
-                            {grupo.tipo === 'orden' && (
-                                <span className="text-[11px] text-gray-600">Firma: {firmanteTexto}</span>
-                            )}
                         </div>
-
-                        {editandoFirmante && grupoPermiteEditarAutorizacion && (
-                            <div className="rounded-md border border-blue-200 bg-white/90 p-2">
-                                <label className="block text-[11px] font-medium text-blue-900">
-                                    Medico firmante de la orden
-                                    <ProfesionalSelect
-                                        profesionales={profesionalesConMatricula}
-                                        value={borradorFirmanteId}
-                                        onChange={setBorradorFirmanteId}
-                                        permitirCargaManual
-                                        textoBotonCargaManual="Agregar firmante manual (nombre + matricula)"
-                                        onProfesionalCreado={registrarProfesionalCreado}
-                                        autoSelectOnSearch={false}
-                                        placeholderOption="-- Seleccionar firmante --"
-                                        searchPlaceholder="Buscar por nombre o matricula"
-                                        disabled={guardandoFirmanteOrden}
-                                        selectClassName="mt-1 w-full rounded border border-blue-300 bg-white px-2 py-1 text-xs text-blue-900 disabled:bg-blue-50"
-                                        searchClassName="mt-1 w-full rounded border border-blue-200 bg-white px-2 py-1 text-[11px] text-blue-900 disabled:bg-blue-50"
-                                    />
-                                </label>
-                                <div className="mt-2 flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => void guardarFirmanteOrden(grupo)}
-                                        disabled={guardandoFirmanteOrden}
-                                        className="inline-flex items-center rounded border border-blue-300 bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                                    >
-                                        {guardandoFirmanteOrden ? 'Guardando...' : 'Guardar firmante'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={cancelarEdicionFirmanteOrden}
-                                        disabled={guardandoFirmanteOrden}
-                                        className="inline-flex items-center rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                    >
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </div>
-                        )}
 
                         {editandoAutorizacion && grupoPermiteEditarAutorizacion && (
                             <div className="rounded-md border border-blue-200 bg-white/90 p-2">
@@ -3600,63 +3393,6 @@ export function PracticaCargaRapidaPage({
                     {
                     <div className="his-card p-4 space-y-3">
                         <h3 className="text-sm font-semibold text-gray-900">Ordenes generadas</h3>
-
-                        <div className="rounded-md border border-gray-200 bg-gray-50 p-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="text-[11px] text-gray-700">
-                                    Medico tratante:{' '}
-                                    <span className="font-medium text-gray-900">
-                                        {tratanteVigente
-                                            ? `${tratanteVigente.nombre.trim()}${tratanteVigente.matricula != null ? ` · MP ${tratanteVigente.matricula}` : ''}`
-                                            : 'Sin asignar'}
-                                    </span>
-                                </span>
-                                {puedeCrear && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setMensajeError(null)
-                                            setEditandoTratante((prev) => !prev)
-                                        }}
-                                        disabled={guardandoTratante}
-                                        className="inline-flex items-center rounded-full border border-gray-300 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                                    >
-                                        {editandoTratante ? 'Cancelar' : 'Cambiar tratante'}
-                                    </button>
-                                )}
-                            </div>
-
-                            {editandoTratante && puedeCrear && (
-                                <div className="mt-2">
-                                    <ProfesionalSelect
-                                        profesionales={profesionalesConMatricula}
-                                        value={tratanteSeleccionadoId}
-                                        onChange={setTratanteSeleccionadoId}
-                                        permitirCargaManual
-                                        textoBotonCargaManual="Agregar profesional manual (nombre + matricula)"
-                                        onProfesionalCreado={registrarProfesionalCreado}
-                                        autoSelectOnSearch={false}
-                                        placeholderOption="-- Seleccionar tratante --"
-                                        searchPlaceholder="Buscar por nombre o matricula"
-                                        disabled={guardandoTratante}
-                                        selectClassName="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 disabled:bg-gray-100"
-                                        searchClassName="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 disabled:bg-gray-100"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => void guardarTratanteInternacion()}
-                                        disabled={guardandoTratante}
-                                        className="mt-2 inline-flex items-center rounded border border-gray-300 bg-gray-800 px-2 py-1 text-[11px] font-medium text-white hover:bg-gray-900 disabled:opacity-50"
-                                    >
-                                        {guardandoTratante ? 'Guardando...' : 'Guardar tratante'}
-                                    </button>
-                                    <p className="mt-1 text-[10px] text-gray-600">
-                                        Cambia el tratante de toda la internacion. Las ordenes ya generadas no se modifican:
-                                        para esas usa &quot;Cambiar firmante&quot;.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
 
                         <div className="space-y-1">
                             <button

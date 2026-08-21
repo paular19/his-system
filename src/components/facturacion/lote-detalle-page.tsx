@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItemDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
 import { puedeEditarPrestacionEnLote } from '@/modules/facturacion/editability'
+import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { LoteResumenPrint } from './lote-resumen-print'
 import { descargarResumenPdf } from './lote-resumen-pdf'
 import { fechaHoraAInputLocal, formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
@@ -243,7 +244,14 @@ type OrdenEditState = {
     fechaEmision: string
     descripcion: string
     numeroAutorizacion: string
-    matriculaEjecutante: string
+    /** Medico que suscribe la orden (cabecera). */
+    matriculaProfesional: string
+}
+
+type ProfesionalOpcion = {
+    id: number
+    nombre: string
+    matricula: number
 }
 
 function toDateTimeInput(value: Date | string | null | undefined): string {
@@ -298,7 +306,7 @@ function buildOrdenEditState(orden: OrdenAutorizadaLote): OrdenEditState {
         fechaEmision: toDateTimeInput(orden.fechaEmision),
         descripcion: orden.descripcion ?? '',
         numeroAutorizacion: orden.numeroAutorizacion ?? '',
-        matriculaEjecutante: orden.profesional?.matricula ? String(orden.profesional.matricula) : '',
+        matriculaProfesional: orden.profesional?.matricula ? String(orden.profesional.matricula) : '',
     }
 }
 
@@ -367,6 +375,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const [editOrdenes, setEditOrdenes] = useState<Record<string, OrdenEditState>>({})
     const [guardandoItemKey, setGuardandoItemKey] = useState<string | null>(null)
     const [guardandoOrdenKey, setGuardandoOrdenKey] = useState<string | null>(null)
+    const [profesionales, setProfesionales] = useState<ProfesionalOpcion[]>([])
     const [actualizandoOrdenKey, setActualizandoOrdenKey] = useState<string | null>(null)
     const [ordenesAbiertas, setOrdenesAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesExpandidas, setOrdenesExpandidas] = useState<Record<string, boolean>>({})
@@ -402,6 +411,52 @@ export function LoteDetallePage({ loteId }: Props) {
     }, [loteId, filtroMedico, filtroMatricula])
 
     useEffect(() => { cargar() }, [cargar])
+
+    useEffect(() => {
+        let cancelado = false
+
+        const cargarProfesionales = async () => {
+            try {
+                const res = await fetch('/api/cirugia/profesionales', { cache: 'no-store' })
+                const json = await res.json().catch(() => null)
+                const data: unknown[] = Array.isArray(json?.data) ? json.data : []
+                if (cancelado) return
+
+                setProfesionales(
+                    data.filter((item): item is ProfesionalOpcion => {
+                        if (!item || typeof item !== 'object') return false
+                        const candidato = item as { id?: unknown; nombre?: unknown; matricula?: unknown }
+                        return (
+                            typeof candidato.id === 'number' &&
+                            typeof candidato.nombre === 'string' &&
+                            typeof candidato.matricula === 'number' &&
+                            candidato.matricula > 0
+                        )
+                    })
+                )
+            } catch {
+                if (!cancelado) setProfesionales([])
+            }
+        }
+
+        void cargarProfesionales()
+        return () => { cancelado = true }
+    }, [])
+
+    /** El editor guarda matriculas; ProfesionalSelect trabaja con el id del profesional. */
+    const profesionalIdPorMatricula = (matricula: string): string => {
+        const valor = Number.parseInt(matricula, 10)
+        if (!Number.isFinite(valor) || valor <= 0) return ''
+        const profesional = profesionales.find((item) => item.matricula === valor)
+        return profesional ? String(profesional.id) : ''
+    }
+
+    const matriculaPorProfesionalId = (profesionalId: string): string => {
+        const valor = Number.parseInt(profesionalId, 10)
+        if (!Number.isFinite(valor)) return ''
+        const profesional = profesionales.find((item) => item.id === valor)
+        return profesional ? String(profesional.matricula) : ''
+    }
 
     async function cargarOrdenes(ingresoId: number) {
         setSelectedIngresoId(ingresoId)
@@ -622,7 +677,9 @@ export function LoteDetallePage({ loteId }: Props) {
                     fechaEmision: new Date(draft.fechaEmision || orden.fechaEmision).toISOString(),
                     descripcion: draft.descripcion.trim() || null,
                     numeroAutorizacion: draft.numeroAutorizacion.trim() || null,
-                    matriculaEjecutante: draft.matriculaEjecutante ? Number(draft.matriculaEjecutante) : null,
+                    // El efector por practica se edita item por item: la cabecera no lo pisa.
+                    matriculaEjecutante: null,
+                    matriculaProfesional: draft.matriculaProfesional ? Number(draft.matriculaProfesional) : null,
                 }),
             })
             const json = await res.json()
@@ -1452,6 +1509,37 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                     <label className="block sm:col-span-2">Descripción de la orden
                                                                         <input value={draftOrden.descripcion} onChange={(e) => setEditOrdenes((prev) => ({ ...prev, [keyOrdenEdicion]: { ...draftOrden, descripcion: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5" />
                                                                     </label>
+                                                                    <label className="block sm:col-span-3">Médico que suscribe la orden
+                                                                        <ProfesionalSelect
+                                                                            profesionales={profesionales}
+                                                                            value={profesionalIdPorMatricula(draftOrden.matriculaProfesional)}
+                                                                            onChange={(nextValue) => setEditOrdenes((prev) => ({
+                                                                                ...prev,
+                                                                                [keyOrdenEdicion]: {
+                                                                                    ...draftOrden,
+                                                                                    matriculaProfesional: matriculaPorProfesionalId(nextValue),
+                                                                                },
+                                                                            }))}
+                                                                            permitirCargaManual
+                                                                            textoBotonCargaManual="Agregar profesional manual (nombre + matricula)"
+                                                                            onProfesionalCreado={(profesional) => {
+                                                                                if (typeof profesional.matricula !== 'number' || profesional.matricula <= 0) return
+                                                                                const alta: ProfesionalOpcion = {
+                                                                                    id: profesional.id,
+                                                                                    nombre: profesional.nombre,
+                                                                                    matricula: profesional.matricula,
+                                                                                }
+                                                                                setProfesionales((prev) => (
+                                                                                    prev.some((item) => item.id === alta.id) ? prev : [...prev, alta]
+                                                                                ))
+                                                                            }}
+                                                                            autoSelectOnSearch={false}
+                                                                            placeholderOption="-- Sin firmante --"
+                                                                            searchPlaceholder="Buscar por nombre o matricula"
+                                                                            selectClassName="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5"
+                                                                            searchClassName="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-[11px]"
+                                                                        />
+                                                                    </label>
                                                                     <div className="flex items-center gap-3 sm:col-span-3">
                                                                         <span>Total: <strong>{formatMonto(orden.importeTotal)}</strong></span>
                                                                         <span>Cantidad: <strong>{totalCantidadOrden}</strong></span>
@@ -1509,6 +1597,34 @@ export function LoteDetallePage({ loteId }: Props) {
                                                                                 </label>
                                                                                 <label>Módulo
                                                                                     <input value={draft.modulo} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, modulo: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />
+                                                                                </label>
+                                                                                <label className="sm:col-span-2">Médico que ejecuta la práctica
+                                                                                    <ProfesionalSelect
+                                                                                        profesionales={profesionales}
+                                                                                        value={profesionalIdPorMatricula(draft.matriculaEjecutante)}
+                                                                                        onChange={(nextValue) => setEditItems((prev) => ({
+                                                                                            ...prev,
+                                                                                            [key]: { ...draft, matriculaEjecutante: matriculaPorProfesionalId(nextValue) },
+                                                                                        }))}
+                                                                                        permitirCargaManual
+                                                                                        textoBotonCargaManual="Agregar profesional manual (nombre + matricula)"
+                                                                                        onProfesionalCreado={(profesional) => {
+                                                                                            if (typeof profesional.matricula !== 'number' || profesional.matricula <= 0) return
+                                                                                            const alta: ProfesionalOpcion = {
+                                                                                                id: profesional.id,
+                                                                                                nombre: profesional.nombre,
+                                                                                                matricula: profesional.matricula,
+                                                                                            }
+                                                                                            setProfesionales((prev) => (
+                                                                                                prev.some((item) => item.id === alta.id) ? prev : [...prev, alta]
+                                                                                            ))
+                                                                                        }}
+                                                                                        autoSelectOnSearch={false}
+                                                                                        placeholderOption="-- Sin efector --"
+                                                                                        searchPlaceholder="Buscar por nombre o matricula"
+                                                                                        selectClassName="mt-1 w-full rounded border border-gray-300 px-2 py-1.5"
+                                                                                        searchClassName="mt-1 w-full rounded border border-gray-200 px-2 py-1.5 text-[11px]"
+                                                                                    />
                                                                                 </label>
                                                                                 <label>Matrícula ejecutante
                                                                                     <input type="number" min={1} value={draft.matriculaEjecutante} onChange={(e) => setEditItems((prev) => ({ ...prev, [key]: { ...draft, matriculaEjecutante: e.target.value } }))} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5" />

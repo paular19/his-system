@@ -357,7 +357,16 @@ function detalleRepartoUnidades(
     // que mostrar un numero inventado.
     if (unitarioConDiferencial < 0) return null
 
-    return `${sinDiferencial} × ${formatCurrency(unitarioBase)} + ${conDiferencial} × ${formatCurrency(unitarioConDiferencial)}`
+    // El porcentaje sale del precio, no de las reglas: asi la linea cierra sola
+    // aunque el componente de la fila combine gastos y especialista.
+    const porcentajeConDiferencial = unitarioBase > 0
+        ? Math.round((unitarioConDiferencial / unitarioBase) * 100)
+        : 0
+
+    return (
+        `${sinDiferencial} × ${formatCurrency(unitarioBase)} (100%)` +
+        ` + ${conDiferencial} × ${formatCurrency(unitarioConDiferencial)} (${porcentajeConDiferencial}%)`
+    )
 }
 
 function etiquetasCamposDiferencial(
@@ -4594,7 +4603,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         </span>
                                                                         {mostrarDeltaDiferencial && importeOriginal !== null && deltaDiferencial !== null && (
                                                                             <div className="text-[10px] text-amber-700">
-                                                                                Base {formatCurrency(importeOriginal)} · Dif {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}
+                                                                                Sin diferencial {formatCurrency(importeOriginal)} · Ajuste {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}
                                                                             </div>
                                                                         )}
                                                                         {/* Con reparto por cantidad el total sale de dos precios
@@ -5139,7 +5148,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                     <span className="text-xs font-semibold text-gray-800">{Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}</span>
                                                                                     {mostrarDeltaDiferencial && importeOriginal !== null && deltaDiferencial !== null && (
                                                                                         <div className="text-[10px] text-amber-700">
-                                                                                            Base {formatCurrency(importeOriginal)} · Dif {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}
+                                                                                            Sin diferencial {formatCurrency(importeOriginal)} · Ajuste {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}
                                                                                         </div>
                                                                                     )}
                                                                                 </div>

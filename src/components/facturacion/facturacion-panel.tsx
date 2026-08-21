@@ -4388,6 +4388,24 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 ) : (
                                                                     <div className="text-xs leading-snug text-gray-800">{draft.descripcion || '—'}</div>
                                                                 )}
+                                                                {/* En un grupo de cirugia la cabecera no muestra numero de
+                                                                    orden (el grupo es la cirugia, no la orden), asi que sin
+                                                                    esto no hay forma de saber a que orden pertenece cada
+                                                                    honorario. La orden sale de autorizacionesVinculadas:
+                                                                    las practicas de cirugia no traen ordenNumero propio. */}
+                                                                {esGrupoCirugia && (
+                                                                    <div className="mt-1 flex flex-wrap gap-1">
+                                                                        {obtenerOrdenesRelacionadasPrestacion(p).map((ordenRelacionada) => (
+                                                                            <span
+                                                                                key={keyOrdenRelacionada(ordenRelacionada)}
+                                                                                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+                                                                                title="Orden a la que pertenece esta práctica"
+                                                                            >
+                                                                                {formatOrderNumber(ordenRelacionada.ordenPuestoNumero, ordenRelacionada.ordenNumero)}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
                                                                 {p.tipo === 'PRACTICA' && (
                                                                     <div className="mt-1 flex flex-wrap gap-1">
                                                                         {linea.items.length > 1 && (

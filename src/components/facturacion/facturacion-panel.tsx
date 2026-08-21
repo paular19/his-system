@@ -99,21 +99,6 @@ type CirugiaPracticaEditable = {
     esPracticaBase: boolean
     esPracticaSecundaria: boolean
     aplicaDiferencial: boolean
-    // Filas reales que quedaron detras del renglon agrupado. Se listan en la
-    // tabla del panel para poder ver que orden y que honorario esta entrando
-    // en el diferencial, igual que en la grilla de pendientes.
-    filas: CirugiaFilaDetalle[]
-}
-
-type CirugiaFilaDetalle = {
-    practicaId: number
-    ordenPuestoNumero: number | null
-    ordenNumero: number | null
-    incluyeCodigo: string | null
-    cantidad: number
-    importeTotal: number
-    facturada: boolean
-    desglose: PrestacionFacturableItem['desglose'] | null
 }
 
 type CirugiaEditableGroup = {
@@ -1054,6 +1039,38 @@ function obtenerOrdenesRelacionadasPrestacion(p: PrestacionFacturableItem): Orde
     })
 }
 
+type SubgrupoOrden = {
+    key: string
+    orden: OrdenRelacionada | null
+    items: PrestacionFacturableItem[]
+}
+
+// En un grupo de cirugia la cabecera es la cirugia, no la orden: gastos, especialista,
+// ayudante y anestesista salen cada uno en su propia orden y quedaban todos mezclados en
+// una sola lista. Se parte el grupo en subgrupos con la orden arriba y sus practicas
+// abajo. Una practica vinculada a varias ordenes va en la primera: es la que la genero.
+function agruparItemsPorOrden(items: PrestacionFacturableItem[]): SubgrupoOrden[] {
+    const subgrupos: SubgrupoOrden[] = []
+    const indicePorKey = new Map<string, number>()
+
+    for (const p of items) {
+        const orden = obtenerOrdenesRelacionadasPrestacion(p)[0] ?? null
+        const key = orden ? keyOrdenRelacionada(orden) : 'SIN_ORDEN'
+
+        const idx = indicePorKey.get(key)
+        const existente = idx != null ? subgrupos[idx] : undefined
+        if (!existente) {
+            indicePorKey.set(key, subgrupos.length)
+            subgrupos.push({ key, orden, items: [p] })
+            continue
+        }
+
+        existente.items.push(p)
+    }
+
+    return subgrupos
+}
+
 function prioridadTipoPrestacionParaGrilla(p: PrestacionFacturableItem): number {
     if (p.tipo === 'PRACTICA') return 0
     if (p.tipo === 'MEDICACION') return 1
@@ -1628,20 +1645,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 esPracticaBase: Boolean(p.diferenciales?.esPracticaBase),
                 esPracticaSecundaria: Boolean(p.diferenciales?.esPracticaSecundaria),
                 aplicaDiferencial: Boolean(p.diferenciales?.aplicaDiferencial),
-                filas: [{
-                    practicaId: p.origen.practicaId,
-                    // Una practica de cirugia rara vez trae ordenNumero propio:
-                    // el vinculo con su orden vive en autorizacionesVinculadas.
-                    ordenPuestoNumero:
-                        p.origen.ordenPuestoNumero ?? p.autorizacionesVinculadas?.[0]?.ordenPuestoNumero ?? null,
-                    ordenNumero:
-                        p.origen.ordenNumero ?? p.autorizacionesVinculadas?.[0]?.ordenNumero ?? null,
-                    incluyeCodigo: p.incluyeCodigo ?? null,
-                    cantidad: Number(p.cantidad) || 0,
-                    importeTotal: Number(p.importeTotal ?? 0),
-                    facturada: Boolean(p.facturada),
-                    desglose: p.desglose ?? null,
-                }],
             }
 
             // La cantidad que importa es la de la practica quirurgica: la cama
@@ -1680,7 +1683,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     actual.esPracticaSecundaria = actual.esPracticaSecundaria || Boolean(p.diferenciales?.esPracticaSecundaria)
                     actual.aplicaDiferencial = actual.aplicaDiferencial || Boolean(p.diferenciales?.aplicaDiferencial)
                     actual.practicaId = Math.min(actual.practicaId, p.origen.practicaId)
-                    actual.filas.push(...practica.filas)
                 }
             }
 
@@ -3568,55 +3570,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     {etiquetasAplicadas.length > 0 ? etiquetasAplicadas.join(' · ') : 'Base 100%'}
                                                 </div>
 
-                                                {/* Que orden y que honorario entra en el diferencial. Sin esto
-                                                    el renglon agrupado no deja ver si una fila esta entrando
-                                                    como gastos, como ayudante o como practica completa. */}
-                                                <div className="rounded border border-amber-200 bg-white overflow-x-auto">
-                                                    <table className="w-full text-[11px]">
-                                                        <thead className="bg-amber-100 text-amber-900">
-                                                            <tr>
-                                                                <th className="px-2 py-1 text-left font-semibold">Orden</th>
-                                                                <th className="px-2 py-1 text-left font-semibold">Práctica</th>
-                                                                <th className="px-2 py-1 text-right font-semibold">Cant</th>
-                                                                <th className="px-2 py-1 text-left font-semibold">Incluye</th>
-                                                                <th className="px-2 py-1 text-right font-semibold">Esp</th>
-                                                                <th className="px-2 py-1 text-right font-semibold">Ayu</th>
-                                                                <th className="px-2 py-1 text-right font-semibold">Ane</th>
-                                                                <th className="px-2 py-1 text-right font-semibold">Gto</th>
-                                                                <th className="px-2 py-1 text-right font-semibold">Importe</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {cirugia.practicas.flatMap((practica) =>
-                                                                practica.filas.map((fila) => (
-                                                                    <tr key={fila.practicaId} className="border-t border-amber-100 text-amber-900">
-                                                                        <td className="px-2 py-1 whitespace-nowrap">
-                                                                            {fila.ordenPuestoNumero != null && fila.ordenNumero != null
-                                                                                ? formatOrderNumber(fila.ordenPuestoNumero, fila.ordenNumero)
-                                                                                : 'Pendiente'}
-                                                                            {fila.facturada && (
-                                                                                <span className="ml-1 text-green-700 font-medium">· facturada</span>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="px-2 py-1">{practica.descripcion}</td>
-                                                                        <td className="px-2 py-1 text-right">{fila.cantidad}</td>
-                                                                        <td className="px-2 py-1 whitespace-nowrap">
-                                                                            {fila.incluyeCodigo ?? (
-                                                                                <span className="text-amber-700 italic">práctica completa</span>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="px-2 py-1 text-right">{fila.desglose?.valorEspecialista != null ? formatCurrency(fila.desglose.valorEspecialista) : '—'}</td>
-                                                                        <td className="px-2 py-1 text-right">{fila.desglose?.valorAyudante != null ? formatCurrency(fila.desglose.valorAyudante) : '—'}</td>
-                                                                        <td className="px-2 py-1 text-right">{fila.desglose?.valorAnestesista != null ? formatCurrency(fila.desglose.valorAnestesista) : '—'}</td>
-                                                                        <td className="px-2 py-1 text-right">{fila.desglose?.valorGastos != null ? formatCurrency(fila.desglose.valorGastos) : '—'}</td>
-                                                                        <td className="px-2 py-1 text-right font-medium">{formatCurrency(fila.importeTotal)}</td>
-                                                                    </tr>
-                                                                ))
-                                                            )}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-
                                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 text-xs text-amber-900">
                                                     <label className="inline-flex items-center gap-2">
                                                         <input
@@ -4225,7 +4178,11 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             </td>
                                                         </tr>
 
-                                                        {grupoExpandido && agruparLineasDuplicadas(grupo.items).flatMap((linea) => {
+                                                        {grupoExpandido && agruparItemsPorOrden(grupo.items).flatMap((subgrupo) => {
+                                                            // Solo la cirugia se abre por orden: en un grupo de orden la
+                                                            // cabecera ya dice cual es y repetirla seria ruido.
+                                                            const mostrarCabeceraOrden = esGrupoCirugia
+                                                            const filasSubgrupo = agruparLineasDuplicadas(subgrupo.items).flatMap((linea) => {
                                                 const lineaExpandida = Boolean(lineasDuplicadasExpand[linea.key])
                                                 const resumenDuplicados = linea.items.length > 1 && !lineaExpandida
                                                 const itemsVisibles = resumenDuplicados ? linea.items.slice(0, 1) : linea.items
@@ -4387,24 +4344,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     />
                                                                 ) : (
                                                                     <div className="text-xs leading-snug text-gray-800">{draft.descripcion || '—'}</div>
-                                                                )}
-                                                                {/* En un grupo de cirugia la cabecera no muestra numero de
-                                                                    orden (el grupo es la cirugia, no la orden), asi que sin
-                                                                    esto no hay forma de saber a que orden pertenece cada
-                                                                    honorario. La orden sale de autorizacionesVinculadas:
-                                                                    las practicas de cirugia no traen ordenNumero propio. */}
-                                                                {esGrupoCirugia && (
-                                                                    <div className="mt-1 flex flex-wrap gap-1">
-                                                                        {obtenerOrdenesRelacionadasPrestacion(p).map((ordenRelacionada) => (
-                                                                            <span
-                                                                                key={keyOrdenRelacionada(ordenRelacionada)}
-                                                                                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700"
-                                                                                title="Orden a la que pertenece esta práctica"
-                                                                            >
-                                                                                {formatOrderNumber(ordenRelacionada.ordenPuestoNumero, ordenRelacionada.ordenNumero)}
-                                                                            </span>
-                                                                        ))}
-                                                                    </div>
                                                                 )}
                                                                 {p.tipo === 'PRACTICA' && (
                                                                     <div className="mt-1 flex flex-wrap gap-1">
@@ -4800,7 +4739,43 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     </Fragment>
                                                 )
                                             })
-                                            })}
+                                            })
+
+                                                            if (!mostrarCabeceraOrden) return filasSubgrupo
+
+                                                            const hrefSubgrupo = subgrupo.orden
+                                                                ? `/dashboard/ambulatorio/${subgrupo.orden.ordenPuestoNumero}/${subgrupo.orden.ordenNumero}`
+                                                                : null
+
+                                                            return [
+                                                                <tr key={`${grupo.key}:orden:${subgrupo.key}`} className="bg-slate-50">
+                                                                    <td colSpan={8} className="px-3 py-1.5">
+                                                                        <div className="flex flex-wrap items-center gap-2 border-l-4 border-slate-300 pl-2">
+                                                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                                                                Orden
+                                                                            </span>
+                                                                            {subgrupo.orden && hrefSubgrupo ? (
+                                                                                <Link
+                                                                                    href={hrefSubgrupo}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                    className="inline-flex rounded bg-blue-50 px-2 py-0.5 font-mono text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                                                                                    title="Abrir orden en nueva pestaña"
+                                                                                >
+                                                                                    {formatOrderNumber(subgrupo.orden.ordenPuestoNumero, subgrupo.orden.ordenNumero)}
+                                                                                </Link>
+                                                                            ) : (
+                                                                                <span className="font-mono text-xs font-semibold text-slate-600">Sin orden vinculada</span>
+                                                                            )}
+                                                                            <span className="text-[11px] text-slate-600">
+                                                                                {subgrupo.items.length} práctica{subgrupo.items.length === 1 ? '' : 's'}
+                                                                            </span>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>,
+                                                                ...filasSubgrupo,
+                                                            ]
+                                                        })}
 
                                                     </Fragment>
                                                 )

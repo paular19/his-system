@@ -1201,7 +1201,40 @@ function resolverInfoCirugiaConFallback<T extends { cirugiaId: number }>(
         }
     }
 
+    // Ultimo fallback: solo por codigo. La cantidad se edita despues de cargar
+    // la cirugia (4 radioscopias que terminan siendo 3) y la cirugia queda con
+    // el valor viejo, asi que la practica pierde el vinculo en silencio y se
+    // muestra fuera del grupo de la cirugia. Igual que arriba, solo resuelve
+    // cuando todos los candidatos son de la misma cirugia; si hay mas de una
+    // es ambiguo y se devuelve null.
+    const candidatosPorCodigo = candidatosPorCodigoEnMapa(porClaveSinFecha, codigo)
+    if (candidatosPorCodigo.length > 0) {
+        const cirugias = new Set(candidatosPorCodigo.map((candidato) => candidato.cirugiaId))
+        if (cirugias.size === 1) {
+            return candidatosPorCodigo[0] ?? null
+        }
+    }
+
     return null
+}
+
+/**
+ * Junta los candidatos de todas las cantidades de un mismo codigo. Las claves
+ * de `porClaveSinFecha` son `CODIGO:cantidad`, asi que alcanza con recorrerlas
+ * por prefijo: el mapa tiene una entrada por practica de cirugia del ingreso.
+ */
+function candidatosPorCodigoEnMapa<T extends { cirugiaId: number }>(
+    porClaveSinFecha: Map<string, T[]>,
+    codigo: string
+): T[] {
+    const prefijo = `${normalizarCodigoPracticaFacturacion(codigo)}:`
+    const candidatos: T[] = []
+    for (const [clave, valores] of porClaveSinFecha) {
+        if (clave.startsWith(prefijo)) {
+            candidatos.push(...valores)
+        }
+    }
+    return candidatos
 }
 
 function normalizarCodigoPracticaFacturacion(codigo: string): string {
@@ -2049,6 +2082,21 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         practicaSecundariaAutomaticaPorCirugia.set(cirugiaId, candidata.practicaId)
     }
 
+    // practicaBaseId / practicaSecundariaId apuntan a UNA fila de Practica, pero
+    // una practica de cirugia esta partida en cuatro (GA, HE, HA, A1), cada una
+    // con su propio id. Comparando por id el diferencial de doble cirugia caia
+    // solo en la fila elegida -siempre la de gastos, que es la de mayor importe-
+    // y el especialista, el anestesista y el ayudante de la practica secundaria
+    // se facturaban al 100%. La identidad de la practica es (convenio, codigo),
+    // no el id, asi que el match va por ahi.
+    const claveIdentidadPorPracticaId = new Map<number, string>()
+    for (const p of ingreso.practicas) {
+        claveIdentidadPorPracticaId.set(
+            p.id,
+            `${p.convenioId}:${normalizarCodigoPractica(p.codigoPractica)}`
+        )
+    }
+
     // Sin doble cirugia el diferencial (feriado, nocturna, via) va solo a la
     // practica quirurgica. Los codigos accesorios que igual se cargan dentro de
     // la cirugia -cama, descartable, derecho de quirofano, interconsulta,
@@ -2469,15 +2517,37 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 null
             )
             : null
+        // Ver claveIdentidadPorPracticaId: el match va por (convenio, codigo)
+        // para que el diferencial alcance a los cuatro componentes de la
+        // practica, no solo a la fila cuyo id quedo guardado. Si base y
+        // secundaria comparten codigo la clave no las distingue, asi que ahi se
+        // vuelve a comparar por id.
+        const claveBaseDobleCirugia = practicaBaseIdEfectiva != null
+            ? (claveIdentidadPorPracticaId.get(practicaBaseIdEfectiva) ?? null)
+            : null
+        const claveSecundariaDobleCirugia = practicaSecundariaIdEfectiva != null
+            ? (claveIdentidadPorPracticaId.get(practicaSecundariaIdEfectiva) ?? null)
+            : null
+        const clavesDobleCirugiaDistinguibles = Boolean(
+            claveBaseDobleCirugia &&
+            claveSecundariaDobleCirugia &&
+            claveBaseDobleCirugia !== claveSecundariaDobleCirugia
+        )
+        const clavePractica = claveIdentidadPorPracticaId.get(p.id) ?? null
+
         const esPracticaBaseDobleCirugia = Boolean(
             diferencialCirugia?.diferenciales?.dobleCirugia &&
             practicaBaseIdEfectiva != null &&
-            practicaBaseIdEfectiva === p.id
+            (clavesDobleCirugiaDistinguibles
+                ? clavePractica === claveBaseDobleCirugia
+                : practicaBaseIdEfectiva === p.id)
         )
         const esPracticaSecundariaDobleCirugia = Boolean(
             diferencialCirugia?.diferenciales?.dobleCirugia &&
             practicaSecundariaIdEfectiva != null &&
-            practicaSecundariaIdEfectiva === p.id
+            (clavesDobleCirugiaDistinguibles
+                ? clavePractica === claveSecundariaDobleCirugia
+                : practicaSecundariaIdEfectiva === p.id)
         )
         const diferencialesCirugiaRaw = diferencialCirugia?.diferenciales ?? null
         const diferencialesCirugiaCalculados = (() => {

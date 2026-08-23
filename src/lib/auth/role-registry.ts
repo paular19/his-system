@@ -21,6 +21,7 @@ const ROLES_POR_EMAIL_REGISTRADOS: Record<string, RolHIS> = {
   'ivanagtarcaya78@gmail.com': ROLES.ADMISION,
   'emilio_xeneize_22@hotmail.com.ar': ROLES.ADMISION,
   'marcelalejandra2015@gmail.com': ROLES.ADMIN,
+  'alejandro.toromejia@gmail.com': ROLES.ADMIN,
   'marianacanaza24@gmail.com': ROLES.FACTURACION,
   'kmontano137@gmail.com': ROLES.FACTURACION,
   'serapiogabriela40@gmail.com': ROLES.FACTURACION,

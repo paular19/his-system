@@ -49,80 +49,28 @@ function formatPeriodo(periodo: string) {
     return `${meses[parseInt(mes, 10) - 1]} ${anio}`
 }
 
-function desglosarImportesPorCodigo(
-    codigoRaw: string,
-    moduloRaw: string | null | undefined,
-    profesionalRaw: string | null | undefined,
-    importeTotal: number
-) {
-    const codigo = normalizarTexto(codigoRaw)
-    const modulo = normalizarTexto(moduloRaw)
-    const profesional = normalizarTexto(profesionalRaw)
-
-    if (modulo.includes('A1') || modulo.includes('A2') || modulo.includes('A3')) {
-        return {
-            importeEspecialista: null,
-            importeAyudante: importeTotal,
-            importeAnestesista: null,
-            importeGastos: null,
-        }
-    }
-    if (modulo.includes('HE')) {
-        return {
-            importeEspecialista: importeTotal,
-            importeAyudante: null,
-            importeAnestesista: null,
-            importeGastos: null,
-        }
-    }
-    if (modulo.includes('HA') || profesional.includes('ANEST')) {
-        return {
-            importeEspecialista: null,
-            importeAyudante: null,
-            importeAnestesista: importeTotal,
-            importeGastos: null,
-        }
-    }
-    if (modulo.includes('GA') || profesional.includes('CLINICA SAN RAFAEL')) {
-        return {
-            importeEspecialista: null,
-            importeAyudante: null,
-            importeAnestesista: null,
-            importeGastos: importeTotal,
-        }
+// Manda el importe de la linea a la columna del resumen que le corresponde.
+//
+// Antes esto era un clasificador propio que miraba solo modulo, nombre del profesional
+// y codigo. Con el modulo vacio y el ejecutante llamandose "SAN RAFAEL S.A. MP CMS"
+// (no matcheaba el literal 'CLINICA SAN RAFAEL') se quedaba sin senales y mandaba todo
+// a especialista: en el lote 36 caian ahi 46 de 48 lineas, incluidas las de gastos,
+// mientras la pantalla ya las mostraba como GA. Ahora la columna sale del mismo
+// resolver que usan la pantalla y el promedi, asi que no pueden divergir.
+function desglosarImportePorSubitem(subitem: SubitemPromedi, importeTotal: number) {
+    const vacio = {
+        importeEspecialista: null as number | null,
+        importeAyudante: null as number | null,
+        importeAnestesista: null as number | null,
+        importeGastos: null as number | null,
     }
 
-    if (codigo.includes('A1') || codigo.includes('A2') || codigo.includes('A3')) {
-        return {
-            importeEspecialista: null,
-            importeAyudante: importeTotal,
-            importeAnestesista: null,
-            importeGastos: null,
-        }
+    if (subitem === 'A1' || subitem === 'A2' || subitem === 'A3') {
+        return { ...vacio, importeAyudante: importeTotal }
     }
-    if (codigo.includes('HA')) {
-        return {
-            importeEspecialista: null,
-            importeAyudante: null,
-            importeAnestesista: importeTotal,
-            importeGastos: null,
-        }
-    }
-    if (codigo.includes('GA')) {
-        return {
-            importeEspecialista: null,
-            importeAyudante: null,
-            importeAnestesista: null,
-            importeGastos: importeTotal,
-        }
-    }
-
-    return {
-        importeEspecialista: importeTotal,
-        importeAyudante: 0,
-        importeAnestesista: 0,
-        importeGastos: 0,
-    }
+    if (subitem === 'HA') return { ...vacio, importeAnestesista: importeTotal }
+    if (subitem === 'GA') return { ...vacio, importeGastos: importeTotal }
+    return { ...vacio, importeEspecialista: importeTotal }
 }
 
 function sumarImporteNullable(actual: number | null, siguiente: number | null): number | null {
@@ -339,38 +287,64 @@ type OrdenItemAgrupadoTabla = {
     importePromedi: number
 }
 
+// Una practica cargada con cantidad N se guarda como N filas de OrdenPrac de cantidad 1,
+// una por unidad y por subitem. En pantalla eso se veia como la misma linea repetida,
+// indistinguible de una carga doble. Se colapsan las filas identicas en una sola con la
+// cantidad sumada; el importe se suma para que el total de la orden no cambie.
+//
+// La clave incluye el importe y el subitem a proposito: dos filas del mismo codigo que
+// difieren en cualquiera de los dos son componentes distintos (gastos y honorario) y
+// tienen que seguir viendose separadas.
 function agruparItemsOrdenParaTabla(
     items: OrdenAutorizadaLote['items'],
     porcentajePromedi: number,
     esOsecac: boolean,
     profesionalNombre: string | null | undefined
 ): OrdenItemAgrupadoTabla[] {
-    return items.map((item) => {
+    const agrupados = new Map<string, OrdenItemAgrupadoTabla>()
+
+    for (const item of items) {
         const linea = lineaSubitemDeItem(item, profesionalNombre)
-        return {
-            key: [
-                item.item,
-                fechaToGroupingKey(item.fecha),
-                (item.codigoPractica ?? '').trim(),
-                item.numeroAutorizacion ?? '',
-                item.descripcion ?? '',
-            ].join('|'),
-            fecha: item.fecha,
-            codigoPractica: item.codigoPractica,
-            descripcion: item.descripcion,
-            subitemComputado: etiquetaSubitemComputado(linea),
-            cantidad: item.cantidad,
-            numeroAutorizacion: item.numeroAutorizacion,
-            importeTotal: item.importeTotal,
-            importePromedi: importePromediAplicado(
-                item.codigoPractica,
-                item.importeTotal,
-                porcentajePromedi,
-                esOsecac,
-                resolverSubitemPromedi(linea)
-            ),
+        const subitemComputado = etiquetaSubitemComputado(linea)
+        const key = [
+            fechaToGroupingKey(item.fecha),
+            (item.codigoPractica ?? '').trim(),
+            item.numeroAutorizacion ?? '',
+            item.descripcion ?? '',
+            subitemComputado,
+            item.importeTotal.toFixed(2),
+        ].join('|')
+
+        const importePromedi = importePromediAplicado(
+            item.codigoPractica,
+            item.importeTotal,
+            porcentajePromedi,
+            esOsecac,
+            resolverSubitemPromedi(linea)
+        )
+
+        const existente = agrupados.get(key)
+        if (!existente) {
+            agrupados.set(key, {
+                key,
+                fecha: item.fecha,
+                codigoPractica: item.codigoPractica,
+                descripcion: item.descripcion,
+                subitemComputado,
+                cantidad: item.cantidad,
+                numeroAutorizacion: item.numeroAutorizacion,
+                importeTotal: item.importeTotal,
+                importePromedi,
+            })
+            continue
         }
-    })
+
+        existente.cantidad += item.cantidad
+        existente.importeTotal += item.importeTotal
+        existente.importePromedi += importePromedi
+    }
+
+    return Array.from(agrupados.values())
 }
 
 export function LoteDetallePage({ loteId }: Props) {
@@ -891,14 +865,9 @@ export function LoteDetallePage({ loteId }: Props) {
                             subitemLinea
                         )
                         : linea.importeTotal
-                    const desglose = desglosarImportesPorCodigo(
-                        linea.codigoPractica,
-                        linea.modulo,
-                        orden.profesional?.nombre,
-                        importeLinea
-                    )
+                    const desglose = desglosarImportePorSubitem(subitemLinea, importeLinea)
                     return {
-                        itemKey: String(linea.item ?? `${orden.numero}:${linea.codigoPractica}:${linea.fecha}`),
+                        subitem: subitemLinea,
                         ordenNumero: orden.numero,
                         fecha: linea.fecha,
                         numeroAutorizacion: linea.numeroAutorizacion,
@@ -917,13 +886,18 @@ export function LoteDetallePage({ loteId }: Props) {
             const lineas = Array.from(
                 lineasBase
                     .reduce((acc, linea) => {
+                        // Misma regla que las cards de pantalla: solo se colapsan las
+                        // lineas identicas (una practica cargada con cantidad N se guarda
+                        // como N filas de cantidad 1). El subitem y el importe van en la
+                        // clave para que gastos y honorario sigan siendo lineas distintas.
                         const key = [
-                            linea.itemKey,
                             linea.ordenNumero,
                             fechaToGroupingKey(linea.fecha),
                             linea.numeroAutorizacion ?? '',
                             linea.profesional ?? '',
                             linea.codigoPractica,
+                            linea.subitem,
+                            linea.importeTotal.toFixed(2),
                         ].join('|')
 
                         const existente = acc.get(key)
@@ -949,7 +923,7 @@ export function LoteDetallePage({ loteId }: Props) {
                             linea.importeGastos
                         )
                         existente.importeTotal += linea.importeTotal
-                        existente.cantidad = Math.max(existente.cantidad, linea.cantidad)
+                        existente.cantidad += linea.cantidad
 
                         return acc
                     }, new Map<string, (typeof lineasBase)[number]>())

@@ -54,12 +54,33 @@ Las tablas vienen de un sistema anterior (`@map("PraID")`, `@map("NPrCodig")`, t
 `NPractica`, etc.). **No renombrar columnas ni agregar/cambiar `@map`.** Los nombres feos son
 intencionales.
 
-Tras cambios de schema: `npx prisma generate` y después `npx prisma db push`.
+Tras cambios de schema: `npx prisma generate`, y para bajar el cambio a la base leer la
+trampa 5 antes de correr `db push`.
 
 ### 4. Estado nulo en filtros
 
 `Practica.estado` es nullable. `{ estado: { not: 'X' } }` **no** trae los `null`. Para "activas"
 hay que usar `OR: [{ estado: null }, { estado: { not: 'X' } }]`.
+
+### 5. `prisma db push` es destructivo en esta base
+
+La base tiene objetos que **no** están declarados en `schema.prisma`, así que `db push` los
+interpreta como drift y los borra. Medido con `migrate diff` (2026-08-23), un push haría:
+
+- `DROP SEQUENCE "Paciente_HC_seq"` → se rompe la asignación de HC de **todo** paciente nuevo.
+- `DROP INDEX` sobre 11 índices de performance creados a mano (`idx_npractica_descripcion_trgm`,
+  `idx_obrasocial_nombre_trgm`, `idx_medicacion_nombre_trgm`, etc.).
+
+**Regla:** antes de tocar la base, mirar el SQL real:
+
+```bash
+npx prisma migrate diff --from-schema-datasource prisma/schema.prisma \
+  --to-schema-datamodel prisma/schema.prisma --script
+```
+
+Si el diff trae `DROP`, no correr `db push`: aplicar a mano solo el `CREATE` que hace falta
+(`$executeRawUnsafe` con `IF NOT EXISTS`) y verificar después que la secuencia y los índices
+sigan vivos.
 
 ---
 
@@ -84,6 +105,24 @@ deployar exige commit + push primero.
 - Fechas: Prisma devuelve `Date`; los `<input type="date">` necesitan `YYYY-MM-DD`. Convertir en
   el server component con `.toISOString().split('T')[0]`.
 - Helpers de fecha con zona horaria argentina: `src/lib/utils/argentina-date.ts`.
+
+---
+
+## Archivo historico (`ArchivoPaciente` / modulo `archivo`)
+
+Copia congelada de la base del sistema anterior, para ubicar el legajo en el archivo fisico.
+Vive **aislada a proposito**:
+
+- Sin FK ni relaciones Prisma hacia `Paciente` ni ninguna tabla del HIS. **No joinear.**
+- El `pacienteIdViejo` **no** es el `Paciente.id` nuevo. Que coincidan es casualidad.
+- Solo lectura: el módulo no expone `actions/` ni ninguna escritura. No usarlo como fuente
+  para crear o actualizar pacientes.
+- El `PacHC` viejo solo existe para 19.046 de las 54.154 filas; el resto nunca tuvo número.
+  Mostrar "sin HC" no es un bug de carga.
+- `busqueda` es una columna denormalizada que llena el import. El import y el buscador comparten
+  `src/modules/archivo/normalizar.ts`: si se cambia la normalización, hay que **recargar** la
+  tabla (`npm run db:import-archivo -- --archivo="..." --reemplazar`) o los términos dejan de
+  matchear en silencio.
 
 ---
 

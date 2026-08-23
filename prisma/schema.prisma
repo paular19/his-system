@@ -1408,3 +1408,57 @@ model GuiaFeedback {
   @@index([createdAt])
   @@map("GuiaFeedback")
 }
+
+// ============================================
+// ARCHIVO HISTORICO - SISTEMA ANTERIOR
+// Copia congelada de solo lectura del sistema viejo.
+// NO tiene relaciones con Paciente ni con ninguna tabla del HIS nuevo:
+// convive aislada para poder ubicar el legajo en el archivo fisico.
+// El PacID viejo NO es el PacID nuevo. No cruzar por id.
+// ============================================
+
+model ArchivoPaciente {
+  // Identificacion en el sistema anterior
+  pacienteIdViejo      Int  @id
+  historiaClinicaVieja Int?
+
+  // Datos del paciente, tal cual estaban en la base vieja
+  apellido        String    @db.VarChar(100)
+  nombre          String    @db.VarChar(100)
+  nombreCompleto  String    @db.VarChar(200)
+  tipoDocumento   String?   @db.VarChar(10)
+  numeroDocumento String?   @db.VarChar(20)
+  cuil            String?   @db.VarChar(20)
+  fechaNacimiento DateTime? @db.Timestamp(6)
+  sexo            String?   @db.Char(1)
+  estadoCivil     String?   @db.Char(1)
+
+  domicilio       String? @db.VarChar(200)
+  telefonoFijo    String? @db.VarChar(50)
+  telefonoLaboral String? @db.VarChar(50)
+  celular1        String? @db.VarChar(50)
+  celular2        String? @db.VarChar(50)
+  email           String? @db.VarChar(100)
+
+  // Ids de obra social del sistema viejo, sin FK (los maestros pueden no coincidir)
+  obraSocialIdViejo Int?
+  planIdViejo       Int?
+  numeroAfiliado    String? @db.VarChar(50)
+
+  observaciones String? @db.Text
+
+  usuarioAlta       String?   @db.VarChar(10)
+  fechaAlta         DateTime? @db.Timestamp(6)
+  fechaModificacion DateTime? @db.Timestamp(6)
+
+  // Clave de busqueda normalizada (sin acentos, mayusculas) para el buscador
+  busqueda String @db.VarChar(240)
+
+  importadoAt DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([historiaClinicaVieja])
+  @@index([numeroDocumento])
+  @@index([apellido, nombre])
+  @@index([busqueda])
+  @@map("ArchivoPaciente")
+}

@@ -19,6 +19,7 @@
     "db:import-obras": "tsx prisma/import-obras-sociales-planes.ts",
     "db:import-profesionales": "tsx prisma/import-profesionales.ts",
     "db:import-pacientes": "tsx prisma/import-pacientes-historial.ts",
+    "db:import-archivo": "tsx prisma/import-archivo-historico.ts",
     "db:import-geo-profesion": "tsx prisma/import-localidad-barrio-profesion.ts",
     "db:import-medicamentos-uti": "tsx prisma/import-medicamentos-uti.ts",
     "db:import-descartables-uti": "tsx prisma/import-descartables-uti.ts",

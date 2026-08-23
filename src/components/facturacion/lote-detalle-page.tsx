@@ -169,6 +169,23 @@ function importePromediAplicado(
     return calcularImportePromediPorCodigo(codigoRaw, importe, porcentaje, esOsecac ? 'OSECAC' : 'IPS', subitem)
 }
 
+// Arma la linea que consume el resolver de subitem. El importe y el desglose del
+// nomenclador van siempre juntos: son los que distinguen dos filas de la misma
+// practica cuando el modulo viene vacio.
+function lineaSubitemDeItem(
+    item: OrdenAutorizadaLote['items'][number],
+    profesionalNombre: string | null | undefined
+): LineaSubitemPromedi {
+    return {
+        codigoPractica: item.codigoPractica,
+        modulo: item.modulo,
+        efectorMatricula: item.efectorMatricula,
+        profesional: profesionalNombre,
+        importeTotal: item.importeTotal,
+        valoresNomenclador: item.valoresNomenclador,
+    }
+}
+
 function etiquetaSubitemComputado(linea: LineaSubitemPromedi): string {
     const subitem = resolverSubitemPromedi(linea)
     if (subitem === 'A1' || subitem === 'A2' || subitem === 'A3') {
@@ -329,12 +346,7 @@ function agruparItemsOrdenParaTabla(
     profesionalNombre: string | null | undefined
 ): OrdenItemAgrupadoTabla[] {
     return items.map((item) => {
-        const linea = {
-            codigoPractica: item.codigoPractica,
-            modulo: item.modulo,
-            efectorMatricula: item.efectorMatricula,
-            profesional: profesionalNombre,
-        }
+        const linea = lineaSubitemDeItem(item, profesionalNombre)
         return {
             key: [
                 item.item,
@@ -812,12 +824,7 @@ export function LoteDetallePage({ loteId }: Props) {
                     aplicaPromediPorObraYSubitem(
                         linea.codigoPractica,
                         esOsecac ? 'OSECAC' : 'IPS',
-                        resolverSubitemPromedi({
-                            codigoPractica: linea.codigoPractica,
-                            modulo: linea.modulo,
-                            efectorMatricula: linea.efectorMatricula,
-                            profesional: orden.profesional?.nombre,
-                        })
+                        resolverSubitemPromedi(lineaSubitemDeItem(linea, orden.profesional?.nombre))
                     )
                 )
             )
@@ -872,12 +879,9 @@ export function LoteDetallePage({ loteId }: Props) {
                     ? orden.items.filter((it) => categoriaPractica(it.codigoPractica) === filtroCategoria)
                     : orden.items
                 ).map((linea) => {
-                    const subitemLinea = resolverSubitemPromedi({
-                        codigoPractica: linea.codigoPractica,
-                        modulo: linea.modulo,
-                        efectorMatricula: linea.efectorMatricula,
-                        profesional: orden.profesional?.nombre,
-                    })
+                    const subitemLinea = resolverSubitemPromedi(
+                        lineaSubitemDeItem(linea, orden.profesional?.nombre)
+                    )
                     const importeLinea = vistaPromedi
                         ? importePromediAplicado(
                             linea.codigoPractica,

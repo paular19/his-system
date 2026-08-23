@@ -283,6 +283,12 @@ function esTituloAnestesista(titularModular: string | null | undefined): boolean
     return normalizarTextoComparacion(titularModular).includes('ANEST')
 }
 
+function decimalANumero(valor: Prisma.Decimal | null | undefined): number | null {
+    if (valor == null) return null
+    const numero = Number(valor)
+    return Number.isFinite(numero) ? numero : null
+}
+
 function esTituloPatologia(titularModular: string | null | undefined): boolean {
     return normalizarTextoComparacion(titularModular).includes('PATOLOG')
 }
@@ -5873,7 +5879,15 @@ export async function obtenerOrdenesAutorizadasIngreso(
                             ordenItem: true,
                         },
                     },
-                    nomencladorPractica: { select: { descripcion: true } },
+                    nomencladorPractica: {
+                        select: {
+                            descripcion: true,
+                            valorEspecialista: true,
+                            valorAnestesista: true,
+                            valorAyudante: true,
+                            valorGastos: true,
+                        },
+                    },
                 },
             },
         },
@@ -5960,6 +5974,14 @@ export async function obtenerOrdenesAutorizadasIngreso(
                     modulo: it.modulo?.trim() || null,
                     efectorMatricula: it.efectorMatricula,
                     descripcion: it.nomencladorPractica?.descripcion ?? null,
+                    valoresNomenclador: it.nomencladorPractica
+                        ? {
+                            valorEspecialista: decimalANumero(it.nomencladorPractica.valorEspecialista),
+                            valorAnestesista: decimalANumero(it.nomencladorPractica.valorAnestesista),
+                            valorAyudante: decimalANumero(it.nomencladorPractica.valorAyudante),
+                            valorGastos: decimalANumero(it.nomencladorPractica.valorGastos),
+                        }
+                        : null,
                     cantidad: Number(it.cantidad),
                     numeroAutorizacion: resolverNumeroAutorizacion(it.numeroAutorizacion, o.numeroAutorizacion),
                     importeTotal: Number(it.importeTotal ?? 0),
@@ -6222,6 +6244,14 @@ export async function aplicarPromediLote(
                             ordenItem: true,
                         },
                     },
+                    nomencladorPractica: {
+                        select: {
+                            valorEspecialista: true,
+                            valorAnestesista: true,
+                            valorAyudante: true,
+                            valorGastos: true,
+                        },
+                    },
                 },
             },
         },
@@ -6250,6 +6280,15 @@ export async function aplicarPromediLote(
                 modulo: item.modulo,
                 efectorMatricula: item.efectorMatricula,
                 profesional: orden.profesional?.nombre,
+                importeTotal: importeBase,
+                valoresNomenclador: item.nomencladorPractica
+                    ? {
+                        valorEspecialista: decimalANumero(item.nomencladorPractica.valorEspecialista),
+                        valorAnestesista: decimalANumero(item.nomencladorPractica.valorAnestesista),
+                        valorAyudante: decimalANumero(item.nomencladorPractica.valorAyudante),
+                        valorGastos: decimalANumero(item.nomencladorPractica.valorGastos),
+                    }
+                    : null,
             })
             const aplica = aplicaCodigo && subitemEntraEnPromedi(item.codigoPractica, subitem)
             const importeFacturable = aplica

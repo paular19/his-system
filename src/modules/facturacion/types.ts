@@ -253,6 +253,12 @@ export interface OrdenAutorizadaLote {
         modulo: string | null
         efectorMatricula: number | null
         descripcion: string | null
+        valoresNomenclador: {
+            valorEspecialista: number | null
+            valorAnestesista: number | null
+            valorAyudante: number | null
+            valorGastos: number | null
+        } | null
         cantidad: number
         numeroAutorizacion: string | null
         importeTotal: number

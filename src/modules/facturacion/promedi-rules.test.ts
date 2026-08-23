@@ -101,6 +101,100 @@ test('sin modulo, el subitem sale de la matricula del efector', () => {
   )
 })
 
+// Caso real del lote 36 (IPS, agosto 2026, ingreso 347, orden 1/1555): la radiografia
+// 340213 se emitio en dos filas con la misma matricula de clinica (9110) y sin modulo.
+// Antes las dos resolvian GA y las cards se veian identicas.
+test('sin modulo, el importe contra el nomenclador desempata los componentes', () => {
+  const valores340213 = {
+    valorEspecialista: 1592.64,
+    valorAnestesista: null,
+    valorAyudante: null,
+    valorGastos: 5319.56,
+  }
+  const linea = (importeTotal: number) =>
+    resolverSubitemPromedi({
+      codigoPractica: '340213  ',
+      modulo: null,
+      efectorMatricula: 9110,
+      profesional: 'SAN RAFAEL S.A. MP CMS',
+      importeTotal,
+      valoresNomenclador: valores340213,
+    })
+
+  assert.equal(linea(5319.56), 'GA')
+  assert.equal(linea(1592.64), 'HE')
+
+  // El modulo explicito sigue mandando sobre el importe.
+  assert.equal(
+    resolverSubitemPromedi({
+      codigoPractica: '340213  ',
+      modulo: 'GA      ',
+      efectorMatricula: 9110,
+      importeTotal: 1592.64,
+      valoresNomenclador: valores340213,
+    }),
+    'GA'
+  )
+
+  // Un importe que no matchea ningun componente (editado a mano en facturacion) cae
+  // al fallback por matricula, como antes.
+  assert.equal(linea(999.99), 'GA')
+
+  // Si dos componentes valen lo mismo el importe no desempata: tambien cae al fallback.
+  assert.equal(
+    resolverSubitemPromedi({
+      codigoPractica: '340213  ',
+      modulo: null,
+      efectorMatricula: 2032,
+      importeTotal: 1000,
+      valoresNomenclador: { valorEspecialista: 1000, valorGastos: 1000 },
+    }),
+    'HE'
+  )
+
+  // Sin valores de nomenclador cargados nada cambia respecto del comportamiento viejo.
+  assert.equal(
+    resolverSubitemPromedi({
+      codigoPractica: '340213  ',
+      modulo: null,
+      efectorMatricula: 9110,
+      importeTotal: 1592.64,
+      valoresNomenclador: null,
+    }),
+    'GA'
+  )
+})
+
+test('el desempate por importe corrige el subitem en codigos alcanzados por promedi', () => {
+  // 720329 si esta en rango de promedi. Una linea de honorario emitida con matricula
+  // de clinica se rotulaba GA y entraba al resumen descontando de mas.
+  const valores = {
+    valorEspecialista: 40000,
+    valorAnestesista: null,
+    valorAyudante: null,
+    valorGastos: 150000,
+  }
+  const subitemHonorario = resolverSubitemPromedi({
+    codigoPractica: '720329',
+    modulo: null,
+    efectorMatricula: 9995,
+    importeTotal: 40000,
+    valoresNomenclador: valores,
+  })
+  assert.equal(subitemHonorario, 'HE')
+  assert.equal(subitemEntraEnPromedi('720329', subitemHonorario), false)
+
+  const subitemGastos = resolverSubitemPromedi({
+    codigoPractica: '720329',
+    modulo: null,
+    efectorMatricula: 9995,
+    importeTotal: 150000,
+    valoresNomenclador: valores,
+  })
+  assert.equal(subitemGastos, 'GA')
+  assert.equal(subitemEntraEnPromedi('720329', subitemGastos), true)
+})
+
 test('sin modulo ni matricula, se cae al nombre del profesional', () => {
   assert.equal(resolverSubitemPromedi({ codigoPractica: '720329', profesional: 'CLINICA SAN RAFAEL' }), 'GA')
   assert.equal(resolverSubitemPromedi({ codigoPractica: '720329', profesional: 'CLÍNICA SAN RAFAEL' }), 'GA')

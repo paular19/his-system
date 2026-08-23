@@ -44,6 +44,16 @@ export function esProfesionalClinica(profesional: string | null | undefined): bo
     return MARCADORES_PROFESIONAL_CLINICA.some((marcador) => limpio.includes(marcador))
 }
 
+// Valores por componente del nomenclador (NPractica). Sirven para desempatar cuando
+// una practica se partio en varias filas y ninguna quedo con el modulo cargado: el
+// importe de cada fila es una copia del valor del componente que representa.
+export type ValoresNomencladorSubitem = {
+    valorEspecialista?: number | null
+    valorAnestesista?: number | null
+    valorAyudante?: number | null
+    valorGastos?: number | null
+}
+
 export type LineaSubitemPromedi = {
     codigoPractica?: string | null
     modulo?: string | null
@@ -53,11 +63,45 @@ export type LineaSubitemPromedi = {
     // Profesional de la orden (el prescriptor). Solo sirve de respaldo: no identifica
     // al efector de cada linea, asi que nunca debe pisar a la matricula.
     profesional?: string | null
+    // Importe de la linea y desglose del nomenclador. Juntos identifican el componente
+    // cuando el modulo esta vacio; sueltos no sirven de nada.
+    importeTotal?: number | null
+    valoresNomenclador?: ValoresNomencladorSubitem | null
+}
+
+// Tolerancia de centavo: los importes se guardan con 2 decimales en Decimal(12,2) y
+// el valor del nomenclador en Decimal(18,2), asi que la comparacion es exacta salvo
+// por el redondeo del binario al pasar por Number.
+const TOLERANCIA_IMPORTE_SUBITEM = 0.005
+
+// Compara el importe de la linea contra cada componente del nomenclador. Solo resuelve
+// si matchea UNO solo: si dos componentes valen lo mismo el importe no desempata y hay
+// que seguir con las senales de abajo.
+function resolverSubitemPorImporte(linea: LineaSubitemPromedi): SubitemPromedi | null {
+    const importe = linea.importeTotal
+    const valores = linea.valoresNomenclador
+    if (importe == null || !Number.isFinite(importe) || valores == null) return null
+
+    const candidatos: Array<[SubitemPromedi, number | null | undefined]> = [
+        ['GA', valores.valorGastos],
+        ['HE', valores.valorEspecialista],
+        ['HA', valores.valorAnestesista],
+        ['A1', valores.valorAyudante],
+    ]
+
+    const matches = candidatos.filter(
+        ([, valor]) =>
+            valor != null &&
+            Number.isFinite(valor) &&
+            Math.abs(valor - importe) < TOLERANCIA_IMPORTE_SUBITEM
+    )
+
+    return matches.length === 1 ? matches[0]![0] : null
 }
 
 // El subitem no viene en una columna propia. Se resuelve por prioridad: modulo
-// explicito, despues la matricula del efector, y recien al final el nombre del
-// profesional o el codigo.
+// explicito, despues el importe contra el desglose del nomenclador, despues la
+// matricula del efector, y recien al final el nombre del profesional o el codigo.
 export function resolverSubitemPromedi(linea: LineaSubitemPromedi): SubitemPromedi {
     const codigoNorm = normalizarTextoPromedi(linea.codigoPractica)
     const moduloNorm = normalizarTextoPromedi(linea.modulo)
@@ -69,8 +113,14 @@ export function resolverSubitemPromedi(linea: LineaSubitemPromedi): SubitemProme
     if (moduloNorm.includes('HA')) return 'HA'
     if (moduloNorm.includes('GA')) return 'GA'
 
-    // Sin modulo: la linea es un gasto si la factura la clinica, y un honorario si la
-    // factura un medico con matricula propia.
+    // Sin modulo: si el importe coincide con un unico componente del nomenclador, ese
+    // es el subitem. Es la unica senal que distingue dos filas de la misma practica
+    // emitidas con la misma matricula (gastos + honorario de una radiografia, por ej).
+    const porImporte = resolverSubitemPorImporte(linea)
+    if (porImporte) return porImporte
+
+    // Sin modulo ni desempate por importe: la linea es un gasto si la factura la
+    // clinica, y un honorario si la factura un medico con matricula propia.
     if (linea.efectorMatricula != null) {
         return esMatriculaClinica(linea.efectorMatricula) ? 'GA' : 'HE'
     }

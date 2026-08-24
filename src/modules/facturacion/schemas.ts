@@ -258,10 +258,16 @@ export type ActualizarDiferencialesCirugiaFacturacionInput = z.infer<typeof Actu
 
 export const CrearLoteFacturacionSchema = z.object({
     fecha: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
+    // Opcional a proposito: sin periodo el lote no filtra por fecha y levanta todo lo
+    // pendiente. Antes era obligatorio y el modal lo precargaba con el mes actual, asi
+    // que se facturaba el mes en curso sin que nadie eligiera nada y lo anterior quedaba
+    // afuera en silencio.
     periodo: z
         .string()
         .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato: YYYY-MM')
-        .describe('Ej: 2026-04'),
+        .optional()
+        .nullable()
+        .describe('Ej: 2026-04. Vacio = sin filtro de fecha'),
     tipo: z.enum(['PRACTICAS', 'MEDICAMENTOS']),
     clienteTipo: z.enum(['OBRA_SOCIAL', 'PARTICULAR']).default('OBRA_SOCIAL'),
     obraSocialId: z.number().int().positive().optional().nullable(),

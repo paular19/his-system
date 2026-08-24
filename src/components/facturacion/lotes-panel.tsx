@@ -25,7 +25,8 @@ const TIPO_LABEL: Record<string, string> = {
     MEDICAMENTOS: 'Medicamentos',
 }
 
-function formatPeriodo(periodo: string) {
+function formatPeriodo(periodo: string | null) {
+    if (!periodo) return 'Sin período'
     const [anio, mes] = periodo.split('-')
     if (!anio || !mes) return periodo
     const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -470,11 +471,12 @@ interface CrearLoteModalProps {
 
 function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
     const hoy = fechaAInputLocal()
-    const periodoActual = periodoAInputLocal()
-
+    // El periodo arranca vacio a proposito: precargarlo con el mes actual hacia que se
+    // facturara el mes en curso sin que nadie lo eligiera, y lo anterior quedaba afuera
+    // sin ningun aviso.
     const [form, setForm] = useState({
         fecha: hoy,
-        periodo: periodoActual,
+        periodo: '',
         tipo: 'PRACTICAS',
         clienteTipo: 'OBRA_SOCIAL',
         obraSocialId: '',
@@ -513,7 +515,7 @@ function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
         try {
             const body: Record<string, unknown> = {
                 fecha: new Date(form.fecha).toISOString(),
-                periodo: form.periodo,
+                periodo: form.periodo || null,
                 tipo: form.tipo,
                 clienteTipo: form.clienteTipo,
                 obraSocialId: form.clienteTipo === 'OBRA_SOCIAL' && form.obraSocialId ? Number(form.obraSocialId) : null,
@@ -561,14 +563,18 @@ function CrearLoteModal({ onClose, onCreado }: CrearLoteModalProps) {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">Período</label>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Período (opcional)</label>
                             <input
                                 type="month"
                                 value={form.periodo}
                                 onChange={(e) => set('periodo', e.target.value)}
-                                required
                                 className="w-full border rounded px-3 py-1.5 text-sm"
                             />
+                            <p className="mt-1 text-[11px] text-gray-500">
+                                {form.periodo
+                                    ? 'Solo entran las órdenes emitidas en ese mes.'
+                                    : 'Vacío: entra todo lo pendiente, de cualquier fecha.'}
+                            </p>
                         </div>
                     </div>
 

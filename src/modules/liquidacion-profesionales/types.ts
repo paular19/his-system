@@ -38,7 +38,7 @@ export interface LiquidacionLinea {
     loteId: number
     loteNumero: number
     loteEstado: EstadoLoteLiquidacion
-    lotePeriodo: string
+    lotePeriodo: string | null
 }
 
 /** Bloque PRESTADOR del resumen. */
@@ -94,7 +94,7 @@ export interface LiquidacionResumen {
         id: number
         numero: number
         estado: EstadoLoteLiquidacion
-        periodo: string
+        periodo: string | null
     }>
 }
 

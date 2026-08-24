@@ -1146,6 +1146,24 @@ function periodoToDateRange(periodo: string): { desde: Date; hasta: Date } {
     return { desde, hasta }
 }
 
+// Un lote sin periodo no filtra por fecha: levanta todo lo pendiente. Estos tres
+// helpers son la unica forma de leer el periodo de un lote, para que "sin periodo"
+// signifique lo mismo al crearlo, al mostrarlo y al aplicarle el promedi.
+function rangoPeriodoOpcional(periodo: string | null | undefined): { desde: Date; hasta: Date } | null {
+    if (!periodo) return null
+    return periodoToDateRange(periodo)
+}
+
+function fechaEntraEnPeriodo(fecha: Date, rango: { desde: Date; hasta: Date } | null): boolean {
+    if (!rango) return true
+    return fecha >= rango.desde && fecha < rango.hasta
+}
+
+function whereFechaEmisionPeriodo(periodo: string | null | undefined): Prisma.OrdenWhereInput {
+    const rango = rangoPeriodoOpcional(periodo)
+    return rango ? { fechaEmision: { gte: rango.desde, lt: rango.hasta } } : {}
+}
+
 function fechaClave(value: Date): string {
     return claveDiaArgentina(value) ?? value.toISOString().slice(0, 10)
 }
@@ -5113,12 +5131,12 @@ export async function buscarPracticasFacturadasProfesionalEnLotes(
     const filas: LotePracticaFacturadaProfesionalItem[] = []
 
     for (const lote of lotes) {
-        const { desde, hasta } = periodoToDateRange(lote.periodo)
+        const rangoLote = rangoPeriodoOpcional(lote.periodo)
 
         for (const itemLote of lote.items) {
             const ingreso = itemLote.ingreso
             const ordenesIngreso = (ordenesPorIngreso.get(ingreso.id) ?? []).filter(
-                (orden) => orden.fechaEmision >= desde && orden.fechaEmision < hasta
+                (orden) => fechaEntraEnPeriodo(orden.fechaEmision, rangoLote)
             )
 
             for (const orden of ordenesIngreso) {
@@ -5208,11 +5226,10 @@ export async function obtenerLote(
         matricula: filtros?.matricula,
     })
 
-    const [desde, hasta] = [periodoToDateRange(lote.periodo).desde, periodoToDateRange(lote.periodo).hasta]
     const ordenFacturadaWhere: Prisma.OrdenWhereInput = {
         AND: [
             buildOrdenNoAnuladaWhere(),
-            { fechaEmision: { gte: desde, lt: hasta } },
+            whereFechaEmisionPeriodo(lote.periodo),
             buildOrdenFacturadaWhere(),
             especialistaWhere,
         ],
@@ -5328,19 +5345,26 @@ export async function obtenerLote(
  */
 async function obtenerOrdenesTomadasEnLotes(
     tipo: string,
-    periodo: string,
+    periodo: string | null | undefined,
     excluirLoteId?: number
 ): Promise<Set<string>> {
-    const { desde, hasta } = periodoToDateRange(periodo)
+    // Que lotes pueden haberse llevado una orden que este lote quiere tomar:
+    // - si el lote nuevo tiene periodo, los de ese mismo periodo y los que no tienen
+    //   ninguno (esos barren cualquier fecha, incluida la de este periodo);
+    // - si el lote nuevo no tiene periodo, cualquiera: va a mirar todas las fechas.
+    const wherePeriodo: Prisma.LoteFacturacionWhereInput = periodo
+        ? { OR: [{ periodo }, { periodo: null }] }
+        : {}
 
     const lotes = await prisma.loteFacturacion.findMany({
         where: {
             tipo,
-            periodo,
             estado: { in: ['PEN', 'CON'] },
+            ...wherePeriodo,
             ...(excluirLoteId ? { id: { not: excluirLoteId } } : {}),
         },
         select: {
+            periodo: true,
             ordenesExcluidas: { select: { puestoNumero: true, ordenNumero: true } },
             items: {
                 where: { incluido: true },
@@ -5351,11 +5375,10 @@ async function obtenerOrdenesTomadasEnLotes(
                                 where: {
                                     AND: [
                                         buildOrdenNoAnuladaWhere(),
-                                        { fechaEmision: { gte: desde, lt: hasta } },
                                         buildOrdenFacturadaWhere(),
                                     ],
                                 },
-                                select: { puestoNumero: true, numero: true },
+                                select: { puestoNumero: true, numero: true, fechaEmision: true },
                             },
                         },
                     },
@@ -5366,11 +5389,15 @@ async function obtenerOrdenesTomadasEnLotes(
 
     const tomadas = new Set<string>()
     for (const lote of lotes) {
+        // Cada lote se llevo solo las ordenes de SU periodo. El filtro va por lote y no
+        // en la query porque cada uno tiene un rango distinto (o ninguno).
+        const rangoLote = rangoPeriodoOpcional(lote.periodo)
         const excluidas = new Set(
             lote.ordenesExcluidas.map((o) => claveOrdenLote(o.puestoNumero, o.ordenNumero))
         )
         for (const item of lote.items) {
             for (const orden of item.ingreso.ordenes) {
+                if (!fechaEntraEnPeriodo(orden.fechaEmision, rangoLote)) continue
                 const clave = claveOrdenLote(orden.puestoNumero, orden.numero)
                 if (!excluidas.has(clave)) tomadas.add(clave)
             }
@@ -5393,7 +5420,13 @@ export async function crearLote(
         select: { numero: true },
     })
     const numero = (ultimo?.numero ?? 0) + 1
-    const { desde, hasta } = periodoToDateRange(data.periodo)
+    // Sin periodo no hay filtro de fecha: el lote levanta todo lo que quedo pendiente,
+    // sin importar de que mes sea.
+    const whereFechaOrden = whereFechaEmisionPeriodo(data.periodo)
+    const rangoMedicacion = rangoPeriodoOpcional(data.periodo)
+    const whereFechaMedicacion = rangoMedicacion
+        ? { fechaInicio: { gte: rangoMedicacion.desde, lt: rangoMedicacion.hasta } }
+        : {}
 
     // Build where for ingreso resolution
     const whereIngreso: Prisma.IngresoWhereInput = {
@@ -5435,7 +5468,7 @@ export async function crearLote(
         whereIngreso.ordenes = {
             some: {
                 ...buildOrdenNoAnuladaWhere(),
-                fechaEmision: { gte: desde, lt: hasta },
+                ...whereFechaOrden,
                 ...buildOrdenFacturadaWhere(),
             },
         }
@@ -5443,7 +5476,7 @@ export async function crearLote(
         whereIngreso.medicaciones = {
             some: {
                 estado: { not: 'S' },
-                fechaInicio: { gte: desde, lt: hasta },
+                ...whereFechaMedicacion,
             },
         }
     }
@@ -5456,7 +5489,7 @@ export async function crearLote(
                 ? {
                     where: {
                         ...buildOrdenNoAnuladaWhere(),
-                        fechaEmision: { gte: desde, lt: hasta },
+                        ...whereFechaOrden,
                     },
                     select: {
                         puestoNumero: true,
@@ -5482,7 +5515,7 @@ export async function crearLote(
                 : false,
             medicaciones: data.tipo === 'MEDICAMENTOS'
                 ? {
-                    where: { estado: { not: 'S' }, fechaInicio: { gte: desde, lt: hasta } },
+                    where: { estado: { not: 'S' }, ...whereFechaMedicacion },
                     select: { nombre: true },
                 }
                 : false,
@@ -6179,8 +6212,6 @@ export async function aplicarPromediLote(
         throw new Error('PROMEDI solo aplica a lotes IPS TXT o lotes de prácticas con obra social de regla PROMEDI')
     }
 
-    const { desde, hasta } = periodoToDateRange(lote.periodo)
-
     const loteItems = await prisma.loteFacturacionItem.findMany({
         where: { loteId },
         select: { id: true, ingresoId: true, incluido: true },
@@ -6203,7 +6234,7 @@ export async function aplicarPromediLote(
         where: {
             ingresoId: { in: ingresoIds },
             ...buildOrdenNoAnuladaWhere(),
-            fechaEmision: { gte: desde, lt: hasta },
+            ...whereFechaEmisionPeriodo(lote.periodo),
             OR: [
                 {
                     AND: [

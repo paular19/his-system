@@ -17,7 +17,8 @@ function formatMonto(n: number) {
     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(n)
 }
 
-function formatPeriodo(periodo: string) {
+function formatPeriodo(periodo: string | null) {
+    if (!periodo) return 'Sin período'
     const [anio, mes] = periodo.split('-')
     if (!anio || !mes) return periodo
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']

@@ -241,7 +241,7 @@ export async function obtenerLiquidacionProfesionales(
     const descartes = descartesVacios()
     const conteoCategorias: Partial<Record<CategoriaPractica, number>> = {}
     const lineasPorMatricula = new Map<number, LiquidacionLinea[]>()
-    const lotesUsados = new Map<number, { id: number; numero: number; estado: EstadoLoteLiquidacion; periodo: string }>()
+    const lotesUsados = new Map<number, { id: number; numero: number; estado: EstadoLoteLiquidacion; periodo: string | null }>()
 
     for (const orden of ordenes) {
         const ingreso = orden.ingreso

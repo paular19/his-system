@@ -152,7 +152,8 @@ export interface LoteFacturacionListItem {
     id: number
     numero: number
     fecha: Date
-    periodo: string
+    // Null = lote sin filtro de fecha: levanta todo lo pendiente.
+    periodo: string | null
     tipo: TipoLote
     estado: EstadoLote
     origen: string | null
@@ -177,7 +178,7 @@ export interface LotePracticaFacturadaProfesionalItem {
     loteId: number
     loteNumero: number
     loteEstado: EstadoLote
-    lotePeriodo: string
+    lotePeriodo: string | null
     loteFecha: Date
     loteObraSocial: { id: number; nombre: string } | null
     lotePlan: { id: number; descripcion: string } | null

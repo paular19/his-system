@@ -74,7 +74,8 @@ function formatFecha(value: Date | string | null | undefined): string {
     return formatearFechaArgentina(date)
 }
 
-function formatPeriodo(periodo: string): string {
+function formatPeriodo(periodo: string | null): string {
+    if (!periodo) return "Sin periodo"
     const [anio, mes] = periodo.split('-')
     if (!anio || !mes) return periodo
     return `${MESES[parseInt(mes, 10) - 1] ?? mes} ${anio}`

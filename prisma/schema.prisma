@@ -1267,8 +1267,8 @@ model LoteFacturacion {
   numero Int      @map("LotNro")
   fecha  DateTime @map("LotFecha") @db.Timestamp(6)
 
-  // Periodo "2026-04"
-  periodo String @map("LotPeriodo") @db.VarChar(7)
+  // Periodo "2026-04". Null = lote sin filtro de fecha: levanta todo lo pendiente.
+  periodo String? @map("LotPeriodo") @db.VarChar(7)
 
   // Cliente
   obraSocialId Int? @map("OSID")

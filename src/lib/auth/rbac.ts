@@ -11,6 +11,8 @@ export const ROLES = {
   MEDICO: 'MEDICO',
   ENFERMERIA: 'ENFERMERIA',
   FACTURACION: 'FACTURACION',
+  // Liquidacion de honorarios al profesional efector. Solo ve ese modulo.
+  FACTURACION_PROFESIONALES: 'FACTURACION_PROFESIONALES',
   CAJA: 'CAJA',
 } as const
 
@@ -30,6 +32,9 @@ export const MODULOS = {
   SERVICIOS_MEDICOS: 'SERVICIOS_MEDICOS',
   HISTORIA_CLINICA: 'HISTORIA_CLINICA',
   FACTURACION: 'FACTURACION',
+  // Modulo propio: liquidacion de honorarios por profesional efector. Se separa de
+  // FACTURACION para que el rol de proveedores no herede el resto de facturacion.
+  LIQUIDACION_PROFESIONALES: 'LIQUIDACION_PROFESIONALES',
   CAJA: 'CAJA',
   REPORTES: 'REPORTES',
   AUDITORIA: 'AUDITORIA',
@@ -61,6 +66,7 @@ export const MATRIZ_PERMISOS: MatrizPermisos = {
     SERVICIOS_MEDICOS: ['LEER', 'CREAR', 'MODIFICAR', 'ELIMINAR'],
     HISTORIA_CLINICA: ['LEER', 'CREAR', 'MODIFICAR', 'ELIMINAR'],
     FACTURACION: ['LEER', 'CREAR', 'MODIFICAR', 'ELIMINAR'],
+    LIQUIDACION_PROFESIONALES: ['LEER'],
     CAJA: ['LEER', 'CREAR', 'MODIFICAR', 'ELIMINAR'],
     REPORTES: ['LEER', 'CREAR', 'MODIFICAR', 'ELIMINAR'],
     AUDITORIA: ['LEER'],
@@ -116,6 +122,11 @@ export const MATRIZ_PERMISOS: MatrizPermisos = {
     REPORTES: ['LEER'],
     COTIZADOR: ['LEER', 'CREAR', 'MODIFICAR', 'ELIMINAR'],
   },
+  // Rol acotado: solo consulta la liquidacion de honorarios. Es un reporte, no
+  // escribe nada, asi que no lleva mas permiso que LEER sobre su propio modulo.
+  FACTURACION_PROFESIONALES: {
+    LIQUIDACION_PROFESIONALES: ['LEER'],
+  },
   CAJA: {
     PACIENTES: ['LEER'],
     CAJA: ['LEER', 'CREAR', 'MODIFICAR'],
@@ -157,6 +168,7 @@ export const RUTAS_MODULOS: Record<string, ModuloHIS> = {
   '/dashboard/ambulatorio': 'AMBULATORIO',
   '/dashboard/historia-clinica': 'HISTORIA_CLINICA',
   '/dashboard/facturacion': 'FACTURACION',
+  '/dashboard/liquidacion-profesionales': 'LIQUIDACION_PROFESIONALES',
   '/dashboard/caja': 'CAJA',
   '/dashboard/reportes': 'REPORTES',
   '/dashboard/auditoria': 'AUDITORIA',

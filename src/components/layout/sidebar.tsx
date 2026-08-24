@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { ROLES, type RolHIS } from '@/lib/auth/rbac'
 import {
@@ -52,21 +52,40 @@ const NAV_ITEMS_INTERNACION: NavItem[] = [
   { label: 'Internación', href: '/dashboard/internacion', icon: BedDouble },
 ]
 
-interface SidebarProps {
-  rol: RolHIS
+const NAV_ITEM_LIQUIDACION: NavItem = {
+  label: 'Liquidación',
+  href: '/dashboard/liquidacion-profesionales',
+  icon: Receipt,
 }
 
-export function Sidebar({ rol }: SidebarProps) {
+const NAV_ITEMS_FACTURACION_PROFESIONALES: NavItem[] = [NAV_ITEM_LIQUIDACION]
+
+interface SidebarProps {
+  rol: RolHIS
+  /** Incluye el permiso extra por email, no solo el del rol. */
+  puedeVerLiquidacion?: boolean
+}
+
+export function Sidebar({ rol, puedeVerLiquidacion = false }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const navItems =
-    rol === ROLES.INTERNACION
+  const navItemsDelRol =
+    rol === ROLES.FACTURACION_PROFESIONALES
+      ? NAV_ITEMS_FACTURACION_PROFESIONALES
+      : rol === ROLES.INTERNACION
       ? NAV_ITEMS_INTERNACION
       : rol === ROLES.ADMISION
       ? NAV_ITEMS_ADMISION
       : rol === ROLES.ORDENES
         ? NAV_ITEMS_ORDENES
         : NAV_ITEMS_DEFAULT
+
+  // Un permiso extra por email no cambia el rol, asi que el menu del rol no lo trae.
+  const navItems = useMemo(() => {
+    const yaEsta = navItemsDelRol.some((item) => item.href === NAV_ITEM_LIQUIDACION.href)
+    if (!puedeVerLiquidacion || yaEsta) return navItemsDelRol
+    return [...navItemsDelRol, NAV_ITEM_LIQUIDACION]
+  }, [navItemsDelRol, puedeVerLiquidacion])
   const [hrefEnCurso, setHrefEnCurso] = useState<string | null>(null)
   const desbloqueoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 

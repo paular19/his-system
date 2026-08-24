@@ -2,7 +2,14 @@
  * Script para asignar roles a usuarios en Clerk por dirección de email.
  *
  * Uso:
- *   node assign-roles.mjs
+ *   node assign-roles.mjs                          → todos los emails del mapa
+ *   node assign-roles.mjs a@x.com b@y.com          → solo esos emails
+ *   node assign-roles.mjs --dry-run                → muestra qué haría, sin escribir
+ *
+ * Conviene filtrar: el mapa de abajo y ROLES_POR_EMAIL_REGISTRADOS
+ * (src/lib/auth/role-registry.ts) no están sincronizados, y lo que se escribe en
+ * Clerk le gana al registro por email. Correr el script entero puede cambiarle el
+ * rol a un usuario que no tenías intención de tocar.
  *
  * Requiere la variable de entorno CLERK_SECRET_KEY en .env.local
  *
@@ -11,6 +18,7 @@
  *   ADMIN       → acceso a todos los módulos incluyendo facturación
  *   FACTURACION → acceso únicamente al módulo de facturación
  *   INTERNACION → acceso únicamente al módulo de internación
+ *   FACTURACION_PROFESIONALES → solo la liquidación de honorarios por efector
  */
 
 import { readFileSync } from 'fs'
@@ -74,6 +82,10 @@ const ROLES_POR_EMAIL = {
   'marianacanaza24@gmail.com': 'FACTURACION',
   'kmontano137@gmail.com': 'FACTURACION',
   'serapiogabriela40@gmail.com': 'FACTURACION',
+
+  // FACTURACION_PROFESIONALES: solo la liquidación de honorarios al efector
+  'sanarproveedores@gmail.com': 'FACTURACION_PROFESIONALES',
+  'admsanar@gmail.com': 'FACTURACION_PROFESIONALES',
 }
 
 async function buscarUsuarioPorEmail(email) {
@@ -110,12 +122,36 @@ async function asignarRol(userId, rol) {
   return res.json()
 }
 
+/** Filtra el mapa por los emails pasados por linea de comandos. Sin emails, devuelve todo. */
+function seleccionarObjetivos(argv) {
+  const dryRun = argv.includes('--dry-run')
+  const emails = argv.filter((a) => !a.startsWith('--')).map((a) => a.trim().toLowerCase())
+
+  if (emails.length === 0) return { dryRun, objetivos: Object.entries(ROLES_POR_EMAIL) }
+
+  const objetivos = []
+  for (const email of emails) {
+    const entrada = Object.entries(ROLES_POR_EMAIL).find(([e]) => e.toLowerCase() === email)
+    if (!entrada) {
+      console.error(`ERROR: ${email} no está en ROLES_POR_EMAIL. Agregalo al mapa primero.`)
+      process.exit(1)
+    }
+    objetivos.push(entrada)
+  }
+  return { dryRun, objetivos }
+}
+
 async function main() {
-  console.log(`Asignando roles a ${Object.keys(ROLES_POR_EMAIL).length} usuarios...\n`)
+  const { dryRun, objetivos } = seleccionarObjetivos(process.argv.slice(2))
+
+  console.log(
+    `${dryRun ? '[DRY-RUN] ' : ''}Asignando roles a ${objetivos.length} usuario(s)` +
+    `${objetivos.length < Object.keys(ROLES_POR_EMAIL).length ? ' (filtrado)' : ''}...\n`
+  )
 
   const resultados = { ok: [], noEncontrado: [], error: [] }
 
-  for (const [email, rol] of Object.entries(ROLES_POR_EMAIL)) {
+  for (const [email, rol] of objetivos) {
     try {
       const usuario = await buscarUsuarioPorEmail(email)
       if (!usuario) {
@@ -123,8 +159,14 @@ async function main() {
         resultados.noEncontrado.push(email)
         continue
       }
+      const rolActual = usuario.public_metadata?.rol ?? '(sin rol)'
+      if (dryRun) {
+        console.log(`  [DRY-RUN] ${email}: ${rolActual} → ${rol}`)
+        resultados.ok.push({ email, rol })
+        continue
+      }
       await asignarRol(usuario.id, rol)
-      console.log(`  [OK] ${email} → ${rol}`)
+      console.log(`  [OK] ${email}: ${rolActual} → ${rol}`)
       resultados.ok.push({ email, rol })
     } catch (err) {
       console.error(`  [ERROR] ${email}: ${err.message}`)

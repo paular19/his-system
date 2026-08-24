@@ -20,6 +20,9 @@ function inicioYFinDelDia() {
 export default async function DashboardPage() {
   const usuario = await getUsuarioSesion()
   if (usuario.rol === ROLES.INTERNACION) redirect('/dashboard/internacion')
+  // El rol de liquidacion no tiene permiso sobre pacientes ni admision: el tablero
+  // le mostraria conteos que no le corresponden.
+  if (usuario.rol === ROLES.FACTURACION_PROFESIONALES) redirect('/dashboard/liquidacion-profesionales')
 
   const esAdmision = usuario.rol === ROLES.ADMISION
 

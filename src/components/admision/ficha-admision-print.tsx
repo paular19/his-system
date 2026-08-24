@@ -4,6 +4,13 @@ import { useEffect } from 'react'
 import { formatearFecha, formatearFechaHora, formatearFechaCalendario, calcularEdad } from '@/lib/utils'
 import type { IngresoDetalle } from '@/modules/admision/types'
 import { limpiarObservacionesAdmision } from '@/modules/admision/utils'
+import { parseObservacionesInternacion } from '@/modules/internacion/observaciones-meta'
+
+const formatoMonedaFicha = new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 2,
+})
 
 interface FichaAdmisionPrintProps {
     ingreso: IngresoDetalle
@@ -63,6 +70,9 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
     const fechaNacimientoPaciente = ingreso.paciente?.fechaNacimiento ?? ingreso.fechaNacimiento
     const edad = fechaNacimientoPaciente ? calcularEdad(fechaNacimientoPaciente) : null
     const observacionesLimpias = limpiarObservacionesAdmision(ingreso.observaciones)
+    // Los depositos viven en el bloque meta de observaciones, no en una tabla propia.
+    const depositos = parseObservacionesInternacion(ingreso.observaciones).depositosRegistros
+    const totalDepositos = depositos.reduce((acc, d) => acc + Number(d.importe), 0)
     const profesionalTratanteNombre = ingreso.profesionalTratante?.nombre
         ?? ingreso.evoluciones?.[0]?.profesional?.nombre
         ?? ingreso.profesionalTratanteFallback?.nombre
@@ -256,6 +266,13 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                 .pf-tabla td { font-size: 8.2pt; padding: 2px 4px; border: 1px solid #ccc; }
                 .pf-tabla tbody tr:nth-child(even) td {
                     background: #f4f4f4;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                .pf-tabla tfoot td {
+                    font-size: 8.2pt; font-weight: bold;
+                    padding: 2px 4px; border: 1px solid #999;
+                    background: #ececec;
                     -webkit-print-color-adjust: exact;
                     print-color-adjust: exact;
                 }
@@ -460,6 +477,38 @@ export function FichaAdmisionPrint({ ingreso }: FichaAdmisionPrintProps) {
                                 </div>
                             ))}
                         </div>
+                    </Seccion>
+                )}
+
+                {depositos.length > 0 && (
+                    <Seccion titulo="Depósitos realizados" columnas={1}>
+                        <table className="pf-tabla">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th className="pf-num">Importe</th>
+                                    <th>Cubre coseguro</th>
+                                    <th>Observaciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {depositos.map((d) => (
+                                    <tr key={d.id}>
+                                        <td>{formatearFechaCalendario(d.fecha)}</td>
+                                        <td className="pf-num">{formatoMonedaFicha.format(Number(d.importe))}</td>
+                                        <td>{d.cubreCoseguro ? 'Sí' : 'No'}</td>
+                                        <td>{d.observaciones ?? '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td>Total depositado</td>
+                                    <td className="pf-num">{formatoMonedaFicha.format(totalDepositos)}</td>
+                                    <td colSpan={2} />
+                                </tr>
+                            </tfoot>
+                        </table>
                     </Seccion>
                 )}
 

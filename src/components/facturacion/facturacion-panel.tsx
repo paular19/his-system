@@ -2679,7 +2679,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 setMensaje(`Autorización actualizada para orden ${formatOrderNumber(puestoNumero, ordenNumero)}`)
             }
 
-            await cargarContexto(contexto.ingreso.id, { silent: true })
+            await cargarContexto(contexto.ingreso.id, { silent: true, preserveUiState: true })
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al actualizar autorización de la orden')
         } finally {
@@ -2939,13 +2939,24 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             const json = (await res.json()) as ApiResponse<{ ok: boolean }>
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo guardar prestación')
 
+            // preserveUiState: guardar una fila no tiene que mover al usuario de lugar.
+            // Sin esto la recarga limpiaba el filtro y volvia a la pagina 1 de
+            // prestaciones, asi que corregir una cantidad expulsaba de la pagina donde
+            // se estaba trabajando y habia que volver a buscar la fila siguiente.
+            //
+            // La fila sale de edicion recien despues de la recarga. El contexto de un
+            // ingreso grande tarda 5-8s, y salir antes dejaba la fila mostrando el dato
+            // viejo todo ese rato y sin el boton "Guardando...": el cambio de cantidad
+            // parecia no haberse aplicado. Quedandose en edicion se ve el valor nuevo y
+            // el boton deshabilitado mientras termina.
+            if (contexto) await cargarContexto(contexto.ingreso.id, { silent: true, preserveUiState: true })
+
             setRowEditMode((prev) => ({ ...prev, [p.uid]: false }))
             setAplicarOrdenCompletaPorFila((prev) => {
                 const next = { ...prev }
                 delete next[p.uid]
                 return next
             })
-            if (contexto) await cargarContexto(contexto.ingreso.id, { silent: true })
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error al guardar prestación')
         } finally {

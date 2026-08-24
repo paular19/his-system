@@ -3387,6 +3387,26 @@ export async function cargarOrdenesDesdePrestaciones(
         (p) => !(p.practicaId && vinculosOrdenExistente.has(p.practicaId))
     )
 
+    // Facturar es todo o nada: si una sola practica del lote no resuelve orden
+    // autorizada, la tanda entera se rechaza. Antes este chequeo estaba al final,
+    // despues de haber vinculado y recalculado importes de las que si resolvian:
+    // el usuario veia el error, volvia a tildar todo y refacturaba, y cada reintento
+    // dejaba otra tanda de ordenes escritas a medias. Se valida antes de escribir.
+    if (prestacionesParaGenerarOrden.length > 0) {
+        const pendientes = Array.from(
+            new Set(
+                prestacionesParaGenerarOrden.map((p) => {
+                    const codigo = p.codigoPractica.trim()
+                    const incluye = normalizarIncluyeCodigo(p.incluyeCodigo)
+                    return incluye ? `${codigo} [${incluye}]` : codigo
+                })
+            )
+        )
+        throw new Error(
+            `No se puede facturar sin orden autorizada vinculada para: ${pendientes.join(', ')}.`
+        )
+    }
+
     if (prestacionesConOrdenExistente.length > 0) {
         // Facturar no cambia el estado de ninguna orden. Las ordenes se anulan solo
         // desde la ficha de internacion; anular en facturacion se limita a cortar el
@@ -3646,21 +3666,6 @@ export async function cargarOrdenesDesdePrestaciones(
     const ordenesVinculadas = Array.from(
         new Map(entradasOrdenesVinculadas).values()
     )
-
-    if (prestacionesParaGenerarOrden.length > 0) {
-        const pendientes = Array.from(
-            new Set(
-                prestacionesParaGenerarOrden.map((p) => {
-                    const codigo = p.codigoPractica.trim()
-                    const incluye = normalizarIncluyeCodigo(p.incluyeCodigo)
-                    return incluye ? `${codigo} [${incluye}]` : codigo
-                })
-            )
-        )
-        throw new Error(
-            `No se puede facturar sin orden autorizada vinculada para: ${pendientes.join(', ')}.`
-        )
-    }
 
     return {
         modo: data.modo,

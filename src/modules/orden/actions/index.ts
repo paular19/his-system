@@ -1384,3 +1384,64 @@ export async function anularOrdenAction(puestoNumero: number, numero: number) {
     return { error: 'Error al anular la orden' }
   }
 }
+
+/**
+ * Deshace una anulacion: la orden vuelve a estado activo y sale de la solapa
+ * Anuladas. La solapa a la que cae despues (pendientes o confirmadas) la decide
+ * `clasificarSolapaOrden` segun el numero de autorizacion y la obra social.
+ */
+export async function restaurarOrdenAction(puestoNumero: number, numero: number) {
+  const usuario = await getUsuarioSesion()
+
+  const puedeAmbulatorio =
+    tienePermiso(usuario.rol, 'AMBULATORIO', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'AMBULATORIO', 'CREAR')
+  const puedeInternacion =
+    tienePermiso(usuario.rol, 'INTERNACION', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'INTERNACION', 'CREAR')
+  const puedeAdmision =
+    tienePermiso(usuario.rol, 'ADMISION', 'MODIFICAR') ||
+    tienePermiso(usuario.rol, 'ADMISION', 'CREAR')
+
+  if (!puedeAmbulatorio && !puedeInternacion && !puedeAdmision) {
+    return { error: 'Sin permiso para restaurar órdenes' }
+  }
+
+  try {
+    const orden = await prisma.orden.findUnique({
+      where: { puestoNumero_numero: { puestoNumero, numero } },
+      select: { estado: true, ingresoId: true },
+    })
+
+    if (!orden) {
+      return { error: 'Orden no encontrada' }
+    }
+
+    const estado = (orden.estado ?? '').trim().toUpperCase()
+    if (!estado.startsWith('X')) {
+      return { error: 'La orden no está anulada' }
+    }
+
+    await prisma.orden.update({
+      where: { puestoNumero_numero: { puestoNumero, numero } },
+      data: {
+        estado: 'A',
+        fechaEstado: new Date(),
+      },
+    })
+
+    revalidatePath('/dashboard/ambulatorio')
+    revalidatePath(`/dashboard/ambulatorio/${puestoNumero}/${numero}`)
+    if (orden.ingresoId != null) {
+      revalidatePath('/dashboard/internacion')
+      revalidatePath('/dashboard/admision')
+      revalidatePath(`/dashboard/internacion/${orden.ingresoId}`)
+      revalidatePath(`/dashboard/internacion/${orden.ingresoId}/practicas`)
+      revalidatePath(`/dashboard/admision/${orden.ingresoId}`)
+    }
+    return { ok: true }
+  } catch (err) {
+    console.error('[ORDEN] Error al restaurar orden:', err)
+    return { error: 'Error al restaurar la orden' }
+  }
+}

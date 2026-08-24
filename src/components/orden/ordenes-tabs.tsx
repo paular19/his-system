@@ -4,8 +4,12 @@ import { useState, useTransition, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createPortal } from 'react-dom'
-import { Ban, Check, Clock, FileText, Pencil, X } from 'lucide-react'
-import { actualizarNumeroAutorizacionAction, anularOrdenAction } from '@/modules/orden/actions'
+import { Ban, Check, Clock, FileText, Pencil, RotateCcw, X } from 'lucide-react'
+import {
+    actualizarNumeroAutorizacionAction,
+    anularOrdenAction,
+    restaurarOrdenAction,
+} from '@/modules/orden/actions'
 import { formatearNumeroOrden } from '@/modules/orden/types'
 import type { OrdenListItem } from '@/modules/orden/types'
 import { PaginationControls } from '@/components/ui/pagination-controls'
@@ -32,17 +36,22 @@ function FilaOrden({
     permitirEdicion,
     onConfirmada,
     onAnulada,
+    onRestaurada,
     mostrarAnular,
+    mostrarRestaurar,
 }: {
     orden: OrdenListItem
     puedeModificar: boolean
     permitirEdicion: boolean
     onConfirmada?: (puestoNumero: number, numero: number) => void
     onAnulada?: (puestoNumero: number, numero: number) => void
+    onRestaurada?: (puestoNumero: number, numero: number) => void
     mostrarAnular?: boolean
+    mostrarRestaurar?: boolean
 }) {
     const [editando, setEditando] = useState(false)
     const [mostrarModalAnular, setMostrarModalAnular] = useState(false)
+    const [mostrarModalRestaurar, setMostrarModalRestaurar] = useState(false)
     const [nroAut, setNroAut] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [isPending, startTransition] = useTransition()
@@ -99,6 +108,28 @@ function FilaOrden({
                 setMostrarModalAnular(false)
                 setEditando(false)
                 onAnulada?.(orden.puestoNumero, orden.numero)
+            }
+        })
+    }
+
+    function abrirModalRestaurar() {
+        setError(null)
+        setMostrarModalRestaurar(true)
+    }
+
+    function cerrarModalRestaurar() {
+        if (isPending) return
+        setMostrarModalRestaurar(false)
+    }
+
+    function confirmarRestauracion() {
+        startTransition(async () => {
+            const result = await restaurarOrdenAction(orden.puestoNumero, orden.numero)
+            if (result.error) {
+                setError(result.error)
+            } else {
+                setMostrarModalRestaurar(false)
+                onRestaurada?.(orden.puestoNumero, orden.numero)
             }
         })
     }
@@ -203,6 +234,18 @@ function FilaOrden({
                                 Anular
                             </button>
                         )}
+                        {mostrarRestaurar && puedeModificar && (
+                            <button
+                                type="button"
+                                onClick={abrirModalRestaurar}
+                                disabled={isPending}
+                                className="inline-flex items-center gap-1 rounded border border-green-200 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+                                title="Deshacer la anulación y sacarla de esta lista"
+                            >
+                                <RotateCcw className="h-3 w-3" />
+                                Restaurar
+                            </button>
+                        )}
                         <Link
                             href={`/dashboard/ambulatorio/${orden.puestoNumero}/${orden.numero}`}
                             className="text-blue-600 hover:underline text-xs font-medium"
@@ -255,6 +298,52 @@ function FilaOrden({
                     document.body
                 )
                 : null}
+
+            {typeof window !== 'undefined' && mostrarModalRestaurar
+                ? createPortal(
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+                        <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+                            <div className="border-b px-4 py-3">
+                                <h3 className="text-sm font-semibold text-gray-900">Restaurar autorización</h3>
+                            </div>
+                            <div className="space-y-2 px-4 py-3 text-sm text-gray-700">
+                                <p>
+                                    Está por deshacer la anulación de{' '}
+                                    <span className="font-mono font-semibold text-gray-900">
+                                        {formatearNumeroOrden(orden.puestoNumero, orden.numero)}
+                                    </span>
+                                    .
+                                </p>
+                                <p>
+                                    Saldrá de la solapa Anuladas y volverá a{' '}
+                                    {orden.numeroAutorizacion ? 'Confirmadas' : 'Pendientes'}.
+                                </p>
+                                {error && <p className="text-xs text-red-600">{error}</p>}
+                            </div>
+                            <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
+                                <button
+                                    type="button"
+                                    onClick={cerrarModalRestaurar}
+                                    disabled={isPending}
+                                    className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={confirmarRestauracion}
+                                    disabled={isPending}
+                                    className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                                >
+                                    <RotateCcw className="h-3 w-3" />
+                                    {isPending ? 'Restaurando...' : 'Restaurar'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>,
+                    document.body
+                )
+                : null}
         </>
     )
 }
@@ -277,6 +366,8 @@ export function OrdenesTabs({
     const searchParams = useSearchParams()
     const [pendientes, setPendientes] = useState(pendientesIniciales)
     const [countPendientes, setCountPendientes] = useState(totalPendientes)
+    const [anuladasVisibles, setAnuladasVisibles] = useState(anuladas)
+    const [countAnuladas, setCountAnuladas] = useState(totalAnuladas)
 
     function buildTabHref(tab: 'pendientes' | 'confirmadas' | 'anuladas') {
         const params = new URLSearchParams(searchParams.toString())
@@ -304,7 +395,26 @@ export function OrdenesTabs({
             prev.filter((o) => !(o.puestoNumero === puestoNumero && o.numero === numero))
         )
         setCountPendientes((prev) => Math.max(0, prev - 1))
+        setCountAnuladas((prev) => prev + 1)
         router.push('?tab=anuladas')
+        router.refresh()
+    }
+
+    function handleRestaurada(puestoNumero: number, numero: number) {
+        const restaurada = anuladasVisibles.find(
+            (o) => o.puestoNumero === puestoNumero && o.numero === numero
+        )
+        setAnuladasVisibles((prev) =>
+            prev.filter((o) => !(o.puestoNumero === puestoNumero && o.numero === numero))
+        )
+        setCountAnuladas((prev) => Math.max(0, prev - 1))
+        // El destino lo decide la misma regla del servidor: sin numero de
+        // autorizacion la orden vuelve a Pendientes.
+        const destino = restaurada?.numeroAutorizacion ? 'confirmadas' : 'pendientes'
+        if (destino === 'pendientes') setCountPendientes((prev) => prev + 1)
+        // buildTabHref conserva la busqueda: si se llego con ?q=..., la orden se
+        // sigue viendo en la solapa nueva.
+        router.push(buildTabHref(destino))
         router.refresh()
     }
 
@@ -312,12 +422,12 @@ export function OrdenesTabs({
         ? pendientes
         : tabActual === 'confirmadas'
             ? confirmadas
-            : anuladas
+            : anuladasVisibles
     const total = tabActual === 'pendientes'
         ? countPendientes
         : tabActual === 'confirmadas'
             ? totalConfirmadas
-            : totalAnuladas
+            : countAnuladas
 
     return (
         <div className="space-y-4">
@@ -362,9 +472,9 @@ export function OrdenesTabs({
                 >
                     <Ban className="h-4 w-4" />
                     Anuladas
-                    {totalAnuladas > 0 && (
+                    {countAnuladas > 0 && (
                         <span className="ml-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-                            {totalAnuladas}
+                            {countAnuladas}
                         </span>
                     )}
                 </Link>
@@ -408,7 +518,9 @@ export function OrdenesTabs({
                                     permitirEdicion={tabActual !== 'anuladas'}
                                     onConfirmada={tabActual === 'pendientes' ? handleConfirmada : undefined}
                                     onAnulada={tabActual !== 'anuladas' ? handleAnulada : undefined}
+                                    onRestaurada={tabActual === 'anuladas' ? handleRestaurada : undefined}
                                     mostrarAnular={tabActual !== 'anuladas'}
+                                    mostrarRestaurar={tabActual === 'anuladas'}
                                 />
                             ))}
                         </tbody>

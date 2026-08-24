@@ -111,6 +111,7 @@ function resumenVacio(
             categorias: params.categorias ?? [],
             matricula: params.matricula ?? null,
             estadosLote: params.estadosLote,
+            tipoIngreso: params.tipoIngreso ?? null,
         },
         lotesConsiderados: [],
     }
@@ -192,6 +193,8 @@ export async function obtenerLiquidacionProfesionales(
             // Anuladas fuera: el estado arranca con 'X'.
             NOT: [{ estado: { contains: 'X', mode: 'insensitive' } }],
             items: { some: { fecha: { gte: desde, lt: hasta } } },
+            // Char(3) sin padding: 'INT' y 'AMB' entran justos, no hace falta trim.
+            ...(params.tipoIngreso ? { ingreso: { tipoIngresoCodigo: params.tipoIngreso } } : {}),
         },
         select: {
             puestoNumero: true,
@@ -399,6 +402,7 @@ export async function obtenerLiquidacionProfesionales(
             categorias: params.categorias ?? [],
             matricula: params.matricula ?? null,
             estadosLote: params.estadosLote,
+            tipoIngreso: params.tipoIngreso ?? null,
         },
         lotesConsiderados: Array.from(lotesUsados.values()).sort((a, b) => a.numero - b.numero),
     }

@@ -12,6 +12,9 @@ export function esSubitemLiquidable(subitem: SubitemLiquidacion): subitem is Sub
 
 export type EstadoLoteLiquidacion = 'PEN' | 'CON'
 
+// Los unicos dos tipos de ingreso que existen en la base: internacion y ambulatorio.
+export type TipoIngresoLiquidacion = 'INT' | 'AMB'
+
 /** Una linea del resumen: equivale a una fila de OrdenPractica ya atribuida a un efector. */
 export interface LiquidacionLinea {
     ingresoId: number
@@ -89,6 +92,7 @@ export interface LiquidacionResumen {
         categorias: CategoriaPractica[]
         matricula: number | null
         estadosLote: EstadoLoteLiquidacion[]
+        tipoIngreso: TipoIngresoLiquidacion | null
     }
     lotesConsiderados: Array<{
         id: number

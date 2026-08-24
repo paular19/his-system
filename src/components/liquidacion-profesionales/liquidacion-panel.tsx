@@ -11,6 +11,7 @@ import type {
     EstadoLoteLiquidacion,
     LiquidacionResumen,
     ProfesionalEfectorItem,
+    TipoIngresoLiquidacion,
 } from '@/modules/liquidacion-profesionales/types'
 import { formatearFechaArgentina } from '@/lib/utils/argentina-date'
 import { LiquidacionPrint } from './liquidacion-print'
@@ -21,6 +22,11 @@ type ObraSocialItem = { id: number; nombre: string }
 const ESTADOS_LOTE: Array<{ id: EstadoLoteLiquidacion; label: string }> = [
     { id: 'PEN', label: 'Pendientes' },
     { id: 'CON', label: 'Confirmados' },
+]
+
+const TIPOS_INGRESO: Array<{ id: TipoIngresoLiquidacion; label: string }> = [
+    { id: 'INT', label: 'Internados' },
+    { id: 'AMB', label: 'Ambulatorios' },
 ]
 
 function formatMonto(n: number): string {
@@ -59,6 +65,7 @@ export function LiquidacionProfesionalesPanel() {
     const [matricula, setMatricula] = useState<string>('')
     const [categorias, setCategorias] = useState<CategoriaPractica[]>([])
     const [estadosLote, setEstadosLote] = useState<EstadoLoteLiquidacion[]>(['PEN', 'CON'])
+    const [tipoIngreso, setTipoIngreso] = useState<TipoIngresoLiquidacion | ''>('')
 
     const [obrasSociales, setObrasSociales] = useState<ObraSocialItem[]>([])
     const [profesionales, setProfesionales] = useState<ProfesionalEfectorItem[]>([])
@@ -96,6 +103,7 @@ export function LiquidacionProfesionalesPanel() {
             if (obraSocialId) params.set('obraSocialId', obraSocialId)
             if (matricula) params.set('matricula', matricula)
             if (categorias.length > 0) params.set('categorias', categorias.join(','))
+            if (tipoIngreso) params.set('tipoIngreso', tipoIngreso)
 
             const res = await fetch(`/api/liquidacion-profesionales?${params.toString()}`)
             const json = await res.json()
@@ -112,7 +120,7 @@ export function LiquidacionProfesionalesPanel() {
         } finally {
             setCargando(false)
         }
-    }, [desde, hasta, obraSocialId, matricula, categorias, estadosLote])
+    }, [desde, hasta, obraSocialId, matricula, categorias, estadosLote, tipoIngreso])
 
     const toggleCategoria = (id: CategoriaPractica) => {
         setCategorias((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]))
@@ -238,6 +246,33 @@ export function LiquidacionProfesionalesPanel() {
                                 </button>
                             )
                         })}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-gray-500 mr-1">Tipo de ingreso:</span>
+                        <button
+                            type="button"
+                            onClick={() => setTipoIngreso('')}
+                            className={`rounded-full border px-2.5 py-0.5 text-[11px] ${tipoIngreso === ''
+                                ? 'border-blue-500 bg-blue-600 text-white'
+                                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                                }`}
+                        >
+                            Todos
+                        </button>
+                        {TIPOS_INGRESO.map((tipo) => (
+                            <button
+                                key={tipo.id}
+                                type="button"
+                                onClick={() => setTipoIngreso(tipo.id)}
+                                className={`rounded-full border px-2.5 py-0.5 text-[11px] ${tipoIngreso === tipo.id
+                                    ? 'border-blue-500 bg-blue-600 text-white'
+                                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                                    }`}
+                            >
+                                {tipo.label}
+                            </button>
+                        ))}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5">

@@ -7,6 +7,11 @@ const ESTADO_LOTE_LABEL: Record<string, string> = {
     CON: 'Confirmado',
 }
 
+const TIPO_INGRESO_LABEL: Record<string, string> = {
+    INT: 'Internados',
+    AMB: 'Ambulatorios',
+}
+
 function formatMonto(n: number): string {
     return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 }
@@ -39,6 +44,7 @@ export function nombreArchivoLiquidacion(resumen: LiquidacionResumen): string {
     // El archivo se comparte por mail: que el nombre diga si es provisorio.
     if (resumen.esProvisorio) partes.push('PROVISORIO')
     partes.push(resumen.filtros.desde, resumen.filtros.hasta)
+    if (resumen.filtros.tipoIngreso) partes.push(resumen.filtros.tipoIngreso.toLowerCase())
     if (resumen.filtros.matricula) partes.push(`mat-${resumen.filtros.matricula}`)
     if (resumen.filtros.obraSocial) partes.push(slugArchivo(resumen.filtros.obraSocial.nombre))
     return `${partes.join('_')}.pdf`
@@ -81,6 +87,7 @@ export async function generarLiquidacionPdf(resumen: LiquidacionResumen): Promis
         `Tipo de practica: ${categorias || 'Todas'}`,
         `Profesional: ${filtros.matricula ? `Mat. ${filtros.matricula}` : 'Todos'}`,
         `Lotes: ${filtros.estadosLote.map((e) => ESTADO_LOTE_LABEL[e] ?? e).join(', ')}`,
+        `Tipo de ingreso: ${filtros.tipoIngreso ? TIPO_INGRESO_LABEL[filtros.tipoIngreso] ?? filtros.tipoIngreso : 'Todos'}`,
         `Generado: ${formatearFechaHoraArgentina(new Date())}`,
     ]
     doc.text(datos.join('   |   '), margen, 21, { maxWidth: anchoPagina - margen * 2 })

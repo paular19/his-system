@@ -7,6 +7,11 @@ const ESTADO_LOTE_LABEL: Record<string, string> = {
     CON: 'Confirmado',
 }
 
+const TIPO_INGRESO_LABEL: Record<string, string> = {
+    INT: 'Internados',
+    AMB: 'Ambulatorios',
+}
+
 function formatMonto(n: number): string {
     return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 }
@@ -60,6 +65,7 @@ export function LiquidacionPrint({ resumen }: { resumen: LiquidacionResumen }) {
                 </div>
                 <div className="space-y-1">
                     <p><strong>Estado de lote:</strong> {filtros.estadosLote.map((e) => ESTADO_LOTE_LABEL[e] ?? e).join(', ')}</p>
+                    <p><strong>Tipo de ingreso:</strong> {filtros.tipoIngreso ? TIPO_INGRESO_LABEL[filtros.tipoIngreso] ?? filtros.tipoIngreso : 'Todos'}</p>
                     <p><strong>Profesionales:</strong> {resumen.profesionales.length}</p>
                     <p><strong>Cantidad de prácticas:</strong> {resumen.cantidadPracticas}</p>
                 </div>

@@ -14,6 +14,8 @@ export const BusquedaLiquidacionSchema = z
         categorias: z.array(z.enum(CATEGORIAS_PRACTICA_IDS)).optional(),
         matricula: z.coerce.number().int().positive().optional(),
         estadosLote: z.array(z.enum(['PEN', 'CON'])).min(1).default(['PEN', 'CON']),
+        // Sin valor: internados y ambulatorios juntos.
+        tipoIngreso: z.enum(['INT', 'AMB']).optional(),
     })
     .refine((v) => v.desde <= v.hasta, {
         message: 'La fecha desde no puede ser posterior a la fecha hasta',
@@ -44,5 +46,6 @@ export function parsearBusquedaLiquidacion(searchParams: URLSearchParams) {
         categorias: lista('categorias'),
         matricula: searchParams.get('matricula') || undefined,
         estadosLote: lista('estadosLote') ?? ['PEN', 'CON'],
+        tipoIngreso: searchParams.get('tipoIngreso')?.trim().toUpperCase() || undefined,
     })
 }

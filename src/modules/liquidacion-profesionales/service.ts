@@ -24,6 +24,7 @@ export async function consultarLiquidacionProfesionales(
             matricula: params.matricula ?? null,
             categorias: params.categorias ?? [],
             estadosLote: params.estadosLote,
+            tipoIngreso: params.tipoIngreso ?? null,
             profesionales: resumen.profesionales.length,
             practicas: resumen.cantidadPracticas,
         }),

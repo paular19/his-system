@@ -11,7 +11,7 @@ export const ROLES = {
   MEDICO: 'MEDICO',
   ENFERMERIA: 'ENFERMERIA',
   FACTURACION: 'FACTURACION',
-  // Liquidacion de honorarios al profesional efector. Solo ve ese modulo.
+  // Liquidacion de honorarios al profesional efector. Lee todos los modulos, sin escribir.
   FACTURACION_PROFESIONALES: 'FACTURACION_PROFESIONALES',
   CAJA: 'CAJA',
 } as const
@@ -122,10 +122,22 @@ export const MATRIZ_PERMISOS: MatrizPermisos = {
     REPORTES: ['LEER'],
     COTIZADOR: ['LEER', 'CREAR', 'MODIFICAR', 'ELIMINAR'],
   },
-  // Rol acotado: solo consulta la liquidacion de honorarios. Es un reporte, no
-  // escribe nada, asi que no lleva mas permiso que LEER sobre su propio modulo.
+  // Rol de solo lectura global: consulta todos los modulos del sistema, incluida la
+  // liquidacion de honorarios. No escribe nada, asi que en ningun modulo pasa de LEER.
   FACTURACION_PROFESIONALES: {
+    PACIENTES: ['LEER'],
+    ADMISION: ['LEER'],
+    INTERNACION: ['LEER'],
+    GUARDIA: ['LEER'],
+    AMBULATORIO: ['LEER'],
+    SERVICIOS_MEDICOS: ['LEER'],
+    HISTORIA_CLINICA: ['LEER'],
+    FACTURACION: ['LEER'],
     LIQUIDACION_PROFESIONALES: ['LEER'],
+    CAJA: ['LEER'],
+    REPORTES: ['LEER'],
+    AUDITORIA: ['LEER'],
+    COTIZADOR: ['LEER'],
   },
   CAJA: {
     PACIENTES: ['LEER'],

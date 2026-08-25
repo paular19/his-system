@@ -58,7 +58,12 @@ const NAV_ITEM_LIQUIDACION: NavItem = {
   icon: Receipt,
 }
 
-const NAV_ITEMS_FACTURACION_PROFESIONALES: NavItem[] = [NAV_ITEM_LIQUIDACION]
+// Rol de solo lectura global: ve el menu completo mas su propio modulo.
+const NAV_ITEMS_FACTURACION_PROFESIONALES: NavItem[] = [
+  ...NAV_ITEMS_DEFAULT,
+  { label: 'Presupuesto', href: '/dashboard/cotizador', icon: Receipt },
+  NAV_ITEM_LIQUIDACION,
+]
 
 interface SidebarProps {
   rol: RolHIS

@@ -73,3 +73,45 @@ que el bug volvio.
 desde la sesion de Claude Code (el server no responde al SSLRequest). El driver
 HTTP de Neon (`@neondatabase/serverless`, sale por 443) si funciona y fue el que
 se uso. Las lecturas de auditoria salieron por ahi tambien.
+
+---
+
+## 2026-08-25 — Verificacion del fix del 420303 (paciente de prueba)
+
+Antes de borrar el paciente de prueba queda anotado lo que mostraba, porque es la
+evidencia de que el fix del commit `a8912f5` quedo bien en produccion.
+
+Paciente `ZZTEST, CANTIDADES` (PacID 68391), ingreso 516 ambulatorio, cargado el
+2026-08-25 21:16 para reproducir el caso reportado en el lote 41:
+
+| orden | codigo | cantidad | importe | esperado |
+|---|---|---|---|---|
+| 2563 | 420301 | 2 | 34.000,22 | correcto — 2 x 17.000,11 |
+| 2564 | 420303 | 1 | **17.000,11** | correcto — un solo honorario |
+
+Las dos practicas con `PraMatEsp = 9110` y `PraMatAne` en null. Antes del fix esa
+combinacion caia en el empate "HE"/"HA" y el 420303 salia 34.000,22; con el
+desempate por matricula sale 17.000,11.
+
+---
+
+## 2026-08-25 — Borrado del paciente de prueba ZZTEST
+
+**Que se borro:** el paciente 68391 y todo lo que colgaba de el, en una
+transaccion y en orden de FK.
+
+| tabla | filas |
+|---|---|
+| `OrdenPrac` | 2 |
+| `Orden` | 2 |
+| `Practica` | 2 |
+| `InformeAmb` | 1 |
+| `IngresoSubtipo` | 1 |
+| `Ingreso` | 1 (ingreso 516) |
+| `Paciente` | 1 (PacID 68391) |
+
+**Guardas del script:** aborta si el `PacNomCom` del 68391 no contiene "ZZTEST", y
+aborta si el ingreso 516 aparece en algun `LoteFacturacionItem`. No estaba en
+ningun lote, asi que no se toco ninguna facturacion.
+
+**Verificacion:** 0 pacientes con ZZTEST en apellido, nombre o nombre completo.

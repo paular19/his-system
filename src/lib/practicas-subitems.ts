@@ -70,3 +70,38 @@ export function esSubitemEspecialista(subitem: SubitemCodigo): boolean {
 export function esSubitemAnestesista(subitem: SubitemCodigo): boolean {
   return subitem === 'HA'
 }
+
+export type SubitemAgrupado = {
+  subitem: SubitemCodigo
+  cantidad: number
+}
+
+/**
+ * Igual que obtenerSubitemsSeleccionados pero colapsando los codigos repetidos
+ * en una sola entrada con su cantidad. Sirve para que 3 especialistas generen
+ * una practica x3 en vez de tres practicas x1.
+ *
+ * Los ayudantes no se ven afectados: A1/A2/A3 son codigos distintos (un puesto
+ * de ayudante cada uno), asi que siguen saliendo como filas separadas x1.
+ */
+export function obtenerSubitemsAgrupados(
+  valores: ComponenteValoresSubitem,
+  seleccion: ComponenteSeleccionSubitem,
+  options?: { incluirSinValor?: boolean }
+): SubitemAgrupado[] {
+  const agrupados: SubitemAgrupado[] = []
+  const indicePorSubitem = new Map<SubitemCodigo, number>()
+
+  for (const subitem of obtenerSubitemsSeleccionados(valores, seleccion, options)) {
+    const indice = indicePorSubitem.get(subitem)
+    if (indice != null) {
+      agrupados[indice]!.cantidad += 1
+      continue
+    }
+
+    indicePorSubitem.set(subitem, agrupados.length)
+    agrupados.push({ subitem, cantidad: 1 })
+  }
+
+  return agrupados
+}

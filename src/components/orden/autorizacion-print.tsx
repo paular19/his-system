@@ -272,6 +272,14 @@ export function AutorizacionPrint({
     hour12: false,
     timeZone: ARG_TIME_ZONE,
   })
+
+  // La fecha de realizacion es la del item: una orden agrupa practicas de dias distintos.
+  const fechaItemFormateada = (item: OrdenConItems['items'][number]): string =>
+    formatearFechaArgentina(item.fecha ?? orden.fechaEmision, {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+    })
   const ingresoTexto =
     orden.ingresoNumero !== null
       ? `${orden.ingresoTipoCodigo ? `${orden.ingresoTipoCodigo}-` : ''}${orden.ingresoNumero}`
@@ -404,7 +412,7 @@ export function AutorizacionPrint({
                         <td className="text-center">{diferencialTexto(item)}</td>
                         <td className="text-center">{item.incluyeCodigo ?? '-'}</td>
                         <td>{profesionalTexto(item)}</td>
-                        <td>{fechaFormateada}</td>
+                        <td>{fechaItemFormateada(item)}</td>
                       </tr>
                     ))}
                   </tbody>

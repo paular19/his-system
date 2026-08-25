@@ -7,7 +7,7 @@ import { calcularTotalSeleccionado } from '@/components/ui/componente-selector'
 import {
     esSubitemAnestesista,
     esSubitemEspecialista,
-    obtenerSubitemsSeleccionados,
+    obtenerSubitemsAgrupados,
     valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
 import {
@@ -89,7 +89,7 @@ export function PracticaIngresoForm({
             let ventanaTransferida = false
             try {
                 const practicasExpandida = practicas.flatMap((p) => {
-                    const subitems = obtenerSubitemsSeleccionados(
+                    const subitems = obtenerSubitemsAgrupados(
                         {
                             valorEspecialista: p.desglose.valorEspecialista,
                             valorAyudante: p.desglose.valorAyudante,
@@ -116,7 +116,7 @@ export function PracticaIngresoForm({
                         }]
                     }
 
-                    return subitems.map((subitem) => {
+                    return subitems.map(({ subitem, cantidad }) => {
                         const valorUnitario = valorUnitarioPorSubitem(subitem, {
                             valorEspecialista: p.desglose.valorEspecialista,
                             valorAyudante: p.desglose.valorAyudante,
@@ -125,7 +125,7 @@ export function PracticaIngresoForm({
                         })
 
                         return {
-                            cantidad: 1,
+                            cantidad,
                             convenioId: p.convenioId,
                             codigo: p.codigo.trim(),
                             descripcion: p.descripcion,
@@ -134,7 +134,7 @@ export function PracticaIngresoForm({
                                 : null,
                             matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
                             matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
-                            importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
+                            importeTotal: Number(((valorUnitario ?? 0) * cantidad).toFixed(2)),
                         }
                     })
                 })

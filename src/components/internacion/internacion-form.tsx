@@ -12,7 +12,7 @@ import { SECTOR_LABEL } from '@/modules/internacion/types'
 import {
   esSubitemAnestesista,
   esSubitemEspecialista,
-  obtenerSubitemsSeleccionados,
+  obtenerSubitemsAgrupados,
   valorUnitarioPorSubitem,
 } from '@/lib/practicas-subitems'
 import { requiereCoseguroParaObraSocial } from '@/lib/utils/coseguros'
@@ -314,7 +314,7 @@ export function InternacionForm({
     }))
 
     const practicasExpandida = practicasNormalizadas.flatMap((p) => {
-      const subitems = obtenerSubitemsSeleccionados(
+      const subitems = obtenerSubitemsAgrupados(
         {
           valorEspecialista: p.desglose.valorEspecialista,
           valorAyudante: p.desglose.valorAyudante,
@@ -340,7 +340,7 @@ export function InternacionForm({
         }]
       }
 
-      return subitems.map((subitem) => {
+      return subitems.map(({ subitem, cantidad }) => {
         const valorUnitario = valorUnitarioPorSubitem(subitem, {
           valorEspecialista: p.desglose.valorEspecialista,
           valorAyudante: p.desglose.valorAyudante,
@@ -353,9 +353,9 @@ export function InternacionForm({
           codigo: p.codigo,
           descripcion: p.descripcion,
           numeroAutorizacion: p.numeroAutorizacion?.trim() || null,
-          cantidad: 1,
+          cantidad,
           grupoOrden: null,
-          importeTotal: Number((valorUnitario ?? 0).toFixed(2)),
+          importeTotal: Number(((valorUnitario ?? 0) * cantidad).toFixed(2)),
           matriculaEspecialista: esSubitemEspecialista(subitem) ? p.matriculaEspecialista : null,
           matriculaAnestesista: esSubitemAnestesista(subitem) ? p.matriculaAnestesista : null,
         }

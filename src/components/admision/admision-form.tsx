@@ -363,6 +363,7 @@ export function AdmisionForm({
     }))
 
     const practicasExpandida = practicasNormalizadas.flatMap((p) => {
+      const cantidadPractica = Math.max(1, Math.floor(p.cantidad ?? 1))
       const subitems = obtenerSubitemsAgrupados(
         {
           valorEspecialista: p.desglose.valorEspecialista,
@@ -379,17 +380,18 @@ export function AdmisionForm({
           codigo: p.codigo,
           descripcion: p.descripcion,
           numeroAutorizacion: p.numeroAutorizacion?.trim() || null,
-          cantidad: 1,
+          cantidad: cantidadPractica,
           grupoOrden: null,
           importeTotal: Number((
-            calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
+            calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) * cantidadPractica
           ).toFixed(2)),
           matriculaEspecialista: p.seleccionComponentes.especialista > 0 ? p.matriculaEspecialista : null,
           matriculaAnestesista: p.seleccionComponentes.anestesista > 0 ? p.matriculaAnestesista : null,
         }]
       }
 
-      return subitems.map(({ subitem, cantidad }) => {
+      return subitems.map(({ subitem, cantidad: cantidadSubitem }) => {
+        const cantidad = cantidadSubitem * cantidadPractica
         const valorUnitario = valorUnitarioPorSubitem(subitem, {
           valorEspecialista: p.desglose.valorEspecialista,
           valorAyudante: p.desglose.valorAyudante,

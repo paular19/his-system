@@ -89,6 +89,7 @@ export function PracticaIngresoForm({
             let ventanaTransferida = false
             try {
                 const practicasExpandida = practicas.flatMap((p) => {
+                    const cantidadPractica = Math.max(1, Math.floor(p.cantidad ?? 1))
                     const subitems = obtenerSubitemsAgrupados(
                         {
                             valorEspecialista: p.desglose.valorEspecialista,
@@ -101,7 +102,7 @@ export function PracticaIngresoForm({
 
                     if (subitems.length === 0) {
                         return [{
-                            cantidad: 1,
+                            cantidad: cantidadPractica,
                             convenioId: p.convenioId,
                             codigo: p.codigo.trim(),
                             descripcion: p.descripcion,
@@ -111,12 +112,13 @@ export function PracticaIngresoForm({
                             matriculaEspecialista: p.matriculaEspecialista,
                             matriculaAnestesista: p.matriculaAnestesista,
                             importeTotal: Number((
-                                calcularTotalSeleccionado(p.desglose, p.seleccionComponentes)
+                                calcularTotalSeleccionado(p.desglose, p.seleccionComponentes) * cantidadPractica
                             ).toFixed(2)),
                         }]
                     }
 
-                    return subitems.map(({ subitem, cantidad }) => {
+                    return subitems.map(({ subitem, cantidad: cantidadSubitem }) => {
+                        const cantidad = cantidadSubitem * cantidadPractica
                         const valorUnitario = valorUnitarioPorSubitem(subitem, {
                             valorEspecialista: p.desglose.valorEspecialista,
                             valorAyudante: p.desglose.valorAyudante,

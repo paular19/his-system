@@ -72,6 +72,8 @@ interface ComponenteSelectorProps {
     seleccion: ComponenteSeleccion
     onChange: (seleccion: ComponenteSeleccion) => void
     disabled?: boolean
+    /** Cantidad de la practica: multiplica los importes mostrados (no la seleccion). */
+    cantidadPractica?: number
     clasificacionesPorComponente?: Partial<Record<keyof ComponenteSeleccion, Array<{
         index: number
         label: string
@@ -86,6 +88,7 @@ export function ComponenteSelector({
     seleccion,
     onChange,
     disabled = false,
+    cantidadPractica = 1,
     clasificacionesPorComponente,
     onClasificacionChange,
     clasificacionListId,
@@ -98,7 +101,10 @@ export function ComponenteSelector({
     const tieneValoresNomenclador = tieneDesglose || valores.valorTotal != null
 
     // Siempre mostrar el selector, aunque sea para selection manual sin valores
-    const total = calcularTotalSeleccionado(valores, seleccion)
+    const multiplicador = Number.isFinite(cantidadPractica) && cantidadPractica > 0
+        ? Math.floor(cantidadPractica)
+        : 1
+    const total = calcularTotalSeleccionado(valores, seleccion) * multiplicador
 
     const normalizarCantidad = (cantidad: number, maximo: number): number => {
         if (!Number.isFinite(cantidad) || cantidad <= 0) return 0
@@ -124,9 +130,7 @@ export function ComponenteSelector({
         const cantidad = normalizarCantidad(seleccion[key], maximo)
         const activo = cantidad > 0
         const puedeSumar = cantidad < maximo
-        const importe = valor != null
-            ? (cantidad > 1 ? valor * cantidad : valor)
-            : null
+        const importe = valor != null ? valor * cantidad * multiplicador : null
         const clasificacionesFila = clasificacionesPorComponente?.[key] ?? []
 
         return (
@@ -192,6 +196,11 @@ export function ComponenteSelector({
         <div className="rounded-lg border border-blue-100 bg-blue-50/30 px-3 py-2 space-y-1.5">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
                 Componentes a facturar {!tieneValoresNomenclador && <span className="text-amber-600">(sin valores del nomenclador)</span>}
+                {multiplicador > 1 && (
+                    <span className="ml-1 text-blue-700 normal-case">
+                        — importes ×{multiplicador} (cantidad de la práctica)
+                    </span>
+                )}
             </p>
             {!tieneValoresNomenclador && (
                 <p className="text-[10px] text-amber-700 italic">

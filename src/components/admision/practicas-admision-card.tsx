@@ -27,6 +27,7 @@ export interface PracticaAdmisionItem {
   codigo: string
   descripcion: string
   numeroAutorizacion?: string | null
+  cantidad: number
   desglose: ComponenteValores
   seleccionComponentes: ComponenteSeleccion
   requiereMatriculaEspecialista?: boolean
@@ -271,6 +272,7 @@ export function PracticasAdmisionCard({
         codigo: practica.codigo,
         descripcion: practica.descripcion,
         numeroAutorizacion: '',
+        cantidad: 1,
         desglose: {
           valorEspecialista: practica.valorEspecialista ?? null,
           valorAyudante: practica.valorAyudante ?? null,
@@ -398,6 +400,27 @@ export function PracticasAdmisionCard({
                   <span className="font-mono text-xs text-gray-500 w-20 shrink-0">{p.codigo}</span>
                   <span className="flex-1 text-sm text-gray-800">{p.descripcion}</span>
                   <div className="flex items-center gap-1 shrink-0">
+                    <label className="text-xs text-gray-500">Cant.</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={p.cantidad ?? 1}
+                      onChange={(e) => {
+                        const parsed = parseInt(e.target.value, 10)
+                        const cantidad = Number.isFinite(parsed)
+                          ? Math.min(99, Math.max(1, parsed))
+                          : 1
+                        setPracticas((prev) => prev.map((x) =>
+                          x.tempId === p.tempId
+                            ? { ...x, cantidad }
+                            : x
+                        ))
+                      }}
+                      className="w-14 rounded border border-gray-300 px-2 py-1 text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
                     <label className="text-xs text-gray-500">Aut.</label>
                     <input
                       type="text"
@@ -462,6 +485,7 @@ export function PracticasAdmisionCard({
                 <ComponenteSelector
                   valores={p.desglose}
                   seleccion={p.seleccionComponentes}
+                  cantidadPractica={p.cantidad ?? 1}
                   onChange={(nuevaSeleccion) => {
                     setPracticas((prev) => prev.map((x) =>
                       x.tempId === p.tempId

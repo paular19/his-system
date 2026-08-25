@@ -459,6 +459,8 @@ function serializarIncluyeSeleccion(seleccion: IncluyeCodigoSeleccion): string |
 function inferirIncluyeCodigoDesdeImporte(params: {
     desglose: DesgloseValores | null
     precioUnitarioDesdeDb: number | null
+    matriculaEspecialista?: number | null
+    matriculaAnestesista?: number | null
 }): string | null {
     if (!params.desglose || params.precioUnitarioDesdeDb == null || params.precioUnitarioDesdeDb <= 0) {
         return null
@@ -476,7 +478,7 @@ function inferirIncluyeCodigoDesdeImporte(params: {
     const posiblesGastos = params.desglose.valorGastos != null ? [false, true] : [false]
     const maxAyudantes = params.desglose.valorAyudante != null ? 3 : 0
 
-    const candidatos: string[] = []
+    const candidatos: Array<{ incluye: string; especialista: boolean; anestesista: boolean }> = []
 
     for (const especialista of posiblesEspecialista) {
         for (const anestesista of posiblesAnestesista) {
@@ -497,16 +499,43 @@ function inferirIncluyeCodigoDesdeImporte(params: {
                         calcularTotalUnitarioDesglose(params.desglose, incluye).toFixed(2)
                     )
                     if (Math.abs(total - objetivo) <= tol) {
-                        candidatos.push(incluye)
+                        candidatos.push({ incluye, especialista, anestesista })
                     }
                 }
             }
         }
     }
 
-    const unicos = Array.from(new Set(candidatos))
-    if (unicos.length !== 1) return null
-    return normalizarIncluyeCodigo(unicos[0])
+    const unicos = Array.from(new Set(candidatos.map((c) => c.incluye)))
+    if (unicos.length === 1) return normalizarIncluyeCodigo(unicos[0])
+    if (unicos.length === 0) return null
+
+    // Empate: el importe guardado no alcanza para distinguir el componente.
+    // Pasa cuando el override de codigo espeja el valor del especialista sobre
+    // el anestesista (420303): los dos quedan en el mismo numero y "HE" y "HA"
+    // matchean igual. Sin desempate la practica cae en "completa" y termina
+    // cobrando los dos honorarios — el doble del nomenclador.
+    // Se desempata con las matriculas cargadas en la practica: si solo hay
+    // especialista, la practica cobra HE; si solo hay anestesista, HA.
+    const soloEspecialista =
+        params.matriculaEspecialista != null && params.matriculaAnestesista == null
+    const soloAnestesista =
+        params.matriculaAnestesista != null && params.matriculaEspecialista == null
+    if (!soloEspecialista && !soloAnestesista) return null
+
+    const compatibles = Array.from(
+        new Set(
+            candidatos
+                .filter((c) =>
+                    soloEspecialista
+                        ? c.especialista && !c.anestesista
+                        : c.anestesista && !c.especialista
+                )
+                .map((c) => c.incluye)
+        )
+    )
+    if (compatibles.length !== 1) return null
+    return normalizarIncluyeCodigo(compatibles[0])
 }
 
 async function obtenerValoresPracticas(codigosPractica: string[]): Promise<Map<string, number>> {
@@ -2632,6 +2661,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             ? inferirIncluyeCodigoDesdeImporte({
                 desglose: desgloseBase,
                 precioUnitarioDesdeDb,
+                matriculaEspecialista: p.matriculaEspecialista,
+                matriculaAnestesista: p.matriculaAnestesista,
             })
             : null
         const incluyeCodigoPractica = normalizarIncluyeCodigo(

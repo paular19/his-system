@@ -49,8 +49,9 @@ import { claveDiaArgentina } from '@/lib/utils/argentina-date'
 import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
 import {
-    aplicaPromediIPS,
-    aplicaPromediOsecac,
+    aplicaPromediPorObra,
+    porcentajePromediPorObra,
+    resolverReglaPromedi,
     resolverSubitemPromedi,
     subitemEntraEnPromedi,
     CODIGOS_PROMEDI_BASE,
@@ -99,20 +100,6 @@ function normalizarTextoComparacion(value: string | null | undefined): string {
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toUpperCase()
-}
-
-function normalizarTextoSoloAlfanumerico(value: string | null | undefined): string {
-    return normalizarTextoComparacion(value).replace(/[^A-Z0-9]/g, '')
-}
-
-function esObraSocialOsecac(nombre: string | null | undefined): boolean {
-    const limpio = normalizarTextoSoloAlfanumerico(nombre)
-    return limpio.includes('OSECAC') || limpio.includes('OBRASOCIALEMPLEADOSDECOMERCIO')
-}
-
-function esObraSocialIps(nombre: string | null | undefined): boolean {
-    const limpio = normalizarTextoSoloAlfanumerico(nombre)
-    return limpio.includes('IPS') || limpio.includes('IPSS')
 }
 
 function descripcionEsAnestesista(descripcion: string | null | undefined): boolean {
@@ -6289,10 +6276,9 @@ export async function aplicarPromediLote(
         return { importeTotal: totalPromedi, cantidadItems }
     }
 
-    const esIps = esObraSocialIps(lote.obraSocial?.nombre)
-    const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)
-    const esPromediObraSocial = esIps || esOsecac
-    if (!esPromediObraSocial || lote.tipo !== 'PRACTICAS') {
+    // ACIDSAL resuelve a la regla IPS: mismos codigos alcanzados y mismo porcentaje.
+    const reglaPromedi = resolverReglaPromedi(lote.obraSocial?.nombre)
+    if (reglaPromedi === null || lote.tipo !== 'PRACTICAS') {
         throw new Error('PROMEDI solo aplica a lotes IPS TXT o lotes de prácticas con obra social de regla PROMEDI')
     }
 
@@ -6373,7 +6359,7 @@ export async function aplicarPromediLote(
     })
 
     const importePorIngreso = new Map<number, number>()
-    const porcentajePromedi = esIps ? 0.36 : 0.20
+    const porcentajePromedi = porcentajePromediPorObra(reglaPromedi)
 
     for (const orden of ordenes) {
         if (clavesOrdenesExcluidas.has(`${orden.puestoNumero}:${orden.numero}`)) continue
@@ -6387,7 +6373,7 @@ export async function aplicarPromediLote(
             // Al resumen solo entran las practicas alcanzadas por la regla de promedi.
             // El resto (oxigeno, radiografias, ecografias, guardia, 431101, y en OSECAC
             // ademas 70116 y 70607) no se factura en este lote.
-            const aplicaCodigo = (esIps ? aplicaPromediIPS : aplicaPromediOsecac)(item.codigoPractica)
+            const aplicaCodigo = aplicaPromediPorObra(item.codigoPractica, reglaPromedi)
             // Y dentro de esos codigos, solo impacta el subitem de gastos (GA).
             // Unica excepcion: el 400101, que impacta todos los subitems.
             const subitem = resolverSubitemPromedi({

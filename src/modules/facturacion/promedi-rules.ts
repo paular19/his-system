@@ -24,6 +24,43 @@ function normalizarTextoPromedi(value: string | null | undefined): string {
         .toUpperCase()
 }
 
+function normalizarNombreObraSocial(nombre: string | null | undefined): string {
+    return normalizarTextoPromedi(nombre).replace(/[^A-Z0-9]/g, '')
+}
+
+// Porcentaje del importe que se factura en el resumen, por regla.
+export const PORCENTAJE_PROMEDI: Record<ObraSocialPromedi, number> = {
+    IPS: 0.36,
+    OSECAC: 0.20,
+}
+
+export function esObraSocialIps(nombre: string | null | undefined): boolean {
+    const limpio = normalizarNombreObraSocial(nombre)
+    return limpio.includes('IPS') || limpio.includes('IPSS')
+}
+
+export function esObraSocialOsecac(nombre: string | null | undefined): boolean {
+    const limpio = normalizarNombreObraSocial(nombre)
+    return limpio.includes('OSECAC') || limpio.includes('OBRASOCIALEMPLEADOSDECOMERCIO')
+}
+
+export function esObraSocialAcidsal(nombre: string | null | undefined): boolean {
+    return normalizarNombreObraSocial(nombre).includes('ACIDSAL')
+}
+
+// La regla nombra el tratamiento, no la obra social: ACIDSAL se factura con los mismos
+// codigos alcanzados y el mismo porcentaje que IPS, asi que resuelve a la regla 'IPS'.
+// Devuelve null cuando la obra social no tiene regla de promedi.
+export function resolverReglaPromedi(nombre: string | null | undefined): ObraSocialPromedi | null {
+    if (esObraSocialOsecac(nombre)) return 'OSECAC'
+    if (esObraSocialAcidsal(nombre) || esObraSocialIps(nombre)) return 'IPS'
+    return null
+}
+
+export function porcentajePromediPorObra(obraSocial: ObraSocialPromedi): number {
+    return PORCENTAJE_PROMEDI[obraSocial]
+}
+
 // La clinica se factura a si misma los gastos con dos matriculas propias: 9995
 // ("CLINICA SAN RAFAEL", internacion) y 9110 ("SAN RAFAEL S.A. MP CMS", ambulatorio).
 // Es la misma columna "Mat." que imprime el resumen del sistema anterior.

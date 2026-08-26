@@ -14,8 +14,11 @@ import {
     aplicaPromediIPS,
     aplicaPromediPorObraYSubitem,
     calcularImportePromediPorCodigo,
+    porcentajePromediPorObra,
+    resolverReglaPromedi,
     resolverSubitemPromedi,
     type LineaSubitemPromedi,
+    type ObraSocialPromedi,
     type SubitemPromedi,
 } from '@/modules/facturacion/promedi-rules'
 import {
@@ -98,29 +101,15 @@ function normalizarTexto(value: string | null | undefined): string {
         .toUpperCase()
 }
 
-function normalizarTextoSoloAlfanumerico(value: string | null | undefined): string {
-    return normalizarTexto(value).replace(/[^A-Z0-9]/g, '')
-}
-
-function esObraSocialOsecac(nombre: string | null | undefined): boolean {
-    const limpio = normalizarTextoSoloAlfanumerico(nombre)
-    return limpio.includes('OSECAC') || limpio.includes('OBRASOCIALEMPLEADOSDECOMERCIO')
-}
-
-function esObraSocialIps(nombre: string | null | undefined): boolean {
-    const limpio = normalizarTextoSoloAlfanumerico(nombre)
-    return limpio.includes('IPS') || limpio.includes('IPSS')
-}
-
 function importePromediAplicado(
     codigoRaw: string,
     importe: number,
     porcentaje: number,
-    esOsecac: boolean,
+    obraSocialPromedi: ObraSocialPromedi,
     subitem: SubitemPromedi
 ): number {
     // El PROMEDI debe evaluarse por práctica/item y no por paciente o ingreso.
-    return calcularImportePromediPorCodigo(codigoRaw, importe, porcentaje, esOsecac ? 'OSECAC' : 'IPS', subitem)
+    return calcularImportePromediPorCodigo(codigoRaw, importe, porcentaje, obraSocialPromedi, subitem)
 }
 
 // Arma la linea que consume el resolver de subitem. El importe y el desglose del
@@ -304,7 +293,7 @@ type OrdenItemAgrupadoTabla = {
 function agruparItemsOrdenParaTabla(
     items: OrdenAutorizadaLote['items'],
     porcentajePromedi: number,
-    esOsecac: boolean,
+    obraSocialPromedi: ObraSocialPromedi,
     profesionalNombre: string | null | undefined
 ): OrdenItemAgrupadoTabla[] {
     const agrupados = new Map<string, OrdenItemAgrupadoTabla>()
@@ -325,7 +314,7 @@ function agruparItemsOrdenParaTabla(
             item.codigoPractica,
             item.importeTotal,
             porcentajePromedi,
-            esOsecac,
+            obraSocialPromedi,
             resolverSubitemPromedi(linea)
         )
 
@@ -759,11 +748,13 @@ export function LoteDetallePage({ loteId }: Props) {
     const est = ESTADO_LABEL[lote.estado] ?? { label: lote.estado, cls: 'bg-gray-100 text-gray-700' }
     const esPendiente = puedeEditarPrestacionEnLote(lote.estado)
     const esIPSTxt = lote.origen === 'IPS_TXT'
-    const esIps = esObraSocialIps(lote.obraSocial?.nombre)
-    const esOsecac = esObraSocialOsecac(lote.obraSocial?.nombre)
-    const puedeAplicarPromedi = esPendiente && !lote.promediAplicado && (esIPSTxt || (lote.tipo === 'PRACTICAS' && (esIps || esOsecac)))
-    const porcentajePromediDecimal = esIPSTxt || esIps ? 0.36 : 0.20
-    const porcentajePromediLabel = esIPSTxt || esIps ? 36 : 20
+    // ACIDSAL resuelve a la regla IPS: mismos codigos alcanzados y mismo porcentaje.
+    const reglaPromedi = resolverReglaPromedi(lote.obraSocial?.nombre)
+    const puedeAplicarPromedi = esPendiente && !lote.promediAplicado && (esIPSTxt || (lote.tipo === 'PRACTICAS' && reglaPromedi !== null))
+    // El lote IPS TXT ya es de IPS por origen, aunque no tenga obra social cargada.
+    const obraSocialPromedi: ObraSocialPromedi = esIPSTxt ? 'IPS' : (reglaPromedi ?? 'IPS')
+    const porcentajePromediDecimal = porcentajePromediPorObra(obraSocialPromedi)
+    const porcentajePromediLabel = Math.round(porcentajePromediDecimal * 100)
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const itemsOrdenados = [...lote.items].sort((a, b) =>
         (a.paciente?.nombreCompleto ?? a.ingreso.nombre ?? '').localeCompare(
@@ -805,7 +796,7 @@ export function LoteDetallePage({ loteId }: Props) {
                 orden.items.some((linea) =>
                     aplicaPromediPorObraYSubitem(
                         linea.codigoPractica,
-                        esOsecac ? 'OSECAC' : 'IPS',
+                        obraSocialPromedi,
                         resolverSubitemPromedi(lineaSubitemDeItem(linea, orden.profesional?.nombre))
                     )
                 )
@@ -869,7 +860,7 @@ export function LoteDetallePage({ loteId }: Props) {
                             linea.codigoPractica,
                             linea.importeTotal,
                             porcentajePromediDecimal,
-                            esOsecac,
+                            obraSocialPromedi,
                             subitemLinea
                         )
                         : linea.importeTotal
@@ -1396,14 +1387,14 @@ export function LoteDetallePage({ loteId }: Props) {
                                             const keyOrden = `${orden.puestoNumero}-${orden.numero}`
                                             const keyOrdenEdicion = `${orden.puestoNumero}:${orden.numero}`
                                             const draftOrden = editOrdenes[keyOrdenEdicion] ?? buildOrdenEditState(orden)
-                                            const porcentajePromediOrden = esIPSTxt || esIps ? 0.36 : 0.20
+                                            const porcentajePromediOrden = porcentajePromediDecimal
                                             const itemsOrden = filtroCategoria
                                                 ? orden.items.filter((it) => categoriaPractica(it.codigoPractica) === filtroCategoria)
                                                 : orden.items
                                             const itemsTabla = agruparItemsOrdenParaTabla(
                                                 itemsOrden,
                                                 porcentajePromediOrden,
-                                                esOsecac,
+                                                obraSocialPromedi,
                                                 orden.profesional?.nombre
                                             )
                                             const totalCantidadOrden = itemsOrden.reduce((acc, it) => acc + (it.cantidad ?? 0), 0)

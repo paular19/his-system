@@ -445,6 +445,7 @@ export function SeccionDatosAdmision({
         profesionalGuardiaNombre: ingreso.profesionalGuardia?.nombre ?? null,
         profesionalTratanteId: ingreso.profesionalTratanteId ?? null,
         profesionalTratanteNombre,
+        profesionalTratanteMatricula,
     }))
 
     useEffect(() => {
@@ -458,6 +459,7 @@ export function SeccionDatosAdmision({
             profesionalGuardiaNombre: ingreso.profesionalGuardia?.nombre ?? null,
             profesionalTratanteId: ingreso.profesionalTratanteId ?? null,
             profesionalTratanteNombre,
+            profesionalTratanteMatricula,
         })
     }, [
         ingreso.fechaIngreso,
@@ -469,6 +471,7 @@ export function SeccionDatosAdmision({
         ingreso.profesionalGuardia?.nombre,
         ingreso.profesionalTratanteId,
         profesionalTratanteNombre,
+        profesionalTratanteMatricula,
     ])
 
     const motivoEgresoDescripcion = catalogos.motivosEgreso.find(
@@ -508,6 +511,10 @@ export function SeccionDatosAdmision({
                 const profesionalTratanteId = aIdOpcional(v.profesionalTratanteId)
                 const nombrePorId = (id: number | null) =>
                     id ? (catalogos.profesionales.find((p) => p.id === id)?.nombre ?? null) : null
+                // La matricula se muestra aparte del nombre: si no se actualiza junto con el
+                // profesional, la vista sigue mostrando la del tratante original.
+                const matriculaPorId = (id: number | null) =>
+                    id ? (catalogos.profesionales.find((p) => p.id === id)?.matricula ?? null) : null
 
                 setDatos((prev) => ({
                     ...prev,
@@ -526,6 +533,9 @@ export function SeccionDatosAdmision({
                     profesionalTratanteNombre: esGuardia
                         ? prev.profesionalTratanteNombre
                         : nombrePorId(profesionalTratanteId),
+                    profesionalTratanteMatricula: esGuardia
+                        ? prev.profesionalTratanteMatricula
+                        : matriculaPorId(profesionalTratanteId),
                 }))
 
                 onGuardado?.({
@@ -571,7 +581,11 @@ export function SeccionDatosAdmision({
                     {!esGuardia && (
                         <Vista
                             label="Matrícula Tratante"
-                            value={profesionalTratanteMatricula ? String(profesionalTratanteMatricula) : null}
+                            value={
+                                datos.profesionalTratanteMatricula
+                                    ? String(datos.profesionalTratanteMatricula)
+                                    : null
+                            }
                         />
                     )}
                     <Vista label="Profesional Interviniente" value={ingreso.profesionalInterviniente?.nombre} />

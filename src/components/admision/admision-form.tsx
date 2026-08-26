@@ -682,6 +682,12 @@ export function AdmisionForm({
               </option>
             ))}
           </select>
+          {subtipos.length === 0 && (
+            <p className="mt-2 text-xs text-red-600">
+              No se pudieron cargar los tipos de admisión. Recargá la página; si sigue igual,
+              avisá a sistemas con la hora exacta.
+            </p>
+          )}
         </div>
       </div>
 

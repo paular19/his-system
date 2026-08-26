@@ -16,3 +16,6 @@ escaner.pdf
 
 # Claude Code (permisos locales)
 .claude/
+
+# Notas de trabajo locales
+docs/plan-cumplimiento.md

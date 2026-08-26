@@ -86,6 +86,11 @@ function fechaToGroupingKey(value: Date | string): string {
     return date.toISOString()
 }
 
+function fechaAOrden(value: Date | string): number {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? Number.POSITIVE_INFINITY : date.getTime()
+}
+
 function normalizarTexto(value: string | null | undefined): string {
     return (value ?? '')
         .normalize('NFD')
@@ -929,7 +934,16 @@ export function LoteDetallePage({ loteId }: Props) {
                         return acc
                     }, new Map<string, (typeof lineasBase)[number]>())
                     .values()
-            )
+            ).sort((a, b) => {
+                // El resumen sale por fecha de realizacion de la practica: las ordenes de
+                // un mismo paciente pueden intercalarse (una emitida antes puede tener
+                // practicas posteriores).
+                const porFecha = fechaAOrden(a.fecha) - fechaAOrden(b.fecha)
+                if (porFecha !== 0) return porFecha
+                const porOrden = a.ordenNumero - b.ordenNumero
+                if (porOrden !== 0) return porOrden
+                return a.codigoPractica.localeCompare(b.codigoPractica)
+            })
 
             return {
                 ingresoId: item.ingresoId,

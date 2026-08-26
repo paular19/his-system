@@ -5799,6 +5799,15 @@ async function recalcularImportesLoteConExclusiones(loteId: number): Promise<voi
     ])
 }
 
+function fechaPrimeraPractica(items: Array<{ fecha: Date }>): number {
+    let minima = Number.POSITIVE_INFINITY
+    for (const item of items) {
+        const valor = item.fecha.getTime()
+        if (valor < minima) minima = valor
+    }
+    return minima
+}
+
 export async function obtenerOrdenesAutorizadasIngreso(
     ingresoId: number,
     filtros?: { medico?: string; matricula?: number; periodo?: string; loteId?: number }
@@ -5931,6 +5940,9 @@ export async function obtenerOrdenesAutorizadasIngreso(
                 },
             },
             items: {
+                // Las practicas de una orden se listan por fecha de realizacion: una orden
+                // puede tener items con fecha distinta a la de emision.
+                orderBy: [{ fecha: 'asc' }, { item: 'asc' }],
                 select: {
                     item: true,
                     fecha: true,
@@ -6092,6 +6104,15 @@ export async function obtenerOrdenesAutorizadasIngreso(
             }
         })
         .filter((orden) => orden.items.length > 0)
+        // Entre ordenes tambien manda la fecha de realizacion: una orden emitida antes
+        // puede tener practicas posteriores a las de otra emitida despues.
+        .sort((a, b) => {
+            const porFecha = fechaPrimeraPractica(a.items) - fechaPrimeraPractica(b.items)
+            if (porFecha !== 0) return porFecha
+            const porEmision = a.fechaEmision.getTime() - b.fechaEmision.getTime()
+            if (porEmision !== 0) return porEmision
+            return a.numero - b.numero
+        })
 }
 
 // ============================================

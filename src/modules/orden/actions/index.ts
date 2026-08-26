@@ -578,11 +578,17 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         id: true,
         convenioId: true,
         codigoPractica: true,
+        convenioValorId: true,
         fecha: true,
         cantidad: true,
         numeroAutorizacion: true,
         matriculaEspecialista: true,
         matriculaAnestesista: true,
+        obraSocialId: true,
+        planId: true,
+        facturable: true,
+        motivoNoFactura: true,
+        estado: true,
         importeTotal: true,
         numeroProtocoloLab: true,
         diagnosticoLab: true,
@@ -762,7 +768,55 @@ export async function generarOrdenesDesdeInternacionAction(input: {
         valoresNomenclador.get(claveNomenclador(practica.convenioId, practica.codigoPractica))
       )
 
+      // Una practica partida en varios componentes necesita una fila de Practica por
+      // componente. Practica guarda un unico (PueNum, OrdNum, OprItem) y facturacion
+      // vincula una practica a un solo item de orden, asi que con una sola fila para
+      // N ordenes solo se podia facturar una y las demas quedaban muertas: ninguna
+      // practica partida por subitem llego nunca a facturarse. El primer componente
+      // se queda con la practica original y el resto se clona con su parte del importe.
+      const practicaIdPorComponente = new Map<number, number>()
+      if (componentesSubitem.length > 1) {
+        for (let idx = 1; idx < clasificacionesObjetivo.length; idx += 1) {
+          const clon = await prisma.practica.create({
+            data: {
+              ingresoId: parsed.data.ingresoId,
+              convenioId: practica.convenioId,
+              codigoPractica: practica.codigoPractica,
+              convenioValorId: practica.convenioValorId,
+              fecha: practica.fecha,
+              cantidad: practica.cantidad,
+              numeroAutorizacion: practica.numeroAutorizacion,
+              numeroProtocoloLab: practica.numeroProtocoloLab,
+              diagnosticoLab: practica.diagnosticoLab,
+              matriculaEspecialista: practica.matriculaEspecialista,
+              matriculaAnestesista: practica.matriculaAnestesista,
+              obraSocialId: practica.obraSocialId,
+              planId: practica.planId,
+              facturable: practica.facturable,
+              motivoNoFactura: practica.motivoNoFactura,
+              importeTotal: importesPorSubitem[idx] ?? importePracticaTotal,
+              estado: practica.estado,
+              usuarioRegistro: usuario.codigoUsuario,
+            },
+            select: { id: true },
+          })
+          practicaIdPorComponente.set(idx, clon.id)
+          practicasPendientesPorId.set(clon.id, { ...practica, id: clon.id })
+        }
+
+        // El importe de la practica original tambien es el del componente, no el total:
+        // si queda el total, facturacion cobra la practica entera en la primera orden.
+        const importePrimerComponente = importesPorSubitem[0] ?? importePracticaTotal
+        if (importePrimerComponente != null && importePrimerComponente !== importePracticaTotal) {
+          await prisma.practica.update({
+            where: { id: practica.id },
+            data: { importeTotal: importePrimerComponente },
+          })
+        }
+      }
+
       for (const [idxClasificacion, clasificacion] of clasificacionesObjetivo.entries()) {
+        const practicaIdComponente = practicaIdPorComponente.get(idxClasificacion) ?? practica.id
         const importeItem = componentesSubitem.length > 0
           ? importesPorSubitem[idxClasificacion] ?? importePracticaTotal
           : importePracticaTotal
@@ -847,7 +901,7 @@ export async function generarOrdenesDesdeInternacionAction(input: {
             : (practica.matriculaEspecialista ?? practica.matriculaAnestesista ?? null)
 
         const item: CrearOrdenInput['items'][number] = {
-          practicaId: practica.id,
+          practicaId: practicaIdComponente,
           convenioId: practica.convenioId,
           codigoPractica: codigoPracticaNormalizado,
           descripcionPractica,
@@ -855,13 +909,19 @@ export async function generarOrdenesDesdeInternacionAction(input: {
           fecha: normalizarFechaOrdenArgentina(practica.fecha),
           tipoFacturacion: 'H',
           clasificacionAgrupacion: esProtocoloBioquimico ? 'HE' : clasificacion,
+          // El componente va tambien en incluyeCodigo (OprModulo): es de donde
+          // facturacion saca que cobra el item. Sin esto la linea salia sin componente
+          // y el importe se recalculaba sobre la practica entera.
+          incluyeCodigo: componentesSubitem.length > 1 && !esProtocoloBioquimico
+            ? clasificacion
+            : undefined,
           efectorMatricula: efectorMatriculaItem,
           numeroAutorizacion: practica.numeroAutorizacion,
           importeTotal: importeItem ?? undefined,
         }
 
         const arr = grupos.get(key) ?? []
-        arr.push({ item, practicaId: practica.id })
+        arr.push({ item, practicaId: practicaIdComponente })
         grupos.set(key, arr)
       }
     }

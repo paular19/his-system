@@ -115,3 +115,65 @@ aborta si el ingreso 516 aparece en algun `LoteFacturacionItem`. No estaba en
 ningun lote, asi que no se toco ninguna facturacion.
 
 **Verificacion:** 0 pacientes con ZZTEST en apellido, nombre o nombre completo.
+
+---
+
+## 2026-08-26 — Ingresos sin obra social que no se podian facturar
+
+**Sintoma reportado:** MAIDANA, ROBERTO NARCISO — ambulatorio AMB-223 (IngID 368).
+Se tildaba la practica en el panel de facturacion y no la tomaba.
+
+**Causa:** el ingreso tenia `Ingreso.OSID` nulo aunque su orden 1-1707 si tenia
+OSID=1 / PosID=1. `cargarOrdenesDesdePrestaciones` cortaba en
+`src/modules/facturacion/repository.ts:3330` con "El ingreso no tiene obra social
+cargada". Ademas, con `OSID` nulo el ingreso tampoco entraba en el lote de IPSS
+(`repository.ts:5492` filtra `whereIngreso.obraSocialId = data.obraSocialId`).
+
+El ingreso quedo sin obra social porque al admitir, `admision-form.tsx` marca
+"Paciente particular" automaticamente cuando la ficha del paciente no tiene OS
+(`const esParticular = !p.obraSocialId`), deshabilita el combo y guarda el ingreso
+con `obraSocialId: null` sin avisar. El audit del alta del 368 (AudID 41603, 2026-08-15
+12:14) muestra `"obraSocialId":null`; la ficha del paciente 68346 recien recibio
+`obraSocialId: 1` el 2026-08-26 12:47 (AudID 62745), pero eso no reescribe el ingreso.
+
+**Que se corrigio:** los 10 ingresos con `OSID` nulo que ya tenian orden generada.
+Cada uno hereda la OS y el plan de su propia orden — en los 10 casos, unanime
+OSID=1 (IPSS) / PosID=1.
+
+| IngID | tipo | nro | paciente | practicas | ordenes |
+|---|---|---|---|---|---|
+| 346 | INT | 173 | BENITEZ, CATALINA | 37 | 6 |
+| 364 | INT | 177 | BENITEZ, CATALINA | 25 | 21 |
+| 368 | AMB | 223 | MAIDANA, ROBERTO NARCISO | 1 | 1 |
+| 369 | AMB | 224 | LEEM, BUGUN SEAN | 1 | 1 |
+| 434 | AMB | 267 | PUCA, WALTER TOMAS | 6 | 1 |
+| 448 | AMB | 280 | ANGEL, ENRIQUE AMADEO | 1 | 1 |
+| 454 | AMB | 283 | VILTE FERNANDA JAZMIN | 2 | 1 |
+| 464 | AMB | 289 | RIOS MELANI MAGALI | 1 | 1 |
+| 469 | AMB | 292 | ALEMAN, ANA INES | 2 | 1 |
+| 513 | INT | 229 | RODRIGUEZ, CARLOS JOSE | 2 | 3 |
+
+```sql
+update "Ingreso" i
+   set "OSID" = o."OSID", "PosID" = o."PosID"
+  from (select distinct on ("IngID") "IngID","OSID","PosID"
+          from "Orden" where "IngID" = any($1::int[]) order by "IngID","OrdNum") o
+ where i."IngID" = o."IngID" and i."IngID" = any($1::int[]) and i."OSID" is null
+```
+
+10 filas actualizadas. Ninguna practica estaba facturada (`PraEstad='F'` = 0 en los
+10), asi que no se toco ningun importe ni lote ya armado.
+
+**Verificacion:** quedan 9 ingresos con `OSID` nulo (7 AMB, 2 INT) y **0** de ellos
+tiene ordenes, o sea ninguno esta bloqueado para facturar. No se tocaron: no hay de
+donde deducirles la cobertura.
+
+**Prevencion:** `crearOrdenInterna` (`src/modules/orden/repository.ts`) ahora, dentro
+de la misma transaccion, copia la OS y el plan de la orden al ingreso cuando el
+ingreso no tiene ninguna (`updateMany` con `obraSocialId: null` en el where, asi
+nunca pisa una cobertura ya cargada).
+
+**Pendiente (no tocado):** el default de "Paciente particular" en
+`src/components/admision/admision-form.tsx:122` y `:298`. 22.654 de 54.253 pacientes
+(42%) no tienen OS en su ficha — todos ellos se admiten como particular en silencio.
+Cambiar ese default es decision de negocio, no un fix mecanico.

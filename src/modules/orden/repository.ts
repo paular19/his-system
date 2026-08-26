@@ -360,6 +360,20 @@ export async function crearOrdenInterna(
             },
           })
 
+        // La admision arranca como particular cuando el paciente no tiene obra
+        // social cargada en su ficha, asi que el ingreso puede quedar con OSID
+        // nulo aunque la orden si tenga cobertura. Facturacion lee la OS del
+        // ingreso: sin esto la practica queda tildable pero al facturar corta con
+        // "El ingreso no tiene obra social cargada", y el ingreso tampoco entra
+        // en el lote de la obra social. La orden es el documento de cobertura:
+        // si el ingreso no tiene ninguna, hereda la de la orden.
+        if (ordenData.ingresoId) {
+          await tx.ingreso.updateMany({
+            where: { id: ordenData.ingresoId, obraSocialId: null },
+            data: { obraSocialId: ordenData.obraSocialId, planId: ordenData.planId },
+          })
+        }
+
         return orden
       })
     } catch (error) {

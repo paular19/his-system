@@ -2492,7 +2492,11 @@ export async function crearCirugiaUrgencia(
           descripcion: (descripcionPayload?.trim() || practica.codigoPractica.trim()),
           fecha: null,
           cantidad: Number(practica.cantidad),
-          importeTotal: practica.importeTotal != null ? Number(practica.importeTotal) : null,
+          // La practica ya existe: su importe es el total, hay que volver al unitario
+          // para respetar el contrato del payload.
+          importeBaseUnitario: practica.importeTotal != null && Number(practica.cantidad) > 0
+            ? Number((Number(practica.importeTotal) / Number(practica.cantidad)).toFixed(2))
+            : null,
           matriculaEspecialista: practica.matriculaEspecialista,
           matriculaAnestesista: practica.matriculaAnestesista,
         }
@@ -2617,7 +2621,13 @@ export async function crearCirugiaUrgencia(
             matriculaEspecialista: p.matriculaEspecialista ?? null,
             matriculaAnestesista: p.matriculaAnestesista ?? null,
             facturable: true,
-            importeTotal: p.importeTotal ?? null,
+            // El payload trae el valor unitario del componente. Guardar el total:
+            // el resto del sistema lee Practica.importeTotal como total de la fila, y
+            // dejarlo unitario hace que la facturacion no reconozca el componente y
+            // termine cobrando la practica completa.
+            importeTotal: p.importeBaseUnitario != null
+              ? Number((p.importeBaseUnitario * p.cantidad).toFixed(2))
+              : null,
             usuarioRegistro: USUARIO_REGISTRO_CIRUGIA,
           },
         })

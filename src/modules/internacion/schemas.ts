@@ -277,7 +277,9 @@ export const CrearCirugiaUrgenciaSchema = z.object({
     descripcion: z.string().min(1).max(500),
     fecha: z.preprocess(parseFechaArgentina, z.date().optional().nullable()),
     cantidad: z.number().int().min(1),
-    importeTotal: z.number().min(0).optional().nullable(),
+    // Valor unitario del componente elegido (GA/HE/HA/A1), NO el total de la fila.
+    // El total sale de multiplicarlo por la cantidad en el repository.
+    importeBaseUnitario: z.number().min(0).optional().nullable(),
     matriculaEspecialista: z.number().int().positive().optional().nullable(),
     matriculaAnestesista: z.number().int().positive().optional().nullable(),
   })).min(1),

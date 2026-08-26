@@ -1105,7 +1105,7 @@ export function PracticaCargaRapidaPage({
                 descripcion: entrada.payload.descripcionPractica,
                 fecha: entrada.payload.fecha,
                 cantidad: entrada.payload.cantidad,
-                importeTotal: entrada.payload.importeBaseUnitario,
+                importeBaseUnitario: entrada.payload.importeBaseUnitario,
                 matriculaEspecialista: entrada.payload.matriculaEspecialista,
                 matriculaAnestesista: entrada.payload.matriculaAnestesista,
             }))
@@ -1171,7 +1171,10 @@ export function PracticaCargaRapidaPage({
                         diagnosticoLaboratorio: null,
                         fecha: new Date(entrada.payload.fecha),
                         cantidad: Number(entrada.payload.cantidad ?? 1),
-                        importeTotal: entrada.payload.importeBaseUnitario ?? null,
+                        // El optimista tiene que espejar lo que guarda el server: total, no unitario.
+                        importeTotal: entrada.payload.importeBaseUnitario != null
+                            ? Number((entrada.payload.importeBaseUnitario * Number(entrada.payload.cantidad ?? 1)).toFixed(2))
+                            : null,
                         numeroAutorizacion: entrada.payload.numeroAutorizacion ?? null,
                         matriculaEspecialista: entrada.payload.matriculaEspecialista ?? null,
                         matriculaAnestesista: entrada.payload.matriculaAnestesista ?? null,

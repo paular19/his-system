@@ -2665,8 +2665,33 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 matriculaAnestesista: p.matriculaAnestesista,
             })
             : null
+        // Cargas viejas de cirugia guardaron el componente SIN multiplicar por la
+        // cantidad, asi que el unitario da la enesima parte y no matchea nada. Se
+        // reintenta contra el importe crudo: si ahi si matchea un componente, la fila
+        // es ese componente con el importe guardado como unitario.
+        const incluyeCodigoInferidoSinPartir = !incluyeCodigoPracticaBase && !incluyeCodigoInferido && cant > 1
+            ? inferirIncluyeCodigoDesdeImporte({
+                desglose: desgloseBase,
+                precioUnitarioDesdeDb: importeFromDb,
+                matriculaEspecialista: p.matriculaEspecialista,
+                matriculaAnestesista: p.matriculaAnestesista,
+            })
+            : null
         const incluyeCodigoPractica = normalizarIncluyeCodigo(
-            incluyeCodigoPracticaBase ?? incluyeCodigoInferido
+            incluyeCodigoPracticaBase ?? incluyeCodigoInferido ?? incluyeCodigoInferidoSinPartir
+        )
+        // Sin componente reconocido y con un importe guardado que tampoco es el de la
+        // practica completa, no hay forma de saber que cobra la fila. Antes caia en
+        // "completa" y facturaba (esp+ayu+ane+gto) x cantidad: inventaba hacia arriba.
+        const importeGuardadoIndeterminado = Boolean(
+            !incluyeCodigoPractica &&
+            importeFromDb !== null &&
+            precioUnitarioDesdeDb !== null &&
+            desgloseBase &&
+            Math.abs(
+                Number(calcularTotalUnitarioDesglose(desgloseBase, null).toFixed(2)) -
+                precioUnitarioDesdeDb
+            ) > 0.01
         )
 
         const esCodigoAnestesista = esCodigoHaObligatorio(p.codigoPractica)
@@ -2772,11 +2797,13 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         const precioUnitario = partirPorUnidades && cant > 0
             ? Number((importeTotalCalculado / cant).toFixed(2))
             : precioUnitarioSinPartir
-        const importeTotalFacturacion = diferencialCirugia
-            ? importeTotalCalculado
-            : (incluyeCodigoPractica && totalUnitarioDesglose !== null
+        const importeTotalFacturacion = importeGuardadoIndeterminado
+            ? importeFromDb!
+            : (diferencialCirugia
                 ? importeTotalCalculado
-                : (importeFromDb ?? coberturaBase.importeTotalFacturable))
+                : (incluyeCodigoPractica && totalUnitarioDesglose !== null
+                    ? importeTotalCalculado
+                    : (importeFromDb ?? coberturaBase.importeTotalFacturable)))
         const descripcionBase = p.nomencladorPractica?.descripcion ?? p.codigoPractica.trim()
         const incluyeSeleccion = incluyeSeleccionPractica
         const esGastoPractica =

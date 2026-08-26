@@ -177,3 +177,153 @@ nunca pisa una cobertura ya cargada).
 `src/components/admision/admision-form.tsx:122` y `:298`. 22.654 de 54.253 pacientes
 (42%) no tienen OS en su ficha — todos ellos se admiten como particular en silencio.
 Cambiar ese default es decision de negocio, no un fix mecanico.
+
+---
+
+## 2026-08-26 — MAMANI: sutura partida en dos ordenes que no se podia facturar
+
+**Reportado por:** Paula, sobre `/dashboard/facturacion?numeroOrden=1747&ingresoId=360`.
+
+**Que estaba mal:** el ingreso 360 (INT-176, MAMANI MIGUEL ANGEL) tenia UNA sola
+`Practica` del codigo 130110 (SUTURA DE HERIDA, PraID 2973) y DOS ordenes activas
+apuntando a ella: la 1747 (HONORARIO ESPECIALISTA, autorizacion 52296834) y la 1748
+(DERECHOS, autorizacion 52296873). Facturacion vincula una practica a un solo item de
+orden (`resolverVinculosOrdenExistenteFacturacion`, `Map` con clave `practicaId`) y
+`Practica` guarda un unico `(PueNum, OrdNum, OprItem)`: solo entraba una de las dos y
+la otra quedaba muerta. La practica nunca se pudo facturar (`PraEstad` null).
+
+Ademas las dos ordenes tenian el importe **completo** de la practica (81.579,56 cada
+una, 163.159,12 sumadas) en vez de su componente. El prorrateo por subitem entro con
+el commit `619c914` (18/08 20:09) y estas ordenes se crearon el 18/08 13:13.
+
+**Que se hizo:** se partio la practica en una fila por componente.
+
+| | PraID | componente | autorizacion | importe | orden |
+|---|---|---|---|---|---|
+| original | 2973 | HE | 52296834 | 21.930,22 | 1747 |
+| nueva | 4208 | GA | 52296873 | 59.649,34 | 1748 |
+
+Los importes salen del nomenclador de 130110 convenio 1 (`NPrValEsp` 21.930,22 +
+`NPrValGto` 59.649,34 = 81.579,56, el total que tenia la practica).
+
+Tambien se completo `OprModulo` (estaba null en los dos items) con el componente que
+ya traia `OprClasAgrup`, y se bajo `OrdImpTotal` de cada orden a su componente.
+
+**Verificacion:** 0 practicas del ingreso 360 con mas de una orden. La suma de las
+ordenes activas del ingreso da 809.253,14 = 727.673,58 (lo ya facturado, que es lo que
+el lote 41 tiene guardado para MAMANI) + 81.579,56 (la sutura, todavia sin facturar) +
+0,00 (orden 1745, protocolo de laboratorio). El lote 41 (PEN) no se toco: la sutura
+nunca estuvo adentro.
+
+**Prevencion:** `generarOrdenesDesdeInternacionAction` (`src/modules/orden/actions/`)
+ahora crea una fila de `Practica` por componente cuando parte una practica por
+subitem, prorratea tambien el importe de la practica original, y escribe el componente
+en `incluyeCodigo` (`OprModulo`) del item.
+
+**Pendiente:** quedan **37 casos** con la misma estructura (una practica, varias
+ordenes por componente), ninguno facturado. Solo uno mas esta en un lote pendiente:
+ingreso 258 (INT-147, TORRES PAULINA) en el lote 43. En 34 de los 37 los importes ya
+estan bien repartidos y solo falta el corte; los que ademas necesitan prorrateo son
+PraID 3081 (ing. 282), 3059 y 3060 (ing. 400).
+
+Tres casos aparte, que no son de este bug y no se tocaron:
+
+- ing. 467 (BURGOS, 721012): la practica vale 2.117.380,72 pero solo tiene ordenes HE,
+  HA y GA, que suman 1.922.871,67. Falta la orden del ayudante, 194.509,05.
+- ing. 470 (VALENCIA, 100404): hay ordenes de anestesista y ayudante en 0,00; el
+  nomenclador de ese codigo no trae esos componentes.
+- ing. 258 (TORRES, 80720): la practica guarda 537.356,26 (solo el gasto) y sus tres
+  ordenes suman 1.134.362,66.
+
+---
+
+## 2026-08-26 — Componente de cirugia guardado sin multiplicar por la cantidad
+
+**Sintoma detectado por la usuaria:** el monto de la orden por escision de escaras de
+ROSALES HECTOR BENITO (ingreso 241, lote 43) no cerraba contra el nomenclador.
+
+**Causa:** cuando una practica se parte en subitems (GA/HE/HA/A1) y se carga con
+`cantidad > 1`, la ruta de carga desde cirugia guardaba en `Practica.importeTotal` el
+valor **unitario** del componente, sin multiplicar
+(`src/modules/internacion/repository.ts`, `importeTotal: p.importeTotal ?? null`).
+
+Al facturar, `inferirIncluyeCodigoDesdeImporte`
+(`src/modules/facturacion/repository.ts`) divide ese importe por la cantidad para
+adivinar que componente es. Con cantidad 2 el objetivo queda a la mitad, no matchea
+ningun componente, devuelve `null`, y el fallback trataba la fila como **practica
+completa**: facturaba `(esp+ayu+ane+gto) x cantidad`.
+
+**Alcance medido:** 858 practicas con `cantidad > 1` y desglose. **14 rotas** (11
+nacieron mal al crear, 3 al editar la cantidad). De esas, 2 ya se habian facturado
+infladas, las dos de ROSALES: ordenes 1685 y 1687 a 865.715,24 cada una, cuando
+correspondian 46.644,08 (HE) y 483.018,68 (GA). Sobrefacturacion: **1.201.767,72**.
+Las otras 12 sub-facturaban.
+
+**Correccion aplicada** (script `tmp-corregir-componentes.ts`, ya borrado):
+
+- 14 `Practica.PraImpTotal` = componente unitario x cantidad.
+- 14 renglones de `OrdenPrac.OprImpTotal` en 13 ordenes activas.
+- 13 `Orden.OrdImpTotal` recalculados como suma de sus renglones.
+- 2 `LoteFacturacionItem.LItImpTotal` ajustados **por diferencia** (no recalculados
+  desde cero: el reparto por categoria y las ordenes tomadas por otros lotes las
+  decide la app al armar el lote).
+- Totales de los lotes 43 y 30, ambos PEN. Ningun lote confirmado quedo afectado.
+
+Incluye revertir la edicion manual del 2026-08-25 sobre la practica 2691, a la que le
+habian puesto el total de la practica (865.715,24) en un renglon que es solo HE.
+
+| lote | antes | despues |
+|---|---|---|
+| 43 (ACIDSAL) | 34.325.721,57 | 32.882.444,51 |
+| 30 (OSECAC) | 79.933,09 | 86.845,29 |
+
+**Verificacion:** 0 practicas con el patron roto entre las corregidas; 0 cabeceras de
+orden descuadradas contra sus renglones (13 de 13); las escaras de ROSALES dan
+865.715,24 por cirugia, 1.731.430,48 en total, contra 3.174.707,54 antes; el total de
+cada lote coincide con la suma de sus items.
+
+**ROSALES tiene 2 cirugias reales** (confirmado por la usuaria): los dos juegos de
+ordenes 1586-1589 y 1685-1688 son legitimos. El tercer juego de practicas
+(2848-2851) ya estaba anulado.
+
+**Prevencion:** la carga desde cirugia ahora multiplica por la cantidad, el campo del
+payload pasa a llamarse `importeBaseUnitario` para que la semantica sea explicita, y
+la facturacion (a) reintenta la inferencia contra el importe crudo para leer bien las
+cargas viejas y (b) nunca cae en "practica completa" cuando no reconoce el componente:
+usa el importe guardado.
+
+**No se toco:** la practica 483 (ingreso 68, 80617 x5). Es del paciente de prueba que
+se borro — el ingreso quedo con `PacID` en null, sin orden y sin lote.
+
+**Pendiente:** durante la correccion aparecieron 3 practicas nuevas con el mismo bug,
+cargadas el mismo 2026-08-26 entre las 16:41 y las 16:58: PraID 4215, 4222 y 4232
+(SULCA PASCUALA, ingreso 456, codigo 340907 x4, 10.639,12 en vez de 42.556,48).
+Ninguna tiene orden ni lote todavia. El fix de codigo no estaba deployado cuando se
+cargaron.
+
+### Anexo del mismo dia — SULCA PASCUALA (ingreso 456)
+
+Mientras se corregia lo anterior aparecieron 4 cargas de `340907` (radioscopia en
+quirofano) x4 para el ingreso 456, todas entre las 16:41 y las 16:58 del 2026-08-26.
+Fueron cuatro intentos: cargar, generar orden, anular, recargar.
+
+| PraID | componente | importe que tenia | su orden |
+|---|---|---|---|
+| 4215 | HE | 1.769,60 | 2657 anulada |
+| 4222 | HE | 1.769,60 | 2661 anulada |
+| 4225 | GA | 42.556,48 (correcto) | 2667 anulada |
+| 4232 | GA | 10.639,12 | 2670 **activa** |
+
+No habia duplicacion facturable: de los cuatro intentos sobrevive uno solo.
+
+Corregido: `PraImpTotal` de 4215 y 4222 a 7.078,40 y de 4232 a 42.556,48; el renglon
+2670/2 de 10.639,12 a 42.556,48; la cabecera de la orden 2670 de 431.094,33 a
+463.011,69. El ingreso no esta en ningun lote. La practica 4225 no se toco: ya estaba
+bien.
+
+Estas ordenes no las genera la ruta de facturacion sino
+`generarOrdenesDesdeInternacionAction`, que copia `Practica.importeTotal` tal cual, asi
+que aca el importe salio corto en vez de inflado.
+
+**Verificacion:** el barrido completo sobre las practicas con `cantidad > 1` no
+devuelve ninguna con el patron roto.

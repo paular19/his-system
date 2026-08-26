@@ -190,6 +190,17 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Modo "una hoja por paciente": cada bloque de paciente arranca en hoja nueva. */
+  .lote-hoja-paciente {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .lote-hoja-paciente:last-of-type {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
   .lote-detalle-print-root > * {
     display: none !important;
   }

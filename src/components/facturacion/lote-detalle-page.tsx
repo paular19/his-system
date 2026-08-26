@@ -379,6 +379,8 @@ export function LoteDetallePage({ loteId }: Props) {
     const [filtroCategoria, setFiltroCategoria] = useState<CategoriaPractica | ''>('')
     const [filtroCategoriaIPS, setFiltroCategoriaIPS] = useState<CategoriaPractica | ''>('')
     const [printIngresoId, setPrintIngresoId] = useState<number | null>(null)
+    // Solo aplica al resumen general: separa cada paciente en su propia hoja.
+    const [separarPorPaciente, setSepararPorPaciente] = useState(false)
     const [generandoPdf, setGenerandoPdf] = useState(false)
     const [errorPdf, setErrorPdf] = useState('')
     const [vistaPromedi, setVistaPromedi] = useState(false)
@@ -1002,6 +1004,7 @@ export function LoteDetallePage({ loteId }: Props) {
                 lote: lote!,
                 totalIncluido: totalPdf,
                 detalleIngresos: detalle,
+                unaHojaPorPaciente: ingresoId === null && separarPorPaciente,
                 itemsIPSTxt: itemsIPSTxtParaResumen,
                 filtroCategoria: etiquetaFiltroCategoria,
                 pacienteUnico: ingresoId === null ? null : (detalle[0]?.paciente ?? null),
@@ -1053,7 +1056,16 @@ export function LoteDetallePage({ loteId }: Props) {
                         )}
                     </div>
 
-                    <div className="flex gap-2 print:hidden">
+                    <div className="flex flex-wrap items-center gap-2 print:hidden">
+                        <label className="flex items-center gap-1.5 text-sm text-gray-600">
+                            <input
+                                type="checkbox"
+                                checked={separarPorPaciente}
+                                onChange={(e) => setSepararPorPaciente(e.target.checked)}
+                                className="h-4 w-4"
+                            />
+                            Una hoja por paciente
+                        </label>
                         <button
                             onClick={() => imprimir(null)}
                             className="border border-gray-300 text-gray-600 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
@@ -1693,6 +1705,7 @@ export function LoteDetallePage({ loteId }: Props) {
                     detalleIngresos={detalleParaImpresion}
                     itemsIPSTxt={esIPSTxt ? itemsIPSTxtParaResumen : undefined}
                     filtroCategoria={etiquetaFiltroCategoria}
+                    unaHojaPorPaciente={printIngresoId === null && separarPorPaciente}
                 />
                 </div>
 

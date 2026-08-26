@@ -33,6 +33,8 @@ interface Props {
     itemsIPSTxt?: LoteFacturacionDetalle['itemsIPSTxt']
     // Etiqueta de la categoria filtrada, para dejar constancia de que es parcial.
     filtroCategoria?: string | null
+    // Arranca cada paciente en una hoja nueva al imprimir.
+    unaHojaPorPaciente?: boolean
 }
 
 interface LoteResumenIngresoLinea {
@@ -87,6 +89,7 @@ export function LoteResumenPrint({
     detalleIngresos = [],
     itemsIPSTxt,
     filtroCategoria,
+    unaHojaPorPaciente = false,
 }: Props) {
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const esIPSTxt = lote.origen === 'IPS_TXT'
@@ -158,7 +161,16 @@ export function LoteResumenPrint({
             {!esIPSTxt && (
                 <div className="space-y-6">
                     {detalleIngresos.map((ingreso) => (
-                        <section key={ingreso.ingresoId} className="break-inside-avoid-page">
+                        <section
+                            key={ingreso.ingresoId}
+                            className={`break-inside-avoid-page${unaHojaPorPaciente ? ' lote-hoja-paciente' : ''}`}
+                        >
+                            {unaHojaPorPaciente && (
+                                <div className="mb-1 flex justify-between text-[10px] text-gray-500">
+                                    <span>Lote #{lote.numero} · {lote.obraSocial?.nombre ?? 'Particular'}</span>
+                                    <span>Período: {formatPeriodo(lote.periodo)}</span>
+                                </div>
+                            )}
                             <div className="border border-gray-300 rounded-sm">
                                 <div className="grid grid-cols-12 gap-2 border-b border-gray-300 px-3 py-2 text-[12px] font-semibold bg-gray-50">
                                     <div className="col-span-5">PACIENTE: <span className="font-normal">{ingreso.paciente}</span></div>

@@ -48,6 +48,8 @@ export interface ResumenPdfOpciones {
     filtroCategoria?: string | null
     // Nombre del paciente cuando el PDF es de un solo ingreso.
     pacienteUnico?: string | null
+    // Arranca cada paciente en una hoja nueva.
+    unaHojaPorPaciente?: boolean
 }
 
 function formatMonto(n: number): string {
@@ -104,7 +106,15 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
         import('jspdf-autotable'),
     ])
 
-    const { lote, totalIncluido, detalleIngresos, itemsIPSTxt = [], filtroCategoria, pacienteUnico } = opciones
+    const {
+        lote,
+        totalIncluido,
+        detalleIngresos,
+        itemsIPSTxt = [],
+        filtroCategoria,
+        pacienteUnico,
+        unaHojaPorPaciente = false,
+    } = opciones
     const esIPSTxt = lote.origen === 'IPS_TXT'
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
@@ -192,7 +202,23 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
         doc.text('No hay detalle de practicas para el resumen.', margen, y)
         y += 6
     } else {
-        for (const ingreso of detalleIngresos) {
+        detalleIngresos.forEach((ingreso, indice) => {
+            // Con una hoja por paciente el primero sigue abajo de la portada; los demas
+            // arrancan en hoja nueva con un encabezado minimo que repite el lote.
+            if (unaHojaPorPaciente && indice > 0) {
+                doc.addPage()
+                doc.setFontSize(7)
+                doc.setTextColor(120)
+                doc.text(
+                    `Lote #${lote.numero}  ·  ${lote.obraSocial?.nombre ?? 'Particular'}  ·  Periodo: ${formatPeriodo(lote.periodo)}`,
+                    margen,
+                    10
+                )
+                doc.setTextColor(0)
+                doc.setFontSize(8)
+                y = 14
+            }
+
             autoTable(doc, {
                 ...estilosTabla,
                 startY: y,
@@ -233,7 +259,7 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
                 },
             })
             y = posicionFinal() + 4
-        }
+        })
     }
 
     const cantidadRegistros = esIPSTxt

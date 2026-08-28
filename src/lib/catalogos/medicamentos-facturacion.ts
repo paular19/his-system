@@ -16,6 +16,8 @@ export interface MedicamentoFacturacion {
     precio: number
 }
 
+// Los nombres van tal como los usa la clinica y estan confirmados: "Porpofol" y
+// "Atracuronio" no son typos, no "corregirlos".
 export const MEDICAMENTOS_FACTURACION: MedicamentoFacturacion[] = [
     { id: 1, nombre: 'Midazolan 15mg (ampollas)', precio: 425.88 },
     { id: 2, nombre: 'Remifentanilo 5mg. (ampollas)', precio: 803.96 },

@@ -58,6 +58,7 @@ export const CrearMedicacionFacturacionSchema = z.object({
     fechaInicio: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
     fechaFin: z.string().datetime().or(z.date()).transform((v) => new Date(v)).optional().nullable(),
     observaciones: z.string().trim().max(500).optional().nullable(),
+    importe: z.coerce.number().min(0).optional().nullable(),
     profesionalId: z.number().int().positive().optional().nullable(),
 })
 
@@ -68,6 +69,7 @@ export const CrearDescartableFacturacionSchema = z.object({
     nombre: z.string().trim().min(1).max(200),
     cantidad: z.coerce.number().int().min(1).default(1),
     observaciones: z.string().trim().max(500).optional().nullable(),
+    importe: z.coerce.number().min(0).optional().nullable(),
     profesionalId: z.number().int().positive().optional().nullable(),
 })
 
@@ -170,6 +172,19 @@ export const ActualizarAutorizacionSchema = z.discriminatedUnion('tipo', [
 export type ActualizarAutorizacionInput = z.infer<typeof ActualizarAutorizacionSchema>
 
 export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo', [
+    z.object({
+        tipo: z.literal('MEDICACION'),
+        medicacionId: z.number().int().positive(),
+        fecha: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
+        importeTotal: z.coerce.number().min(0),
+    }),
+    z.object({
+        tipo: z.literal('DESCARTABLE'),
+        descartableId: z.number().int().positive(),
+        fecha: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
+        cantidad: z.coerce.number().positive(),
+        importeTotal: z.coerce.number().min(0),
+    }),
     z.object({
         tipo: z.literal('ORDEN'),
         loteId: z.number().int().positive().optional(),

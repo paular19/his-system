@@ -646,16 +646,6 @@ export async function obtenerValorPractica(codigoPractica: string): Promise<numb
     return valores.get(normalizarCodigoPractica(codigoPractica)) ?? 0
 }
 
-function precioFicticioMedicacion(nombre: string): number {
-    const base = nombre.trim().length || 1
-    return 3500 + (base % 15) * 180
-}
-
-function precioFicticioDescartable(nombre: string): number {
-    const base = nombre.trim().length || 1
-    return 1200 + (base % 12) * 90
-}
-
 function tieneNumeroAutorizacionValido(numeroAutorizacion: string | null | undefined): boolean {
     return typeof numeroAutorizacion === 'string' && numeroAutorizacion.trim().length > 0
 }
@@ -1565,6 +1555,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 dosis: true,
                 viaAdministracion: true,
                 frecuencia: true,
+                importe: true,
             },
         }),
         prisma.descartableIngreso.findMany({
@@ -1576,6 +1567,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 nombre: true,
                 cantidad: true,
                 observaciones: true,
+                importe: true,
             },
         }),
         prisma.orden.findMany({
@@ -3086,8 +3078,8 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             fecha: m.fechaInicio,
             descripcion: detalle ? `${m.nombre} (${detalle})` : m.nombre,
             cantidad: 1,
-            precioUnitario: precioFicticioMedicacion(m.nombre),
-            importeTotal: precioFicticioMedicacion(m.nombre),
+            precioUnitario: Number(m.importe ?? 0),
+            importeTotal: Number(m.importe ?? 0),
             facturada: false,
             matriculaProfesional: null,
             matriculaEspecialista: null,
@@ -3103,7 +3095,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     for (const d of ingreso.descartables) {
         const detalle = d.observaciones ? `${d.nombre} (${d.observaciones})` : d.nombre
-        const precioUnitario = precioFicticioDescartable(d.nombre)
+        const precioUnitario = Number(d.importe ?? 0)
         const cantidad = Number(d.cantidad)
         prestaciones.push({
             uid: `DESCARTABLE:${d.id}`,
@@ -3223,6 +3215,7 @@ export async function crearMedicacionFacturacion(
             fechaInicio: data.fechaInicio,
             fechaFin: data.fechaFin ?? null,
             observaciones: data.observaciones ?? null,
+            importe: data.importe ?? null,
             profesionalId: data.profesionalId ?? null,
             estado: 'A',
             usuario: usuario.trim().slice(0, 10) || 'SISTEMA',
@@ -3244,6 +3237,7 @@ export async function crearDescartableFacturacion(
             nombre: data.nombre,
             cantidad: data.cantidad,
             observaciones: data.observaciones ?? null,
+            importe: data.importe ?? null,
             fechaInicio: new Date(),
             profesionalId: data.profesionalId ?? null,
             estado: 'A',
@@ -3853,6 +3847,31 @@ async function resolverPracticaDesdeInput(
 export async function actualizarPrestacionFacturacion(
     data: ActualizarPrestacionFacturacionInput
 ): Promise<void> {
+    if (data.tipo === 'MEDICACION') {
+        await prisma.medicacionIngreso.update({
+            where: { id: data.medicacionId },
+            data: {
+                fechaInicio: data.fecha,
+                importe: data.importeTotal,
+            },
+        })
+        return
+    }
+
+    if (data.tipo === 'DESCARTABLE') {
+        // El importe se guarda unitario: la grilla muestra unitario x cantidad.
+        const cantidad = data.cantidad > 0 ? data.cantidad : 1
+        await prisma.descartableIngreso.update({
+            where: { id: data.descartableId },
+            data: {
+                fechaInicio: data.fecha,
+                cantidad: Math.round(cantidad),
+                importe: Number((data.importeTotal / cantidad).toFixed(2)),
+            },
+        })
+        return
+    }
+
     if ((data.tipo === 'ORDEN' || data.tipo === 'ORDEN_ITEM') && data.loteId) {
         const orden = await prisma.orden.findUnique({
             where: {
@@ -5566,7 +5585,7 @@ export async function crearLote(
             medicaciones: data.tipo === 'MEDICAMENTOS'
                 ? {
                     where: { estado: { not: 'S' }, ...whereFechaMedicacion },
-                    select: { nombre: true },
+                    select: { nombre: true, importe: true },
                 }
                 : false,
         },
@@ -5645,8 +5664,8 @@ export async function crearLote(
             ordenesExcluidas.push(...reparto.ordenesExcluidas)
         }
         if (data.tipo === 'MEDICAMENTOS' && ing.medicaciones) {
-            importe += (ing.medicaciones as Array<{ nombre: string }>).reduce(
-                (s, m) => s + precioFicticioMedicacion(m.nombre),
+            importe += (ing.medicaciones as Array<{ importe: unknown }>).reduce(
+                (s, m) => s + Number(m.importe ?? 0),
                 0
             )
         }

@@ -150,7 +150,14 @@ export async function actualizarPrestacionFacturacion(
     await registrarAudit({
         usuario,
         accion: 'MODIFICAR',
-        entidad: data.tipo === 'PRACTICA' ? 'Practica' : 'OrdenPrac',
+        entidad:
+            data.tipo === 'PRACTICA'
+                ? 'Practica'
+                : data.tipo === 'MEDICACION'
+                    ? 'MedicacionIngreso'
+                    : data.tipo === 'DESCARTABLE'
+                        ? 'DescartableIngreso'
+                        : 'OrdenPrac',
         detalle: 'Actualizacion integral de prestacion en facturacion',
         direccionIp: ip,
     })

@@ -18,7 +18,7 @@ import {
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { esCodigoAccesorioCirugia, resumenDiferenciales } from '@/modules/facturacion/diferenciales'
 import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/practicas-subitems'
-import { fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
+import { fechaAInputLocal, fechaDesdeClaveArgentina, fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 import { normalizarTextoBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
@@ -160,6 +160,17 @@ const ORDEN_COMPONENTES_CLASIFICACION: Array<keyof ComponenteSeleccion> = [
     'anestesista',
     'gastos',
 ]
+
+// Acepta "1.234,50" y "1234.50". Vacio = sin importe cargado.
+function importeDesdeInput(valor: string): number | null {
+    const limpio = valor.trim().replace(/\./g, '').replace(',', '.')
+    if (!limpio) return null
+    const n = Number(limpio)
+    return Number.isFinite(n) && n >= 0 ? n : null
+}
+
+// Por ahora en facturacion solo se habilitan practica y medicacion.
+const MOSTRAR_LABORATORIO_Y_DESCARTABLE = false
 
 function toDateInput(value: Date | string | null | undefined): string {
     if (!value) return ''
@@ -1157,6 +1168,15 @@ function agruparItemsPorOrden(items: PrestacionFacturableItem[]): SubgrupoOrden[
     return subgrupos
 }
 
+function esPrestacionEditable(p: PrestacionFacturableItem): boolean {
+    return (
+        p.tipo === 'PRACTICA' ||
+        p.tipo === 'ORDEN_ITEM' ||
+        p.tipo === 'MEDICACION' ||
+        p.tipo === 'DESCARTABLE'
+    )
+}
+
 function prioridadTipoPrestacionParaGrilla(p: PrestacionFacturableItem): number {
     if (p.tipo === 'PRACTICA') return 0
     if (p.tipo === 'MEDICACION') return 1
@@ -1419,7 +1439,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const [npComponentes, setNpComponentes] = useState<ComponenteSeleccion>({
         especialista: 0, ayudante: 0, anestesista: 0, gastos: 0,
     })
-    const [nuevaPracticaFecha, setNuevaPracticaFecha] = useState(() => toDateInput(new Date()))
+    const [nuevaPracticaFecha, setNuevaPracticaFecha] = useState(() => fechaAInputLocal(new Date()))
     const [nuevaPracticaAutorizacion, setNuevaPracticaAutorizacion] = useState('')
     const [numeroProtocoloLaboratorio, setNumeroProtocoloLaboratorio] = useState('')
     const [diagnosticoLaboratorio, setDiagnosticoLaboratorio] = useState('')
@@ -1427,9 +1447,11 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const npDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const [nuevaMedicacionNombre, setNuevaMedicacionNombre] = useState('')
-    const [nuevaMedicacionFecha, setNuevaMedicacionFecha] = useState(() => toDateInput(new Date()))
+    const [nuevaMedicacionFecha, setNuevaMedicacionFecha] = useState(() => fechaAInputLocal(new Date()))
+    const [nuevaMedicacionImporte, setNuevaMedicacionImporte] = useState('')
 
     const [nuevoDescartableNombre, setNuevoDescartableNombre] = useState('')
+    const [nuevoDescartableImporte, setNuevoDescartableImporte] = useState('')
     const [opcionesInsumosUti, setOpcionesInsumosUti] = useState<Array<{ id: number; nombre: string }>>([])
     const [cargandoInsumosUti, setCargandoInsumosUti] = useState(false)
 
@@ -2365,7 +2387,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         codigoPractica,
                         descripcionPractica,
                         cantidad: 1,
-                        fecha: new Date(nuevaPracticaFecha).toISOString(),
+                        fecha: fechaDesdeClaveArgentina(nuevaPracticaFecha).toISOString(),
                         numeroAutorizacion: nuevaPracticaAutorizacion.trim() || null,
                         importeBaseUnitario: importeEntrada,
                     }),
@@ -2487,8 +2509,9 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     dosis: null,
                     viaAdministracion: null,
                     frecuencia: null,
-                    fechaInicio: new Date(nuevaMedicacionFecha).toISOString(),
+                    fechaInicio: fechaDesdeClaveArgentina(nuevaMedicacionFecha).toISOString(),
                     observaciones: null,
+                    importe: importeDesdeInput(nuevaMedicacionImporte),
                 }),
             })
 
@@ -2496,6 +2519,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo crear la medicacion')
 
             setNuevaMedicacionNombre('')
+            setNuevaMedicacionImporte('')
             setExpandNuevaMedicacion(false)
             setMensaje('Medicación agregada')
             await cargarContexto(contexto.ingreso.id)
@@ -2520,6 +2544,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     nombre: nuevoDescartableNombre.trim(),
                     cantidad: 1,
                     observaciones: null,
+                    importe: importeDesdeInput(nuevoDescartableImporte),
                 }),
             })
 
@@ -2527,6 +2552,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo crear el descartable')
 
             setNuevoDescartableNombre('')
+            setNuevoDescartableImporte('')
             setExpandNuevoDescartable(false)
             setMensaje('Descartable agregado')
             await cargarContexto(contexto.ingreso.id)
@@ -2766,9 +2792,62 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setConfirmacion(null)
     }
 
+    // Medicacion y descartable no tienen codigo de nomenclador: solo se les
+    // edita fecha, cantidad e importe.
+    async function guardarPrestacionInsumo(p: PrestacionFacturableItem) {
+        const draft = editRows[p.uid]
+        if (!draft) return
+
+        const importe = importeDesdeInput(draft.importeTotal)
+        if (importe == null) {
+            setError('Importe invalido')
+            return
+        }
+
+        setGuardandoRowUid(p.uid)
+        setError(null)
+        try {
+            const payload =
+                p.tipo === 'MEDICACION'
+                    ? {
+                        tipo: 'MEDICACION' as const,
+                        medicacionId: p.origen.medicacionId,
+                        fecha: new Date(draft.fecha || p.fecha).toISOString(),
+                        importeTotal: importe,
+                    }
+                    : {
+                        tipo: 'DESCARTABLE' as const,
+                        descartableId: p.origen.descartableId,
+                        fecha: new Date(draft.fecha || p.fecha).toISOString(),
+                        cantidad: Number(draft.cantidad || 1),
+                        importeTotal: importe,
+                    }
+
+            const res = await fetch('/api/facturacion/prestaciones/editar', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+
+            const json = (await res.json()) as ApiResponse<{ ok: boolean }>
+            if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo guardar')
+
+            if (contexto) await cargarContexto(contexto.ingreso.id, { silent: true, preserveUiState: true })
+            setRowEditMode((prev) => ({ ...prev, [p.uid]: false }))
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al guardar')
+        } finally {
+            setGuardandoRowUid(null)
+        }
+    }
+
     async function guardarPrestacion(p: PrestacionFacturableItem) {
         const draft = editRows[p.uid]
         if (!draft) return
+        if (p.tipo === 'MEDICACION' || p.tipo === 'DESCARTABLE') {
+            await guardarPrestacionInsumo(p)
+            return
+        }
         if (p.tipo !== 'PRACTICA' && p.tipo !== 'ORDEN_ITEM') return
 
         const cantidadAnterior = Number(p.cantidad)
@@ -3974,24 +4053,28 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                     >
                                         <Plus className="h-3 w-3" /> Agregar práctica
                                     </button>
-                                    <button
-                                        onClick={() => setExpandPedidoLaboratorio((v) => !v)}
-                                        className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${expandPedidoLaboratorio ? 'border-indigo-300 bg-indigo-50 text-indigo-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
-                                    >
-                                        <Plus className="h-3 w-3" /> Agregar laboratorio
-                                    </button>
+                                    {MOSTRAR_LABORATORIO_Y_DESCARTABLE && (
+                                        <button
+                                            onClick={() => setExpandPedidoLaboratorio((v) => !v)}
+                                            className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${expandPedidoLaboratorio ? 'border-indigo-300 bg-indigo-50 text-indigo-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+                                        >
+                                            <Plus className="h-3 w-3" /> Agregar laboratorio
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => setExpandNuevaMedicacion((v) => !v)}
                                         className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${expandNuevaMedicacion ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
                                     >
                                         <Plus className="h-3 w-3" /> Agregar medicación
                                     </button>
-                                    <button
-                                        onClick={() => setExpandNuevoDescartable((v) => !v)}
-                                        className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${expandNuevoDescartable ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
-                                    >
-                                        <Plus className="h-3 w-3" /> Agregar descartable
-                                    </button>
+                                    {MOSTRAR_LABORATORIO_Y_DESCARTABLE && (
+                                        <button
+                                            onClick={() => setExpandNuevoDescartable((v) => !v)}
+                                            className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${expandNuevoDescartable ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+                                        >
+                                            <Plus className="h-3 w-3" /> Agregar descartable
+                                        </button>
+                                    )}
                                 </div>
 
                                 {expandNuevaPractica && (
@@ -4043,13 +4126,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
                                         <div className="grid gap-2 md:grid-cols-2">
                                             <input value={nuevaPracticaAutorizacion} onChange={(e) => setNuevaPracticaAutorizacion(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" placeholder="Nro autorización" />
-                                            <input type="datetime-local" value={nuevaPracticaFecha} onChange={(e) => setNuevaPracticaFecha(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" />
+                                            <input type="date" value={nuevaPracticaFecha} onChange={(e) => setNuevaPracticaFecha(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" />
                                         </div>
                                         <button onClick={crearPractica} disabled={guardandoPractica || (!npSeleccionada && !npBusqueda.trim())} className="rounded border px-2 py-1 text-[11px] font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoPractica ? 'Guardando...' : 'Guardar práctica'}</button>
                                     </div>
                                 )}
 
-                                {expandPedidoLaboratorio && (
+                                {MOSTRAR_LABORATORIO_Y_DESCARTABLE && expandPedidoLaboratorio && (
                                     <div className="rounded-md border border-indigo-200 bg-indigo-50/40 p-2.5 space-y-2">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">Agregar laboratorio</p>
                                         <div className="grid gap-2 md:grid-cols-2">
@@ -4077,13 +4160,22 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 </select>
                                                 {cargandoInsumosUti && <p className="mt-1 text-[11px] text-gray-400">Cargando listado...</p>}
                                             </div>
-                                            <input type="datetime-local" value={nuevaMedicacionFecha} onChange={(e) => setNuevaMedicacionFecha(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" />
+                                            <input type="date" value={nuevaMedicacionFecha} onChange={(e) => setNuevaMedicacionFecha(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" />
+                                        </div>
+                                        <div className="grid gap-2 md:grid-cols-2">
+                                            <input
+                                                value={nuevaMedicacionImporte}
+                                                onChange={(e) => setNuevaMedicacionImporte(e.target.value)}
+                                                inputMode="decimal"
+                                                placeholder="Importe"
+                                                className="h-8 rounded border border-gray-300 px-2 text-xs"
+                                            />
                                         </div>
                                         <button onClick={crearMedicacion} disabled={guardandoMedicacion} className="rounded border px-2 py-1 text-[11px] font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoMedicacion ? 'Guardando...' : 'Guardar medicación'}</button>
                                     </div>
                                 )}
 
-                                {expandNuevoDescartable && (
+                                {MOSTRAR_LABORATORIO_Y_DESCARTABLE && expandNuevoDescartable && (
                                     <div className="rounded-md border border-gray-200 bg-white p-2.5 space-y-2">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Agregar descartable</p>
                                         <div>
@@ -4099,6 +4191,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                             </select>
                                             {cargandoInsumosUti && <p className="mt-1 text-[11px] text-gray-400">Cargando listado...</p>}
                                         </div>
+                                        <input
+                                            value={nuevoDescartableImporte}
+                                            onChange={(e) => setNuevoDescartableImporte(e.target.value)}
+                                            inputMode="decimal"
+                                            placeholder="Importe unitario"
+                                            className="h-8 w-full rounded border border-gray-300 px-2 text-xs"
+                                        />
                                         <button onClick={crearDescartable} disabled={guardandoDescartable} className="rounded border px-2 py-1 text-[11px] font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoDescartable ? 'Guardando...' : 'Guardar descartable'}</button>
                                     </div>
                                 )}
@@ -4630,7 +4729,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 )}
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
-                                                                {p.tipo === 'PRACTICA' || p.tipo === 'ORDEN_ITEM' ? (
+                                                                {esPrestacionEditable(p) ? (
                                                                     filaEnEdicion ? (
                                                                         <div className="flex flex-col gap-1">
                                                                             <button onClick={() => guardarPrestacion(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60">{guardandoRowUid === p.uid ? 'Guardando...' : 'Guardar'}</button>
@@ -4656,7 +4755,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             </td>
                                                         </tr>
 
-                                                        {filaEnEdicion && (
+                                                        {filaEnEdicion && (p.tipo === 'PRACTICA' || p.tipo === 'ORDEN_ITEM') && (
                                                             <tr className={`${CARRIL_PRACTICA_PENDIENTE} bg-slate-50`}>
                                                                 <td colSpan={8} className="px-4 py-3">
                                                                     <div className="mb-3 flex items-center justify-between gap-2">

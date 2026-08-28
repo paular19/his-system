@@ -327,3 +327,31 @@ que aca el importe salio corto en vez de inflado.
 
 **Verificacion:** el barrido completo sobre las practicas con `cantidad > 1` no
 devuelve ninguna con el patron roto.
+
+---
+
+## 2026-08-28 — Columnas de importe para medicacion y descartable (DDL)
+
+**Que se toco:** dos `ALTER TABLE` sobre produccion, aplicados por el endpoint SQL
+sobre HTTP de Neon (el 5432 no responde desde la terminal):
+
+```sql
+ALTER TABLE "MedicacionIngreso"  ADD COLUMN IF NOT EXISTS "MedImporte" numeric(18,2);
+ALTER TABLE "DescartableIngreso" ADD COLUMN IF NOT EXISTS "DesImporte" numeric(18,2);
+```
+
+**Por que:** el importe de medicacion y descartable en facturacion salia de dos
+funciones que lo inventaban a partir del largo del nombre
+(`precioFicticioMedicacion` / `precioFicticioDescartable`). Se borraron: ahora el
+importe se carga y se edita a mano, y necesita donde guardarse.
+
+**Por que a mano y no `db push`:** trampa 5 del CLAUDE.md — el push borraria
+`Paciente_HC_seq` y los indices creados fuera del schema.
+
+Las columnas son nullable a proposito: las filas viejas quedan en `null` y se
+muestran en 0, sin inventar un numero. `DesImporte` es unitario; la grilla muestra
+unitario x cantidad.
+
+**Verificacion:** `information_schema.columns` devuelve las dos como
+`numeric(18,2)` nullable; `Paciente_HC_seq` sigue viva y los 9 indices `idx_%trgm`
+siguen presentes despues del ALTER.

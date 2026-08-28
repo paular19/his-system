@@ -475,6 +475,7 @@ model MedicacionIngreso {
   fechaInicio       DateTime  @map("MedFchIni") @db.Timestamp(6)
   fechaFin          DateTime? @map("MedFchFin") @db.Timestamp(6)
   observaciones     String?   @map("MedObs") @db.VarChar(500)
+  importe           Decimal?  @map("MedImporte") @db.Decimal(18, 2)
 
   // Vinculación con autorización (opcional)
   ordenPuestoNumero Int? @map("MedOrdPue")
@@ -499,6 +500,7 @@ model DescartableIngreso {
   nombre        String    @map("DesNombre") @db.VarChar(200)
   cantidad      Int       @default(1) @map("DesCantidad")
   observaciones String?   @map("DesObs") @db.VarChar(500)
+  importe       Decimal?  @map("DesImporte") @db.Decimal(18, 2)
   fechaInicio   DateTime  @map("DesFchIni") @db.Timestamp(6)
   fechaFin      DateTime? @map("DesFchFin") @db.Timestamp(6)
   profesionalId Int?      @map("PrfID")

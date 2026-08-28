@@ -346,6 +346,13 @@ export async function toggleOrdenLote(
     return repo.toggleOrdenLote(loteId, puestoNumero, ordenNumero, incluida)
 }
 
+export async function obtenerMedicacionesLoteIngreso(
+    ingresoId: number,
+    periodo?: string | null
+) {
+    return repo.obtenerMedicacionesLoteIngreso(ingresoId, periodo)
+}
+
 export async function obtenerOrdenesAutorizadasIngreso(
     ingresoId: number,
     filtros?: { medico?: string; matricula?: number; periodo?: string; loteId?: number }

@@ -19,6 +19,7 @@ import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { esCodigoAccesorioCirugia, resumenDiferenciales } from '@/modules/facturacion/diferenciales'
 import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/practicas-subitems'
 import { fechaAInputLocal, fechaDesdeClaveArgentina, fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
+import { MEDICAMENTOS_FACTURACION, buscarMedicamentoFacturacion } from '@/lib/catalogos/medicamentos-facturacion'
 import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 import { normalizarTextoBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
@@ -1456,6 +1457,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const [nuevaMedicacionNombre, setNuevaMedicacionNombre] = useState('')
     const [nuevaMedicacionFecha, setNuevaMedicacionFecha] = useState(() => fechaAInputLocal(new Date()))
     const [nuevaMedicacionImporte, setNuevaMedicacionImporte] = useState('')
+    const [nuevaMedicacionCantidad, setNuevaMedicacionCantidad] = useState('1')
 
     const [nuevoDescartableNombre, setNuevoDescartableNombre] = useState('')
     const [nuevoDescartableImporte, setNuevoDescartableImporte] = useState('')
@@ -2501,6 +2503,29 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setNpComponentes(seleccionPorDefecto(vals))
     }
 
+    function cantidadAmpollas(): number {
+        const n = Number.parseInt(nuevaMedicacionCantidad, 10)
+        return Number.isFinite(n) && n > 0 ? n : 1
+    }
+
+    // Se guarda unitario: el campo del formulario muestra el total.
+    function importeUnitarioMedicacion(): number | null {
+        const total = importeDesdeInput(nuevaMedicacionImporte)
+        if (total == null) return null
+        return Number((total / cantidadAmpollas()).toFixed(2))
+    }
+
+    // El importe se autocompleta con el precio de lista por ampolla, pero queda
+    // editable: si el frasco vino a otro precio se pisa a mano.
+    function recalcularImporteMedicacion(nombre: string, cantidadTexto: string) {
+        const medicamento = buscarMedicamentoFacturacion(nombre)
+        if (!medicamento) return
+
+        const ampollas = Number.parseInt(cantidadTexto, 10)
+        const unidades = Number.isFinite(ampollas) && ampollas > 0 ? ampollas : 1
+        setNuevaMedicacionImporte((medicamento.precio * unidades).toFixed(2))
+    }
+
     async function crearMedicacion() {
         if (!contexto) return
         setGuardandoMedicacion(true)
@@ -2518,7 +2543,8 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     frecuencia: null,
                     fechaInicio: fechaDesdeClaveArgentina(nuevaMedicacionFecha).toISOString(),
                     observaciones: null,
-                    importe: importeDesdeInput(nuevaMedicacionImporte),
+                    importe: importeUnitarioMedicacion(),
+                    cantidad: cantidadAmpollas(),
                 }),
             })
 
@@ -2527,6 +2553,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
             setNuevaMedicacionNombre('')
             setNuevaMedicacionImporte('')
+            setNuevaMedicacionCantidad('1')
             setExpandNuevaMedicacion(false)
             setMensaje('Medicación agregada')
             await cargarContexto(contexto.ingreso.id)
@@ -2857,6 +2884,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         tipo: 'MEDICACION' as const,
                         medicacionId: p.origen.medicacionId,
                         fecha: new Date(draft.fecha || p.fecha).toISOString(),
+                        cantidad: Number(draft.cantidad || 1),
                         importeTotal: importe,
                     }
                     : {
@@ -4194,26 +4222,43 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                             <div>
                                                 <select
                                                     value={nuevaMedicacionNombre}
-                                                    onChange={(e) => setNuevaMedicacionNombre(e.target.value)}
+                                                    onChange={(e) => {
+                                                        setNuevaMedicacionNombre(e.target.value)
+                                                        recalcularImporteMedicacion(e.target.value, nuevaMedicacionCantidad)
+                                                    }}
                                                     className="h-8 w-full rounded border border-gray-300 px-2 text-xs bg-white"
                                                 >
-                                                    <option value="">-- Seleccionar de lista unificada --</option>
-                                                    {opcionesInsumosUti.map((item) => (
+                                                    <option value="">-- Seleccionar medicación --</option>
+                                                    {MEDICAMENTOS_FACTURACION.map((item) => (
                                                         <option key={item.id} value={item.nombre}>{item.nombre}</option>
                                                     ))}
                                                 </select>
-                                                {cargandoInsumosUti && <p className="mt-1 text-[11px] text-gray-400">Cargando listado...</p>}
                                             </div>
                                             <input type="date" value={nuevaMedicacionFecha} onChange={(e) => setNuevaMedicacionFecha(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" />
                                         </div>
                                         <div className="grid gap-2 md:grid-cols-2">
-                                            <input
-                                                value={nuevaMedicacionImporte}
-                                                onChange={(e) => setNuevaMedicacionImporte(e.target.value)}
-                                                inputMode="decimal"
-                                                placeholder="Importe"
-                                                className="h-8 rounded border border-gray-300 px-2 text-xs"
-                                            />
+                                            <label className="text-[11px] text-gray-600">
+                                                Ampollas
+                                                <input
+                                                    value={nuevaMedicacionCantidad}
+                                                    onChange={(e) => {
+                                                        setNuevaMedicacionCantidad(e.target.value)
+                                                        recalcularImporteMedicacion(nuevaMedicacionNombre, e.target.value)
+                                                    }}
+                                                    inputMode="numeric"
+                                                    className="mt-1 h-8 w-full rounded border border-gray-300 px-2 text-xs"
+                                                />
+                                            </label>
+                                            <label className="text-[11px] text-gray-600">
+                                                Importe total
+                                                <input
+                                                    value={nuevaMedicacionImporte}
+                                                    onChange={(e) => setNuevaMedicacionImporte(e.target.value)}
+                                                    inputMode="decimal"
+                                                    placeholder="Importe"
+                                                    className="mt-1 h-8 w-full rounded border border-gray-300 px-2 text-xs"
+                                                />
+                                            </label>
                                         </div>
                                         <button onClick={crearMedicacion} disabled={guardandoMedicacion} className="rounded border px-2 py-1 text-[11px] font-medium hover:bg-gray-50 disabled:opacity-60">{guardandoMedicacion ? 'Guardando...' : 'Guardar medicación'}</button>
                                     </div>

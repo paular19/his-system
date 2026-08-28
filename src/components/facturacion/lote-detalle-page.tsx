@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
-import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItemDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
+import type { LoteFacturacionDetalle, LoteFacturacionItemDetalle, LoteIPSTxtItemDetalle, MedicacionLoteDetalle, OrdenAutorizadaLote } from '@/modules/facturacion/types'
 import { puedeEditarPrestacionEnLote } from '@/modules/facturacion/editability'
 import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { LoteResumenPrint } from './lote-resumen-print'
@@ -345,11 +345,14 @@ function agruparItemsOrdenParaTabla(
 export function LoteDetallePage({ loteId }: Props) {
     const router = useRouter()
     const [lote, setLote] = useState<LoteFacturacionDetalle | null>(null)
+    // Un lote de medicamentos factura medicacion suelta del ingreso, sin orden.
+    const esLoteMedicamentos = lote?.tipo === 'MEDICAMENTOS'
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const [selectedIngresoId, setSelectedIngresoId] = useState<number | null>(null)
     const [ordenes, setOrdenes] = useState<OrdenAutorizadaLote[]>([])
     const [loadingOrdenes, setLoadingOrdenes] = useState(false)
+    const [medicaciones, setMedicaciones] = useState<MedicacionLoteDetalle[]>([])
     const [procesando, setProcesando] = useState(false)
     const [ordenesEnEdicion, setOrdenesEnEdicion] = useState<Record<string, boolean>>({})
     const [editItems, setEditItems] = useState<Record<string, OrdenItemEditState>>({})
@@ -447,6 +450,25 @@ export function LoteDetallePage({ loteId }: Props) {
         setOrdenesAbiertas({})
         setOrdenesExpandidas({})
         setOrdenesEnEdicion({})
+
+        // Un lote de medicamentos no tiene ordenes: sus renglones salen de la
+        // medicacion cargada en el ingreso.
+        if (esLoteMedicamentos) {
+            try {
+                const sp = new URLSearchParams()
+                if (lote?.periodo) sp.set('periodo', lote.periodo)
+                const res = await fetch(`/api/facturacion/lotes/ingreso/${ingresoId}/medicaciones?${sp.toString()}`)
+                const json = await res.json()
+                setMedicaciones(res.ok && json.ok ? (json.data ?? []) : [])
+            } catch {
+                setMedicaciones([])
+            } finally {
+                setOrdenes([])
+                setLoadingOrdenes(false)
+            }
+            return
+        }
+
         try {
             const sp = new URLSearchParams()
             if (filtroMedico.trim()) sp.set('medico', filtroMedico.trim())
@@ -485,7 +507,9 @@ export function LoteDetallePage({ loteId }: Props) {
     }, [filtroMedico, filtroMatricula, lote?.periodo])
 
     useEffect(() => {
-        if (!lote || lote.origen === 'IPS_TXT') {
+        // En medicamentos no hay ordenes que traer: el detalle por paciente sale de
+        // la medicacion y no pasa por esta consulta.
+        if (!lote || lote.origen === 'IPS_TXT' || lote.tipo === 'MEDICAMENTOS') {
             setOrdenesPorIngreso({})
             return
         }
@@ -1352,7 +1376,48 @@ export function LoteDetallePage({ loteId }: Props) {
                             </div>
 
                             {loadingOrdenes ? (
-                                <div className="p-4 text-center text-gray-400 text-sm">Cargando órdenes...</div>
+                                <div className="p-4 text-center text-gray-400 text-sm">
+                                    {esLoteMedicamentos ? 'Cargando medicación...' : 'Cargando órdenes...'}
+                                </div>
+                            ) : esLoteMedicamentos ? (
+                                medicaciones.length === 0 ? (
+                                    <div className="p-4 text-center text-gray-400 text-sm rounded border bg-gray-50">
+                                        Sin medicación cargada para este ingreso
+                                    </div>
+                                ) : (
+                                    <div className="overflow-x-auto rounded border">
+                                        <table className="min-w-full text-xs">
+                                            <thead className="bg-gray-50 text-gray-500">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-left font-medium">Fecha</th>
+                                                    <th className="px-3 py-2 text-left font-medium">Medicación</th>
+                                                    <th className="px-3 py-2 text-right font-medium">Ampollas</th>
+                                                    <th className="px-3 py-2 text-right font-medium">Unitario</th>
+                                                    <th className="px-3 py-2 text-right font-medium">Importe</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y">
+                                                {medicaciones.map((med) => (
+                                                    <tr key={med.id}>
+                                                        <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{new Date(med.fecha).toLocaleDateString('es-AR')}</td>
+                                                        <td className="px-3 py-2 text-gray-800">{med.nombre}</td>
+                                                        <td className="px-3 py-2 text-right text-gray-700">{med.cantidad}</td>
+                                                        <td className="px-3 py-2 text-right text-gray-700">{formatMonto(med.precioUnitario)}</td>
+                                                        <td className="px-3 py-2 text-right font-semibold text-gray-900">{formatMonto(med.importeTotal)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot className="bg-gray-50">
+                                                <tr>
+                                                    <td colSpan={4} className="px-3 py-2 text-right font-medium text-gray-600">Total</td>
+                                                    <td className="px-3 py-2 text-right font-semibold text-gray-900">
+                                                        {formatMonto(medicaciones.reduce((total, med) => total + med.importeTotal, 0))}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                )
                             ) : ordenes.length === 0 ? (
                                 <div className="p-4 text-center text-gray-400 text-sm rounded border bg-gray-50">
                                     Sin órdenes facturadas para este ingreso

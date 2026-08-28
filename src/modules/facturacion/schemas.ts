@@ -59,6 +59,7 @@ export const CrearMedicacionFacturacionSchema = z.object({
     fechaFin: z.string().datetime().or(z.date()).transform((v) => new Date(v)).optional().nullable(),
     observaciones: z.string().trim().max(500).optional().nullable(),
     importe: z.coerce.number().min(0).optional().nullable(),
+    cantidad: z.coerce.number().int().min(1).default(1),
     profesionalId: z.number().int().positive().optional().nullable(),
 })
 
@@ -176,6 +177,7 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
         tipo: z.literal('MEDICACION'),
         medicacionId: z.number().int().positive(),
         fecha: z.string().datetime().or(z.date()).transform((v) => new Date(v)),
+        cantidad: z.coerce.number().positive(),
         importeTotal: z.coerce.number().min(0),
     }),
     z.object({

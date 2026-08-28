@@ -25,6 +25,7 @@ import type {
     FacturacionContexto,
     LoteFacturacionDetalle,
     LoteFacturacionItemDetalle,
+    MedicacionLoteDetalle,
     LoteFacturacionListItem,
     LotePracticaFacturadaProfesionalItem,
     LoteIPSTxtItemDetalle,
@@ -1557,6 +1558,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 viaAdministracion: true,
                 frecuencia: true,
                 importe: true,
+                cantidad: true,
             },
         }),
         prisma.descartableIngreso.findMany({
@@ -3072,15 +3074,16 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     for (const m of ingreso.medicaciones) {
         const detalle = [m.dosis, m.viaAdministracion, m.frecuencia].filter(Boolean).join(' · ')
+        const cantidadMedicacion = Number(m.cantidad ?? 1) || 1
         prestaciones.push({
             uid: `MEDICACION:${m.id}`,
             tipo: 'MEDICACION',
             referencia: `MED-${m.id}`,
             fecha: m.fechaInicio,
             descripcion: detalle ? `${m.nombre} (${detalle})` : m.nombre,
-            cantidad: 1,
+            cantidad: cantidadMedicacion,
             precioUnitario: Number(m.importe ?? 0),
-            importeTotal: Number(m.importe ?? 0),
+            importeTotal: Number((Number(m.importe ?? 0) * cantidadMedicacion).toFixed(2)),
             facturada: false,
             matriculaProfesional: null,
             matriculaEspecialista: null,
@@ -3217,6 +3220,7 @@ export async function crearMedicacionFacturacion(
             fechaFin: data.fechaFin ?? null,
             observaciones: data.observaciones ?? null,
             importe: data.importe ?? null,
+            cantidad: data.cantidad,
             profesionalId: data.profesionalId ?? null,
             estado: 'A',
             usuario: usuario.trim().slice(0, 10) || 'SISTEMA',
@@ -3876,11 +3880,14 @@ export async function actualizarPrestacionFacturacion(
     data: ActualizarPrestacionFacturacionInput
 ): Promise<void> {
     if (data.tipo === 'MEDICACION') {
+        // El importe llega total y se guarda unitario, igual que el descartable.
+        const cantidadMedicacion = data.cantidad > 0 ? data.cantidad : 1
         await prisma.medicacionIngreso.update({
             where: { id: data.medicacionId },
             data: {
                 fechaInicio: data.fecha,
-                importe: data.importeTotal,
+                cantidad: Math.round(cantidadMedicacion),
+                importe: Number((data.importeTotal / cantidadMedicacion).toFixed(2)),
             },
         })
         return
@@ -5331,9 +5338,20 @@ export async function obtenerLote(
             especialistaWhere,
         ],
     }
-    const whereIngresoFiltro: Prisma.IngresoWhereInput = {
-        ordenes: { some: ordenFacturadaWhere },
+    // Un lote de medicamentos factura la medicacion cargada directamente en el
+    // ingreso: no hay orden de por medio. Pedir una orden facturada dejaba el lote
+    // vacio aunque tuviera importe, porque estos ingresos no tienen ninguna.
+    const esLoteMedicamentos = lote.tipo === 'MEDICAMENTOS'
+    const rangoMedicacionLote = rangoPeriodoOpcional(lote.periodo)
+    const whereMedicacionLote: Prisma.MedicacionIngresoWhereInput = {
+        estado: { notIn: ['S', 'X'] },
+        ...(rangoMedicacionLote
+            ? { fechaInicio: { gte: rangoMedicacionLote.desde, lt: rangoMedicacionLote.hasta } }
+            : {}),
     }
+    const whereIngresoFiltro: Prisma.IngresoWhereInput = esLoteMedicamentos
+        ? { medicaciones: { some: whereMedicacionLote } }
+        : { ordenes: { some: ordenFacturadaWhere } }
     const ordenesExcluidas = await prisma.loteFacturacionOrdenExcluida.findMany({
         where: { loteId: id },
         select: { puestoNumero: true, ordenNumero: true },
@@ -5367,6 +5385,8 @@ export async function obtenerLote(
                     numeroAfiliado: true,
                     descripcionPatologia: true,
                     paciente: { select: { id: true, nombreCompleto: true, numeroDocumento: true } },
+                    // Los dos selects van siempre: hacerlos condicionales convierte
+                    // el tipo de Prisma en una union y rompe el calculo de abajo.
                     ordenes: {
                         where: ordenFacturadaWhere,
                         select: {
@@ -5389,13 +5409,33 @@ export async function obtenerLote(
                             },
                         },
                     },
+                    medicaciones: {
+                        where: whereMedicacionLote,
+                        select: { importe: true, cantidad: true },
+                    },
                 },
             },
         },
     })
 
     const items = itemsLote.map((item) => {
-        const { ordenes, ...ingreso } = item.ingreso
+        const { ordenes, medicaciones, ...ingreso } = item.ingreso
+
+        if (esLoteMedicamentos) {
+            const importeMedicacion = (medicaciones ?? []).reduce(
+                (total, med) => total + Number(med.importe ?? 0) * (Number(med.cantidad ?? 1) || 1),
+                0
+            )
+
+            return {
+                ...item,
+                ingreso,
+                importeTotal: Number(importeMedicacion.toFixed(2)),
+                importePromedi: item.importePromedi !== null ? Number(item.importePromedi) : null,
+                paciente: ingreso.paciente,
+            }
+        }
+
         const importeTotal = ordenes
             .filter((orden) => !clavesOrdenesExcluidas.has(`${orden.puestoNumero}:${orden.numero}`))
             .flatMap((orden) => {
@@ -5572,7 +5612,7 @@ export async function crearLote(
     } else {
         whereIngreso.medicaciones = {
             some: {
-                estado: { not: 'S' },
+                estado: { notIn: ['S', 'X'] },
                 ...whereFechaMedicacion,
             },
         }
@@ -5613,7 +5653,7 @@ export async function crearLote(
             medicaciones: data.tipo === 'MEDICAMENTOS'
                 ? {
                     where: { estado: { notIn: ['S', 'X'] }, ...whereFechaMedicacion },
-                    select: { nombre: true, importe: true },
+                    select: { nombre: true, importe: true, cantidad: true },
                 }
                 : false,
         },
@@ -5692,8 +5732,8 @@ export async function crearLote(
             ordenesExcluidas.push(...reparto.ordenesExcluidas)
         }
         if (data.tipo === 'MEDICAMENTOS' && ing.medicaciones) {
-            importe += (ing.medicaciones as Array<{ importe: unknown }>).reduce(
-                (s, m) => s + Number(m.importe ?? 0),
+            importe += (ing.medicaciones as Array<{ importe: unknown; cantidad: number | null }>).reduce(
+                (s, m) => s + Number(m.importe ?? 0) * (Number(m.cantidad ?? 1) || 1),
                 0
             )
         }
@@ -5867,6 +5907,42 @@ function fechaPrimeraPractica(items: Array<{ fecha: Date }>): number {
         if (valor < minima) minima = valor
     }
     return minima
+}
+
+export async function obtenerMedicacionesLoteIngreso(
+    ingresoId: number,
+    periodo?: string | null
+): Promise<MedicacionLoteDetalle[]> {
+    const rango = rangoPeriodoOpcional(periodo)
+
+    const medicaciones = await prisma.medicacionIngreso.findMany({
+        where: {
+            ingresoId,
+            estado: { notIn: ['S', 'X'] },
+            ...(rango ? { fechaInicio: { gte: rango.desde, lt: rango.hasta } } : {}),
+        },
+        orderBy: [{ fechaInicio: 'asc' }, { id: 'asc' }],
+        select: {
+            id: true,
+            nombre: true,
+            fechaInicio: true,
+            importe: true,
+            cantidad: true,
+        },
+    })
+
+    return medicaciones.map((med) => {
+        const cantidad = Number(med.cantidad ?? 1) || 1
+        const precioUnitario = Number(med.importe ?? 0)
+        return {
+            id: med.id,
+            nombre: med.nombre,
+            fecha: med.fechaInicio,
+            cantidad,
+            precioUnitario,
+            importeTotal: Number((precioUnitario * cantidad).toFixed(2)),
+        }
+    })
 }
 
 export async function obtenerOrdenesAutorizadasIngreso(

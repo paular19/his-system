@@ -231,6 +231,16 @@ export interface LoteFacturacionItemDetalle {
     } | null
 }
 
+/** Renglon de medicacion de un lote de medicamentos: no pasa por orden. */
+export interface MedicacionLoteDetalle {
+    id: number
+    nombre: string
+    fecha: Date
+    cantidad: number
+    precioUnitario: number
+    importeTotal: number
+}
+
 export interface OrdenAutorizadaLote {
     puestoNumero: number
     numero: number

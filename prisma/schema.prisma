@@ -476,6 +476,8 @@ model MedicacionIngreso {
   fechaFin          DateTime? @map("MedFchFin") @db.Timestamp(6)
   observaciones     String?   @map("MedObs") @db.VarChar(500)
   importe           Decimal?  @map("MedImporte") @db.Decimal(18, 2)
+  // Unidades (ampollas). El importe se guarda unitario: total = importe x cantidad.
+  cantidad          Int?      @map("MedCantidad")
 
   // Vinculación con autorización (opcional)
   ordenPuestoNumero Int? @map("MedOrdPue")

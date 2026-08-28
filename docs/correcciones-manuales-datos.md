@@ -355,3 +355,25 @@ unitario x cantidad.
 **Verificacion:** `information_schema.columns` devuelve las dos como
 `numeric(18,2)` nullable; `Paciente_HC_seq` sigue viva y los 9 indices `idx_%trgm`
 siguen presentes despues del ALTER.
+
+---
+
+## 2026-08-28 — Columna de ampollas en medicacion (DDL)
+
+**Que se toco:** un `ALTER TABLE` sobre produccion, por el endpoint SQL sobre HTTP
+de Neon:
+
+```sql
+ALTER TABLE "MedicacionIngreso" ADD COLUMN IF NOT EXISTS "MedCantidad" integer;
+```
+
+**Por que:** la lista de medicacion de facturacion pasa a tener precio por unidad
+(ampolla), asi que el importe se guarda unitario y hace falta la cantidad para
+calcular el total.
+
+Nullable a proposito: las 5 filas que ya existian quedan en `null` y se leen como
+1, o sea que su importe no cambia.
+
+**Verificacion:** la columna figura como `integer` nullable en
+`information_schema.columns`; `Paciente_HC_seq` sigue viva y los 9 indices
+`idx_%trgm` siguen presentes.

@@ -248,6 +248,19 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
 
 export type ActualizarPrestacionFacturacionInput = z.infer<typeof ActualizarPrestacionFacturacionSchema>
 
+export const EliminarPrestacionFacturacionSchema = z.discriminatedUnion('tipo', [
+    z.object({
+        tipo: z.literal('MEDICACION'),
+        medicacionId: z.number().int().positive(),
+    }),
+    z.object({
+        tipo: z.literal('DESCARTABLE'),
+        descartableId: z.number().int().positive(),
+    }),
+])
+
+export type EliminarPrestacionFacturacionInput = z.infer<typeof EliminarPrestacionFacturacionSchema>
+
 export const ActualizarDiferencialesCirugiaFacturacionSchema = z.object({
     ingresoId: z.number().int().positive(),
     cirugiaProgramadaId: z.number().int().positive(),

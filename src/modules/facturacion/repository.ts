@@ -16,6 +16,7 @@ import type {
     CrearDescartableFacturacionInput,
     CrearMedicacionFacturacionInput,
     CrearPracticaFacturacionInput,
+    EliminarPrestacionFacturacionInput,
     RenumerarOrdenFacturacionInput,
 } from './schemas'
 import type {
@@ -1546,7 +1547,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             },
         }),
         prisma.medicacionIngreso.findMany({
-            where: { ingresoId },
+            where: { ingresoId, estado: { not: 'X' } },
             orderBy: [{ fechaInicio: 'desc' }, { id: 'desc' }],
             select: {
                 id: true,
@@ -1559,7 +1560,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             },
         }),
         prisma.descartableIngreso.findMany({
-            where: { ingresoId },
+            where: { ingresoId, estado: { not: 'X' } },
             orderBy: [{ fechaInicio: 'desc' }, { id: 'desc' }],
             select: {
                 id: true,
@@ -3844,6 +3845,33 @@ async function resolverPracticaDesdeInput(
     return { convenioId: convenioIdActual, codigoPractica: codigo }
 }
 
+// Baja logica: se marca 'X' (anulada), no 'S'. 'S' es suspension clinica y hay
+// vistas que la muestran a proposito (orden/repository levanta A y S). No se borra
+// la fila para no perder el rastro de lo que se habia cargado.
+export async function eliminarPrestacionFacturacion(
+    data: EliminarPrestacionFacturacionInput,
+    usuario: string
+): Promise<void> {
+    const comun = {
+        estado: 'X',
+        usuario: usuario.trim().slice(0, 10) || 'SISTEMA',
+        fechaEstado: new Date(),
+    }
+
+    if (data.tipo === 'MEDICACION') {
+        await prisma.medicacionIngreso.update({
+            where: { id: data.medicacionId },
+            data: comun,
+        })
+        return
+    }
+
+    await prisma.descartableIngreso.update({
+        where: { id: data.descartableId },
+        data: comun,
+    })
+}
+
 export async function actualizarPrestacionFacturacion(
     data: ActualizarPrestacionFacturacionInput
 ): Promise<void> {
@@ -5584,7 +5612,7 @@ export async function crearLote(
                 : false,
             medicaciones: data.tipo === 'MEDICAMENTOS'
                 ? {
-                    where: { estado: { not: 'S' }, ...whereFechaMedicacion },
+                    where: { estado: { notIn: ['S', 'X'] }, ...whereFechaMedicacion },
                     select: { nombre: true, importe: true },
                 }
                 : false,

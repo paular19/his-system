@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { AlertTriangle, CalendarDays, ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, ListFilter, Loader2, Plus, Search, Upload, X, XCircle } from 'lucide-react'
+import { AlertTriangle, CalendarDays, ChevronDown, ChevronRight, CheckCircle, FileSpreadsheet, ListFilter, Loader2, Plus, Search, Trash2, Upload, X, XCircle } from 'lucide-react'
 import type { AdmisionFacturacionListItem, FacturacionContexto, PrestacionFacturableItem } from '@/modules/facturacion/types'
 import { crearPedidoLaboratorioAction } from '@/modules/orden/actions'
 import {
@@ -1168,6 +1168,12 @@ function agruparItemsPorOrden(items: PrestacionFacturableItem[]): SubgrupoOrden[
     return subgrupos
 }
 
+// Practicas y ordenes se anulan por su propio circuito; medicacion y descartable
+// son carga suelta y se dan de baja desde la misma grilla.
+function esPrestacionEliminable(p: PrestacionFacturableItem): boolean {
+    return p.tipo === 'MEDICACION' || p.tipo === 'DESCARTABLE'
+}
+
 function esPrestacionEditable(p: PrestacionFacturableItem): boolean {
     return (
         p.tipo === 'PRACTICA' ||
@@ -1407,6 +1413,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
     const [guardandoPractica, setGuardandoPractica] = useState(false)
     const [guardandoMedicacion, setGuardandoMedicacion] = useState(false)
+    const [eliminandoRowUid, setEliminandoRowUid] = useState<string | null>(null)
     const [guardandoDescartable, setGuardandoDescartable] = useState(false)
     const [cargandoOrdenes, setCargandoOrdenes] = useState(false)
 
@@ -2790,6 +2797,43 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     function responderConfirmacion(confirmado: boolean) {
         confirmacion?.resolver(confirmado)
         setConfirmacion(null)
+    }
+
+    async function eliminarPrestacionInsumo(p: PrestacionFacturableItem) {
+        if (!contexto) return
+
+        const ok = await pedirConfirmacion({
+            titulo: p.tipo === 'MEDICACION' ? 'Eliminar medicación' : 'Eliminar descartable',
+            mensaje: 'Deja de figurar en las prestaciones del ingreso y no se factura.',
+            detalle: [p.descripcion],
+        })
+        if (!ok) return
+
+        setEliminandoRowUid(p.uid)
+        setError(null)
+        setMensaje(null)
+        try {
+            const payload =
+                p.tipo === 'MEDICACION'
+                    ? { tipo: 'MEDICACION' as const, medicacionId: p.origen.medicacionId }
+                    : { tipo: 'DESCARTABLE' as const, descartableId: p.origen.descartableId }
+
+            const res = await fetch('/api/facturacion/prestaciones/eliminar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+
+            const json = (await res.json()) as ApiResponse<{ ok: boolean }>
+            if (!res.ok || !json.ok) throw new Error(json.error ?? 'No se pudo eliminar')
+
+            setMensaje(p.tipo === 'MEDICACION' ? 'Medicación eliminada' : 'Descartable eliminado')
+            await cargarContexto(contexto.ingreso.id, { silent: true, preserveUiState: true })
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al eliminar')
+        } finally {
+            setEliminandoRowUid(null)
+        }
     }
 
     // Medicacion y descartable no tienen codigo de nomenclador: solo se les
@@ -4736,18 +4780,30 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                             <button onClick={() => cancelarEdicionFila(p)} disabled={guardandoRowUid === p.uid} className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cancelar</button>
                                                                         </div>
                                                                     ) : (
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                if (resumenDuplicados) {
-                                                                                    setLineasDuplicadasExpand((prev) => ({ ...prev, [linea.key]: true }))
-                                                                                    return
-                                                                                }
-                                                                                habilitarEdicionFila(p)
-                                                                            }}
-                                                                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
-                                                                        >
-                                                                            Editar
-                                                                        </button>
+                                                                        <div className="flex flex-col gap-1">
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    if (resumenDuplicados) {
+                                                                                        setLineasDuplicadasExpand((prev) => ({ ...prev, [linea.key]: true }))
+                                                                                        return
+                                                                                    }
+                                                                                    habilitarEdicionFila(p)
+                                                                                }}
+                                                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                            >
+                                                                                Editar
+                                                                            </button>
+                                                                            {esPrestacionEliminable(p) && (
+                                                                                <button
+                                                                                    onClick={() => eliminarPrestacionInsumo(p)}
+                                                                                    disabled={eliminandoRowUid === p.uid}
+                                                                                    className="inline-flex items-center justify-center gap-1 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+                                                                                >
+                                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                                    {eliminandoRowUid === p.uid ? 'Eliminando...' : 'Eliminar'}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
                                                                     )
                                                                 ) : (
                                                                     <span className="text-xs text-gray-400">No aplica</span>

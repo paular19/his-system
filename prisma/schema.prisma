@@ -482,7 +482,7 @@ model MedicacionIngreso {
   ordenNumero       Int? @map("MedOrdNum")
 
   profesionalId Int?     @map("PrfID")
-  // Estado: A=Activo, S=Suspendido, F=Finalizado
+  // Estado: A=Activo, S=Suspendido, F=Finalizado, X=Anulado (baja desde facturacion)
   estado        String   @map("MedEstado") @db.Char(1)
   usuario       String   @map("UsuCodig") @db.Char(10)
   fechaEstado   DateTime @map("MedFchEstado") @db.Timestamp(6)
@@ -504,7 +504,7 @@ model DescartableIngreso {
   fechaInicio   DateTime  @map("DesFchIni") @db.Timestamp(6)
   fechaFin      DateTime? @map("DesFchFin") @db.Timestamp(6)
   profesionalId Int?      @map("PrfID")
-  // Estado: A=Activo, S=Suspendido, F=Finalizado
+  // Estado: A=Activo, S=Suspendido, F=Finalizado, X=Anulado (baja desde facturacion)
   estado        String    @map("DesEstado") @db.Char(1)
   usuario       String    @map("UsuCodig") @db.Char(10)
   fechaEstado   DateTime  @map("DesFchEstado") @db.Timestamp(6)

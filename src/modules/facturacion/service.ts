@@ -13,6 +13,7 @@ import type {
     CrearDescartableFacturacionInput,
     CrearMedicacionFacturacionInput,
     CrearPracticaFacturacionInput,
+    EliminarPrestacionFacturacionInput,
     RenumerarOrdenFacturacionInput,
 } from './schemas'
 import * as repo from './repository'
@@ -136,6 +137,23 @@ export async function actualizarNumeroAutorizacion(
         accion: 'MODIFICAR',
         entidad,
         detalle: 'Actualizacion de numero de autorizacion',
+        direccionIp: ip,
+    })
+}
+
+export async function eliminarPrestacionFacturacion(
+    data: EliminarPrestacionFacturacionInput,
+    usuario: string,
+    ip?: string
+) {
+    await repo.eliminarPrestacionFacturacion(data, usuario)
+
+    await registrarAudit({
+        usuario,
+        accion: 'ELIMINAR',
+        entidad: data.tipo === 'MEDICACION' ? 'MedicacionIngreso' : 'DescartableIngreso',
+        registroId: data.tipo === 'MEDICACION' ? data.medicacionId : data.descartableId,
+        detalle: 'Baja de prestacion desde facturacion',
         direccionIp: ip,
     })
 }

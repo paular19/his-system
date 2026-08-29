@@ -377,3 +377,121 @@ Nullable a proposito: las 5 filas que ya existian quedan en `null` y se leen com
 **Verificacion:** la columna figura como `integer` nullable en
 `information_schema.columns`; `Paciente_HC_seq` sigue viva y los 9 indices
 `idx_%trgm` siguen presentes.
+
+---
+
+## 2026-08-28 — Orden 2174 (LIZARRAGA): 340213 partida en filas x1
+
+**Que se toco:** las practicas del ingreso 466 y los items de la orden 1-2174, por
+el endpoint SQL sobre HTTP de Neon.
+
+```sql
+UPDATE "Practica" SET "PraCant"=2, "PraImpTotal"=10639.12 WHERE "PraID"=3567;  -- gastos
+UPDATE "Practica" SET "PraCant"=2, "PraImpTotal"=3185.28  WHERE "PraID"=3569;  -- especialista
+UPDATE "Practica" SET "PraEstad"='X', "PraNumAut"=NULL,
+       "PueNum"=NULL, "OrdNum"=NULL, "OprItem"=NULL       WHERE "PraID"=3568;  -- fila duplicada
+DELETE FROM "OrdenPrac" WHERE "PueNum"=1 AND "OrdNum"=2174 AND "OprItem"=3;
+UPDATE "OrdenPrac" SET "OprCant"=2, "OprImpTotal"=10639.12 WHERE "PueNum"=1 AND "OrdNum"=2174 AND "OprItem"=2;
+UPDATE "OrdenPrac" SET "OprCant"=2, "OprImpTotal"=3185.28  WHERE "PueNum"=1 AND "OrdNum"=2174 AND "OprItem"=4;
+-- mas el recalculo de Orden.OrdImpTotal, LoteFacturacionItem 518 y LoteFacturacion 45
+```
+
+**Por que:** el ingreso se cargo el 21/08, antes del fix `61bb52a` (25/08). El
+codigo viejo (`obtenerSubitemsSeleccionados`) traducia "gastos x2" a dos filas x1
+con importe unitario en vez de una fila x2, y ademas ignoraba el campo Cantidad de
+la practica. La orden quedaba con tres renglones de 340213 x1.
+
+El honorario de especialista habia entrado una sola vez. Se confirmo con la usuaria
+que va x2, igual que las otras radiografias cargadas con el mismo bug (ingresos 349,
+434, 446, 490). Por eso el total sube: la consolidacion de gastos no mueve plata,
+el especialista si.
+
+**Importes:** orden 2174 13.333,17 -> 14.925,81 (+1.592,64). Lote 45 (PEN, "CM
+AGOSTO / RX IPS") 165.722,52 -> 167.315,16. El lote deriva sus importes en vivo de
+`OrdenPrac`; los campos guardados se actualizaron para que el snapshot no quede
+desfasado.
+
+**Verificacion:** el ingreso 466 queda con 340119 x1 1.101,41, 340213 gastos x2
+10.639,12 y 340213 especialista x2 3.185,28; la orden tiene 3 items (1, 2 y 4 — el
+3 se borro, el hueco de numeracion es intencional) y suma 14.925,81.
+
+**Los demas casos del mismo bug** se consolidaron en la entrada siguiente.
+
+---
+
+## 2026-08-28 — Consolidar el resto de las practicas partidas en filas x1
+
+**Que se toco:** los mismos dos campos que la entrada anterior (`Practica` y
+`OrdenPrac`) en 10 grupos de 6 ingresos, por el endpoint SQL sobre HTTP de Neon.
+Por cada grupo: la fila de menor `PraID` queda con la cantidad y el importe
+sumado, las otras se anulan (`PraEstad='X'`, punteros a orden en null) y sus items
+de `OrdenPrac` se borran.
+
+| ingreso | orden | codigo | queda | anuladas | resultado |
+|---|---|---|---|---|---|
+| 226 | 774  | 340119 gastos | 1569 | 1570, 1571 | x3 3.304,23 |
+| 349 | 1557 | 340213 gastos | 2621 | 2622 | x2 10.639,12 |
+| 349 | 1557 | 340213 esp.   | 2623 | 2624 | x2 3.185,28 |
+| 434 | 2023 | 340213 gastos | 3333 | 3334 | x2 10.639,12 |
+| 434 | 2023 | 340213 esp.   | 3335 | 3336 | x2 3.185,28 |
+| 444 | 2075 | 430205 esp.   | 3420 | 3421, 3422 | x3 2.952,72 |
+| 446 | 2079 | 340213 gastos | 3433 | 3434 | x2 10.639,12 |
+| 446 | 2079 | 340213 esp.   | 3435 | 3436 | x2 3.185,28 |
+| 490 | 2309 | 340213 gastos | 3753 | 3754 | x2 10.639,12 |
+| 490 | 2309 | 340213 esp.   | 3755 | 3756 | x2 3.185,28 |
+
+**Por que:** mismo bug que la entrada anterior (cargas anteriores al fix `61bb52a`
+del 25/08). A diferencia del ingreso 466, aca los dos componentes ya habian entrado
+con la cantidad correcta: la plata estaba bien y lo unico mal era que se veia como
+varios renglones x1.
+
+**Importes:** ninguno se movio. El script verifico `sum(OprImpTotal)` por orden
+antes y despues: 774 3.304,23 / 1557 25.206,00 / 2023 20.736,60 / 2075 3.391,50 /
+2079 32.612,65 / 2309 33.674,41, iguales en los dos lados. Los lotes 39 y 45 (los
+dos PEN) quedaron en 78.696,16 y 167.315,16.
+
+**Guardas del script:** antes de tocar cada grupo verifico que las filas
+compartieran ingreso, orden, codigo, componente (`OprClasAgrup`/`OprModulo`) e
+importe unitario, y que ninguna estuviera ya anulada.
+
+**Dos casos que NO se tocaron a proposito:**
+
+- **Ingreso 32, 721331 x2 de 18.923,83 (PraID 237 y 238).** No es el bug: 18.923,83
+  es el `NPrValAyu` de esa practica, o sea que son el primer y el segundo ayudante
+  (A1 y A2). Son puestos distintos y tienen que seguir como dos renglones x1 — es
+  justamente lo que el fix `61bb52a` dejo sin agrupar.
+- **Ingreso 251, 430205 x3 de 438,78 (PraID 1704-1706).** Es el bug, pero el
+  ingreso esta en el **lote 44, confirmado**. Consolidarlo no moveria un peso, pero
+  cambia como se imprime el detalle de un lote ya cerrado. Queda para decidir.
+
+---
+
+## 2026-08-28 — Ordenes 1829-1833 (ingreso 282): fecha al 27/08
+
+**Que se toco:** las practicas 3081 y 3087 del ingreso 282, sus items en `OrdenPrac`
+y las cabeceras de las ordenes 1-1829 a 1-1833, por el endpoint SQL sobre HTTP de Neon.
+
+```sql
+UPDATE "Practica" SET "PraFch"='2026-08-27 15:00:00' WHERE "PraID" IN (3081,3087);
+UPDATE "OrdenPrac" SET "OprFch"='2026-08-27 15:00:00' WHERE "PraID" IN (3081,3087);
+UPDATE "Orden" SET "OrdFchEmi"='2026-08-27 15:00:00', "OrdFchPed"='2026-08-27 15:00:00'
+ WHERE "PueNum"=1 AND "OrdNum" IN (1829,1830,1831,1832,1833);
+```
+
+**Por que:** la usuaria intento seis veces (28/08 21:20-21:23) cambiar la fecha de la
+practica 3081 desde internacion. La auditoria muestra las seis tandas escribiendo
+27/08 en `Practica`, `OrdenPrac` y `Orden`, y ninguna quedo: la transaccion de
+`actualizarPractica` no declaraba `timeout` y corria con los 5 s por defecto de
+Prisma. Con ~15 operaciones de ~225 ms cada una (la practica 3081 cuelga de cuatro
+ordenes) se pasaba del limite y hacia rollback entero. El punto donde cortaba
+variaba entre intentos —a veces alcanzaba a tocar la orden 1833, a veces no—, que
+es la firma de un timeout y no de un throw. Arreglado en el mismo commit con
+`{ timeout: 30000, maxWait: 10000 }`.
+
+**Importes:** sin cambios. El ingreso 282 no esta en ningun lote, asi que mover la
+fecha no reubica nada facturado.
+
+**Verificacion:** las cinco ordenes quedan con `OrdFchEmi`/`OrdFchPed` en
+2026-08-27 15:00:00 y estado 'A'. Los items 1830/1 (420303) y 1831/1 (431101)
+siguen en 17/08 a proposito: son otras practicas que la usuaria no pidio mover, y
+la cabecera toma el maximo de los items igual que lo haria la app.

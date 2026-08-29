@@ -2067,7 +2067,7 @@ export async function actualizarPractica(
         fechaEmision: op.orden?.fechaEmision ?? null,
       })),
     } as PracticaItem
-  })
+  }, { timeout: 30000, maxWait: 10000 })
 }
 
 export async function desagruparPracticaNoAutorizada(

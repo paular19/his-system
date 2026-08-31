@@ -49,6 +49,9 @@ export interface PrestacionFacturableItem {
         ordenItem: number
         numeroAutorizacion: string | null
         incluyeCodigo?: string | null
+        // Importe propio del item en esa orden. La practica de una cirugia se
+        // reparte por rol y cada orden se lleva una parte del total.
+        importeTotal?: number | null
         matriculaProfesional?: number | null
         matriculaEspecialista?: number | null
         matriculaAnestesista?: number | null

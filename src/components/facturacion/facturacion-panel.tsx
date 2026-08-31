@@ -31,6 +31,7 @@ type AutorizacionVinculadaExtendida = {
     ordenItem: number
     numeroAutorizacion: string | null
     incluyeCodigo?: string | null
+    importeTotal?: number | null
     matriculaProfesional?: number | null
     matriculaEspecialista?: number | null
     matriculaAnestesista?: number | null
@@ -1137,33 +1138,62 @@ function obtenerOrdenesRelacionadasPrestacion(p: PrestacionFacturableItem): Orde
     })
 }
 
+type EspejoOrden = {
+    prestacion: PrestacionFacturableItem
+    vinculo: AutorizacionVinculadaExtendida
+}
+
 type SubgrupoOrden = {
     key: string
     orden: OrdenRelacionada | null
     items: PrestacionFacturableItem[]
+    // Practicas cuya fila editable vive en otra orden pero que tienen un item
+    // propio en esta. Se listan como referencia para que la orden no desaparezca.
+    espejos: EspejoOrden[]
 }
 
 // En un grupo de cirugia la cabecera es la cirugia, no la orden: gastos, especialista,
 // ayudante y anestesista salen cada uno en su propia orden y quedaban todos mezclados en
 // una sola lista. Se parte el grupo en subgrupos con la orden arriba y sus practicas
-// abajo. Una practica vinculada a varias ordenes va en la primera: es la que la genero.
-function agruparItemsPorOrden(items: PrestacionFacturableItem[]): SubgrupoOrden[] {
+// abajo. La fila editable de una practica vinculada a varias ordenes va en la primera,
+// pero el item aparece tambien en las otras: hay una sola Practica y varios OrdenPrac,
+// y sin eso las ordenes que no la generaron no se dibujan y desde facturacion se lee
+// como que todos los subitems cuelgan de la primera.
+function agruparItemsPorOrden(
+    items: PrestacionFacturableItem[],
+    conEspejos: boolean
+): SubgrupoOrden[] {
     const subgrupos: SubgrupoOrden[] = []
     const indicePorKey = new Map<string, number>()
 
-    for (const p of items) {
-        const orden = obtenerOrdenesRelacionadasPrestacion(p)[0] ?? null
+    const obtenerSubgrupo = (orden: OrdenRelacionada | null): SubgrupoOrden => {
         const key = orden ? keyOrdenRelacionada(orden) : 'SIN_ORDEN'
-
         const idx = indicePorKey.get(key)
         const existente = idx != null ? subgrupos[idx] : undefined
-        if (!existente) {
-            indicePorKey.set(key, subgrupos.length)
-            subgrupos.push({ key, orden, items: [p] })
-            continue
-        }
+        if (existente) return existente
 
-        existente.items.push(p)
+        const nuevo: SubgrupoOrden = { key, orden, items: [], espejos: [] }
+        indicePorKey.set(key, subgrupos.length)
+        subgrupos.push(nuevo)
+        return nuevo
+    }
+
+    for (const p of items) {
+        const ordenes = obtenerOrdenesRelacionadasPrestacion(p)
+        obtenerSubgrupo(ordenes[0] ?? null).items.push(p)
+
+        if (!conEspejos) continue
+
+        for (const otra of ordenes.slice(1)) {
+            const vinculos = (p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[]
+            const vinculo = vinculos.find(
+                (aut) =>
+                    aut.ordenPuestoNumero === otra.ordenPuestoNumero &&
+                    aut.ordenNumero === otra.ordenNumero
+            )
+            if (!vinculo) continue
+            obtenerSubgrupo(otra).espejos.push({ prestacion: p, vinculo })
+        }
     }
 
     return subgrupos
@@ -4534,7 +4564,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             </td>
                                                         </tr>
 
-                                                        {grupoExpandido && agruparItemsPorOrden(grupo.items).flatMap((subgrupo) => {
+                                                        {grupoExpandido && agruparItemsPorOrden(grupo.items, esGrupoCirugia).flatMap((subgrupo) => {
                                                             // Solo la cirugia se abre por orden: en un grupo de orden la
                                                             // cabecera ya dice cual es y repetirla seria ruido.
                                                             const mostrarCabeceraOrden = esGrupoCirugia
@@ -4803,6 +4833,18 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         {mostrarDeltaDiferencial && importeOriginal !== null && deltaDiferencial !== null && (
                                                                             <div className="text-[10px] text-amber-700">
                                                                                 Sin diferencial {formatCurrency(importeOriginal)} · Ajuste {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}
+                                                                            </div>
+                                                                        )}
+                                                                        {/* El total de una practica de cirugia se reparte entre las
+                                                                            ordenes de cada rol: sin el detalle parece que todo lo
+                                                                            cobra la primera. */}
+                                                                        {!resumenDuplicados && autorizacionesVinculadasOrdenadas.length > 1 && (
+                                                                            <div className="text-[10px] text-slate-600">
+                                                                                Repartido: {autorizacionesVinculadasOrdenadas
+                                                                                    .map((aut) =>
+                                                                                        `${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} ${aut.importeTotal != null ? formatCurrency(aut.importeTotal) : '—'}`
+                                                                                    )
+                                                                                    .join(' · ')}
                                                                             </div>
                                                                         )}
                                                                         {/* Con reparto por cantidad el total sale de dos precios
@@ -5120,6 +5162,36 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
                                                             if (!mostrarCabeceraOrden) return filasSubgrupo
 
+                                                            const cantidadPracticas = subgrupo.items.length + subgrupo.espejos.length
+                                                            // La practica repartida por rol tiene una sola fila editable, en la
+                                                            // orden que la genero. Aca se muestra el item que le toca a esta orden.
+                                                            const filasEspejo = subgrupo.espejos.map(({ prestacion, vinculo }) => {
+                                                                const ordenEditable = obtenerOrdenesRelacionadasPrestacion(prestacion)[0] ?? null
+                                                                return (
+                                                                    <tr key={`${grupo.key}:${subgrupo.key}:espejo:${prestacion.uid}:${vinculo.ordenItem}`}>
+                                                                        <td colSpan={8} className="px-3 py-2">
+                                                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-l-4 border-slate-200 pl-2">
+                                                                                <span className="font-mono text-xs font-semibold text-gray-800">
+                                                                                    {prestacion.codigoPractica ?? '—'}
+                                                                                </span>
+                                                                                <span className="text-xs text-gray-700">{prestacion.descripcion}</span>
+                                                                                <span className="text-xs font-semibold text-gray-800">
+                                                                                    {vinculo.importeTotal != null ? formatCurrency(vinculo.importeTotal) : '—'}
+                                                                                </span>
+                                                                                <span className="text-[11px] text-slate-500">
+                                                                                    Item {vinculo.ordenItem} · {vinculo.numeroAutorizacion?.trim() || 'S/A'}
+                                                                                </span>
+                                                                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                                                                                    Misma práctica{ordenEditable
+                                                                                        ? `: se edita y factura en ${formatOrderNumber(ordenEditable.ordenPuestoNumero, ordenEditable.ordenNumero)}`
+                                                                                        : ''}
+                                                                                </span>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                )
+                                                            })
+
                                                             const hrefSubgrupo = subgrupo.orden
                                                                 ? `/dashboard/ambulatorio/${subgrupo.orden.ordenPuestoNumero}/${subgrupo.orden.ordenNumero}`
                                                                 : null
@@ -5145,12 +5217,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                 <span className="font-mono text-xs font-semibold text-slate-600">Sin orden vinculada</span>
                                                                             )}
                                                                             <span className="text-[11px] text-slate-600">
-                                                                                {subgrupo.items.length} práctica{subgrupo.items.length === 1 ? '' : 's'}
+                                                                                {cantidadPracticas} práctica{cantidadPracticas === 1 ? '' : 's'}
                                                                             </span>
                                                                         </div>
                                                                     </td>
                                                                 </tr>,
                                                                 ...filasSubgrupo,
+                                                                ...filasEspejo,
                                                             ]
                                                         })}
 

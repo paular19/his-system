@@ -1892,6 +1892,9 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             ordenItem: number
             numeroAutorizacion: string | null
             incluyeCodigo: string | null
+            // Importe del item de esa orden: una practica repartida por rol
+            // (especialista / gastos / ayudante) vale distinto en cada una.
+            importeTotal: number | null
             matriculaProfesional: number | null
             matriculaEspecialista: number | null
             matriculaAnestesista: number | null
@@ -2322,6 +2325,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     ordenItem: it.item,
                     numeroAutorizacion: numeroAutorizacionVinculo,
                     incluyeCodigo: incluyeCodigoVinculo,
+                    importeTotal: decimalANumero(it.importeTotal),
                     matriculaProfesional: o.profesional?.matricula ?? null,
                     matriculaEspecialista: matriculaEspecialistaVinculo,
                     matriculaAnestesista: matriculaAnestesistaVinculo,

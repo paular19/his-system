@@ -29,8 +29,10 @@ export interface LiquidacionLinea {
     categoria: CategoriaPractica | null
     subitem: SubitemLiquidable
     cantidad: number
-    // El importe de la fila va entero a honorarios o entero a gastos segun el
-    // subitem: en esta base cada componente de la practica es una fila propia.
+    // Casi siempre el importe va entero a un lado: cada componente de la practica
+    // suele ser una fila propia. Pero las filas que cobran la practica completa
+    // ('HE+GA' y las que quedaron sin etiqueta) llevan honorario y gastos juntos y
+    // se reparten — ver resolverImportesLiquidacion.
     importeHonorarios: number
     importeGastos: number
     importeTotal: number

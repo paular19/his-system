@@ -5,7 +5,7 @@ import {
     type CategoriaPractica,
 } from '@/modules/facturacion/categorias-practica'
 import { esMatriculaClinica } from '@/modules/facturacion/promedi-rules'
-import { resolverSubitemLiquidacion, type SubitemLiquidacion } from './subitem'
+import { resolverImportesLiquidacion } from './subitem'
 import type { BusquedaLiquidacionInput } from './schemas'
 import {
     esSubitemLiquidable,
@@ -273,7 +273,7 @@ export async function obtenerLiquidacionProfesionales(
             const codigo = it.codigoPractica.trim()
             const categoria = categoriaPractica(codigo)
 
-            const subitem: SubitemLiquidacion = resolverSubitemLiquidacion({
+            const { subitem, importeHonorarios, importeGastos } = resolverImportesLiquidacion({
                 codigoPractica: codigo,
                 modulo: it.modulo,
                 titularModular: it.titularModular,
@@ -281,6 +281,7 @@ export async function obtenerLiquidacionProfesionales(
                 efectorMatricula: it.efectorMatricula,
                 profesional: orden.profesional?.nombre ?? null,
                 importeTotal: importe,
+                cantidad: aNumero(it.cantidad),
                 valoresNomenclador: it.nomencladorPractica
                     ? {
                         valorEspecialista: aNumeroONull(it.nomencladorPractica.valorEspecialista),
@@ -321,7 +322,6 @@ export async function obtenerLiquidacionProfesionales(
                 continue
             }
 
-            const esGasto = subitem === 'GA'
             const linea: LiquidacionLinea = {
                 ingresoId: ingreso.id,
                 tipoIngresoCodigo: ingreso.tipoIngresoCodigo,
@@ -338,8 +338,8 @@ export async function obtenerLiquidacionProfesionales(
                 categoria,
                 subitem,
                 cantidad: aNumero(it.cantidad),
-                importeHonorarios: esGasto ? 0 : importe,
-                importeGastos: esGasto ? importe : 0,
+                importeHonorarios,
+                importeGastos,
                 importeTotal: importe,
                 ordenPuestoNumero: orden.puestoNumero,
                 ordenNumero: orden.numero,

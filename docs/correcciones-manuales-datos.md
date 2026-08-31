@@ -495,3 +495,79 @@ fecha no reubica nada facturado.
 2026-08-27 15:00:00 y estado 'A'. Los items 1830/1 (420303) y 1831/1 (431101)
 siguen en 17/08 a proposito: son otras practicas que la usuaria no pidio mover, y
 la cabecera toma el maximo de los items igual que lo haria la app.
+
+---
+
+## 2026-08-31 — Lote 43: electrocardiogramas facturados a medias (codigo 170101)
+
+**Que se cambio:** siete lineas del lote 43 cobraban un solo componente del
+nomenclador en vez del electro completo. Seis cobraban solo el honorario
+(15.149,63) y la de LUQUE solo los gastos (3.550,32). El electro vale
+HE 15.149,63 + GA 3.550,32 = 18.699,95.
+
+Las siete pasaron a 18.699,95 con la misma forma que las 37 lineas que ya estaban
+bien cargadas: `OprClasAgrup='HE+GA'`, `OprModulo=NULL`,
+`OprTitularModular='HONORARIO ESPECIALISTA + DERECHOS'`, `OprImprimirDuplicado=true`.
+
+| Paciente | Orden/item | PraID | De | A |
+|---|---|---|---|---|
+| ARAMAYO | 1089/2 | 2002 | 15.149,63 | 18.699,95 |
+| ARGUELLO | 623/1 | 1346 | 15.149,63 | 18.699,95 |
+| DIP | 1368/1 | 2344 | 15.149,63 | 18.699,95 |
+| LAMAS | 1393/1 | 2376 | 15.149,63 | 18.699,95 |
+| LAMAS | 1620/1 | 2751 | 15.149,63 | 18.699,95 |
+| PERSAMPIERI | 1819/1 | 3072 | 15.149,63 | 18.699,95 |
+| LUQUE | 1835/1 | 3096 | 3.550,32 | 18.699,95 |
+
+Cabeceras recalculadas: las que llevan tambien un 420303 (623, 1089, 1393, 1819)
+a 35.700,06; las de un solo item (1368, 1620, 1835) a 18.699,95. En las multi-item
+no se toco `OrdTitularModular` ni `OrdImprimirDuplicado` para no mal-etiquetar el
+420303.
+
+**LUQUE (ingreso 382):** era UN electro partido en dos cargas. El 18/08 18:27 el
+split genero la orden 1834 (`titularModular='HONORARIO ESPECIALISTA'`) y la 1835
+(`'DERECHOS'`) con segundos de diferencia, y despues movieron la 1835 al 15/08.
+Solo la mitad GA quedo facturada, asi que el lote cobraba 3.550,32 por un estudio
+entero. Quedo la orden 1835 completa con fecha 15/08 y se anulo la 1834 junto con
+su practica 3097 (`estado='X'`), para que no se facture de nuevo en el proximo lote.
+
+**Por que salieron asi:** al cargar la practica los dos componentes vienen
+tildados por defecto (`seleccionPorDefecto` en `componente-selector.tsx`). Alguien
+los destildo, o uso el modo de subitems que crea una practica por componente. El
+sistema calculo bien: le pidieron componentes sueltos y guardo componentes
+sueltos. No hay aviso cuando una practica queda a medias ni cuando su otra mitad
+nunca se facturo.
+
+**Importes:** lote 43 pasa de 32.882.444,51 a **32.918.896,06** (+36.451,55).
+`LItImpTotal` de los seis ingresos (288, 191, 181, 331, 382, 388) actualizado con
+su delta. El lote estaba en PEN y sigue en PEN.
+
+```sql
+-- Una sola sentencia con CTEs: o entra todo o no entra nada.
+-- objetivo(pue, ord, item, praid, nuevo_cab, unica) =
+--   (1,623,1,1346,35700.06,f) (1,1089,2,2002,35700.06,f) (1,1368,1,2344,18699.95,t)
+--   (1,1393,1,2376,35700.06,f) (1,1620,1,2751,18699.95,t) (1,1819,1,3072,35700.06,f)
+--   (1,1835,1,3096,18699.95,t)
+UPDATE "Practica"  SET "PraImpTotal"=18699.95                    -- 7 filas
+UPDATE "OrdenPrac" SET "OprImpTotal"=18699.95, "OprClasAgrup"='HE+GA',
+       "OprModulo"=NULL, "OprTitularModular"='HONORARIO ESPECIALISTA + DERECHOS',
+       "OprImprimirDuplicado"=true                               -- 7 filas
+UPDATE "Orden"     SET "OrdImpTotal"=<nuevo_cab>, titular/duplicado solo si unica
+UPDATE "Practica"  SET "PraEstad"='X' WHERE "PraID"=3097
+UPDATE "Orden"     SET "OrdEstad"='X', "OrdFchEst"=now() WHERE "PueNum"=1 AND "OrdNum"=1834
+UPDATE "LoteFacturacionItem" SET "LItImpTotal" = "LItImpTotal" + <delta>  -- 6 filas
+UPDATE "LoteFacturacion"     SET "LotImpTotal"=32918896.06 WHERE "LotID"=43
+```
+
+**Verificacion:** las 11 lineas de 170101 del lote 43 quedan las 11 en 18.699,95.
+El script chequeo antes de escribir que el lote siguiera en PEN, que el total
+fuera el medido y que las 7 lineas tuvieran su PraID e importe esperados; aborta
+sin tocar nada si algo no coincide.
+
+**Reversion:** estado previo completo en `docs/snapshot-lote43-170101-2026-08-31.json`
+(8 practicas, 12 lineas de orden, 8 cabeceras, el lote y sus 6 items).
+
+**Relacionado:** en el mismo dia se arreglo el calculo de la liquidacion (commit
+`dd97b1a`), que mandaba el importe entero de estas lineas al honorario del medico.
+Con las dos cosas aplicadas, cada electro liquida 15.149,63 al medico y 3.550,32 a
+gastos de la clinica.

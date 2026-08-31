@@ -1,0 +1,302 @@
+{
+  "practica": [
+    {
+      "PraID": 1346,
+      "PraImpTotal": "15149.63",
+      "PraEstad": "F",
+      "PueNum": 1,
+      "OrdNum": 623,
+      "OprItem": 1
+    },
+    {
+      "PraID": 2002,
+      "PraImpTotal": "15149.63",
+      "PraEstad": "F",
+      "PueNum": 1,
+      "OrdNum": 1089,
+      "OprItem": 2
+    },
+    {
+      "PraID": 2344,
+      "PraImpTotal": "15149.63",
+      "PraEstad": "F",
+      "PueNum": 1,
+      "OrdNum": 1368,
+      "OprItem": 1
+    },
+    {
+      "PraID": 2376,
+      "PraImpTotal": "15149.63",
+      "PraEstad": "F",
+      "PueNum": 1,
+      "OrdNum": 1393,
+      "OprItem": 1
+    },
+    {
+      "PraID": 2751,
+      "PraImpTotal": "15149.63",
+      "PraEstad": "F",
+      "PueNum": 1,
+      "OrdNum": 1620,
+      "OprItem": 1
+    },
+    {
+      "PraID": 3072,
+      "PraImpTotal": "15149.63",
+      "PraEstad": "F",
+      "PueNum": 1,
+      "OrdNum": 1819,
+      "OprItem": 1
+    },
+    {
+      "PraID": 3096,
+      "PraImpTotal": "3550.32",
+      "PraEstad": "F",
+      "PueNum": 1,
+      "OrdNum": 1835,
+      "OprItem": 1
+    },
+    {
+      "PraID": 3097,
+      "PraImpTotal": "15149.63",
+      "PraEstad": null,
+      "PueNum": null,
+      "OrdNum": null,
+      "OprItem": null
+    }
+  ],
+  "ordenPrac": [
+    {
+      "PueNum": 1,
+      "OrdNum": 623,
+      "OprItem": 1,
+      "OprImpTotal": "15149.63",
+      "OprClasAgrup": "HE",
+      "OprModulo": null,
+      "OprTitularModular": "HONORARIO ESPECIALISTA",
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 623,
+      "OprItem": 2,
+      "OprImpTotal": "17000.11",
+      "OprClasAgrup": "HE",
+      "OprModulo": null,
+      "OprTitularModular": "HONORARIO ESPECIALISTA",
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1089,
+      "OprItem": 1,
+      "OprImpTotal": "17000.11",
+      "OprClasAgrup": "HE",
+      "OprModulo": null,
+      "OprTitularModular": "HONORARIO ESPECIALISTA",
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1089,
+      "OprItem": 2,
+      "OprImpTotal": "15149.63",
+      "OprClasAgrup": "HE",
+      "OprModulo": null,
+      "OprTitularModular": "HONORARIO ESPECIALISTA",
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1368,
+      "OprItem": 1,
+      "OprImpTotal": "15149.63",
+      "OprClasAgrup": null,
+      "OprModulo": "HE      ",
+      "OprTitularModular": null,
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1393,
+      "OprItem": 1,
+      "OprImpTotal": "15149.63",
+      "OprClasAgrup": null,
+      "OprModulo": "HE      ",
+      "OprTitularModular": null,
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1393,
+      "OprItem": 2,
+      "OprImpTotal": "17000.11",
+      "OprClasAgrup": null,
+      "OprModulo": null,
+      "OprTitularModular": null,
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1620,
+      "OprItem": 1,
+      "OprImpTotal": "15149.63",
+      "OprClasAgrup": "HE",
+      "OprModulo": null,
+      "OprTitularModular": "HONORARIO ESPECIALISTA",
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1819,
+      "OprItem": 1,
+      "OprImpTotal": "15149.63",
+      "OprClasAgrup": "HE",
+      "OprModulo": null,
+      "OprTitularModular": "HONORARIO ESPECIALISTA",
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1819,
+      "OprItem": 2,
+      "OprImpTotal": "17000.11",
+      "OprClasAgrup": "HE",
+      "OprModulo": null,
+      "OprTitularModular": "HONORARIO ESPECIALISTA",
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1834,
+      "OprItem": 1,
+      "OprImpTotal": "15149.63",
+      "OprClasAgrup": "HE",
+      "OprModulo": null,
+      "OprTitularModular": "HONORARIO ESPECIALISTA",
+      "OprImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1835,
+      "OprItem": 1,
+      "OprImpTotal": "3550.32",
+      "OprClasAgrup": "GA",
+      "OprModulo": null,
+      "OprTitularModular": "DERECHOS",
+      "OprImprimirDuplicado": true
+    }
+  ],
+  "orden": [
+    {
+      "PueNum": 1,
+      "OrdNum": 623,
+      "OrdImpTotal": "32149.74",
+      "OrdEstad": "A",
+      "OrdFchEst": "2026-08-06 16:42:50.096",
+      "OrdTitularModular": "HONORARIO ESPECIALISTA",
+      "OrdImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1089,
+      "OrdImpTotal": "32149.74",
+      "OrdEstad": "A",
+      "OrdFchEst": "2026-08-11 16:10:37.513",
+      "OrdTitularModular": "HONORARIO ESPECIALISTA",
+      "OrdImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1368,
+      "OrdImpTotal": "15149.63",
+      "OrdEstad": "A",
+      "OrdFchEst": "2026-08-13 14:55:23.858",
+      "OrdTitularModular": "HONORARIO ESPECIALISTA",
+      "OrdImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1393,
+      "OrdImpTotal": "32149.74",
+      "OrdEstad": "A",
+      "OrdFchEst": "2026-08-13 14:08:07.947",
+      "OrdTitularModular": "HONORARIO ESPECIALISTA",
+      "OrdImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1620,
+      "OrdImpTotal": "15149.63",
+      "OrdEstad": "A",
+      "OrdFchEst": "2026-08-14 17:10:09.953",
+      "OrdTitularModular": "HONORARIO ESPECIALISTA",
+      "OrdImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1819,
+      "OrdImpTotal": "32149.74",
+      "OrdEstad": "A",
+      "OrdFchEst": "2026-08-18 17:58:24.843",
+      "OrdTitularModular": "HONORARIO ESPECIALISTA",
+      "OrdImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1834,
+      "OrdImpTotal": "15149.63",
+      "OrdEstad": "A",
+      "OrdFchEst": "2026-08-18 18:27:08.903",
+      "OrdTitularModular": "HONORARIO ESPECIALISTA",
+      "OrdImprimirDuplicado": false
+    },
+    {
+      "PueNum": 1,
+      "OrdNum": 1835,
+      "OrdImpTotal": "3550.32",
+      "OrdEstad": "A",
+      "OrdFchEst": "2026-08-24 14:07:48.096",
+      "OrdTitularModular": "DERECHOS",
+      "OrdImprimirDuplicado": true
+    }
+  ],
+  "lote": [
+    {
+      "LotID": 43,
+      "LotImpTotal": "32882444.51"
+    }
+  ],
+  "loteItems": [
+    {
+      "LItID": 451,
+      "IngID": 181,
+      "LItImpTotal": "1468349.62"
+    },
+    {
+      "LItID": 463,
+      "IngID": 382,
+      "LItImpTotal": "1563069.17"
+    },
+    {
+      "LItID": 464,
+      "IngID": 388,
+      "LItImpTotal": "619153.66"
+    },
+    {
+      "LItID": 471,
+      "IngID": 288,
+      "LItImpTotal": "1374536.84"
+    },
+    {
+      "LItID": 472,
+      "IngID": 191,
+      "LItImpTotal": "3251686.04"
+    },
+    {
+      "LItID": 475,
+      "IngID": 331,
+      "LItImpTotal": "1016095.40"
+    }
+  ]
+}

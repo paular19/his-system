@@ -5,7 +5,6 @@ import type {
     ActualizarAutorizacionInput,
     ActualizarContextoFacturacionInput,
     ActualizarDiferencialesCirugiaFacturacionInput,
-    ActualizarImporteItemOrdenInput,
     ActualizarLoteFacturacionInput,
     ActualizarPrestacionFacturacionInput,
     BusquedaFacturacionInput,
@@ -689,13 +688,21 @@ type VinculoOrdenPractica = {
 // (renumeraciones, ordenes regeneradas), pero facturada esta en una sola: la que
 // guarda en Practica.puestoNumero/ordenNumero. Sin este chequeo, las ordenes
 // viejas se arrastran junto con la vigente y duplican el importe.
-function practicaFacturadaEnOrden(
-    practica: VinculoOrdenPractica,
-    orden: { puestoNumero: number; numero: number }
-): boolean {
+/**
+ * La practica del item esta facturada. El item ya pertenece a la orden por la
+ * relacion, asi que alcanza con que su practica este marcada.
+ *
+ * Antes se exigia ademas que el puntero de vuelta (Practica.puesto/orden/item)
+ * apuntara a ESTA orden. Una practica de cirugia repartida por rol tiene un item
+ * en cada orden pero un solo puntero, asi que de las tres ordenes solo entraba al
+ * lote la apuntada y las otras desaparecian aunque estuvieran facturadas.
+ *
+ * Anular la facturacion deja la practica en 'A' y corta el vinculo, con lo cual
+ * esto vuelve a dar false.
+ */
+function practicaFacturadaEnOrden(practica: VinculoOrdenPractica): boolean {
     if (!practicaMarcadaComoFacturada(practica?.estado)) return false
-    if (!practica?.puestoNumero || !practica.ordenNumero || !practica.ordenItem) return false
-    return practica.puestoNumero === orden.puestoNumero && practica.ordenNumero === orden.numero
+    return Boolean(practica?.puestoNumero && practica.ordenNumero && practica.ordenItem)
 }
 
 function resolverNumeroAutorizacion(
@@ -3901,70 +3908,6 @@ export async function eliminarPrestacionFacturacion(
     })
 }
 
-/**
- * Corrige el importe de un item de orden sin tocar nada mas de ese item ni de
- * las otras ordenes. Despues recalcula el total de la orden y el de la practica:
- * si esta repartida entre varias ordenes su importe es la suma de los items, y
- * si vive en una sola sigue el importe editado.
- */
-export async function actualizarImporteItemOrden(
-    data: ActualizarImporteItemOrdenInput
-): Promise<void> {
-    const item = await prisma.ordenPractica.findUnique({
-        where: {
-            puestoNumero_ordenNumero_item: {
-                puestoNumero: data.puestoNumero,
-                ordenNumero: data.ordenNumero,
-                item: data.item,
-            },
-        },
-        select: {
-            practicaId: true,
-            orden: { select: { ingresoId: true } },
-        },
-    })
-    if (!item) throw new Error('Ítem de orden no encontrado')
-
-    await prisma.$transaction(async (tx) => {
-        await tx.ordenPractica.update({
-            where: {
-                puestoNumero_ordenNumero_item: {
-                    puestoNumero: data.puestoNumero,
-                    ordenNumero: data.ordenNumero,
-                    item: data.item,
-                },
-            },
-            data: { importeTotal: data.importeTotal },
-        })
-
-        const itemsOrden = await tx.ordenPractica.findMany({
-            where: {
-                puestoNumero: data.puestoNumero,
-                ordenNumero: data.ordenNumero,
-            },
-            select: { importeTotal: true },
-        })
-        const totalOrden = itemsOrden.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
-        await tx.orden.update({
-            where: {
-                puestoNumero_numero: {
-                    puestoNumero: data.puestoNumero,
-                    numero: data.ordenNumero,
-                },
-            },
-            data: { importeTotal: Number(totalOrden.toFixed(2)) },
-        })
-
-        if (item.practicaId != null) {
-            await recalcularImportePracticaDesdeItems(tx, item.practicaId)
-        }
-    })
-
-    if (item.orden.ingresoId) {
-        await recalcularTotalesLotesPendientesPracticasPorIngreso(item.orden.ingresoId)
-    }
-}
-
 export async function actualizarPrestacionFacturacion(
     data: ActualizarPrestacionFacturacionInput
 ): Promise<void> {
@@ -5556,7 +5499,7 @@ export async function obtenerLote(
             .flatMap((orden) => {
             const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
             return orden.items.filter((ordenItem) =>
-                practicaFacturadaEnOrden(ordenItem.practica, orden) &&
+                practicaFacturadaEnOrden(ordenItem.practica) &&
                 (ordenConAutorizacion || tieneNumeroAutorizacionValido(ordenItem.numeroAutorizacion))
             )
         }).reduce((total, ordenItem) => total + Number(ordenItem.importeTotal ?? 0), 0)
@@ -5810,7 +5753,7 @@ export async function crearLote(
             for (const o of ordenes) {
                 const ordenConAutorizacion = tieneNumeroAutorizacionValido(o.numeroAutorizacion)
                 const itemsFacturados = o.items.filter((it) =>
-                    practicaFacturadaEnOrden(it.practica, o) &&
+                    practicaFacturadaEnOrden(it.practica) &&
                     (ordenConAutorizacion || tieneNumeroAutorizacionValido(it.numeroAutorizacion))
                 )
                 // Sin practicas facturadas la orden no aparece en el detalle: no hay nada
@@ -6257,7 +6200,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
             const itemsConEfector = o.items
                 .filter(
                     (it) =>
-                        practicaFacturadaEnOrden(it.practica, o) &&
+                        practicaFacturadaEnOrden(it.practica) &&
                         tieneNumeroAutorizacionValido(
                             resolverNumeroAutorizacion(it.numeroAutorizacion, o.numeroAutorizacion)
                         )
@@ -6604,7 +6547,7 @@ export async function aplicarPromediLote(
     for (const orden of ordenes) {
         if (clavesOrdenesExcluidas.has(`${orden.puestoNumero}:${orden.numero}`)) continue
         for (const item of orden.items) {
-            if (!practicaFacturadaEnOrden(item.practica, orden)) continue
+            if (!practicaFacturadaEnOrden(item.practica)) continue
             const numeroAutorizacion = resolverNumeroAutorizacion(item.numeroAutorizacion, orden.numeroAutorizacion)
             if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
             if (!orden.ingresoId) continue

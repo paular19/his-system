@@ -250,19 +250,6 @@ export const ActualizarPrestacionFacturacionSchema = z.discriminatedUnion('tipo'
 
 export type ActualizarPrestacionFacturacionInput = z.infer<typeof ActualizarPrestacionFacturacionSchema>
 
-/**
- * Importe de un item de orden. Una practica de cirugia se cobra repartida entre
- * varias ordenes (especialista, gastos, ayudante) y cada parte se corrige sola,
- * sin tocar el resto del item ni las otras ordenes.
- */
-export const ActualizarImporteItemOrdenSchema = z.object({
-    puestoNumero: z.number().int().positive(),
-    ordenNumero: z.number().int().positive(),
-    item: z.number().int().positive(),
-    importeTotal: z.coerce.number().min(0),
-})
-
-export type ActualizarImporteItemOrdenInput = z.infer<typeof ActualizarImporteItemOrdenSchema>
 
 export const EliminarPrestacionFacturacionSchema = z.discriminatedUnion('tipo', [
     z.object({

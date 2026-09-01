@@ -454,7 +454,11 @@ function tieneNumeroAutorizacionValido(numeroAutorizacion: string | null | undef
 }
 
 function practicaTieneOrdenGenerada(p: PrestacionFacturableItem): boolean {
-    return p.tipo === 'PRACTICA' && !p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0
+    if (p.facturada) return false
+    // Fila derivada de un item: su orden es la que tiene en origen y no lista
+    // vinculadas, pero es una orden generada igual.
+    if (esFilaItemDeOrden(p)) return true
+    return p.tipo === 'PRACTICA' && (p.autorizacionesVinculadas?.length ?? 0) > 0
 }
 
 function practicaTieneAutorizacionConOrden(p: PrestacionFacturableItem): boolean {
@@ -467,7 +471,7 @@ function practicaTieneAutorizacionConOrden(p: PrestacionFacturableItem): boolean
 
 function esPrestacionSeleccionableParaFacturar(p: PrestacionFacturableItem): boolean {
     return (
-        p.tipo === 'PRACTICA' &&
+        (p.tipo === 'PRACTICA' || esFilaItemDeOrden(p)) &&
         Boolean(p.codigoPractica) &&
         p.convenioId !== null &&
         !p.facturada &&
@@ -1138,18 +1142,56 @@ function obtenerOrdenesRelacionadasPrestacion(p: PrestacionFacturableItem): Orde
     })
 }
 
-type EspejoOrden = {
-    prestacion: PrestacionFacturableItem
-    vinculo: AutorizacionVinculadaExtendida
-}
-
 type SubgrupoOrden = {
     key: string
     orden: OrdenRelacionada | null
     items: PrestacionFacturableItem[]
-    // Practicas cuya fila editable vive en otra orden pero que tienen un item
-    // propio en esta. Se listan como referencia para que la orden no desaparezca.
-    espejos: EspejoOrden[]
+}
+
+/**
+ * Convierte el item que una practica tiene en una orden en una fila propia.
+ *
+ * Una practica de cirugia se cobra repartida por rol y cada orden lleva su parte,
+ * asi que cada una tiene que poder editarse entera y por separado, no solo el
+ * monto. La fila resultante es un ORDEN_ITEM: el editor y el guardado ya saben
+ * tratarlo, y apunta al OrdenPrac de esa orden y a ningun otro.
+ */
+/** Fila que representa el item de una practica en una orden concreta. */
+function esFilaItemDeOrden(p: PrestacionFacturableItem): boolean {
+    return (
+        p.tipo === 'ORDEN_ITEM' &&
+        typeof p.origen.practicaId === 'number' &&
+        typeof p.origen.ordenItem === 'number'
+    )
+}
+
+function derivarPrestacionItemOrden(
+    p: PrestacionFacturableItem,
+    vinculo: AutorizacionVinculadaExtendida
+): PrestacionFacturableItem {
+    return {
+        ...p,
+        uid: `ORDEN_ITEM:${vinculo.ordenPuestoNumero}:${vinculo.ordenNumero}:${vinculo.ordenItem}`,
+        tipo: 'ORDEN_ITEM',
+        referencia: `OPR-${vinculo.ordenPuestoNumero}-${vinculo.ordenNumero}-${vinculo.ordenItem}`,
+        importeTotal: vinculo.importeTotal ?? null,
+        importeTotalOriginal: vinculo.importeTotal ?? null,
+        // Si el item no trae la suya, la de la practica: antes alcanzaba con que
+        // una de las ordenes la tuviera para poder facturar.
+        numeroAutorizacion: vinculo.numeroAutorizacion ?? p.numeroAutorizacion,
+        incluyeCodigo: vinculo.incluyeCodigo ?? p.incluyeCodigo,
+        ordenPuestoNumero: vinculo.ordenPuestoNumero,
+        ordenNumero: vinculo.ordenNumero,
+        // La fila ya es de una orden concreta: listar las otras la volveria a
+        // presentar como si cobrara todas.
+        autorizacionesVinculadas: undefined,
+        origen: {
+            ...p.origen,
+            ordenPuestoNumero: vinculo.ordenPuestoNumero,
+            ordenNumero: vinculo.ordenNumero,
+            ordenItem: vinculo.ordenItem,
+        },
+    }
 }
 
 // En un grupo de cirugia la cabecera es la cirugia, no la orden: gastos, especialista,
@@ -1161,7 +1203,7 @@ type SubgrupoOrden = {
 // como que todos los subitems cuelgan de la primera.
 function agruparItemsPorOrden(
     items: PrestacionFacturableItem[],
-    conEspejos: boolean
+    porOrdenIndependiente: boolean
 ): SubgrupoOrden[] {
     const subgrupos: SubgrupoOrden[] = []
     const indicePorKey = new Map<string, number>()
@@ -1172,29 +1214,29 @@ function agruparItemsPorOrden(
         const existente = idx != null ? subgrupos[idx] : undefined
         if (existente) return existente
 
-        const nuevo: SubgrupoOrden = { key, orden, items: [], espejos: [] }
+        const nuevo: SubgrupoOrden = { key, orden, items: [] }
         indicePorKey.set(key, subgrupos.length)
         subgrupos.push(nuevo)
         return nuevo
     }
 
     for (const p of items) {
+        const vinculos = (p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[]
         const ordenes = obtenerOrdenesRelacionadasPrestacion(p)
-        obtenerSubgrupo(ordenes[0] ?? null).items.push(p)
 
-        if (!conEspejos || ordenes.length < 2) continue
-
-        // Repartida: cada orden lleva su item, la que genero la practica tambien.
-        for (const otra of ordenes) {
-            const vinculos = (p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[]
-            const vinculo = vinculos.find(
-                (aut) =>
-                    aut.ordenPuestoNumero === otra.ordenPuestoNumero &&
-                    aut.ordenNumero === otra.ordenNumero
-            )
-            if (!vinculo) continue
-            obtenerSubgrupo(otra).espejos.push({ prestacion: p, vinculo })
+        // Repartida entre varias ordenes: una fila por orden, cada una editable y
+        // apuntando a su propio item. Si vive en una sola, la fila es la practica.
+        if (porOrdenIndependiente && ordenes.length > 1 && vinculos.length > 1) {
+            for (const vinculo of vinculos) {
+                obtenerSubgrupo({
+                    ordenPuestoNumero: vinculo.ordenPuestoNumero,
+                    ordenNumero: vinculo.ordenNumero,
+                }).items.push(derivarPrestacionItemOrden(p, vinculo))
+            }
+            continue
         }
+
+        obtenerSubgrupo(ordenes[0] ?? null).items.push(p)
     }
 
     return subgrupos
@@ -1501,8 +1543,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
     const [editRows, setEditRows] = useState<Record<string, EditState>>({})
     const [editAutorizacionesVinculadas, setEditAutorizacionesVinculadas] = useState<Record<string, Record<string, string>>>({})
-    const [editImporteItemOrden, setEditImporteItemOrden] = useState<Record<string, string>>({})
-    const [guardandoImporteItemKey, setGuardandoImporteItemKey] = useState<string | null>(null)
     const [editAutorizacionOrden, setEditAutorizacionOrden] = useState<Record<string, string>>({})
     const [guardandoAutorizacionOrdenKey, setGuardandoAutorizacionOrdenKey] = useState<string | null>(null)
     const [rowEditMode, setRowEditMode] = useState<Record<string, boolean>>({})
@@ -2649,16 +2689,28 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 ? prestacionesSeleccionadas
                 : prestacionesSeleccionables
 
+            // Una practica repartida por rol se muestra como una fila por orden,
+            // pero el registro que se marca facturado es uno solo: si se tildan
+            // varias de sus filas hay que mandarla una vez.
+            const practicaIdsEnviados = new Set<number>()
+
             const prestaciones: PrestacionOrdenInput[] = source
                 .filter(
                     (p) =>
-                        p.tipo === 'PRACTICA' &&
+                        (p.tipo === 'PRACTICA' || esFilaItemDeOrden(p)) &&
                         p.codigoPractica &&
                         p.convenioId !== null &&
                         !p.facturada &&
                         practicaTieneOrdenGenerada(p) &&
                         practicaTieneAutorizacionConOrden(p)
                 )
+                .filter((p) => {
+                    const practicaId = p.origen.practicaId
+                    if (typeof practicaId !== 'number') return true
+                    if (practicaIdsEnviados.has(practicaId)) return false
+                    practicaIdsEnviados.add(practicaId)
+                    return true
+                })
                 .map((p) => {
                     const draft = editRows[p.uid]
                     const importeTotal = draft ? Number(draft.importeTotal) : (p.importeTotal ?? undefined)
@@ -2947,55 +2999,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
             setError(err instanceof Error ? err.message : 'Error al guardar')
         } finally {
             setGuardandoRowUid(null)
-        }
-    }
-
-    // El importe de un item se corrige en la fila de SU orden. Una practica de
-    // cirugia se cobra repartida por rol y cada orden lleva su parte: el total de
-    // la practica lo recalcula el backend sumando los items.
-    async function guardarImporteItemOrden(
-        ordenPuestoNumero: number,
-        ordenNumero: number,
-        ordenItem: number,
-        valor: string
-    ) {
-        const importeTotal = importeDesdeInput(valor)
-        if (importeTotal == null) {
-            setError('Importe invalido')
-            return
-        }
-
-        const key = keyItemOrdenRelacionado({ ordenPuestoNumero, ordenNumero, ordenItem })
-        setGuardandoImporteItemKey(key)
-        setError(null)
-        try {
-            const res = await fetch('/api/facturacion/prestaciones/importe-item', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    puestoNumero: ordenPuestoNumero,
-                    ordenNumero,
-                    item: ordenItem,
-                    importeTotal,
-                }),
-            })
-
-            const json = (await res.json()) as ApiResponse<{ ok: boolean }>
-            if (!res.ok || !json.ok) {
-                throw new Error(json.error ?? 'No se pudo guardar el importe')
-            }
-
-            setEditImporteItemOrden((prev) => {
-                const next = { ...prev }
-                delete next[key]
-                return next
-            })
-            setMensaje(`Importe actualizado en ${formatOrderNumber(ordenPuestoNumero, ordenNumero)}`)
-            if (contexto) await cargarContexto(contexto.ingreso.id, { silent: true, preserveUiState: true })
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'No se pudo guardar el importe')
-        } finally {
-            setGuardandoImporteItemKey(null)
         }
     }
 
@@ -5240,64 +5243,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
                                                             if (!mostrarCabeceraOrden) return filasSubgrupo
 
-                                                            const cantidadPracticas = subgrupo.items.length + subgrupo.espejos.length
-                                                            // La practica repartida por rol tiene una sola fila editable, en la
-                                                            // orden que la genero. Aca se muestra el item que le toca a esta orden.
-                                                            const filasEspejo = subgrupo.espejos.map(({ prestacion, vinculo }) => {
-                                                                const keyItem = keyItemOrdenRelacionado({
-                                                                    ordenPuestoNumero: vinculo.ordenPuestoNumero,
-                                                                    ordenNumero: vinculo.ordenNumero,
-                                                                    ordenItem: vinculo.ordenItem,
-                                                                })
-                                                                const valorImporte =
-                                                                    editImporteItemOrden[keyItem]
-                                                                    ?? (vinculo.importeTotal != null ? String(vinculo.importeTotal) : '')
-                                                                const guardandoImporte = guardandoImporteItemKey === keyItem
-                                                                return (
-                                                                    <tr key={`${grupo.key}:${subgrupo.key}:espejo:${prestacion.uid}:${vinculo.ordenItem}`}>
-                                                                        <td colSpan={8} className="px-3 py-2">
-                                                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-l-4 border-slate-200 pl-2">
-                                                                                <span className="font-mono text-xs font-semibold text-gray-800">
-                                                                                    {prestacion.codigoPractica ?? '—'}
-                                                                                </span>
-                                                                                <span className="text-xs text-gray-700">{prestacion.descripcion}</span>
-                                                                                <span className="text-[11px] text-slate-500">
-                                                                                    Item {vinculo.ordenItem} · {vinculo.numeroAutorizacion?.trim() || 'S/A'}
-                                                                                </span>
-                                                                                {/* El importe de esta orden se corrige acá, no en la fila
-                                                                                    de la práctica: cada orden lleva su parte. */}
-                                                                                <input
-                                                                                    value={valorImporte}
-                                                                                    onChange={(e) =>
-                                                                                        setEditImporteItemOrden((prev) => ({
-                                                                                            ...prev,
-                                                                                            [keyItem]: e.target.value,
-                                                                                        }))
-                                                                                    }
-                                                                                    inputMode="decimal"
-                                                                                    disabled={guardandoImporte}
-                                                                                    title={`Importe del item ${vinculo.ordenItem} en la orden ${formatOrderNumber(vinculo.ordenPuestoNumero, vinculo.ordenNumero)}`}
-                                                                                    className="w-32 rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100"
-                                                                                />
-                                                                                <button
-                                                                                    onClick={() =>
-                                                                                        guardarImporteItemOrden(
-                                                                                            vinculo.ordenPuestoNumero,
-                                                                                            vinculo.ordenNumero,
-                                                                                            vinculo.ordenItem,
-                                                                                            valorImporte
-                                                                                        )
-                                                                                    }
-                                                                                    disabled={guardandoImporte}
-                                                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-                                                                                >
-                                                                                    {guardandoImporte ? 'Guardando...' : 'Guardar importe'}
-                                                                                </button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                )
-                                                            })
+                                                            const cantidadPracticas = subgrupo.items.length
 
                                                             const hrefSubgrupo = subgrupo.orden
                                                                 ? `/dashboard/ambulatorio/${subgrupo.orden.ordenPuestoNumero}/${subgrupo.orden.ordenNumero}`
@@ -5330,7 +5276,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     </td>
                                                                 </tr>,
                                                                 ...filasSubgrupo,
-                                                                ...filasEspejo,
                                                             ]
                                                         })}
 

@@ -3347,6 +3347,68 @@ export async function actualizarContextoFacturacion(
     })
 }
 
+/**
+ * Da al item de una orden su propia Practica.
+ *
+ * El estado de facturado vive en la practica (`estado='F'` mas un unico puntero
+ * puesto/orden/item), asi que mientras varias ordenes compartan el registro no hay
+ * donde guardar que una esta facturada y otra no. Una cirugia repartida por rol
+ * genera justamente eso: una practica con un item en cada orden.
+ *
+ * Separa el item indicado en una practica propia con el importe de ese item, le
+ * reapunta el OrdenPrac, y deja a la original con lo que le queda (su importe pasa
+ * a ser la suma de sus items restantes). Devuelve el id a facturar. Si la practica
+ * ya vive en una sola orden no toca nada y devuelve el mismo id.
+ */
+async function separarItemEnPracticaPropia(
+    practicaId: number,
+    puestoNumero: number,
+    ordenNumero: number,
+    item: number
+): Promise<number> {
+    return prisma.$transaction(async (tx) => {
+        const items = await tx.ordenPractica.findMany({
+            where: { practicaId },
+            select: { puestoNumero: true, ordenNumero: true, item: true, importeTotal: true },
+        })
+        if (items.length < 2) return practicaId
+
+        const objetivo = items.find(
+            (it) =>
+                it.puestoNumero === puestoNumero &&
+                it.ordenNumero === ordenNumero &&
+                it.item === item
+        )
+        if (!objetivo) return practicaId
+
+        const original = await tx.practica.findUnique({ where: { id: practicaId } })
+        if (!original) return practicaId
+
+        const { id: _id, ...campos } = original
+        const nueva = await tx.practica.create({
+            data: {
+                ...campos,
+                importeTotal: objetivo.importeTotal,
+                // El vinculo lo escribe el circuito de facturacion, no esta separacion.
+                puestoNumero: null,
+                ordenNumero: null,
+                ordenItem: null,
+            },
+        })
+
+        await tx.ordenPractica.update({
+            where: {
+                puestoNumero_ordenNumero_item: { puestoNumero, ordenNumero, item },
+            },
+            data: { practicaId: nueva.id },
+        })
+
+        await recalcularImportePracticaDesdeItems(tx, practicaId)
+
+        return nueva.id
+    })
+}
+
 export async function cargarOrdenesDesdePrestaciones(
     data: CargarOrdenesFacturacionInput,
     usuario: string
@@ -3441,6 +3503,23 @@ export async function cargarOrdenesDesdePrestaciones(
 
     if (prestacionesPreparadas.length === 0) {
         throw new Error('No hay practicas pendientes para facturar en este ingreso')
+    }
+
+    // Cuando se factura una orden concreta de una practica repartida por rol, esa
+    // orden necesita su propia practica: el estado de facturado es uno solo por
+    // practica y si no se separa, facturar una marcaria tambien a las otras. Se
+    // hace antes de vincular, para que el resto del circuito la trate como
+    // cualquier practica de una sola orden.
+    for (const prestacion of prestacionesPreparadas) {
+        const { practicaId, ordenPuestoNumero, ordenNumero, ordenItem } = prestacion
+        if (!practicaId || !ordenPuestoNumero || !ordenNumero || !ordenItem) continue
+
+        prestacion.practicaId = await separarItemEnPracticaPropia(
+            practicaId,
+            ordenPuestoNumero,
+            ordenNumero,
+            ordenItem
+        )
     }
 
     const vinculosOrdenExistente = await resolverVinculosOrdenExistenteFacturacion(

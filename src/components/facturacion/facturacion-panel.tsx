@@ -67,6 +67,11 @@ type PrestacionOrdenInput = {
     matriculaEspecialista?: number | null
     matriculaAnestesista?: number | null
     grupoOrden?: number | null
+    // Orden concreta a facturar, solo en las filas que representan el item de
+    // una practica repartida entre varias ordenes.
+    ordenPuestoNumero?: number | null
+    ordenNumero?: number | null
+    ordenItem?: number | null
 }
 
 type ConfirmacionPendiente = {
@@ -2689,9 +2694,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 ? prestacionesSeleccionadas
                 : prestacionesSeleccionables
 
-            // Una practica repartida por rol se muestra como una fila por orden,
-            // pero el registro que se marca facturado es uno solo: si se tildan
-            // varias de sus filas hay que mandarla una vez.
+            // Cada fila de orden viaja con su orden y el backend le da su propia
+            // practica, asi que se mandan todas. El dedupe es solo para el caso
+            // viejo: dos filas de la misma practica sin orden propia marcarian el
+            // mismo registro dos veces.
             const practicaIdsEnviados = new Set<number>()
 
             const prestaciones: PrestacionOrdenInput[] = source
@@ -2705,6 +2711,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         practicaTieneAutorizacionConOrden(p)
                 )
                 .filter((p) => {
+                    if (esFilaItemDeOrden(p)) return true
                     const practicaId = p.origen.practicaId
                     if (typeof practicaId !== 'number') return true
                     if (practicaIdsEnviados.has(practicaId)) return false
@@ -2741,8 +2748,12 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     const descripcionPractica = sel && incluyeCodigo
                         ? baseDesc + descripcionComponentes(sel)
                         : baseDesc
+                    const filaDeOrden = esFilaItemDeOrden(p)
                     return {
                         practicaId: p.origen.practicaId,
+                        ordenPuestoNumero: filaDeOrden ? p.origen.ordenPuestoNumero : undefined,
+                        ordenNumero: filaDeOrden ? p.origen.ordenNumero : undefined,
+                        ordenItem: filaDeOrden ? p.origen.ordenItem : undefined,
                         convenioId: p.convenioId as number,
                         codigoPractica: (p.codigoPractica as string).trim(),
                         descripcionPractica,

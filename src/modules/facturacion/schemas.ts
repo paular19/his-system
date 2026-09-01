@@ -119,6 +119,12 @@ export const PrestacionOrdenInputSchema = z.object({
     matriculaEspecialista: z.number().int().positive().optional().nullable(),
     matriculaAnestesista: z.number().int().positive().optional().nullable(),
     grupoOrden: z.number().int().min(1).optional().nullable(),
+    // Orden concreta que se esta facturando. Solo viaja cuando la practica se
+    // cobra repartida entre varias: sirve para facturar una y dejar las demas
+    // pendientes.
+    ordenPuestoNumero: z.number().int().positive().optional().nullable(),
+    ordenNumero: z.number().int().positive().optional().nullable(),
+    ordenItem: z.number().int().positive().optional().nullable(),
 })
 
 export const CargarOrdenesFacturacionSchema = z.object({

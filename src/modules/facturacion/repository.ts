@@ -689,20 +689,27 @@ type VinculoOrdenPractica = {
 // guarda en Practica.puestoNumero/ordenNumero. Sin este chequeo, las ordenes
 // viejas se arrastran junto con la vigente y duplican el importe.
 /**
- * La practica del item esta facturada. El item ya pertenece a la orden por la
- * relacion, asi que alcanza con que su practica este marcada.
+ * La practica del item esta facturada EN ESTA ORDEN.
  *
- * Antes se exigia ademas que el puntero de vuelta (Practica.puesto/orden/item)
- * apuntara a ESTA orden. Una practica de cirugia repartida por rol tiene un item
- * en cada orden pero un solo puntero, asi que de las tres ordenes solo entraba al
- * lote la apuntada y las otras desaparecian aunque estuvieran facturadas.
+ * El puntero de vuelta (Practica.puesto/orden/item) es uno solo y marca la unica
+ * orden que alguien facturo explicitamente. Una practica repartida por rol tiene
+ * un item en cada orden: si alcanzara con que la practica este marcada, facturar
+ * una orden daria por facturadas a las otras, que nadie facturo.
+ *
+ * Que cada orden se facture sola lo resuelve `separarItemEnPracticaPropia`, que al
+ * facturar le da al item su propia Practica con su propio puntero. Aca no hay nada
+ * que relajar.
  *
  * Anular la facturacion deja la practica en 'A' y corta el vinculo, con lo cual
  * esto vuelve a dar false.
  */
-function practicaFacturadaEnOrden(practica: VinculoOrdenPractica): boolean {
+function practicaFacturadaEnOrden(
+    practica: VinculoOrdenPractica,
+    orden: { puestoNumero: number; numero: number }
+): boolean {
     if (!practicaMarcadaComoFacturada(practica?.estado)) return false
-    return Boolean(practica?.puestoNumero && practica.ordenNumero && practica.ordenItem)
+    if (!practica?.puestoNumero || !practica.ordenNumero || !practica.ordenItem) return false
+    return practica.puestoNumero === orden.puestoNumero && practica.ordenNumero === orden.numero
 }
 
 function resolverNumeroAutorizacion(
@@ -1629,7 +1636,13 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         cantidad: true,
                         numeroAutorizacion: true,
                         importeTotal: true,
-                        practica: { select: { matriculaEspecialista: true, matriculaAnestesista: true } },
+                        practica: {
+                            select: {
+                                matriculaEspecialista: true,
+                                matriculaAnestesista: true,
+                                numeroAutorizacion: true,
+                            },
+                        },
                         nomencladorPractica: {
                             select: {
                                 descripcion: true,
@@ -2945,12 +2958,16 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
 
     // Solo considerar como "ítem facturado" lo que esté enlazado explícitamente
     // desde Practica (evita duplicar con órdenes solo autorizadas).
+    //
+    // El enlace es el puntero puesto/orden/item de la practica, y apunta a una sola
+    // orden: la que se facturo. Una practica repartida por rol tiene un item en cada
+    // orden, y las que nadie facturo tienen que seguir pendientes — dar por facturado
+    // todo item que comparta la practica las hacia desaparecer de pendientes sin que
+    // nadie las hubiera facturado. Cada orden se factura sola separandola en su propia
+    // practica (`separarItemEnPracticaPropia`), no relajando esto.
     const itemsOrdenFacturados = new Set<string>()
-    const practicasFacturadasIds = new Set<number>()
     for (const p of ingreso.practicas) {
         if (!practicasConEstadoFacturado.has(p.id)) continue
-
-        practicasFacturadasIds.add(p.id)
         if (!p.ordenNumero || !p.ordenItem) continue
         const puesto = p.puestoNumero ?? (puestoPorNumeroOrden.get(p.ordenNumero) ?? null)
         if (!puesto) continue
@@ -2960,25 +2977,21 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
     for (const o of ingreso.ordenes) {
         if (esEstadoOrdenAnuladaFacturacion(o.estado)) continue
         for (const it of o.items) {
-            if (!it.practicaId || !practicasFacturadasIds.has(it.practicaId)) continue
-            itemsOrdenFacturados.add(`${o.puestoNumero}:${o.numero}:${it.item}`)
-        }
-    }
-
-    for (const o of ingreso.ordenes) {
-        if (esEstadoOrdenAnuladaFacturacion(o.estado)) continue
-        for (const it of o.items) {
             const claveItem = `${o.puestoNumero}:${o.numero}:${it.item}`
             if (!itemsOrdenFacturados.has(claveItem)) continue
             const incluyeCodigoItem = normalizarIncluyeCodigo(it.modulo)
 
+            // La autorizacion se pide en el item o en la orden, pero una orden de
+            // cirugia puede quedar con `OprNumAut` vacio y llevar la autorizacion solo
+            // en la practica. Sin este ultimo recurso la orden facturada no salia en
+            // ninguna de las dos vistas: ni en pendientes, por estar facturada, ni aca.
             const numeroAutorizacion = resolverNumeroAutorizacionOrdenItem(
                 it.numeroAutorizacion,
                 o.numeroAutorizacion,
                 o.puestoNumero,
                 o.numero,
                 it.item
-            )
+            ) ?? (it.practica?.numeroAutorizacion?.trim() || null)
             if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
 
             const incluye = desglosarIncluyeCodigo(it.modulo)
@@ -5578,7 +5591,7 @@ export async function obtenerLote(
             .flatMap((orden) => {
             const ordenConAutorizacion = tieneNumeroAutorizacionValido(orden.numeroAutorizacion)
             return orden.items.filter((ordenItem) =>
-                practicaFacturadaEnOrden(ordenItem.practica) &&
+                practicaFacturadaEnOrden(ordenItem.practica, orden) &&
                 (ordenConAutorizacion || tieneNumeroAutorizacionValido(ordenItem.numeroAutorizacion))
             )
         }).reduce((total, ordenItem) => total + Number(ordenItem.importeTotal ?? 0), 0)
@@ -5832,7 +5845,7 @@ export async function crearLote(
             for (const o of ordenes) {
                 const ordenConAutorizacion = tieneNumeroAutorizacionValido(o.numeroAutorizacion)
                 const itemsFacturados = o.items.filter((it) =>
-                    practicaFacturadaEnOrden(it.practica) &&
+                    practicaFacturadaEnOrden(it.practica, o) &&
                     (ordenConAutorizacion || tieneNumeroAutorizacionValido(it.numeroAutorizacion))
                 )
                 // Sin practicas facturadas la orden no aparece en el detalle: no hay nada
@@ -6279,7 +6292,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
             const itemsConEfector = o.items
                 .filter(
                     (it) =>
-                        practicaFacturadaEnOrden(it.practica) &&
+                        practicaFacturadaEnOrden(it.practica, o) &&
                         tieneNumeroAutorizacionValido(
                             resolverNumeroAutorizacion(it.numeroAutorizacion, o.numeroAutorizacion)
                         )
@@ -6626,7 +6639,7 @@ export async function aplicarPromediLote(
     for (const orden of ordenes) {
         if (clavesOrdenesExcluidas.has(`${orden.puestoNumero}:${orden.numero}`)) continue
         for (const item of orden.items) {
-            if (!practicaFacturadaEnOrden(item.practica)) continue
+            if (!practicaFacturadaEnOrden(item.practica, orden)) continue
             const numeroAutorizacion = resolverNumeroAutorizacion(item.numeroAutorizacion, orden.numeroAutorizacion)
             if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
             if (!orden.ingresoId) continue

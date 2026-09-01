@@ -571,3 +571,52 @@ sin tocar nada si algo no coincide.
 `dd97b1a`), que mandaba el importe entero de estas lineas al honorario del medico.
 Con las dos cosas aplicadas, cada electro liquida 15.149,63 al medico y 3.550,32 a
 gastos de la clinica.
+
+---
+
+## 2026-09-01 — Ingreso 506: separar la cirugia repartida entre sus cuatro ordenes
+
+**Sintoma:** la orden 1/2510 (HONORARIO ESPECIALISTA de la hernioplastia 80203) no
+aparecia en ninguna de las dos vistas de facturacion: ni en pendientes ni en
+facturadas. Tampoco se podia facturar.
+
+**Causa:** el estado de facturado vive en la practica (`PraEstad='F'` mas un unico
+puntero puesto/orden/item), y la cirugia se cobra repartida por rol con un item de
+la MISMA practica en cada orden. La practica 4011 tenia un item en 2510 (especialista),
+2511 (anestesista), 2512 (derechos) y 2514 (ayudante 1), y quedo marcada 'F'
+apuntando a 2512. Ese unico flag daba por facturadas a las cuatro.
+
+Desde `separarItemEnPracticaPropia` (commit `e693b03`) facturar una orden le da al
+item su practica propia, asi que el caso no se repite. Pero esa separacion corre al
+facturar, sobre la fila de la grilla de pendientes — y la practica ya marcada no esta
+en esa grilla. Quedaba trabado en circulo: para separarla habia que facturarla, y para
+facturarla habia que separarla.
+
+**Escritura aplicada** (`scripts/separar-practicas-repartidas.ts --ingreso=506 --aplicar`):
+
+```
+INSERT "Practica" x3  -- clones de 4011 en estado 'A', sin puntero, con el importe del item
+   4800  135942.83   HONORARIO ESPECIALISTA
+   4801  148201.60   HONORARIO ANESTESISTA
+   4802   24473.62   AYUDANTE 1
+UPDATE "OrdenPrac" SET "PraID"=4800 WHERE ("PueNum","OrdNum","OprItem")=(1,2510,1)
+UPDATE "OrdenPrac" SET "PraID"=4801 WHERE ("PueNum","OrdNum","OprItem")=(1,2511,1)
+UPDATE "OrdenPrac" SET "PraID"=4802 WHERE ("PueNum","OrdNum","OprItem")=(1,2514,1)
+UPDATE "Practica"  SET "PraImpTotal"=841008.66 WHERE "PraID"=4011   -- ya era ese valor
+```
+
+La 4011 queda facturada apuntando a 2512 (DERECHOS, 841.008,66). Las otras tres
+vuelven a pendientes con su importe, que coincide exacto con el nomenclador de 80203:
+especialista 135.942,83, anestesista 148.201,60, ayudante 24.473,62.
+
+**Alcance:** el script barrio toda la base y este era el unico caso. Las otras 15
+practicas 'F' referenciadas por varias ordenes son renumeraciones — la segunda orden
+esta anulada ('X') —, no repartos por rol, y el script las excluye a proposito:
+separarlas resucitaria la orden anulada como pendiente, lista para cobrarse dos veces.
+
+**Verificacion:** `obtenerContextoFacturacion(506)` devuelve las tres nuevas en
+pendientes (cada una vinculada a su unica orden) y las filas facturadas siguen siendo
+las mismas cuatro de antes (2512#1, 2512#2, 2512#3 y 2653#1). Nada se movio de lugar.
+
+**Relacionado:** en el mismo dia se corrigio el codigo que producia el contagio, para
+que facturar una practica no de por facturadas las ordenes que nadie facturo.

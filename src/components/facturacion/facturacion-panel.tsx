@@ -1263,6 +1263,21 @@ function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Re
     return state
 }
 
+// El importe de cada orden se edita aparte del de la practica: cuando esta
+// repartida (especialista, gastos, ayudante) el total es la suma de las partes
+// y corregir una no puede pisar las otras.
+function buildImportesVinculadosEditState(p: PrestacionFacturableItem): Record<string, string> {
+    const state: Record<string, string> = {}
+    for (const aut of (p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[]) {
+        state[keyAutorizacionVinculada(aut)] = aut.importeTotal != null ? String(aut.importeTotal) : ''
+    }
+    return state
+}
+
+function practicaRepartidaEnVariasOrdenes(p: PrestacionFacturableItem): boolean {
+    return p.tipo === 'PRACTICA' && !p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 1
+}
+
 const MATRICULA_AYUDANTE_DEFAULT = 995
 const MATRICULA_PATOLOGIA_DEFAULT = 2675
 const ADMISIONES_POR_PAGINA_DEFAULT = 12
@@ -1496,6 +1511,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
     const [editRows, setEditRows] = useState<Record<string, EditState>>({})
     const [editAutorizacionesVinculadas, setEditAutorizacionesVinculadas] = useState<Record<string, Record<string, string>>>({})
+    const [editImportesVinculados, setEditImportesVinculados] = useState<Record<string, Record<string, string>>>({})
     const [editAutorizacionOrden, setEditAutorizacionOrden] = useState<Record<string, string>>({})
     const [guardandoAutorizacionOrdenKey, setGuardandoAutorizacionOrdenKey] = useState<string | null>(null)
     const [rowEditMode, setRowEditMode] = useState<Record<string, boolean>>({})
@@ -2030,11 +2046,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     function initEditRows(data: FacturacionContexto) {
         const state: Record<string, EditState> = {}
         const authState: Record<string, Record<string, string>> = {}
+        const importesState: Record<string, Record<string, string>> = {}
         const selMap: Record<string, ComponenteSeleccion> = {}
         for (const p of data.prestaciones) {
             state[p.uid] = buildEditState(p)
             if (p.tipo === 'PRACTICA' && !p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
                 authState[p.uid] = buildAutorizacionesVinculadasEditState(p)
+                importesState[p.uid] = buildImportesVinculadosEditState(p)
             }
             if (p.tipo === 'PRACTICA') {
                 const seleccionDesdeIncluye = parseIncluyeCodigoSeleccion(p.incluyeCodigo)
@@ -2048,6 +2066,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
         setEditRows(state)
         setEditAutorizacionesVinculadas(authState)
+        setEditImportesVinculados(importesState)
         setCompSeleccion(selMap)
         setClasificacionPorComponenteUid({})
     }
@@ -2784,6 +2803,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 ...prev,
                 [p.uid]: prev[p.uid] ?? buildAutorizacionesVinculadasEditState(p),
             }))
+            setEditImportesVinculados((prev) => ({
+                ...prev,
+                [p.uid]: prev[p.uid] ?? buildImportesVinculadosEditState(p),
+            }))
         }
         setRowEditMode((prev) => ({ ...prev, [p.uid]: true }))
         setDetallePrestacionesExpand((prev) => ({ ...prev, [p.uid]: true }))
@@ -2797,6 +2820,15 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 const next = { ...prev }
                 if (!p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
                     next[p.uid] = buildAutorizacionesVinculadasEditState(p)
+                } else {
+                    delete next[p.uid]
+                }
+                return next
+            })
+            setEditImportesVinculados((prev) => {
+                const next = { ...prev }
+                if (!p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
+                    next[p.uid] = buildImportesVinculadosEditState(p)
                 } else {
                     delete next[p.uid]
                 }
@@ -3061,6 +3093,46 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 if (!tieneNumeroAutorizacionValido(numeroAutorizacionPractica)) {
                     numeroAutorizacionPractica =
                         updates.find((aut) => tieneNumeroAutorizacionValido(aut.numeroAutorizacion))?.numeroAutorizacion ?? null
+                }
+
+                // Importe por orden: solo se manda el de las que cambiaron. El total
+                // de la practica lo recalcula el backend sumando los items.
+                const draftImportes = editImportesVinculados[p.uid] ?? buildImportesVinculadosEditState(p)
+                const importesOriginales = buildImportesVinculadosEditState(p)
+                const importesCambiados = (practicaRepartidaEnVariasOrdenes(p) ? (p.autorizacionesVinculadas ?? []) : [])
+                    .map((aut) => {
+                        const key = keyAutorizacionVinculada(aut)
+                        const valor = (draftImportes[key] ?? '').trim()
+                        if (!valor || valor === (importesOriginales[key] ?? '')) return null
+                        const importeTotal = Number(valor)
+                        if (!Number.isFinite(importeTotal) || importeTotal < 0) {
+                            throw new Error(
+                                `Importe inválido para la orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)}`
+                            )
+                        }
+                        return { aut, importeTotal }
+                    })
+                    .filter((v): v is { aut: typeof updates[number]; importeTotal: number } => v !== null)
+
+                for (const { aut, importeTotal } of importesCambiados) {
+                    const res = await fetch('/api/facturacion/prestaciones/importe-item', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            puestoNumero: aut.ordenPuestoNumero,
+                            ordenNumero: aut.ordenNumero,
+                            item: aut.ordenItem,
+                            importeTotal,
+                        }),
+                    })
+
+                    const json = (await res.json()) as ApiResponse<{ ok: boolean }>
+                    if (!res.ok || !json.ok) {
+                        throw new Error(
+                            json.error ??
+                            `No se pudo guardar el importe de ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} item ${aut.ordenItem}`
+                        )
+                    }
                 }
             }
 
@@ -4597,6 +4669,9 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     !tieneAutorizacionesVinculadas
                                                 const draftAutorizacionesVinculadas =
                                                     editAutorizacionesVinculadas[p.uid] ?? buildAutorizacionesVinculadasEditState(p)
+                                                const draftImportesVinculados =
+                                                    editImportesVinculados[p.uid] ?? buildImportesVinculadosEditState(p)
+                                                const practicaRepartida = practicaRepartidaEnVariasOrdenes(p)
                                                 const desgloseSelector = obtenerDesgloseSelector(p)
                                                 const seleccionable = esPrestacionSeleccionableParaFacturar(p)
                                                 const yaFacturada = p.tipo === 'PRACTICA' && p.facturada
@@ -4818,11 +4893,24 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             </td>
                                                             <td className="px-3 py-2 align-top">
                                                                 {filaEnEdicion ? (
-                                                                    <input
-                                                                        value={draft.importeTotal}
-                                                                        onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))}
-                                                                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                                                                    />
+                                                                    practicaRepartida ? (
+                                                                        // Repartida: el total es la suma de las ordenes. Editarlo
+                                                                        // aca dejaria las partes sin cuadrar con el total.
+                                                                        <div className="space-y-0.5">
+                                                                            <span className="text-xs font-semibold text-gray-800">
+                                                                                {Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}
+                                                                            </span>
+                                                                            <div className="text-[10px] text-slate-600">
+                                                                                Suma de las órdenes · se edita abajo, por orden
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <input
+                                                                            value={draft.importeTotal}
+                                                                            onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))}
+                                                                            className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                                                                        />
+                                                                    )
                                                                 ) : (
                                                                     <div className="space-y-0.5">
                                                                         <span className="text-xs font-semibold text-gray-800">
@@ -4976,9 +5064,36 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                                                 placeholder="Nro autorización"
                                                                                                                 className="w-full rounded border border-gray-300 px-2 py-1 text-xs md:w-44"
                                                                                                             />
+                                                                                                            {/* Solo cuando está repartida: si vive en una sola
+                                                                                                                orden alcanza con el importe de la práctica y
+                                                                                                                dos campos para lo mismo se pisan entre sí. */}
+                                                                                                            {practicaRepartida && (
+                                                                                                            <input
+                                                                                                                value={draftImportesVinculados[key] ?? ''}
+                                                                                                                onChange={(e) =>
+                                                                                                                    setEditImportesVinculados((prev) => ({
+                                                                                                                        ...prev,
+                                                                                                                        [p.uid]: {
+                                                                                                                            ...(prev[p.uid] ?? draftImportesVinculados),
+                                                                                                                            [key]: e.target.value,
+                                                                                                                        },
+                                                                                                                    }))
+                                                                                                                }
+                                                                                                                inputMode="decimal"
+                                                                                                                placeholder="Importe de la orden"
+                                                                                                                title={`Importe del item ${aut.ordenItem} en la orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)}`}
+                                                                                                                className="w-full rounded border border-gray-300 px-2 py-1 text-xs md:w-36"
+                                                                                                            />
+                                                                                                            )}
                                                                                                         </div>
                                                                                                     )
                                                                                                 })}
+                                                                                                {practicaRepartida && (
+                                                                                                    <p className="text-[10px] text-slate-600">
+                                                                                                        La práctica se cobra repartida entre estas órdenes: su
+                                                                                                        importe es la suma y se recalcula al guardar.
+                                                                                                    </p>
+                                                                                                )}
                                                                                             </div>
                                                                                         ) : (
                                                                                             <div className="flex flex-wrap gap-1">

@@ -3,6 +3,7 @@ import type {
     ActualizarAutorizacionInput,
     ActualizarContextoFacturacionInput,
     ActualizarDiferencialesCirugiaFacturacionInput,
+    ActualizarImporteItemOrdenInput,
     ActualizarLoteFacturacionInput,
     ActualizarPrestacionFacturacionInput,
     BusquedaFacturacionInput,
@@ -177,6 +178,24 @@ export async function actualizarPrestacionFacturacion(
                         ? 'DescartableIngreso'
                         : 'OrdenPrac',
         detalle: 'Actualizacion integral de prestacion en facturacion',
+        direccionIp: ip,
+    })
+}
+
+export async function actualizarImporteItemOrden(
+    data: ActualizarImporteItemOrdenInput,
+    usuario: string,
+    ip?: string
+) {
+    await repo.actualizarImporteItemOrden(data)
+
+    await registrarAudit({
+        usuario,
+        accion: 'MODIFICAR',
+        entidad: 'OrdenPrac',
+        detalle:
+            `Importe del item ${data.item} de la orden ${data.puestoNumero}-${data.ordenNumero} ` +
+            `pasa a ${data.importeTotal}`,
         direccionIp: ip,
     })
 }

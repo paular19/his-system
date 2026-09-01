@@ -5,6 +5,7 @@ import type {
     ActualizarAutorizacionInput,
     ActualizarContextoFacturacionInput,
     ActualizarDiferencialesCirugiaFacturacionInput,
+    ActualizarImporteItemOrdenInput,
     ActualizarLoteFacturacionInput,
     ActualizarPrestacionFacturacionInput,
     BusquedaFacturacionInput,
@@ -95,6 +96,26 @@ function resolverImporteTotalTrasEdicion(params: {
         params.importeAnterior,
         params.cantidadNueva
     )
+}
+
+// Una practica de cirugia se ejecuta una vez pero se cobra repartida en varias
+// ordenes (especialista, gastos, ayudante), cada una con su OrdenPrac. Ahi el
+// importe de la practica no es el de ningun item suelto: es la suma de todos.
+async function recalcularImportePracticaDesdeItems(
+    tx: Prisma.TransactionClient,
+    practicaId: number
+): Promise<void> {
+    const items = await tx.ordenPractica.findMany({
+        where: { practicaId },
+        select: { importeTotal: true },
+    })
+    if (items.length === 0) return
+
+    const total = items.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
+    await tx.practica.update({
+        where: { id: practicaId },
+        data: { importeTotal: Number(total.toFixed(2)) },
+    })
 }
 
 function normalizarTextoComparacion(value: string | null | undefined): string {
@@ -3880,6 +3901,70 @@ export async function eliminarPrestacionFacturacion(
     })
 }
 
+/**
+ * Corrige el importe de un item de orden sin tocar nada mas de ese item ni de
+ * las otras ordenes. Despues recalcula el total de la orden y el de la practica:
+ * si esta repartida entre varias ordenes su importe es la suma de los items, y
+ * si vive en una sola sigue el importe editado.
+ */
+export async function actualizarImporteItemOrden(
+    data: ActualizarImporteItemOrdenInput
+): Promise<void> {
+    const item = await prisma.ordenPractica.findUnique({
+        where: {
+            puestoNumero_ordenNumero_item: {
+                puestoNumero: data.puestoNumero,
+                ordenNumero: data.ordenNumero,
+                item: data.item,
+            },
+        },
+        select: {
+            practicaId: true,
+            orden: { select: { ingresoId: true } },
+        },
+    })
+    if (!item) throw new Error('Ítem de orden no encontrado')
+
+    await prisma.$transaction(async (tx) => {
+        await tx.ordenPractica.update({
+            where: {
+                puestoNumero_ordenNumero_item: {
+                    puestoNumero: data.puestoNumero,
+                    ordenNumero: data.ordenNumero,
+                    item: data.item,
+                },
+            },
+            data: { importeTotal: data.importeTotal },
+        })
+
+        const itemsOrden = await tx.ordenPractica.findMany({
+            where: {
+                puestoNumero: data.puestoNumero,
+                ordenNumero: data.ordenNumero,
+            },
+            select: { importeTotal: true },
+        })
+        const totalOrden = itemsOrden.reduce((sum, it) => sum + Number(it.importeTotal ?? 0), 0)
+        await tx.orden.update({
+            where: {
+                puestoNumero_numero: {
+                    puestoNumero: data.puestoNumero,
+                    numero: data.ordenNumero,
+                },
+            },
+            data: { importeTotal: Number(totalOrden.toFixed(2)) },
+        })
+
+        if (item.practicaId != null) {
+            await recalcularImportePracticaDesdeItems(tx, item.practicaId)
+        }
+    })
+
+    if (item.orden.ingresoId) {
+        await recalcularTotalesLotesPendientesPracticasPorIngreso(item.orden.ingresoId)
+    }
+}
+
 export async function actualizarPrestacionFacturacion(
     data: ActualizarPrestacionFacturacionInput
 ): Promise<void> {
@@ -4036,6 +4121,11 @@ export async function actualizarPrestacionFacturacion(
         })
         if (!actual) throw new Error('Práctica no encontrada')
 
+        // Repartida entre varias ordenes: el importe de cada una se edita en su
+        // propia fila. Desde aca no se toca ninguno, o el reparto se pierde.
+        const practicaRepartida =
+            (await prisma.ordenPractica.count({ where: { practicaId: data.practicaId } })) > 1
+
         const resolved = await resolverPracticaDesdeInput(
             data.codigoPractica,
             data.descripcionPractica,
@@ -4128,13 +4218,16 @@ export async function actualizarPrestacionFacturacion(
                     ? data.numeroAutorizacion.trim().slice(0, 15)
                     : null
 
+            const conservarRepartoPractica = practicaRepartida && !usarActualizacionGlobal
+
             const dataPractica: Prisma.PracticaUncheckedUpdateManyInput = {
                 fecha: data.fecha,
                 convenioId: resolved.convenioId,
                 codigoPractica: resolved.codigoPractica.trim(),
                 cantidad: data.cantidad,
                 numeroAutorizacion: data.numeroAutorizacion ?? null,
-                importeTotal: importeTotalFinal,
+                // Repartida: el total sale de la suma de los items, mas abajo.
+                ...(conservarRepartoPractica ? {} : { importeTotal: importeTotalFinal }),
                 matriculaEspecialista: matriculaEspecialistaFinal,
                 matriculaAnestesista: data.matriculaAnestesista ?? null,
             }
@@ -4247,7 +4340,9 @@ export async function actualizarPrestacionFacturacion(
                             codigoPractica: resolved.codigoPractica.trim(),
                             cantidad: data.cantidad,
                             numeroAutorizacion: numeroAutorizacionOrden,
-                            importeTotal: importeTotalFinal,
+                            // Repartida: cada orden conserva su parte; el importe de
+                            // cada item se edita desde la fila de esa orden.
+                            ...(conservarRepartoPractica ? {} : { importeTotal: importeTotalFinal }),
                         }
                         actualizarImportesOrden = true
 
@@ -4280,6 +4375,10 @@ export async function actualizarPrestacionFacturacion(
                                 data: { profesionalId: profesional.id },
                             })
                         }
+                    }
+
+                    if (conservarRepartoPractica) {
+                        await recalcularImportePracticaDesdeItems(tx, data.practicaId)
                     }
 
                     if (actualizarImportesOrden) {
@@ -4329,6 +4428,13 @@ export async function actualizarPrestacionFacturacion(
         },
     })
     if (!actualItem) throw new Error('Ítem de orden no encontrado')
+
+    // Si la practica esta repartida en varias ordenes, el importe editado vale
+    // solo para este item: la practica se recalcula sumando todos.
+    const itemsDeLaPractica = actualItem.practicaId != null
+        ? await prisma.ordenPractica.count({ where: { practicaId: actualItem.practicaId } })
+        : 0
+    const practicaRepartida = itemsDeLaPractica > 1
 
     const resolved = await resolverPracticaDesdeInput(
         data.codigoPractica,
@@ -4421,7 +4527,8 @@ export async function actualizarPrestacionFacturacion(
                     codigoPractica: resolved.codigoPractica.trim(),
                     cantidad: data.cantidad,
                     numeroAutorizacion: data.numeroAutorizacion ?? null,
-                    importeTotal: importeTotalFinal,
+                    // Repartida: el importe sale de la suma de los items, mas abajo.
+                    ...(practicaRepartida ? {} : { importeTotal: importeTotalFinal }),
                     matriculaEspecialista: matriculaEspecialistaFinal,
                     matriculaAnestesista: data.matriculaAnestesista ?? null,
                 },
@@ -4473,6 +4580,10 @@ export async function actualizarPrestacionFacturacion(
                 },
                 data: dataOrdenPractica,
             })
+        }
+
+        if (practicaRepartida && actualItem.practicaId != null) {
+            await recalcularImportePracticaDesdeItems(tx, actualItem.practicaId)
         }
 
         if (data.matriculaProfesional) {

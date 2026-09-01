@@ -283,6 +283,63 @@ function desglosarIncluyeCodigo(incluyeCodigo: string | null | undefined): Inclu
     }
 }
 
+/**
+ * Componente que cobra un item de orden (GA/HE/HA/HP/A1..).
+ *
+ * `OprModulo` recien se escribe desde que una practica partida por subitem genera una
+ * fila de Practica por componente. En las ordenes anteriores el componente esta solo en
+ * `OprClasAgrup`, y mirando unicamente el modulo una cirugia repartida por rol pasaba por
+ * practica entera: se mostraba con todos los subitems y al facturar el importe se
+ * recalculaba sobre el nomenclador completo.
+ *
+ * Pero `OprClasAgrup` no siempre marca un reparto: en muchas ordenes es la etiqueta del
+ * titular ("DERECHOS", "HONORARIO PATOLOGO") sobre una linea que igual cobra la practica
+ * entera. Medido sobre las ordenes vivas sin modulo: 410 items valen exactamente su
+ * componente (reparto real), 96 valen el total del nomenclador con etiqueta parcial, y
+ * 133 no coinciden con ninguno de los dos. Tomar la etiqueta al pie de la letra en esos
+ * 229 haria cobrar de menos, asi que el respaldo pide que el importe guardado confirme
+ * el componente; si no lo confirma, la linea sigue siendo la practica completa.
+ */
+function incluyeCodigoDeItemOrden(it: {
+    modulo: string | null
+    clasificacionAgrupacion?: string | null
+    importeTotal?: Prisma.Decimal | number | null
+    cantidad?: Prisma.Decimal | number | null
+    codigoPractica?: string
+    nomencladorPractica?: {
+        valorEspecialista: Prisma.Decimal | number | null
+        valorAyudante: Prisma.Decimal | number | null
+        valorAnestesista: Prisma.Decimal | number | null
+        valorGastos: Prisma.Decimal | number | null
+    } | null
+}): string | null {
+    const desdeModulo = normalizarIncluyeCodigo(it.modulo)
+    if (desdeModulo) return desdeModulo
+
+    const desdeClasificacion = normalizarIncluyeCodigo(it.clasificacionAgrupacion)
+    if (!desdeClasificacion || !it.nomencladorPractica) return null
+
+    const desglose: DesgloseValores = {
+        valorEspecialista: decimalANumero(it.nomencladorPractica.valorEspecialista as Prisma.Decimal | null),
+        valorAyudante: decimalANumero(it.nomencladorPractica.valorAyudante as Prisma.Decimal | null),
+        valorAnestesista: decimalANumero(it.nomencladorPractica.valorAnestesista as Prisma.Decimal | null),
+        valorGastos: decimalANumero(it.nomencladorPractica.valorGastos as Prisma.Decimal | null),
+    }
+    const valorComponente = calcularTotalUnitarioDesglose(desglose, desdeClasificacion)
+    if (valorComponente <= 0) return null
+
+    // El componente ya es toda la practica: el respaldo no cambia el importe, solo nombra
+    // la linea.
+    const valorCompleto = calcularTotalUnitarioDesglose(desglose, null)
+    if (Math.abs(valorCompleto - valorComponente) < 0.05) return desdeClasificacion
+
+    const importe = decimalANumero(it.importeTotal as Prisma.Decimal | null)
+    const cantidad = decimalANumero(it.cantidad as Prisma.Decimal | null) ?? 1
+    if (importe == null || cantidad <= 0) return null
+
+    return Math.abs(importe / cantidad - valorComponente) < 0.05 ? desdeClasificacion : null
+}
+
 function esSeleccionSoloGastos(seleccion: IncluyeCodigoSeleccion | null | undefined): boolean {
     if (!seleccion) return false
     return seleccion.gastos && !incluyeTieneEspecialista(seleccion) && !seleccion.anestesista && seleccion.ayudantes === 0
@@ -1633,6 +1690,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         convenioId: true,
                         codigoPractica: true,
                         modulo: true,
+                        clasificacionAgrupacion: true,
                         cantidad: true,
                         numeroAutorizacion: true,
                         importeTotal: true,
@@ -2236,7 +2294,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             )
             incluyeCodigoPorOrdenItem.set(
                 `${o.puestoNumero}:${o.numero}:${it.item}`,
-                normalizarIncluyeCodigo(it.modulo)
+                incluyeCodigoDeItemOrden(it)
             )
 
             let practicaIdAsociada = it.practicaId
@@ -2288,7 +2346,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 o.numero,
                 it.item
             )
-            const incluyeCodigoVinculo = normalizarIncluyeCodigo(it.modulo)
+            const incluyeCodigoVinculo = incluyeCodigoDeItemOrden(it)
             const incluyeVinculo = desglosarIncluyeCodigo(incluyeCodigoVinculo)
             const desgloseVinculo = {
                 valorEspecialista: it.nomencladorPractica?.valorEspecialista ?? null,
@@ -2383,7 +2441,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 numeroAutorizacion: numeroAutorizacionVinculo,
                 estado: o.estado,
                 matriculaEspecialista: (() => {
-                    const incluye = desglosarIncluyeCodigo(it.modulo)
+                    const incluye = desglosarIncluyeCodigo(incluyeCodigoDeItemOrden(it))
                     const esGasto = esSeleccionSoloGastos(incluye) || (!incluye && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
                     if (esGasto) {
                         return resolverMatriculaGastoEditable(
@@ -2419,7 +2477,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     return resolverMatriculaEspecialistaPorPatologia(matriculaBase, incluye, it.codigoPractica)
                 })(),
                 matriculaAnestesista: (() => {
-                    const incluye = desglosarIncluyeCodigo(it.modulo)
+                    const incluye = desglosarIncluyeCodigo(incluyeCodigoDeItemOrden(it))
                     const esGasto = esSeleccionSoloGastos(incluye) || (!incluye && descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null))
                     if (esGasto) {
                         return resolverMatriculaGastoEditable(
@@ -2979,7 +3037,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
         for (const it of o.items) {
             const claveItem = `${o.puestoNumero}:${o.numero}:${it.item}`
             if (!itemsOrdenFacturados.has(claveItem)) continue
-            const incluyeCodigoItem = normalizarIncluyeCodigo(it.modulo)
+            const incluyeCodigoItem = incluyeCodigoDeItemOrden(it)
 
             // La autorizacion se pide en el item o en la orden, pero una orden de
             // cirugia puede quedar con `OprNumAut` vacio y llevar la autorizacion solo
@@ -2994,7 +3052,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             ) ?? (it.practica?.numeroAutorizacion?.trim() || null)
             if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
 
-            const incluye = desglosarIncluyeCodigo(it.modulo)
+            const incluye = desglosarIncluyeCodigo(incluyeCodigoDeItemOrden(it))
             const esGastoItem =
                 esSeleccionSoloGastos(incluye) ||
                 (!incluye && (

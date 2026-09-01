@@ -620,3 +620,52 @@ las mismas cuatro de antes (2512#1, 2512#2, 2512#3 y 2653#1). Nada se movio de l
 
 **Relacionado:** en el mismo dia se corrigio el codigo que producia el contagio, para
 que facturar una practica no de por facturadas las ordenes que nadie facturo.
+
+---
+
+## 2026-09-01 — Orden 1/2512: la linea de derechos cobraba la cirugia entera
+
+**Sintoma:** la orden 0001-00002512 (DERECHOS del ingreso 506) mostraba la 80203 con
+todos los subitems incluidos, cuando esa orden solo cobra los gastos.
+
+**Causa:** el componente que cobra un item de orden se leia solo de `OprModulo`, que
+recien se empezo a escribir con el fix de subitems del 2026-08-26 (`1308372`). Las
+ordenes anteriores llevan el componente unicamente en `OprClasAgrup`. Sin leerlo, el
+item 2512#1 pasaba por practica completa: se listaba con los cuatro subitems y, al
+facturar, el importe se recalculo sobre el nomenclador entero.
+
+Que el importe fue reescrito despues se ve en el reparto original: 2510 (HE) 135.942,83,
+2511 (HA) 148.201,60 y 2514 (A1) 24.473,62 son exactos, y el A1 es el resto que solo
+cierra si la linea de gastos valia 532.390,61 cuando se genero.
+
+**Escritura aplicada** (endpoint SQL de Neon, ingreso 506 no esta en ningun lote):
+
+```
+UPDATE "OrdenPrac" SET "OprImpTotal"=532390.61 WHERE ("PueNum","OrdNum","OprItem")=(1,2512,1)
+UPDATE "Orden"     SET "OrdImpTotal"=712375.63 WHERE ("PueNum","OrdNum")=(1,2512)
+UPDATE "Practica"  SET "PraImpTotal"=532390.61 WHERE "PraID"=4011
+```
+
+532.390,61 es el `NPrValGto` de la 80203 en el convenio 1, cantidad 1. Con esto los
+cuatro componentes vuelven a sumar el valor de la practica: 532.390,61 + 135.942,83 +
+148.201,60 + 24.473,62 = 841.008,66.
+
+**Alcance:** solo esta orden. La base tiene 107 grupos de practica repartida por rol en
+varias ordenes vivas (casi todos sin `OprModulo`), y en todos los demas la suma de los
+items sigue dando el valor entero de la practica: el reparto solo se rompio aca, porque
+esta se facturo y el importe se recalculo.
+
+**Relacionado:** `incluyeCodigoDeItemOrden` en `src/modules/facturacion/repository.ts`
+deduce el componente de `OprClasAgrup` cuando `OprModulo` esta vacio, pero solo si el
+importe guardado lo confirma. Medido sobre las ordenes vivas sin modulo: 410 items valen
+exactamente su componente (reparto real, es lo que el respaldo arregla), 1.762 tienen una
+clasificacion que ya es la practica entera (el respaldo no cambia el importe), 96 valen el
+total del nomenclador con etiqueta parcial y 133 no coinciden con ninguno de los dos. En
+esos ultimos 229 la clasificacion es el titular de la orden, no un reparto: tomarla al pie
+de la letra haria cobrar de menos, asi que siguen tratandose como practica completa.
+
+**Los cuatro roles de esta cirugia quedan cubiertos:** 2510 (HE), 2511 (HA) y 2512 (GA)
+llevan el componente en `OprClasAgrup` y el importe lo confirma; 1/2514/1 (AYUDANTE 1) no
+tiene `OprClasAgrup` pero si `OprModulo='A1'`, que es el campo que se lee primero. Se
+generaron por caminos distintos — el de ayudante escribe el modulo y no la clasificacion,
+el resto al reves — pero ninguno de los cuatro pasa por practica completa.

@@ -1182,9 +1182,10 @@ function agruparItemsPorOrden(
         const ordenes = obtenerOrdenesRelacionadasPrestacion(p)
         obtenerSubgrupo(ordenes[0] ?? null).items.push(p)
 
-        if (!conEspejos) continue
+        if (!conEspejos || ordenes.length < 2) continue
 
-        for (const otra of ordenes.slice(1)) {
+        // Repartida: cada orden lleva su item, la que genero la practica tambien.
+        for (const otra of ordenes) {
             const vinculos = (p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[]
             const vinculo = vinculos.find(
                 (aut) =>
@@ -1259,17 +1260,6 @@ function buildAutorizacionesVinculadasEditState(p: PrestacionFacturableItem): Re
     const state: Record<string, string> = {}
     for (const aut of p.autorizacionesVinculadas ?? []) {
         state[keyAutorizacionVinculada(aut)] = aut.numeroAutorizacion ?? ''
-    }
-    return state
-}
-
-// El importe de cada orden se edita aparte del de la practica: cuando esta
-// repartida (especialista, gastos, ayudante) el total es la suma de las partes
-// y corregir una no puede pisar las otras.
-function buildImportesVinculadosEditState(p: PrestacionFacturableItem): Record<string, string> {
-    const state: Record<string, string> = {}
-    for (const aut of (p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[]) {
-        state[keyAutorizacionVinculada(aut)] = aut.importeTotal != null ? String(aut.importeTotal) : ''
     }
     return state
 }
@@ -1511,7 +1501,8 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
 
     const [editRows, setEditRows] = useState<Record<string, EditState>>({})
     const [editAutorizacionesVinculadas, setEditAutorizacionesVinculadas] = useState<Record<string, Record<string, string>>>({})
-    const [editImportesVinculados, setEditImportesVinculados] = useState<Record<string, Record<string, string>>>({})
+    const [editImporteItemOrden, setEditImporteItemOrden] = useState<Record<string, string>>({})
+    const [guardandoImporteItemKey, setGuardandoImporteItemKey] = useState<string | null>(null)
     const [editAutorizacionOrden, setEditAutorizacionOrden] = useState<Record<string, string>>({})
     const [guardandoAutorizacionOrdenKey, setGuardandoAutorizacionOrdenKey] = useState<string | null>(null)
     const [rowEditMode, setRowEditMode] = useState<Record<string, boolean>>({})
@@ -2046,13 +2037,11 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     function initEditRows(data: FacturacionContexto) {
         const state: Record<string, EditState> = {}
         const authState: Record<string, Record<string, string>> = {}
-        const importesState: Record<string, Record<string, string>> = {}
         const selMap: Record<string, ComponenteSeleccion> = {}
         for (const p of data.prestaciones) {
             state[p.uid] = buildEditState(p)
             if (p.tipo === 'PRACTICA' && !p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
                 authState[p.uid] = buildAutorizacionesVinculadasEditState(p)
-                importesState[p.uid] = buildImportesVinculadosEditState(p)
             }
             if (p.tipo === 'PRACTICA') {
                 const seleccionDesdeIncluye = parseIncluyeCodigoSeleccion(p.incluyeCodigo)
@@ -2066,7 +2055,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
         setEditRows(state)
         setEditAutorizacionesVinculadas(authState)
-        setEditImportesVinculados(importesState)
         setCompSeleccion(selMap)
         setClasificacionPorComponenteUid({})
     }
@@ -2803,10 +2791,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 ...prev,
                 [p.uid]: prev[p.uid] ?? buildAutorizacionesVinculadasEditState(p),
             }))
-            setEditImportesVinculados((prev) => ({
-                ...prev,
-                [p.uid]: prev[p.uid] ?? buildImportesVinculadosEditState(p),
-            }))
         }
         setRowEditMode((prev) => ({ ...prev, [p.uid]: true }))
         setDetallePrestacionesExpand((prev) => ({ ...prev, [p.uid]: true }))
@@ -2820,15 +2804,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 const next = { ...prev }
                 if (!p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
                     next[p.uid] = buildAutorizacionesVinculadasEditState(p)
-                } else {
-                    delete next[p.uid]
-                }
-                return next
-            })
-            setEditImportesVinculados((prev) => {
-                const next = { ...prev }
-                if (!p.facturada && (p.autorizacionesVinculadas?.length ?? 0) > 0) {
-                    next[p.uid] = buildImportesVinculadosEditState(p)
                 } else {
                     delete next[p.uid]
                 }
@@ -2975,6 +2950,55 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
     }
 
+    // El importe de un item se corrige en la fila de SU orden. Una practica de
+    // cirugia se cobra repartida por rol y cada orden lleva su parte: el total de
+    // la practica lo recalcula el backend sumando los items.
+    async function guardarImporteItemOrden(
+        ordenPuestoNumero: number,
+        ordenNumero: number,
+        ordenItem: number,
+        valor: string
+    ) {
+        const importeTotal = importeDesdeInput(valor)
+        if (importeTotal == null) {
+            setError('Importe invalido')
+            return
+        }
+
+        const key = keyItemOrdenRelacionado({ ordenPuestoNumero, ordenNumero, ordenItem })
+        setGuardandoImporteItemKey(key)
+        setError(null)
+        try {
+            const res = await fetch('/api/facturacion/prestaciones/importe-item', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    puestoNumero: ordenPuestoNumero,
+                    ordenNumero,
+                    item: ordenItem,
+                    importeTotal,
+                }),
+            })
+
+            const json = (await res.json()) as ApiResponse<{ ok: boolean }>
+            if (!res.ok || !json.ok) {
+                throw new Error(json.error ?? 'No se pudo guardar el importe')
+            }
+
+            setEditImporteItemOrden((prev) => {
+                const next = { ...prev }
+                delete next[key]
+                return next
+            })
+            setMensaje(`Importe actualizado en ${formatOrderNumber(ordenPuestoNumero, ordenNumero)}`)
+            if (contexto) await cargarContexto(contexto.ingreso.id, { silent: true, preserveUiState: true })
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'No se pudo guardar el importe')
+        } finally {
+            setGuardandoImporteItemKey(null)
+        }
+    }
+
     async function guardarPrestacion(p: PrestacionFacturableItem) {
         const draft = editRows[p.uid]
         if (!draft) return
@@ -3095,45 +3119,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         updates.find((aut) => tieneNumeroAutorizacionValido(aut.numeroAutorizacion))?.numeroAutorizacion ?? null
                 }
 
-                // Importe por orden: solo se manda el de las que cambiaron. El total
-                // de la practica lo recalcula el backend sumando los items.
-                const draftImportes = editImportesVinculados[p.uid] ?? buildImportesVinculadosEditState(p)
-                const importesOriginales = buildImportesVinculadosEditState(p)
-                const importesCambiados = (practicaRepartidaEnVariasOrdenes(p) ? (p.autorizacionesVinculadas ?? []) : [])
-                    .map((aut) => {
-                        const key = keyAutorizacionVinculada(aut)
-                        const valor = (draftImportes[key] ?? '').trim()
-                        if (!valor || valor === (importesOriginales[key] ?? '')) return null
-                        const importeTotal = Number(valor)
-                        if (!Number.isFinite(importeTotal) || importeTotal < 0) {
-                            throw new Error(
-                                `Importe inválido para la orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)}`
-                            )
-                        }
-                        return { aut, importeTotal }
-                    })
-                    .filter((v): v is { aut: typeof updates[number]; importeTotal: number } => v !== null)
-
-                for (const { aut, importeTotal } of importesCambiados) {
-                    const res = await fetch('/api/facturacion/prestaciones/importe-item', {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            puestoNumero: aut.ordenPuestoNumero,
-                            ordenNumero: aut.ordenNumero,
-                            item: aut.ordenItem,
-                            importeTotal,
-                        }),
-                    })
-
-                    const json = (await res.json()) as ApiResponse<{ ok: boolean }>
-                    if (!res.ok || !json.ok) {
-                        throw new Error(
-                            json.error ??
-                            `No se pudo guardar el importe de ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)} item ${aut.ordenItem}`
-                        )
-                    }
-                }
             }
 
             const usaMatriculaAyudante =
@@ -4669,8 +4654,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     !tieneAutorizacionesVinculadas
                                                 const draftAutorizacionesVinculadas =
                                                     editAutorizacionesVinculadas[p.uid] ?? buildAutorizacionesVinculadasEditState(p)
-                                                const draftImportesVinculados =
-                                                    editImportesVinculados[p.uid] ?? buildImportesVinculadosEditState(p)
                                                 const practicaRepartida = practicaRepartidaEnVariasOrdenes(p)
                                                 const desgloseSelector = obtenerDesgloseSelector(p)
                                                 const seleccionable = esPrestacionSeleccionableParaFacturar(p)
@@ -4901,7 +4884,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                 {Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—'}
                                                                             </span>
                                                                             <div className="text-[10px] text-slate-600">
-                                                                                Suma de las órdenes · se edita abajo, por orden
+                                                                                Suma de las órdenes · se edita en la fila de cada una
                                                                             </div>
                                                                         </div>
                                                                     ) : (
@@ -5064,34 +5047,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                                                 placeholder="Nro autorización"
                                                                                                                 className="w-full rounded border border-gray-300 px-2 py-1 text-xs md:w-44"
                                                                                                             />
-                                                                                                            {/* Solo cuando está repartida: si vive en una sola
-                                                                                                                orden alcanza con el importe de la práctica y
-                                                                                                                dos campos para lo mismo se pisan entre sí. */}
-                                                                                                            {practicaRepartida && (
-                                                                                                            <input
-                                                                                                                value={draftImportesVinculados[key] ?? ''}
-                                                                                                                onChange={(e) =>
-                                                                                                                    setEditImportesVinculados((prev) => ({
-                                                                                                                        ...prev,
-                                                                                                                        [p.uid]: {
-                                                                                                                            ...(prev[p.uid] ?? draftImportesVinculados),
-                                                                                                                            [key]: e.target.value,
-                                                                                                                        },
-                                                                                                                    }))
-                                                                                                                }
-                                                                                                                inputMode="decimal"
-                                                                                                                placeholder="Importe de la orden"
-                                                                                                                title={`Importe del item ${aut.ordenItem} en la orden ${formatOrderNumber(aut.ordenPuestoNumero, aut.ordenNumero)}`}
-                                                                                                                className="w-full rounded border border-gray-300 px-2 py-1 text-xs md:w-36"
-                                                                                                            />
-                                                                                                            )}
                                                                                                         </div>
                                                                                                     )
                                                                                                 })}
                                                                                                 {practicaRepartida && (
                                                                                                     <p className="text-[10px] text-slate-600">
-                                                                                                        La práctica se cobra repartida entre estas órdenes: su
-                                                                                                        importe es la suma y se recalcula al guardar.
+                                                                                                        La práctica se cobra repartida entre estas órdenes: el
+                                                                                                        importe de cada una se edita en su propia fila y el de
+                                                                                                        la práctica es la suma.
                                                                                                     </p>
                                                                                                 )}
                                                                                             </div>
@@ -5281,7 +5244,15 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             // La practica repartida por rol tiene una sola fila editable, en la
                                                             // orden que la genero. Aca se muestra el item que le toca a esta orden.
                                                             const filasEspejo = subgrupo.espejos.map(({ prestacion, vinculo }) => {
-                                                                const ordenEditable = obtenerOrdenesRelacionadasPrestacion(prestacion)[0] ?? null
+                                                                const keyItem = keyItemOrdenRelacionado({
+                                                                    ordenPuestoNumero: vinculo.ordenPuestoNumero,
+                                                                    ordenNumero: vinculo.ordenNumero,
+                                                                    ordenItem: vinculo.ordenItem,
+                                                                })
+                                                                const valorImporte =
+                                                                    editImporteItemOrden[keyItem]
+                                                                    ?? (vinculo.importeTotal != null ? String(vinculo.importeTotal) : '')
+                                                                const guardandoImporte = guardandoImporteItemKey === keyItem
                                                                 return (
                                                                     <tr key={`${grupo.key}:${subgrupo.key}:espejo:${prestacion.uid}:${vinculo.ordenItem}`}>
                                                                         <td colSpan={8} className="px-3 py-2">
@@ -5290,17 +5261,38 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                     {prestacion.codigoPractica ?? '—'}
                                                                                 </span>
                                                                                 <span className="text-xs text-gray-700">{prestacion.descripcion}</span>
-                                                                                <span className="text-xs font-semibold text-gray-800">
-                                                                                    {vinculo.importeTotal != null ? formatCurrency(vinculo.importeTotal) : '—'}
-                                                                                </span>
                                                                                 <span className="text-[11px] text-slate-500">
                                                                                     Item {vinculo.ordenItem} · {vinculo.numeroAutorizacion?.trim() || 'S/A'}
                                                                                 </span>
-                                                                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                                                                                    Misma práctica{ordenEditable
-                                                                                        ? `: se edita y factura en ${formatOrderNumber(ordenEditable.ordenPuestoNumero, ordenEditable.ordenNumero)}`
-                                                                                        : ''}
-                                                                                </span>
+                                                                                {/* El importe de esta orden se corrige acá, no en la fila
+                                                                                    de la práctica: cada orden lleva su parte. */}
+                                                                                <input
+                                                                                    value={valorImporte}
+                                                                                    onChange={(e) =>
+                                                                                        setEditImporteItemOrden((prev) => ({
+                                                                                            ...prev,
+                                                                                            [keyItem]: e.target.value,
+                                                                                        }))
+                                                                                    }
+                                                                                    inputMode="decimal"
+                                                                                    disabled={guardandoImporte}
+                                                                                    title={`Importe del item ${vinculo.ordenItem} en la orden ${formatOrderNumber(vinculo.ordenPuestoNumero, vinculo.ordenNumero)}`}
+                                                                                    className="w-32 rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100"
+                                                                                />
+                                                                                <button
+                                                                                    onClick={() =>
+                                                                                        guardarImporteItemOrden(
+                                                                                            vinculo.ordenPuestoNumero,
+                                                                                            vinculo.ordenNumero,
+                                                                                            vinculo.ordenItem,
+                                                                                            valorImporte
+                                                                                        )
+                                                                                    }
+                                                                                    disabled={guardandoImporte}
+                                                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                                                >
+                                                                                    {guardandoImporte ? 'Guardando...' : 'Guardar importe'}
+                                                                                </button>
                                                                             </div>
                                                                         </td>
                                                                     </tr>

@@ -669,3 +669,79 @@ llevan el componente en `OprClasAgrup` y el importe lo confirma; 1/2514/1 (AYUDA
 tiene `OprClasAgrup` pero si `OprModulo='A1'`, que es el campo que se lee primero. Se
 generaron por caminos distintos — el de ayudante escribe el modulo y no la clasificacion,
 el resto al reves — pero ninguno de los cuatro pasa por practica completa.
+
+---
+
+## 2026-09-01 — Orden 2645: el electro cobraba solo el honorario (codigo 170101)
+
+**Reportado por:** Paula — "orden 2645 no tiene gastos en la practica 170101".
+
+**Que estaba mal:** la orden 1/2645 (ingreso 520, FABIAN CLAUDIA LUZ, OSECAC) cobraba
+el electro a 15.149,63, solo el honorario especialista. El electro vale
+HE 15.149,63 + GA 3.550,32 = 18.699,95. Mismo caso que las siete lineas del lote 43
+corregidas el 31/08, mas abajo en este archivo.
+
+**Causa:** la practica 4196 se cargo el 26/08 15:42:59 ya con 15.149,63, o sea con
+derechos destildado en la carga; la orden salio 27 segundos despues arrastrando ese
+importe. No hay bug de calculo: el nomenclador tiene el `NPrValGto` y la API lo
+devuelve (`buscarPracticas('170101', 1)` -> `valorGastos: 3550.32`), y
+`seleccionPorDefecto` tilda los dos componentes. La edicion del 01/09 16:01 desde
+facturacion solo guardo el numero de autorizacion, no toco componentes.
+
+**Registros tocados** (una transaccion, cada UPDATE guardado por el valor actual):
+
+| tabla | registro | antes | despues |
+|---|---|---|---|
+| `Practica` | 4196 (`PraImpTotal`) | 15.149,63 | 18.699,95 |
+| `OrdenPrac` | 1/2645 it.1 (`OprImpTotal`) | 15.149,63 | 18.699,95 |
+| `Orden` | 1/2645 (`OrdImpTotal`) | 32.149,74 | 35.700,06 |
+
+El item quedo con la misma forma que las 37 lineas bien cargadas y que las siete del
+lote 43: `OprClasAgrup='HE+GA'`, `OprModulo=NULL`,
+`OprTitularModular='HONORARIO ESPECIALISTA + DERECHOS'`, `OprImprimirDuplicado=true`.
+La orden lleva tambien un 420303, asi que no se toco `OrdTitularModular` ni
+`OrdImprimirDuplicado` de la cabecera, para no mal-etiquetar el 420303.
+
+**Alcance verificado:** el ingreso 520 no esta en ningun lote (0 filas en
+`LoteFacturacionItem`, 0 en `LoteFacturacionOrdenExcluida`), asi que no hubo que
+recalcular ningun total de lote y nada salio a la obra social con el numero viejo. El
+script chequeo antes de escribir el codigo, la cantidad, los tres importes, el vinculo
+practica-item, que la orden siguiera activa y que el ingreso no estuviera en un lote;
+aborta sin tocar nada si algo no coincide.
+
+**Tocadas y revertidas el mismo dia — 1/2634, 1/2637 y 1/2638.** Se corrigieron primero
+junto con la 2645 y despues se decidio dejarlas en la lista para completar desde la app,
+asi que volvieron a su estado original en una tercera transaccion. **Hoy estan como
+estaban**: practicas 4181, 4186 y 4188 en 15.149,63, sus items en 15.149,63 y las tres
+cabeceras en 32.149,74. Queda anotado porque las escrituras existieron y este archivo es
+el unico rastro. Valores restaurados uno por uno, que no eran iguales entre si:
+
+| orden | ingreso | practica | item 1 restaurado a |
+|---|---|---|---|
+| 1/2634 | 511 (INT-228) | 4181 | `OprModulo='HE'`, `OprClasAgrup=NULL`, `OprTitularModular=NULL` |
+| 1/2637 | 400 (INT-190) | 4186 | `OprModulo=NULL`, `OprClasAgrup='HE'`, `OprTitularModular='HONORARIO ESPECIALISTA'` |
+| 1/2638 | 508 (INT-226) | 4188 | `OprModulo='HE'`, `OprClasAgrup=NULL`, `OprTitularModular=NULL` |
+
+Las tres con `OprImprimirDuplicado=false`: se midieron antes de revertir los 49 items de
+170101 en 15.149,63 que quedan sin tocar en la base y los 49 lo tienen en false.
+
+**Lo que sigue a medias** (medido el 01/09, con la 2645 ya corregida): de 164 practicas
+activas de 170101, 78 estan completas y 20 son pares HE+GA cargados en filas separadas.
+Quedan **30 a medias** contando por ingreso (25 solo honorario, 5 solo derechos), de las
+cuales **23 estan fuera de todo lote**: $93.256,67 sin cobrar. Solo tres ya tienen orden
+generada (2074, 2191 y 2486) ademas de las 2634/2637/2638 de arriba; el resto sigue
+pendiente, asi que se arreglan desde facturacion tildando el componente que falta, sin
+SQL. **Ninguna se toca sin pedido expreso.**
+
+**El origen es siempre la carga manual.** De las 76 practicas de 170101 a medias, 63
+tienen su `CREAR Practica` en el audit log y **las 63 nacieron ya con el importe a
+medias**; ninguna se creo completa y se recorto despues. Las otras 13 son anteriores al
+log. Tampoco hay un camino automatico que las genere: `IngresoElectrocardiograma` tiene
+1 sola fila en toda la base.
+
+**Como verificar que quedo bien:** la cabecera 1/2645 en 35.700,06 = 18.699,95 +
+17.000,11, y su item 1 con `OprClasAgrup='HE+GA'`.
+
+**Reversion:** `PraImpTotal`/`OprImpTotal` a 15.149,63, `OrdImpTotal` a 32.149,74,
+`OprClasAgrup=NULL`, `OprModulo='HE'`, `OprTitularModular=NULL`,
+`OprImprimirDuplicado=false`.

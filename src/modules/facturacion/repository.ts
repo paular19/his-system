@@ -2371,16 +2371,39 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     descripcionEsGasto(it.nomencladorPractica?.descripcion ?? null) ||
                     esDesgloseSoloGastos(desgloseVinculo)
                 ))
+            // Una practica de cirugia se reparte en varias ordenes (una por rol) y
+            // cada OrdenPrac guarda a quien se le paga en `efectorMatricula`. La
+            // matricula de la Practica es una sola para todas: si sale de ahi, las
+            // tres filas muestran la misma y editar una arrastra a las otras. Manda
+            // el item; la practica queda de respaldo.
+            const efectorEsEspecialistaVinculo = Boolean(
+                it.efectorMatricula && (
+                    incluyeTieneEspecialista(incluyeVinculo) ||
+                    incluyeTieneAyudanteVinculo ||
+                    (!incluyeVinculo && !esCodigoAnestesistaVinculo && (
+                        it.nomencladorPractica?.valorEspecialista != null ||
+                        it.nomencladorPractica?.valorAyudante != null
+                    ))
+                )
+            )
+            const efectorEsAnestesistaVinculo = Boolean(
+                it.efectorMatricula && (
+                    esCodigoAnestesistaVinculo ||
+                    Boolean(incluyeVinculo?.anestesista) ||
+                    (!incluyeVinculo && it.nomencladorPractica?.valorAnestesista != null)
+                )
+            )
             const matriculaEspecialistaVinculo = esGastoVinculo
                 ? resolverMatriculaGastoEditable(
                     ingreso.tipoIngresoCodigo,
-                    it.practica?.matriculaEspecialista,
-                    it.efectorMatricula
+                    it.efectorMatricula,
+                    it.practica?.matriculaEspecialista
                 )
                 : (esCodigoAnestesistaVinculo
                     ? null
                     : resolverMatriculaEspecialistaPorPatologia(
-                        it.practica?.matriculaEspecialista ??
+                        (efectorEsEspecialistaVinculo ? it.efectorMatricula : null) ??
+                            it.practica?.matriculaEspecialista ??
                             (ingreso.tipoIngresoCodigo === 'INT' &&
                                 it.nomencladorPractica?.valorAyudante != null &&
                                 permiteFallbackAyudanteVinculo
@@ -2392,10 +2415,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             const matriculaAnestesistaVinculo = esGastoVinculo
                 ? resolverMatriculaGastoEditable(
                     ingreso.tipoIngresoCodigo,
-                    it.practica?.matriculaAnestesista,
-                    it.efectorMatricula
+                    it.efectorMatricula,
+                    it.practica?.matriculaAnestesista
                 )
-                : (it.practica?.matriculaAnestesista ??
+                : ((efectorEsAnestesistaVinculo ? it.efectorMatricula : null) ??
+                    it.practica?.matriculaAnestesista ??
                     (ingreso.tipoIngresoCodigo === 'INT' &&
                         (it.nomencladorPractica?.valorAnestesista != null || esCodigoAnestesistaVinculo) &&
                         (permiteFallbackAnestesistaVinculo || esCodigoAnestesistaVinculo)
@@ -2405,10 +2429,12 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 ? (esGastoVinculo
                     ? resolverMatriculaGastoEditable(
                         ingreso.tipoIngresoCodigo,
-                        it.practica?.matriculaEspecialista,
-                        it.efectorMatricula
+                        it.efectorMatricula,
+                        it.practica?.matriculaEspecialista
                     )
-                    : (it.practica?.matriculaEspecialista ?? MATRICULA_AYUDANTE_INT_DEFAULT))
+                    : ((efectorEsEspecialistaVinculo ? it.efectorMatricula : null) ??
+                        it.practica?.matriculaEspecialista ??
+                        MATRICULA_AYUDANTE_INT_DEFAULT))
                 : null
 
             const vinculadasActuales = autorizacionesVinculadasPorPractica.get(practicaIdAsociada) ?? []
@@ -4620,10 +4646,18 @@ export async function actualizarPrestacionFacturacion(
                     codigoPractica: resolved.codigoPractica.trim(),
                     cantidad: data.cantidad,
                     numeroAutorizacion: data.numeroAutorizacion ?? null,
-                    // Repartida: el importe sale de la suma de los items, mas abajo.
-                    ...(practicaRepartida ? {} : { importeTotal: importeTotalFinal }),
-                    matriculaEspecialista: matriculaEspecialistaFinal,
-                    matriculaAnestesista: data.matriculaAnestesista ?? null,
+                    // Repartida: el importe sale de la suma de los items, mas abajo,
+                    // y la matricula queda en cada item. La Practica tiene una sola
+                    // y bajarla aca pisaba el efector que ven las demas ordenes:
+                    // cambiar el ayudante de una dejaba al especialista y a gastos
+                    // mostrando esa misma matricula.
+                    ...(practicaRepartida
+                        ? {}
+                        : {
+                            importeTotal: importeTotalFinal,
+                            matriculaEspecialista: matriculaEspecialistaFinal,
+                            matriculaAnestesista: data.matriculaAnestesista ?? null,
+                        }),
                 },
             })
         }

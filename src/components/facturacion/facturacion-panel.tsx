@@ -1185,6 +1185,12 @@ function derivarPrestacionItemOrden(
         // una de las ordenes la tuviera para poder facturar.
         numeroAutorizacion: vinculo.numeroAutorizacion ?? p.numeroAutorizacion,
         incluyeCodigo: vinculo.incluyeCodigo ?? p.incluyeCodigo,
+        // Cada orden de la practica repartida paga a un profesional distinto
+        // (especialista, ayudante, gastos). La matricula sale del item de esa
+        // orden: heredar la de la practica hacia mostrar la misma en las tres
+        // filas y editar una cambiaba todas.
+        matriculaEspecialista: vinculo.matriculaEspecialista ?? null,
+        matriculaAnestesista: vinculo.matriculaAnestesista ?? null,
         ordenPuestoNumero: vinculo.ordenPuestoNumero,
         ordenNumero: vinculo.ordenNumero,
         // La fila ya es de una orden concreta: listar las otras la volveria a

@@ -167,6 +167,36 @@ test('sin modulo, el importe contra el nomenclador desempata los componentes', (
   )
 })
 
+// Caso real del lote 57 (OSECAC, ingresos 490 CABRERA y 557 BARROS): la 340213 se
+// cargo x2, asi que la fila del honorario trae 3.185,28 (2 x 1.592,64). Antes el
+// importe no matcheaba ningun componente y la linea caia al fallback por matricula:
+// 3.185,28 de honorario se contaban como gastos de la clinica.
+test('el desempate por importe compara el unitario, no el importe por cantidad', () => {
+  const valores340213 = {
+    valorEspecialista: 1592.64,
+    valorAnestesista: null,
+    valorAyudante: null,
+    valorGastos: 5319.56,
+  }
+  const linea = (importeTotal: number, cantidad: number) =>
+    resolverSubitemPromedi({
+      codigoPractica: '340213  ',
+      modulo: null,
+      cantidad,
+      efectorMatricula: 9110,
+      profesional: 'SAN RAFAEL S.A. MP CMS',
+      importeTotal,
+      valoresNomenclador: valores340213,
+    })
+
+  assert.equal(linea(10639.12, 2), 'GA')
+  assert.equal(linea(3185.28, 2), 'HE')
+
+  // Cantidad ausente o invalida se comporta como x1.
+  assert.equal(linea(1592.64, 1), 'HE')
+  assert.equal(linea(1592.64, 0), 'HE')
+})
+
 test('el desempate por importe corrige el subitem en codigos alcanzados por promedi', () => {
   // 720329 si esta en rango de promedi. Una linea de honorario emitida con matricula
   // de clinica se rotulaba GA y entraba al resumen descontando de mas.

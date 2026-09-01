@@ -122,10 +122,20 @@ const TOLERANCIA_IMPORTE_SUBITEM = 0.005
 // Compara el importe de la linea contra cada componente del nomenclador. Solo resuelve
 // si matchea UNO solo: si dos componentes valen lo mismo el importe no desempata y hay
 // que seguir con las senales de abajo.
+//
+// El desglose del nomenclador es unitario y el importe de la fila viene multiplicado
+// por la cantidad, asi que la comparacion se hace contra el unitario. Sin esto una
+// fila x2 no matchea ningun componente y cae al default por matricula: el honorario
+// de una radiografia cargada x2 con la matricula de la clinica terminaba contado
+// como gasto.
 function resolverSubitemPorImporte(linea: LineaSubitemPromedi): SubitemPromedi | null {
-    const importe = linea.importeTotal
+    const importeLinea = linea.importeTotal
     const valores = linea.valoresNomenclador
-    if (importe == null || !Number.isFinite(importe) || valores == null) return null
+    if (importeLinea == null || !Number.isFinite(importeLinea) || valores == null) return null
+
+    const cantidad = Number(linea.cantidad ?? 1)
+    const importe =
+        Number.isFinite(cantidad) && cantidad > 0 ? importeLinea / cantidad : importeLinea
 
     const candidatos: Array<[SubitemPromedi, number | null | undefined]> = [
         ['GA', valores.valorGastos],

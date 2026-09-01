@@ -2,13 +2,13 @@ import { type ModuloHIS, type PermisoHIS, type RolHIS, ROLES, tienePermiso } fro
 
 const ROLES_POR_EMAIL_FORZADOS: Record<string, RolHIS> = {
   'cirugiaclinicasr@gmail.com': ROLES.INTERNACION,
-  'ivictoria123@hotmail.com': ROLES.ADMISION,
+  'ivictoria123@hotmail.com': ROLES.FACTURACION,
 }
 
 const ROLES_POR_EMAIL_REGISTRADOS: Record<string, RolHIS> = {
   'cirugiaclinicasr@gmail.com': ROLES.INTERNACION,
   'natividaddelvallelopez@gmail.com': ROLES.ORDENES,
-  'ivictoria123@hotmail.com': ROLES.ADMISION,
+  'ivictoria123@hotmail.com': ROLES.FACTURACION,
   'sorianokaren223@gmail.com': ROLES.ORDENES,
   'lautarouti@gmail.com': ROLES.ORDENES,
   'internacionsanar@gmail.com': ROLES.ORDENES,

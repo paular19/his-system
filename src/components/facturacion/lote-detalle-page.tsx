@@ -15,6 +15,7 @@ import {
     aplicaPromediPorObraYSubitem,
     calcularImportePromediPorCodigo,
     porcentajePromediPorObra,
+    repartirLineaCombinada,
     resolverReglaPromedi,
     resolverSubitemPromedi,
     type LineaSubitemPromedi,
@@ -61,12 +62,34 @@ function formatPeriodo(periodo: string | null) {
 // a especialista: en el lote 36 caian ahi 46 de 48 lineas, incluidas las de gastos,
 // mientras la pantalla ya las mostraba como GA. Ahora la columna sale del mismo
 // resolver que usan la pantalla y el promedi, asi que no pueden divergir.
-function desglosarImportePorSubitem(subitem: SubitemPromedi, importeTotal: number) {
+// Una fila que cobra la practica completa (etiqueta 'HE+GA', o sin etiqueta y con el
+// importe igual a la suma del desglose) no tiene un solo subitem: lleva honorario y
+// gastos juntos. Mandarla entera a una columna dejaba los gastos contados como
+// honorario del especialista — se veia en el lote 43, con los electros en 18.699,95
+// integros en "$ Esp" y "$ Gto" vacio. `repartirLineaCombinada` la parte por
+// componente, y las filas de un solo componente siguen yendo enteras a su columna.
+function desglosarImportePorSubitem(
+    subitem: SubitemPromedi,
+    importeTotal: number,
+    linea: LineaSubitemPromedi
+) {
     const vacio = {
         importeEspecialista: null as number | null,
         importeAyudante: null as number | null,
         importeAnestesista: null as number | null,
         importeGastos: null as number | null,
+    }
+
+    // El importe puede venir ajustado por promedi, asi que el reparto se calcula
+    // sobre el que se muestra: las columnas siempre suman el total de la fila.
+    const reparto = repartirLineaCombinada({ ...linea, importeTotal })
+    if (reparto) {
+        return {
+            importeEspecialista: reparto.especialista || null,
+            importeAyudante: reparto.ayudante || null,
+            importeAnestesista: reparto.anestesista || null,
+            importeGastos: reparto.gastos || null,
+        }
     }
 
     if (subitem === 'A1' || subitem === 'A2' || subitem === 'A3') {
@@ -122,6 +145,8 @@ function lineaSubitemDeItem(
     return {
         codigoPractica: item.codigoPractica,
         modulo: item.modulo,
+        clasificacionAgrupacion: item.clasificacionAgrupacion,
+        cantidad: item.cantidad,
         efectorMatricula: item.efectorMatricula,
         profesional: profesionalNombre,
         importeTotal: item.importeTotal,
@@ -876,9 +901,8 @@ export function LoteDetallePage({ loteId }: Props) {
                     ? orden.items.filter((it) => categoriaPractica(it.codigoPractica) === filtroCategoria)
                     : orden.items
                 ).map((linea) => {
-                    const subitemLinea = resolverSubitemPromedi(
-                        lineaSubitemDeItem(linea, orden.profesional?.nombre)
-                    )
+                    const lineaSubitem = lineaSubitemDeItem(linea, orden.profesional?.nombre)
+                    const subitemLinea = resolverSubitemPromedi(lineaSubitem)
                     const importeLinea = vistaPromedi
                         ? importePromediAplicado(
                             linea.codigoPractica,
@@ -888,7 +912,7 @@ export function LoteDetallePage({ loteId }: Props) {
                             subitemLinea
                         )
                         : linea.importeTotal
-                    const desglose = desglosarImportePorSubitem(subitemLinea, importeLinea)
+                    const desglose = desglosarImportePorSubitem(subitemLinea, importeLinea, lineaSubitem)
                     return {
                         subitem: subitemLinea,
                         ordenNumero: orden.numero,

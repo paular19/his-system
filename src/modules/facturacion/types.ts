@@ -265,6 +265,9 @@ export interface OrdenAutorizadaLote {
         fecha: Date
         codigoPractica: string
         modulo: string | null
+        // Necesaria para saber si la fila cobra varios componentes a la vez: muchas
+        // filas traen el componente aca y el modulo vacio.
+        clasificacionAgrupacion: string | null
         efectorMatricula: number | null
         descripcion: string | null
         valoresNomenclador: {

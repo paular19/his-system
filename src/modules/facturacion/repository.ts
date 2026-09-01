@@ -6200,6 +6200,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
                     fecha: true,
                     codigoPractica: true,
                     modulo: true,
+                    clasificacionAgrupacion: true,
                     efectorMatricula: true,
                     cantidad: true,
                     numeroAutorizacion: true,
@@ -6305,6 +6306,7 @@ export async function obtenerOrdenesAutorizadasIngreso(
                     fecha: it.fecha,
                     codigoPractica: it.codigoPractica,
                     modulo: it.modulo?.trim() || null,
+                    clasificacionAgrupacion: it.clasificacionAgrupacion?.trim() || null,
                     efectorMatricula: it.efectorMatricula,
                     descripcion: it.nomencladorPractica?.descripcion ?? null,
                     valoresNomenclador: it.nomencladorPractica

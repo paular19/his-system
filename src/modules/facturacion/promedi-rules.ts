@@ -94,6 +94,14 @@ export type ValoresNomencladorSubitem = {
 export type LineaSubitemPromedi = {
     codigoPractica?: string | null
     modulo?: string | null
+    // Etiqueta de componentes de la fila ('HE+GA', 'GA', ...). Cuando trae varios
+    // tokens la fila cobra la practica completa y hay que repartirla: ver
+    // repartirLineaCombinada. `modulo` sirve para lo mismo pero muchas filas lo
+    // tienen vacio, asi que se miran los dos.
+    clasificacionAgrupacion?: string | null
+    // Necesaria solo para detectar filas combinadas sin etiqueta: el importe viene
+    // multiplicado por la cantidad y el desglose del nomenclador es unitario.
+    cantidad?: number | null
     // Matricula del efector de la linea (OrdenPractica.efectorMatricula). Es la senal
     // mas confiable: el modulo viene vacio en la mayoria de las filas.
     efectorMatricula?: number | null
@@ -248,4 +256,149 @@ export function calcularImportePromediPorCodigo(
 
     const porcentajeNormalizado = Math.abs(porcentajePromedi) > 1 ? porcentajePromedi / 100 : porcentajePromedi
     return redondear2(importeBase * porcentajeNormalizado)
+}
+// ============================================
+// FILAS COMBINADAS (varios componentes en la misma linea)
+// ============================================
+
+/**
+ * Una fila que cobra la practica completa, no un componente suelto.
+ *
+ * `resolverSubitemPromedi` devuelve UN subitem por fila, y quien lo consume asumia
+ * que el importe entero pertenecia a ese subitem. Eso vale cuando cada componente
+ * es una fila propia, que es como carga la app al tildar los componentes por
+ * separado. Pero hay filas que cobran todo junto: unas con etiqueta explicita
+ * ('HE+GA', 'HE+HA+GA+A1') y otras sin ninguna, donde el importe es exactamente la
+ * suma del desglose. En esas el resolver no encuentra el componente y cae al
+ * default por matricula, asi que los gastos de la clinica terminan contados como
+ * honorario del medico.
+ *
+ * Estas funciones reparten el importe entre los componentes que la fila cobra.
+ */
+
+const TOLERANCIA_IMPORTE_COMBINADA = 0.05
+
+export type RepartoComponentes = {
+    especialista: number
+    ayudante: number
+    anestesista: number
+    gastos: number
+}
+
+type ValorPorToken = { token: string; valor: number | null | undefined }
+
+function redondear2Promedi(valor: number): number {
+    return Math.round(valor * 100) / 100
+}
+
+function valorDeToken(
+    token: string,
+    valores: ValoresNomencladorSubitem
+): number | null | undefined {
+    if (token === 'GA') return valores.valorGastos
+    if (token === 'HE') return valores.valorEspecialista
+    if (token === 'HA') return valores.valorAnestesista
+    if (token === 'A1' || token === 'A2' || token === 'A3') return valores.valorAyudante
+    return null
+}
+
+/** Tokens de la etiqueta ('HE+GA' -> ['HE','GA']). Vacio si no hay etiqueta compuesta. */
+function tokensEtiqueta(linea: LineaSubitemPromedi): string[] {
+    const etiqueta =
+        normalizarTextoPromedi(linea.clasificacionAgrupacion) || normalizarTextoPromedi(linea.modulo)
+    if (!etiqueta.includes('+')) return []
+    return etiqueta
+        .split('+')
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0)
+}
+
+/**
+ * Componentes que cobra la fila, o null si cobra uno solo.
+ *
+ * Dos senales, en este orden:
+ * 1. La etiqueta (`clasificacionAgrupacion` o `modulo`) trae varios tokens.
+ * 2. Sin etiqueta: el importe unitario coincide con la suma de TODO el desglose.
+ *    Es el caso de las filas que quedaron sin marcar.
+ */
+function componentesDeLinea(linea: LineaSubitemPromedi): ValorPorToken[] | null {
+    const valores = linea.valoresNomenclador
+    if (!valores) return null
+
+    const tokens = tokensEtiqueta(linea)
+    if (tokens.length > 1) {
+        return tokens.map((token) => ({ token, valor: valorDeToken(token, valores) }))
+    }
+
+    // Solo se infiere cuando la fila no declara nada: si trae etiqueta de un
+    // componente, esa manda aunque el importe diga otra cosa.
+    if (tokens.length > 0) return null
+    if (normalizarTextoPromedi(linea.clasificacionAgrupacion) || normalizarTextoPromedi(linea.modulo)) {
+        return null
+    }
+
+    const importe = linea.importeTotal
+    if (importe == null || !Number.isFinite(importe)) return null
+
+    const todos: ValorPorToken[] = [
+        { token: 'GA', valor: valores.valorGastos },
+        { token: 'HE', valor: valores.valorEspecialista },
+        { token: 'HA', valor: valores.valorAnestesista },
+        { token: 'A1', valor: valores.valorAyudante },
+    ].filter((c) => c.valor != null && Number.isFinite(c.valor) && c.valor !== 0)
+
+    if (todos.length < 2) return null
+
+    const cantidad = Number(linea.cantidad ?? 1) || 1
+    const suma = todos.reduce((acc, c) => acc + Number(c.valor), 0)
+    if (Math.abs(importe / cantidad - suma) >= TOLERANCIA_IMPORTE_COMBINADA) return null
+
+    return todos
+}
+
+/**
+ * Reparte el importe de una fila combinada entre sus componentes, o null si la fila
+ * cobra uno solo y no hay nada que repartir.
+ *
+ * Va por proporcion del desglose y no por el valor absoluto del nomenclador: asi la
+ * suma de las partes da exactamente el importe de la fila aunque la hayan editado a
+ * mano en facturacion. El sobrante del redondeo queda en el componente mas grande.
+ */
+export function repartirLineaCombinada(linea: LineaSubitemPromedi): RepartoComponentes | null {
+    const componentes = componentesDeLinea(linea)
+    if (!componentes) return null
+
+    const conValor = componentes.filter(
+        (c) => c.valor != null && Number.isFinite(c.valor) && Number(c.valor) > 0
+    )
+    // Con un solo componente valorizado no hay reparto posible: queda como estaba.
+    if (conValor.length < 2) return null
+
+    const importe = linea.importeTotal
+    if (importe == null || !Number.isFinite(importe) || importe <= 0) return null
+
+    const totalValores = conValor.reduce((acc, c) => acc + Number(c.valor), 0)
+    if (totalValores <= 0) return null
+
+    const reparto: RepartoComponentes = { especialista: 0, ayudante: 0, anestesista: 0, gastos: 0 }
+    const claveDe = (token: string): keyof RepartoComponentes =>
+        token === 'GA' ? 'gastos'
+            : token === 'HA' ? 'anestesista'
+                : token === 'HE' ? 'especialista'
+                    : 'ayudante'
+
+    for (const c of conValor) {
+        reparto[claveDe(c.token)] += redondear2Promedi(importe * (Number(c.valor) / totalValores))
+    }
+
+    // El redondeo de cada parte puede dejar uno o dos centavos sueltos. Van al
+    // componente mas grande para que la suma cierre contra el importe de la fila.
+    const sumado = reparto.especialista + reparto.ayudante + reparto.anestesista + reparto.gastos
+    const resto = redondear2Promedi(importe - sumado)
+    if (resto !== 0) {
+        const mayor = conValor.reduce((a, b) => (Number(a.valor) >= Number(b.valor) ? a : b))
+        reparto[claveDe(mayor.token)] = redondear2Promedi(reparto[claveDe(mayor.token)] + resto)
+    }
+
+    return reparto
 }

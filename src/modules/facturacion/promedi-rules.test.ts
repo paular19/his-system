@@ -282,9 +282,9 @@ test('las categorias de filtro reconocen los codigos de los lotes reales', () =>
   assert.equal(categoriaPractica('430101'), null)
 })
 
-test('ACIDSAL se factura con la misma regla y el mismo porcentaje que IPS', () => {
-  assert.equal(resolverReglaPromedi('ACIDSAL - Cod.346'), 'IPS')
-  assert.equal(resolverReglaPromedi('acidsal'), 'IPS')
+test('ACIDSAL alcanza los mismos codigos que IPS pero se factura al 13%', () => {
+  assert.equal(resolverReglaPromedi('ACIDSAL - Cod.346'), 'ACIDSAL')
+  assert.equal(resolverReglaPromedi('acidsal'), 'ACIDSAL')
   assert.equal(resolverReglaPromedi('I.P.S.S.'), 'IPS')
   assert.equal(resolverReglaPromedi('OSECAC'), 'OSECAC')
   assert.equal(resolverReglaPromedi('SWISS MEDICAL'), null)
@@ -292,6 +292,7 @@ test('ACIDSAL se factura con la misma regla y el mismo porcentaje que IPS', () =
 
   assert.equal(porcentajePromediPorObra('IPS'), 0.36)
   assert.equal(porcentajePromediPorObra('OSECAC'), 0.2)
+  assert.equal(porcentajePromediPorObra('ACIDSAL'), 0.13)
 
   // Mismos codigos alcanzados que IPS: sin las exclusiones propias de OSECAC.
   for (const codigo of ['430101', '431001', '400101', '431002', '431103', '430130', '070116', '070607', '720329']) {
@@ -301,9 +302,10 @@ test('ACIDSAL se factura con la misma regla y el mismo porcentaje que IPS', () =
     assert.equal(aplicaPromediIPS(codigo), false, codigo)
   }
 
-  // Y el mismo 36% sobre el subitem de gastos.
+  // Pero al 13% sobre el subitem de gastos, no al 36% de IPS.
   const regla = resolverReglaPromedi('ACIDSAL - Cod.346')!
-  assert.equal(calcularImportePromediPorCodigo('720329', 100000, porcentajePromediPorObra(regla), regla, 'GA'), 36000)
+  assert.equal(calcularImportePromediPorCodigo('720329', 100000, porcentajePromediPorObra(regla), regla, 'GA'), 13000)
+  assert.equal(calcularImportePromediPorCodigo('720329', 100000, porcentajePromediPorObra('IPS'), 'IPS', 'GA'), 36000)
   assert.equal(calcularImportePromediPorCodigo('720329', 100000, porcentajePromediPorObra(regla), regla, 'HE'), 0)
   assert.equal(calcularImportePromediPorCodigo('431101', 100000, porcentajePromediPorObra(regla), regla, 'GA'), 0)
 })

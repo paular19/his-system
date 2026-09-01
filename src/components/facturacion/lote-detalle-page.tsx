@@ -797,7 +797,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const est = ESTADO_LABEL[lote.estado] ?? { label: lote.estado, cls: 'bg-gray-100 text-gray-700' }
     const esPendiente = puedeEditarPrestacionEnLote(lote.estado)
     const esIPSTxt = lote.origen === 'IPS_TXT'
-    // ACIDSAL resuelve a la regla IPS: mismos codigos alcanzados y mismo porcentaje.
+    // ACIDSAL tiene regla propia: mismos codigos alcanzados que IPS, pero al 13%.
     const reglaPromedi = resolverReglaPromedi(lote.obraSocial?.nombre)
     const puedeAplicarPromedi = esPendiente && !lote.promediAplicado && (esIPSTxt || (lote.tipo === 'PRACTICAS' && reglaPromedi !== null))
     // El lote IPS TXT ya es de IPS por origen, aunque no tenga obra social cargada.

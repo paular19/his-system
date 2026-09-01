@@ -9,7 +9,9 @@ export const CODIGOS_PROMEDI_RANGOS = [
 export const CODIGOS_EXCLUIDOS_PROMEDI_OSECAC = [70116, 70607] as const
 const CODIGOS_EXCLUIDOS_PROMEDI_OSECAC_SET = new Set<number>(CODIGOS_EXCLUIDOS_PROMEDI_OSECAC)
 
-export type ObraSocialPromedi = 'IPS' | 'OSECAC'
+// ACIDSAL usa los mismos codigos alcanzados que IPS pero otro porcentaje, asi que es
+// una regla propia y no un alias de 'IPS'.
+export type ObraSocialPromedi = 'IPS' | 'OSECAC' | 'ACIDSAL'
 
 // El PROMEDI solo golpea los gastos (GA). Los honorarios (HE/HA) y los ayudantes
 // (A1/A2/A3) quedan afuera, salvo para el 400101 que impacta todos los subitems.
@@ -32,6 +34,7 @@ function normalizarNombreObraSocial(nombre: string | null | undefined): string {
 export const PORCENTAJE_PROMEDI: Record<ObraSocialPromedi, number> = {
     IPS: 0.36,
     OSECAC: 0.20,
+    ACIDSAL: 0.13,
 }
 
 export function esObraSocialIps(nombre: string | null | undefined): boolean {
@@ -48,12 +51,13 @@ export function esObraSocialAcidsal(nombre: string | null | undefined): boolean 
     return normalizarNombreObraSocial(nombre).includes('ACIDSAL')
 }
 
-// La regla nombra el tratamiento, no la obra social: ACIDSAL se factura con los mismos
-// codigos alcanzados y el mismo porcentaje que IPS, asi que resuelve a la regla 'IPS'.
-// Devuelve null cuando la obra social no tiene regla de promedi.
+// La regla nombra el tratamiento, no la obra social: ACIDSAL alcanza los mismos codigos
+// que IPS (sin las exclusiones de OSECAC) pero se factura al 13% en vez del 36%, asi que
+// tiene regla propia. Devuelve null cuando la obra social no tiene regla de promedi.
 export function resolverReglaPromedi(nombre: string | null | undefined): ObraSocialPromedi | null {
     if (esObraSocialOsecac(nombre)) return 'OSECAC'
-    if (esObraSocialAcidsal(nombre) || esObraSocialIps(nombre)) return 'IPS'
+    if (esObraSocialAcidsal(nombre)) return 'ACIDSAL'
+    if (esObraSocialIps(nombre)) return 'IPS'
     return null
 }
 
@@ -237,7 +241,10 @@ export function aplicaPromediPorObra(
     codigoPractica: string | null | undefined,
     obraSocial: ObraSocialPromedi
 ): boolean {
-    return obraSocial === 'IPS' ? aplicaPromediIPS(codigoPractica) : aplicaPromediOsecac(codigoPractica)
+    // ACIDSAL comparte los codigos alcanzados con IPS: lo unico propio es el porcentaje.
+    return obraSocial === 'OSECAC'
+        ? aplicaPromediOsecac(codigoPractica)
+        : aplicaPromediIPS(codigoPractica)
 }
 
 // Una linea entra al resumen si su codigo esta alcanzado por la regla Y ademas es un

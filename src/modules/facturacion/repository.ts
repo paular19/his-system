@@ -6551,7 +6551,7 @@ export async function aplicarPromediLote(
         return { importeTotal: totalPromedi, cantidadItems }
     }
 
-    // ACIDSAL resuelve a la regla IPS: mismos codigos alcanzados y mismo porcentaje.
+    // ACIDSAL tiene regla propia: mismos codigos alcanzados que IPS, pero al 13%.
     const reglaPromedi = resolverReglaPromedi(lote.obraSocial?.nombre)
     if (reglaPromedi === null || lote.tipo !== 'PRACTICAS') {
         throw new Error('PROMEDI solo aplica a lotes IPS TXT o lotes de prácticas con obra social de regla PROMEDI')

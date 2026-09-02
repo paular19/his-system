@@ -1213,8 +1213,7 @@ function derivarPrestacionItemOrden(
 // y sin eso las ordenes que no la generaron no se dibujan y desde facturacion se lee
 // como que todos los subitems cuelgan de la primera.
 function agruparItemsPorOrden(
-    items: PrestacionFacturableItem[],
-    porOrdenIndependiente: boolean
+    items: PrestacionFacturableItem[]
 ): SubgrupoOrden[] {
     const subgrupos: SubgrupoOrden[] = []
     const indicePorKey = new Map<string, number>()
@@ -1237,7 +1236,12 @@ function agruparItemsPorOrden(
 
         // Repartida entre varias ordenes: una fila por orden, cada una editable y
         // apuntando a su propio item. Si vive en una sola, la fila es la practica.
-        if (porOrdenIndependiente && ordenes.length > 1 && vinculos.length > 1) {
+        // No alcanza con mirar si el grupo es de cirugia: una practica repartida por
+        // rol puede no estar cargada como CirugiaProgramada (cirugia de urgencia,
+        // practica agregada a mano) y entonces caia en el grupo de la primera orden
+        // como una sola fila. Las demas ordenes no tenian fila propia y editarles la
+        // matricula terminaba escribiendo el efector de esa primera orden.
+        if (ordenes.length > 1 && vinculos.length > 1) {
             for (const vinculo of vinculos) {
                 obtenerSubgrupo({
                     ordenPuestoNumero: vinculo.ordenPuestoNumero,
@@ -4758,10 +4762,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             </td>
                                                         </tr>
 
-                                                        {grupoExpandido && agruparItemsPorOrden(grupo.items, esGrupoCirugia).flatMap((subgrupo) => {
-                                                            // Solo la cirugia se abre por orden: en un grupo de orden la
-                                                            // cabecera ya dice cual es y repetirla seria ruido.
-                                                            const mostrarCabeceraOrden = esGrupoCirugia
+                                                        {grupoExpandido && agruparItemsPorOrden(grupo.items).flatMap((subgrupo, _indiceSubgrupo, subgruposOrden) => {
+                                                            // En un grupo de una sola orden la cabecera ya dice cual es y
+                                                            // repetirla seria ruido. Se muestra en la cirugia y cuando el
+                                                            // grupo abrio varias ordenes porque la practica esta repartida:
+                                                            // sin eso las filas de las otras ordenes se leen como si fueran
+                                                            // de la orden del encabezado.
+                                                            const mostrarCabeceraOrden = esGrupoCirugia || subgruposOrden.length > 1
                                                             const filasSubgrupo = agruparLineasDuplicadas(subgrupo.items).flatMap((linea) => {
                                                 const lineaExpandida = Boolean(lineasDuplicadasExpand[linea.key])
                                                 const resumenDuplicados = linea.items.length > 1 && !lineaExpandida

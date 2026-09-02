@@ -4402,10 +4402,17 @@ export async function actualizarPrestacionFacturacion(
                 codigoPractica: resolved.codigoPractica.trim(),
                 cantidad: data.cantidad,
                 numeroAutorizacion: data.numeroAutorizacion ?? null,
-                // Repartida: el total sale de la suma de los items, mas abajo.
-                ...(conservarRepartoPractica ? {} : { importeTotal: importeTotalFinal }),
-                matriculaEspecialista: matriculaEspecialistaFinal,
-                matriculaAnestesista: data.matriculaAnestesista ?? null,
+                // Repartida: el total sale de la suma de los items, mas abajo, y la
+                // matricula vive en cada OrdenPrac. La Practica tiene una sola para
+                // todas las ordenes: bajarla aca pisaba al profesional de las otras
+                // (cambiar el ayudante dejaba al anestesista con esa matricula).
+                ...(conservarRepartoPractica
+                    ? {}
+                    : {
+                        importeTotal: importeTotalFinal,
+                        matriculaEspecialista: matriculaEspecialistaFinal,
+                        matriculaAnestesista: data.matriculaAnestesista ?? null,
+                    }),
             }
 
             if (usarActualizacionGlobal && ordenPuestoNumeroObjetivo && ordenNumeroObjetivo) {

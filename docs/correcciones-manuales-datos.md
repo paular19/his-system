@@ -1010,3 +1010,57 @@ del lote.
 
 **Como verificar:** ninguna practica activa de 170101 fuera de lote debe quedar en
 15.149,63 ni en 3.550,32.
+
+---
+
+## 2026-09-02 — Ordenes 2496-2499 de ALBIS: de la ficha INT-220 a la INT-261
+
+Bloque quirurgico cargado en la ficha equivocada. ALBIS, RUTH CINTIA JAQUELIN (paciente
+68386) tiene dos internaciones: **INT-220 = ingreso 489** (24/08 al 29/08, COLICO RENAL) e
+**INT-261 = ingreso 612** (31/08 al 01/09, LITIASIS RENAL). La cirugia real es la del
+31/08; las 4 ordenes del bloque quirurgico estaban colgadas del ingreso 489.
+
+**Que se escribio** (una transaccion, dos `updateMany`, guarda `ingresoId = 489` en ambas):
+
+| que | ids | de | a |
+|---|---|---|---|
+| `Orden.IngID` | 1/2496, 1/2497, 1/2498, 1/2499 | 489 | 612 |
+| `Practica.IngID` | 3991 a 4000 | 489 | 612 |
+
+Las 10 practicas salen de los `OrdenPractica.PraID` de esas 4 ordenes, no de una lista a
+mano. No se toco nada mas: fechas, importes, matriculas, estados y numeros de item quedan
+como estaban (pedido explicito). El bloque son 100124 y 100118 por GA (mat. 4889), HE
+(mat. 6), HA (mat. 9995) y A1 (mat. 995), mas un 431101 y un 420303.
+
+**Que quedo sin tocar, a proposito:**
+
+- **Las fechas siguen en 25/08**, fuera del periodo de la ficha 261 (31/08 al 01/09). El
+  match contra la cirugia #149 sigue funcionando por el fallback sin fecha de
+  `resolverInfoCirugiaConFallback` — el ingreso 612 tiene una sola cirugia — pero un lote
+  filtrado por periodo puede no levantarlas.
+- **La ficha quirurgica**: las 10 filas de `CirugiaPractica` del bloque (ids 904 a 913)
+  siguen en la cirugia **#127** (25/08, ingreso 489). La **#149** (31/08, ingreso 612)
+  sigue con 0 practicas y su diferencial (`dobleCirugia` + `mismaViaMismaPatologia`, id 56)
+  sigue inerte: nunca matchea porque no tiene contra que.
+- **El 25/08 no hubo cirugia.** La #127 es solo el contenedor
+  (`Creada desde internacion para carga de practicas`, 25/08 14:33), sin hora, cama,
+  autorizacion ni diferenciales.
+
+**Lo que queda en la ficha 220 y NO se factura** (se reviso, no es un riesgo): quedan las
+practicas **3982 a 3989** — el mismo bloque quirurgico, 100124 y 100118 por las 4
+matriculas — con `PraEstad` null y sin orden. Cuelgan de las ordenes **2492 a 2495**, que
+estan anuladas (`OrdEstad = 'X'`). Anular una orden efectivamente no toca `PraEstad` (ver
+`anularOrdenAction`), pero la facturacion no mira solo el estado: en
+`obtenerContextoFacturacion` el filtro `practicasSinOrdenAnulada`
+(`src/modules/facturacion/repository.ts:1797`) descarta la practica desvinculada cuyo
+**unico** historial en `OrdenPractica` son ordenes anuladas. Medido: el contexto de
+facturacion del ingreso 489 devuelve **16 prestaciones, ninguna de 100124 ni 100118**.
+La 3990 (431101) ademas ya esta en `X`.
+
+Distincion util: "practica activa y sin orden" no equivale a "pendiente de facturar". Sin
+historial de vinculos es pendiente; con historial todo anulado es huerfana y se descarta.
+
+**Reversion:** `IngID` de vuelta a 489 en las 4 ordenes y en las practicas 3991 a 4000.
+
+**Como verificar:** el ingreso 612 tiene 6 ordenes y 13 practicas; el 489 baja a 16
+ordenes y 27 practicas.

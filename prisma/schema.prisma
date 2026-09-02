@@ -529,6 +529,25 @@ model CatalogoMedicamentoUti {
   @@map("CatalogoMedicamentoUti")
 }
 
+// Medicacion que factura anestesia, con precio por ampolla. Es la lista corta y
+// cerrada del alta de medicacion en facturacion, distinta del catalogo de
+// insumos de UTI (CatalogoMedicamentoUti), que sale del Excel de existencias y
+// no trae precio.
+model CatalogoMedicamentoFacturacion {
+  id     Int      @id @default(autoincrement()) @map("CMFId")
+  nombre String   @unique @map("CMFNombre") @db.VarChar(200)
+  // Precio de una ampolla. NULL = todavia sin confirmar: el medicamento sale en
+  // la lista pero el formulario no autocompleta el importe.
+  precio Decimal? @map("CMFPrecio") @db.Decimal(18, 2)
+
+  estado      String   @default("A") @map("CMFEstado") @db.Char(1)
+  fechaEstado DateTime @map("CMFFchEstado") @db.Timestamp(6)
+  usuario     String   @map("UsuCodig") @db.Char(10)
+
+  @@index([estado])
+  @@map("CatalogoMedicamentoFacturacion")
+}
+
 model CatalogoDescartableUti {
   id          Int      @id @default(autoincrement()) @map("CDUId")
   nombre      String   @unique @map("CDUNombre") @db.VarChar(200)

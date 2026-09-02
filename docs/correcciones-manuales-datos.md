@@ -1064,3 +1064,33 @@ historial de vinculos es pendiente; con historial todo anulado es huerfana y se 
 
 **Como verificar:** el ingreso 612 tiene 6 ordenes y 13 practicas; el 489 baja a 16
 ordenes y 27 practicas.
+
+---
+
+## 2026-09-02 — Alta de la tabla CatalogoMedicamentoFacturacion (DDL + seed)
+
+**Reportado por:** Paula — faltaban 4 medicamentos en la lista de medicacion de
+facturacion (Dexametasona 8 MG, Dipirona 1 g, Diclofenac ampolla, Diclofenac 75mg).
+
+**Que estaba mal:** la lista era un array hardcodeado de 7 items en
+`src/lib/catalogos/medicamentos-facturacion.ts`, o sea que cada medicamento nuevo
+exigia cambio de codigo y deploy.
+
+**Que se hizo:** se creo la tabla `CatalogoMedicamentoFacturacion` (nombre unico +
+precio nullable + estado) y se sembraron 11 filas: los 7 de siempre con su precio y
+los 4 nuevos con `CMFPrecio` NULL. El combo del panel ahora lee de esa tabla y tiene
+un boton "+ Nuevo" para dar de alta desde la UI.
+
+**No se uso `prisma db push`** (trampa 5 de CLAUDE.md). El `migrate diff` medido antes
+de tocar nada confirmaba que un push habria hecho `DROP SEQUENCE "Paciente_HC_seq"` y
+`DROP INDEX` sobre 11 indices manuales. Se aplico solo el bloque CreateTable + sus 2
+indices, con `IF NOT EXISTS`, desde `prisma/seed-medicamentos-facturacion.ts`.
+
+**Verificado despues de correr:** `Paciente_HC_seq` viva (`true`), 12 indices `idx_*`
+presentes, 11 medicamentos activos, y `migrate diff` ya no propone ningun CreateTable.
+
+**Reversion:** `DROP TABLE "CatalogoMedicamentoFacturacion"` y revertir el codigo. Ojo:
+se pierden los medicamentos que hayan cargado desde el panel despues del seed.
+
+**Como verificar:** `npm run db:seed-medicamentos-facturacion` es idempotente — volver a
+correrlo debe decir `Sembrados: 0 | ya existian: 11` y no pisa precios cargados a mano.

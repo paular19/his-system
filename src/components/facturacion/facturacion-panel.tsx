@@ -19,7 +19,7 @@ import { ProfesionalSelect } from '@/components/ui/profesional-select'
 import { esCodigoAccesorioCirugia, resumenDiferenciales } from '@/modules/facturacion/diferenciales'
 import { obtenerSubitemsSeleccionados, valorUnitarioPorSubitem } from '@/lib/practicas-subitems'
 import { fechaAInputLocal, fechaDesdeClaveArgentina, fechaHoraAInputLocal, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
-import { MEDICAMENTOS_FACTURACION, buscarMedicamentoFacturacion } from '@/lib/catalogos/medicamentos-facturacion'
+import type { MedicamentoCatalogoItem } from '@/modules/facturacion/repository'
 import { normalizarClasificacionAgrupacion } from '@/modules/orden/clasificacion'
 import { normalizarTextoBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
@@ -1542,6 +1542,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     const [guardandoPedidoLaboratorio, setGuardandoPedidoLaboratorio] = useState(false)
     const npDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+    // Catalogo de medicacion facturable: se carga de la base para que
+    // facturacion pueda dar de alta medicamentos sin tocar el codigo.
+    const [medicamentosCatalogo, setMedicamentosCatalogo] = useState<MedicamentoCatalogoItem[]>([])
+    const [expandNuevoMedicamento, setExpandNuevoMedicamento] = useState(false)
+    const [nuevoMedicamentoNombre, setNuevoMedicamentoNombre] = useState('')
+    const [nuevoMedicamentoPrecio, setNuevoMedicamentoPrecio] = useState('')
+    const [guardandoMedicamentoCatalogo, setGuardandoMedicamentoCatalogo] = useState(false)
+
     const [nuevaMedicacionNombre, setNuevaMedicacionNombre] = useState('')
     const [nuevaMedicacionFecha, setNuevaMedicacionFecha] = useState(() => fechaAInputLocal(new Date()))
     const [nuevaMedicacionImporte, setNuevaMedicacionImporte] = useState('')
@@ -1602,6 +1610,26 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
 
         void cargarInsumos()
+        return () => {
+            activo = false
+        }
+    }, [])
+
+    useEffect(() => {
+        let activo = true
+
+        const cargarMedicamentos = async () => {
+            try {
+                const res = await fetch('/api/catalogos/medicamentos-facturacion')
+                const json = (await res.json()) as ApiResponse<MedicamentoCatalogoItem[]>
+                if (!activo) return
+                setMedicamentosCatalogo(Array.isArray(json.data) ? json.data : [])
+            } catch {
+                if (activo) setMedicamentosCatalogo([])
+            }
+        }
+
+        void cargarMedicamentos()
         return () => {
             activo = false
         }
@@ -2606,12 +2634,62 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
     // El importe se autocompleta con el precio de lista por ampolla, pero queda
     // editable: si el frasco vino a otro precio se pisa a mano.
     function recalcularImporteMedicacion(nombre: string, cantidadTexto: string) {
-        const medicamento = buscarMedicamentoFacturacion(nombre)
-        if (!medicamento) return
+        const clave = nombre.trim().toLowerCase()
+        const medicamento = medicamentosCatalogo.find((m) => m.nombre.toLowerCase() === clave)
+        // Sin precio de lista no hay nada que autocompletar: se deja el campo
+        // como esta para que facturacion escriba el importe a mano.
+        if (!medicamento || medicamento.precio == null) return
 
         const ampollas = Number.parseInt(cantidadTexto, 10)
         const unidades = Number.isFinite(ampollas) && ampollas > 0 ? ampollas : 1
         setNuevaMedicacionImporte((medicamento.precio * unidades).toFixed(2))
+    }
+
+    // Alta en el catalogo (la lista del combo), no la prestacion del paciente.
+    async function crearMedicamentoCatalogo() {
+        const nombre = nuevoMedicamentoNombre.trim()
+        if (!nombre) return
+
+        setGuardandoMedicamentoCatalogo(true)
+        setError(null)
+        setMensaje(null)
+        try {
+            const res = await fetch('/api/catalogos/medicamentos-facturacion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombre,
+                    precio: importeDesdeInput(nuevoMedicamentoPrecio),
+                }),
+            })
+
+            const json = (await res.json()) as ApiResponse<MedicamentoCatalogoItem>
+            if (!res.ok || !json.ok || !json.data) {
+                throw new Error(json.error ?? 'No se pudo crear el medicamento')
+            }
+
+            const creado = json.data
+            setMedicamentosCatalogo((prev) =>
+                [...prev, creado].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+            )
+
+            // Queda seleccionado para no obligar a buscarlo en el combo.
+            setNuevaMedicacionNombre(creado.nombre)
+            if (creado.precio != null) {
+                const ampollas = Number.parseInt(nuevaMedicacionCantidad, 10)
+                const unidades = Number.isFinite(ampollas) && ampollas > 0 ? ampollas : 1
+                setNuevaMedicacionImporte((creado.precio * unidades).toFixed(2))
+            }
+
+            setNuevoMedicamentoNombre('')
+            setNuevoMedicamentoPrecio('')
+            setExpandNuevoMedicamento(false)
+            setMensaje(`Medicamento "${creado.nombre}" agregado al catalogo`)
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'No se pudo crear el medicamento')
+        } finally {
+            setGuardandoMedicamentoCatalogo(false)
+        }
     }
 
     async function crearMedicacion() {
@@ -4326,7 +4404,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                     <div className="rounded-md border border-gray-200 bg-white p-2.5 space-y-2">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Agregar medicación</p>
                                         <div className="grid gap-2 md:grid-cols-2">
-                                            <div>
+                                            <div className="flex items-center gap-1">
                                                 <select
                                                     value={nuevaMedicacionNombre}
                                                     onChange={(e) => {
@@ -4336,13 +4414,52 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     className="h-8 w-full rounded border border-gray-300 px-2 text-xs bg-white"
                                                 >
                                                     <option value="">-- Seleccionar medicación --</option>
-                                                    {MEDICAMENTOS_FACTURACION.map((item) => (
+                                                    {medicamentosCatalogo.map((item) => (
                                                         <option key={item.id} value={item.nombre}>{item.nombre}</option>
                                                     ))}
                                                 </select>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandNuevoMedicamento((v) => !v)}
+                                                    title="Agregar un medicamento al catálogo"
+                                                    className="h-8 shrink-0 rounded border border-gray-300 px-2 text-[11px] font-medium hover:bg-gray-50"
+                                                >
+                                                    {expandNuevoMedicamento ? 'Cancelar' : '+ Nuevo'}
+                                                </button>
                                             </div>
                                             <input type="date" value={nuevaMedicacionFecha} onChange={(e) => setNuevaMedicacionFecha(e.target.value)} className="h-8 rounded border border-gray-300 px-2 text-xs" />
                                         </div>
+
+                                        {expandNuevoMedicamento && (
+                                            <div className="rounded-md border border-gray-200 bg-gray-50 p-2 space-y-2">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Nuevo medicamento en el catálogo</p>
+                                                <div className="grid gap-2 md:grid-cols-2">
+                                                    <input
+                                                        value={nuevoMedicamentoNombre}
+                                                        onChange={(e) => setNuevoMedicamentoNombre(e.target.value)}
+                                                        maxLength={200}
+                                                        placeholder="Nombre (ej. Dipirona 1 g ampolla)"
+                                                        className="h-8 rounded border border-gray-300 px-2 text-xs"
+                                                    />
+                                                    <input
+                                                        value={nuevoMedicamentoPrecio}
+                                                        onChange={(e) => setNuevoMedicamentoPrecio(e.target.value)}
+                                                        inputMode="decimal"
+                                                        placeholder="Precio por ampolla (opcional)"
+                                                        className="h-8 rounded border border-gray-300 px-2 text-xs"
+                                                    />
+                                                </div>
+                                                <p className="text-[11px] text-gray-500">Sin precio queda en la lista igual, pero el importe se carga a mano cada vez.</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={crearMedicamentoCatalogo}
+                                                    disabled={guardandoMedicamentoCatalogo || !nuevoMedicamentoNombre.trim()}
+                                                    className="rounded border px-2 py-1 text-[11px] font-medium hover:bg-gray-50 disabled:opacity-60"
+                                                >
+                                                    {guardandoMedicamentoCatalogo ? 'Guardando...' : 'Agregar al catálogo'}
+                                                </button>
+                                            </div>
+                                        )}
                                         <div className="grid gap-2 md:grid-cols-2">
                                             <label className="text-[11px] text-gray-600">
                                                 Ampollas

@@ -15,6 +15,7 @@ import type {
     CrearLoteIPSTxtInput,
     CrearDescartableFacturacionInput,
     CrearMedicacionFacturacionInput,
+    CrearMedicamentoCatalogoInput,
     CrearPracticaFacturacionInput,
     EliminarPrestacionFacturacionInput,
     RenumerarOrdenFacturacionInput,
@@ -3333,6 +3334,61 @@ export async function crearPracticaFacturacion(
     })
 
     return practica
+}
+
+export type MedicamentoCatalogoItem = {
+    id: number
+    nombre: string
+    /** Precio de una ampolla. `null` = sin confirmar, no se autocompleta. */
+    precio: number | null
+}
+
+/** Lista del combo de medicacion de facturacion: solo los activos. */
+export async function listarMedicamentosCatalogo(): Promise<MedicamentoCatalogoItem[]> {
+    const filas = await prisma.catalogoMedicamentoFacturacion.findMany({
+        where: { estado: 'A' },
+        orderBy: { nombre: 'asc' },
+        select: { id: true, nombre: true, precio: true },
+    })
+
+    return filas.map((f) => ({
+        id: f.id,
+        nombre: f.nombre,
+        precio: f.precio == null ? null : Number(f.precio),
+    }))
+}
+
+/**
+ * Alta en el catalogo. Devuelve `null` si el nombre ya existe (el unique de
+ * CMFNombre), para que la UI avise en lugar de romper con un 500.
+ */
+export async function crearMedicamentoCatalogo(
+    data: CrearMedicamentoCatalogoInput,
+    usuario: string
+): Promise<MedicamentoCatalogoItem | null> {
+    try {
+        const creado = await prisma.catalogoMedicamentoFacturacion.create({
+            data: {
+                nombre: data.nombre,
+                precio: data.precio ?? null,
+                estado: 'A',
+                usuario: usuario.trim().slice(0, 10) || 'SISTEMA',
+                fechaEstado: new Date(),
+            },
+            select: { id: true, nombre: true, precio: true },
+        })
+
+        return {
+            id: creado.id,
+            nombre: creado.nombre,
+            precio: creado.precio == null ? null : Number(creado.precio),
+        }
+    } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+            return null
+        }
+        throw error
+    }
 }
 
 export async function crearMedicacionFacturacion(

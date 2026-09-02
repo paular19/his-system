@@ -65,6 +65,16 @@ export const CrearMedicacionFacturacionSchema = z.object({
 
 export type CrearMedicacionFacturacionInput = z.infer<typeof CrearMedicacionFacturacionSchema>
 
+// Alta de un medicamento en el catalogo de facturacion (la lista del combo, no
+// la prestacion de un paciente). El precio es opcional: si todavia no se
+// confirmo con la clinica se carga sin precio y el importe se tipea a mano.
+export const CrearMedicamentoCatalogoSchema = z.object({
+    nombre: z.string().trim().min(1).max(200),
+    precio: z.coerce.number().min(0).optional().nullable(),
+})
+
+export type CrearMedicamentoCatalogoInput = z.infer<typeof CrearMedicamentoCatalogoSchema>
+
 export const CrearDescartableFacturacionSchema = z.object({
     ingresoId: z.number().int().positive(),
     nombre: z.string().trim().min(1).max(200),

@@ -12,6 +12,7 @@ import type {
     CrearLoteFacturacionInput,
     CrearDescartableFacturacionInput,
     CrearMedicacionFacturacionInput,
+    CrearMedicamentoCatalogoInput,
     CrearPracticaFacturacionInput,
     EliminarPrestacionFacturacionInput,
     RenumerarOrdenFacturacionInput,
@@ -43,6 +44,35 @@ export async function crearPracticaFacturacion(
     })
 
     return practica
+}
+
+export async function listarMedicamentosCatalogo() {
+    return repo.listarMedicamentosCatalogo()
+}
+
+export async function crearMedicamentoCatalogo(
+    data: CrearMedicamentoCatalogoInput,
+    usuario: string,
+    ip?: string
+) {
+    const medicamento = await repo.crearMedicamentoCatalogo(data, usuario)
+
+    // El repo devuelve null cuando choca el unique de nombre. "Ya existe" lo
+    // traduce manejarErrorApi a un 409.
+    if (!medicamento) {
+        throw new Error('Ya existe un medicamento con ese nombre en el catalogo')
+    }
+
+    await registrarAudit({
+        usuario,
+        accion: 'CREAR',
+        entidad: 'CatalogoMedicamentoFacturacion',
+        registroId: medicamento.id,
+        detalle: `Alta en el catalogo de medicacion de facturacion: ${medicamento.nombre}`,
+        direccionIp: ip,
+    })
+
+    return medicamento
 }
 
 export async function crearMedicacionFacturacion(

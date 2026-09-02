@@ -23,6 +23,7 @@
     "db:import-geo-profesion": "tsx prisma/import-localidad-barrio-profesion.ts",
     "db:import-medicamentos-uti": "tsx prisma/import-medicamentos-uti.ts",
     "db:import-descartables-uti": "tsx prisma/import-descartables-uti.ts",
+    "db:seed-medicamentos-facturacion": "tsx prisma/seed-medicamentos-facturacion.ts",
     "type-check": "tsc --noEmit",
     "prod:preflight": "powershell -ExecutionPolicy Bypass -File scripts/prod-preflight.ps1",
     "prod:deploy": "powershell -ExecutionPolicy Bypass -File scripts/prod-deploy.ps1"

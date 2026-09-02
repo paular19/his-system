@@ -2975,6 +2975,22 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         setDetallePrestacionesExpand((prev) => ({ ...prev, [p.uid]: true }))
     }
 
+    /**
+     * Carga en el campo de importe lo que vale el componente de esa orden.
+     *
+     * Solo deja el valor en el formulario: lo que se factura no cambia hasta que
+     * facturacion apreta Guardar. El importe es plata, no se pisa solo.
+     */
+    function usarImporteComponente(p: PrestacionFacturableItem) {
+        const valor = p.importeComponenteEsperado
+        if (valor == null) return
+        habilitarEdicionFila(p)
+        setEditRows((prev) => ({
+            ...prev,
+            [p.uid]: { ...(prev[p.uid] ?? buildEditState(p)), importeTotal: String(valor) },
+        }))
+    }
+
     function cancelarEdicionFila(p: PrestacionFacturableItem) {
         setEditRows((prev) => ({ ...prev, [p.uid]: buildEditState(p) }))
 
@@ -4977,14 +4993,6 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
                                                                             Cobra: {etiquetaComponenteOrden(p)}
                                                                         </span>
-                                                                        {importeNoCoincideConComponente(p) && (
-                                                                            <span
-                                                                                className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
-                                                                                title="La orden cobra este componente pero tiene guardado otro importe. Revisar antes de facturar."
-                                                                            >
-                                                                                Importe ≠ componente ({formatCurrency(p.importeComponenteEsperado ?? 0)})
-                                                                            </span>
-                                                                        )}
                                                                     </div>
                                                                 )}
                                                                 {p.tipo === 'PRACTICA' && (
@@ -5086,11 +5094,23 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                             </div>
                                                                         </div>
                                                                     ) : (
-                                                                        <input
-                                                                            value={draft.importeTotal}
-                                                                            onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))}
-                                                                            className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                                                                        />
+                                                                        <div className="space-y-1">
+                                                                            <input
+                                                                                value={draft.importeTotal}
+                                                                                onChange={(e) => setEditRows((prev) => ({ ...prev, [p.uid]: { ...draft, importeTotal: e.target.value } }))}
+                                                                                className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                                                                            />
+                                                                            {importeNoCoincideConComponente(p) && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => usarImporteComponente(p)}
+                                                                                    className="w-full rounded bg-amber-100 px-1.5 py-0.5 text-left text-[10px] font-medium text-amber-800 hover:bg-amber-200"
+                                                                                    title="Carga el valor del nomenclador para el componente de esta orden. No se guarda hasta apretar Guardar."
+                                                                                >
+                                                                                    Usar el del componente: {formatCurrency(p.importeComponenteEsperado ?? 0)}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
                                                                     )
                                                                 ) : (
                                                                     <div className="space-y-0.5">
@@ -5099,6 +5119,19 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                                 ? formatCurrency(linea.importeTotal)
                                                                                 : (Number.isFinite(importeResumen) ? formatCurrency(importeResumen) : '—')}
                                                                         </span>
+                                                                        {!resumenDuplicados && importeNoCoincideConComponente(p) && (
+                                                                            <div className="text-[10px] text-amber-700">
+                                                                                El componente vale {formatCurrency(p.importeComponenteEsperado ?? 0)}
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => usarImporteComponente(p)}
+                                                                                    className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800 hover:bg-amber-200"
+                                                                                    title="Carga ese valor en el campo de importe. No se guarda hasta apretar Guardar."
+                                                                                >
+                                                                                    Usar
+                                                                                </button>
+                                                                            </div>
+                                                                        )}
                                                                         {mostrarDeltaDiferencial && importeOriginal !== null && deltaDiferencial !== null && (
                                                                             <div className="text-[10px] text-amber-700">
                                                                                 Sin diferencial {formatCurrency(importeOriginal)} · Ajuste {deltaDiferencial > 0 ? '+' : ''}{formatCurrency(deltaDiferencial)}

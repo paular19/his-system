@@ -1233,6 +1233,28 @@ function derivarPrestacionItemOrden(
     }
 }
 
+/**
+ * La practica se dibuja como una fila por orden, no como una sola.
+ *
+ * Es la unica condicion que decide la separacion: la usan tanto el armado de la
+ * grilla como la lista de filas facturables, porque la seleccion se guarda por
+ * uid y la fila derivada tiene uno propio. Si las dos no coincidian, tildar una
+ * fila derivada no matcheaba con nada y facturar cortaba con "No hay practicas
+ * seleccionadas para facturar".
+ */
+function seSeparaEnFilasPorOrden(p: PrestacionFacturableItem): boolean {
+    const vinculos = p.autorizacionesVinculadas ?? []
+    return obtenerOrdenesRelacionadasPrestacion(p).length > 1 && vinculos.length > 1
+}
+
+/** Filas que la grilla dibuja para una prestacion: la propia, o una por orden. */
+function filasFacturablesDePrestacion(p: PrestacionFacturableItem): PrestacionFacturableItem[] {
+    if (!seSeparaEnFilasPorOrden(p)) return [p]
+    return ((p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[]).map((vinculo) =>
+        derivarPrestacionItemOrden(p, vinculo)
+    )
+}
+
 // En un grupo de cirugia la cabecera es la cirugia, no la orden: gastos, especialista,
 // ayudante y anestesista salen cada uno en su propia orden y quedaban todos mezclados en
 // una sola lista. Se parte el grupo en subgrupos con la orden arriba y sus practicas
@@ -1269,7 +1291,7 @@ function agruparItemsPorOrden(
         // practica agregada a mano) y entonces caia en el grupo de la primera orden
         // como una sola fila. Las demas ordenes no tenian fila propia y editarles la
         // matricula terminaba escribiendo el efector de esa primera orden.
-        if (ordenes.length > 1 && vinculos.length > 1) {
+        if (seSeparaEnFilasPorOrden(p)) {
             for (const vinculo of vinculos) {
                 obtenerSubgrupo({
                     ordenPuestoNumero: vinculo.ordenPuestoNumero,
@@ -1695,15 +1717,23 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
         }
     }, [])
 
-    const prestacionesSeleccionables = useMemo(() => {
+    // Las mismas filas que dibuja la grilla: la practica repartida entre varias
+    // ordenes vale por una fila por orden, y el tilde se guarda contra el uid de
+    // esa fila derivada, no contra el de la practica.
+    const filasFacturables = useMemo(() => {
         if (!contexto) return []
-        return contexto.prestaciones.filter((p) => esPrestacionSeleccionableParaFacturar(p))
+        return contexto.prestaciones.flatMap((p) => filasFacturablesDePrestacion(p))
     }, [contexto])
 
-    const prestacionesSeleccionadas = useMemo(() => {
-        if (!contexto) return []
-        return contexto.prestaciones.filter((p) => seleccion[p.uid])
-    }, [contexto, seleccion])
+    const prestacionesSeleccionables = useMemo(
+        () => filasFacturables.filter((p) => esPrestacionSeleccionableParaFacturar(p)),
+        [filasFacturables]
+    )
+
+    const prestacionesSeleccionadas = useMemo(
+        () => filasFacturables.filter((p) => seleccion[p.uid]),
+        [filasFacturables, seleccion]
+    )
 
     const totalPacienteFacturado = useMemo(() => {
         if (!contexto) return 0
@@ -4685,7 +4715,12 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                     !esGrupoCirugia &&
                                                     !grupoAbreVariasOrdenes &&
                                                     Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
-                                                const practicasSeleccionablesOrden = grupo.items.filter((it) => esPrestacionSeleccionableParaFacturar(it))
+                                                // Las filas que realmente se dibujan: si la practica esta
+                                                // repartida, el tilde de la cabecera tiene que marcar las
+                                                // derivadas, que son las que mira facturar.
+                                                const practicasSeleccionablesOrden = subgruposOrden
+                                                    .flatMap((subgrupo) => subgrupo.items)
+                                                    .filter((it) => esPrestacionSeleccionableParaFacturar(it))
                                                 const practicasSeleccionablesOrdenUids = practicasSeleccionablesOrden.map((it) => it.uid)
                                                 const totalSeleccionablesOrden = practicasSeleccionablesOrdenUids.length
                                                 const totalSeleccionadasOrden = practicasSeleccionablesOrdenUids.filter((uid) => Boolean(seleccion[uid])).length

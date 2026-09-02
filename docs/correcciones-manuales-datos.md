@@ -899,3 +899,114 @@ SELECT "OSID", "PosID"               FROM "Orden"    WHERE "PueNum" = 1 AND "Ord
 - Siguen las **9 ordenes** de los otros 7 pacientes contagiados a nombre de IPSS
   (ing 369, 434, 448, 469, 605, 619 con una cada uno; 513 con tres), con el ingreso ya
   en particular.
+
+---
+
+## 2026-09-02 — Los 22 electros a medias de la lista (codigo 170101)
+
+**Pedido por:** Paula, con la lista de la revision del 01/09 pegada en el chat.
+
+**Que estaba mal:** 22 practicas de 170101 cobraban un solo componente. 21 tenian solo
+el honorario (15.149,63) y CERVANTES (INT-197) solo los derechos (3.550,32). El electro
+completo vale HE 15.149,63 + GA 3.550,32 = 18.699,95. Todas fuera de todo lote.
+
+**Causa, verificada una por una:** es siempre la carga. De las 76 practicas de 170101 a
+medias que habia en la base, 63 tienen su `CREAR Practica` en el audit log y **las 63
+nacieron ya con el importe a medias**; ninguna se creo completa y se recorto despues. Las
+otras 13 son anteriores al log. No hay camino automatico que las genere:
+`IngresoElectrocardiograma` tiene 1 sola fila en toda la base. Cuatro de estas
+(ARMENDARIZ, VARELA, VALENCIA, LIENDRO NIEVA) ademas pasaron por ediciones posteriores
+desde facturacion — autorizacion, matricula — y ninguna corrigio el importe.
+
+**Que se escribio** (una transaccion, tres sentencias en bloque):
+
+- `Practica`: **22 filas** de `PraImpTotal` a 18.699,95 (guardadas por `=15.149,63 OR
+  =3.550,32`). 18 no tenian orden generada, asi que con la practica alcanza: `Practica`
+  no guarda los componentes en ningun campo, solo el importe, y 18.699,95 es la practica
+  completa para `inferirIncluyeCodigoDesdeImporte`.
+- `OrdenPrac`: **4 filas** (las que si tenian orden) a 18.699,95 con la forma de siempre:
+  `OprClasAgrup='HE+GA'`, `OprModulo=NULL`,
+  `OprTitularModular='HONORARIO ESPECIALISTA + DERECHOS'`, `OprImprimirDuplicado=true`.
+- `Orden`: **4 cabeceras** de 32.149,74 a 35.700,06. Las cuatro llevan tambien un 420303,
+  asi que no se toco `OrdTitularModular` ni `OrdImprimirDuplicado`.
+
+| orden | ingreso | practica | paciente |
+|---|---|---|---|
+| 1/2518 | 481 (INT-216) | 4022 | ROSALES |
+| 1/2634 | 511 (INT-228) | 4181 | OCHOA |
+| 1/2637 | 400 (INT-190) | 4186 | PEREZ CRUZ |
+| 1/2638 | 508 (INT-226) | 4188 | ARAOZ |
+
+Las 2634, 2637 y 2638 son las mismas que se habian corregido y revertido el 01/09; esta
+vez quedan corregidas. La 2518 (ROSALES) figuraba como pendiente en la lista del 01/09 y
+en realidad ya tenia orden: se detecto al remedir antes de escribir.
+
+**Matriculas:** no se tocaron. Las 21 que ya tenian el honorario conservan su
+`PraMatEsp` (1767 en 19 casos, 5071 en MAIDANA). CERVANTES, que era la de solo derechos,
+ya traia 5071 — una matricula de medico real, no la 9995 de gastos — asi que al
+completarla el honorario queda atribuido bien.
+
+**Guardas:** por cada practica se verifico codigo 170101, cantidad 1, estado distinto de
+X, que el importe fuera exactamente uno de los dos componentes, que el ingreso no
+estuviera en ningun lote y que el puntero a orden fuera el esperado; por cada orden, que
+el item 1 vinculara a su practica, los dos importes y que la cabecera siguiera activa y
+con mas de un item. Las tres sentencias van con su valor anterior en el WHERE y el
+conteo se chequea adentro de la transaccion (22/4/4) antes de commitear.
+
+**Nota operativa:** el primer intento fue con 30 UPDATE de a uno y **murio por el timeout
+de 5s de la transaccion interactiva de Prisma** contra Neon pooled (P2028). El rollback
+fue limpio — se verifico que las 22 seguian en su importe viejo antes de reintentar. La
+version que entro hace tres sentencias en bloque con `timeout: 30000`.
+
+**Alcance:** las 170101 activas pasan de 78 a 98 completas. Quedan **4 a medias fuera de
+lote** — VARELA (2074), VALENCIA (2191), LIENDRO NIEVA (2486) y BETTELLA (pra 4833, sin
+orden), que no estaban en la lista — y **7 dentro de lotes ya armados** (FLORES x2,
+GUZMAN, ARANCIBIA, DIP, MARTINEZ, LAMAS), que no se tocan sin recalcular tambien
+`LItImpTotal` y el total del lote.
+
+**Como verificar:** ninguna practica activa de 170101 fuera de lote deberia quedar en
+15.149,63 ni en 3.550,32 salvo esas 4. Las cuatro cabeceras de arriba en 35.700,06.
+
+**Reversion:** `PraImpTotal` de las 22 a 15.149,63 — menos la 3312 (CERVANTES), que
+vuelve a 3.550,32 — y las 4 ordenes como se detalla en la entrada del 01/09.
+
+---
+
+## 2026-09-02 — Las 4 que faltaban del 170101 (VARELA, VALENCIA, LIENDRO NIEVA, BETTELLA)
+
+Cierra la correccion de la entrada anterior: eran las unicas cuatro que quedaban a
+medias fuera de lote. Tres estaban afuera de la lista porque se habian marcado como "ya
+tienen orden" y una (BETTELLA) se corto al copiar la lista.
+
+**Que se escribio** (una transaccion, tres sentencias en bloque, mismas guardas):
+
+| practica | ingreso | orden | que se toco |
+|---|---|---|---|
+| 4833 | 518 (INT-230) BETTELLA | sin orden | solo `PraImpTotal` |
+| 3415 | 409 (INT-194) VARELA | 1/2074 it.2 | practica + item + cabecera |
+| 3593 | 424 (INT-199) VALENCIA | 1/2191 it.1 | practica + item + cabecera |
+| 3974 | 473 (INT-214) LIENDRO NIEVA | 1/2486 it.1 | practica + item + cabecera |
+
+4 practicas a 18.699,95, 3 items a 18.699,95 con `OprClasAgrup='HE+GA'` / `OprModulo=NULL`
+/ `OprTitularModular='HONORARIO ESPECIALISTA + DERECHOS'` / `OprImprimirDuplicado=true`,
+y 3 cabeceras de 32.149,74 a 35.700,06. Las tres ordenes llevan tambien un 420303, asi
+que no se toco la cabecera mas alla del importe. En la 2074 el 170101 es el item 2, no el
+1 — se verifico el numero de item contra el puntero de cada practica antes de escribir.
+
+**Por que estos cuatro no estaban en ningun lote:** BETTELLA sigue internado — ingreso
+25/08, sin egreso, ingreso en estado A, 19 practicas pendientes. Los otros tres califican
+para lote y quedaron fuera de la seleccion al armarlo: corriendo el filtro real del
+armado (ingreso en A o E, misma OS, mismo tipo, con al menos una orden facturada no
+anulada, sin periodo), **OSECAC INT da 36 ingresos candidatos y el lote 41 tomo 23**;
+**ACIDSAL INT da 34 y el lote 43 tomo 27**. Los dos lotes son provisorios (`PROV 1`,
+`PROVI 1`, armados el 25 y 26/08) y los tres siguen con practicas pendientes, asi que lo
+mas probable es que se hayan dejado para el lote definitivo.
+
+**Estado final del 170101:** 165 practicas activas, **102 completas**, **0 a medias fuera
+de lote**. Quedan 7 a medias dentro de lotes ya armados — FLORES x2 (INT-105), DIP
+(INT-118), LAMAS (INT-170), GUZMAN (INT-143, ord 950), ARANCIBIA (INT-156, ord 1094) y
+MARTINEZ (INT-168, ord 1408) — que no se tocan sin recalcular `LItImpTotal` y el total
+del lote.
+
+**Como verificar:** ninguna practica activa de 170101 fuera de lote debe quedar en
+15.149,63 ni en 3.550,32.

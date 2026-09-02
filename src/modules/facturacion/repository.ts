@@ -2000,6 +2000,11 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             matriculaEspecialista: number | null
             matriculaAnestesista: number | null
             matriculaAyudante: number | null
+            // Componente que cobra esa orden (GA/HE/HA/A1) segun OprClasAgrup y su
+            // titular, mas lo que valdria ese componente en el nomenclador.
+            clasificacionAgrupacion: string | null
+            titularModular: string | null
+            importeComponenteEsperado: number | null
         }>
     >()
     const ordenVinculadaPorPractica = new Map<
@@ -2350,6 +2355,10 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             )
             const incluyeCodigoVinculo = incluyeCodigoDeItemOrden(it)
             const incluyeVinculo = desglosarIncluyeCodigo(incluyeCodigoVinculo)
+            // Componente declarado por la orden. `incluyeCodigoVinculo` lo deja en
+            // null cuando el importe guardado no confirma el reparto, pero la fila
+            // igual tiene que decir de que subitem es y cuanto deberia valer.
+            const clasificacionVinculo = normalizarIncluyeCodigo(it.clasificacionAgrupacion)
             const desgloseVinculo = {
                 valorEspecialista: it.nomencladorPractica?.valorEspecialista ?? null,
                 valorAyudante: it.nomencladorPractica?.valorAyudante ?? null,
@@ -2363,6 +2372,17 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 !incluyeVinculo.anestesista &&
                 !incluyeVinculo.gastos
             )
+            const importeComponenteEsperadoVinculo = clasificacionVinculo && it.nomencladorPractica
+                ? Number((calcularTotalUnitarioDesglose(
+                    {
+                        valorEspecialista: decimalANumero(it.nomencladorPractica.valorEspecialista),
+                        valorAyudante: decimalANumero(it.nomencladorPractica.valorAyudante),
+                        valorAnestesista: decimalANumero(it.nomencladorPractica.valorAnestesista),
+                        valorGastos: decimalANumero(it.nomencladorPractica.valorGastos),
+                    },
+                    clasificacionVinculo
+                ) * (decimalANumero(it.cantidad) ?? 1)).toFixed(2))
+                : null
             const incluyeTieneAyudanteVinculo = Boolean(incluyeVinculo && incluyeVinculo.ayudantes > 0)
             const permiteFallbackAyudanteVinculo = !incluyeVinculo || esSoloAyudanteVinculo
             const permiteFallbackAnestesistaVinculo = !incluyeVinculo || Boolean(incluyeVinculo.anestesista)
@@ -2457,6 +2477,9 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     matriculaEspecialista: matriculaEspecialistaVinculo,
                     matriculaAnestesista: matriculaAnestesistaVinculo,
                     matriculaAyudante: matriculaAyudanteVinculo,
+                    clasificacionAgrupacion: clasificacionVinculo,
+                    titularModular: it.titularModular?.trim() || null,
+                    importeComponenteEsperado: importeComponenteEsperadoVinculo,
                 })
                 autorizacionesVinculadasPorPractica.set(practicaIdAsociada, vinculadasActuales)
             }

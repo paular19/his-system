@@ -56,6 +56,15 @@ export interface PrestacionFacturableItem {
         matriculaEspecialista?: number | null
         matriculaAnestesista?: number | null
         matriculaAyudante?: number | null
+        // Componente que cobra la orden (GA/HE/HA/A1) segun OprClasAgrup, mas el
+        // titular tal cual lo guarda la orden. Va aparte de `incluyeCodigo`: ese
+        // solo se completa cuando el importe confirma el reparto, y la fila igual
+        // tiene que decir de que subitem es.
+        clasificacionAgrupacion?: string | null
+        titularModular?: string | null
+        // Lo que valdria ese componente en el nomenclador. Si no coincide con
+        // `importeTotal`, la orden esta cobrando otra cosa (la practica entera).
+        importeComponenteEsperado?: number | null
     }>
     origen: {
         ingresoId: number
@@ -67,6 +76,10 @@ export interface PrestacionFacturableItem {
         descartableId?: number
         cirugiaProgramadaId?: number
     }
+    // Solo en las filas derivadas del item de una orden: que componente cobra.
+    clasificacionAgrupacion?: string | null
+    titularModular?: string | null
+    importeComponenteEsperado?: number | null
     esPracticaCirugia?: boolean
     diferenciales?: {
         esFeriado: boolean

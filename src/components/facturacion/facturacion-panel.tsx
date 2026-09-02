@@ -36,6 +36,9 @@ type AutorizacionVinculadaExtendida = {
     matriculaEspecialista?: number | null
     matriculaAnestesista?: number | null
     matriculaAyudante?: number | null
+    clasificacionAgrupacion?: string | null
+    titularModular?: string | null
+    importeComponenteEsperado?: number | null
 }
 
 interface NomencladorItem {
@@ -646,6 +649,26 @@ function construirClasificacionesPorComponenteUI(
     return { clasificacionesPorComponente, indexMap }
 }
 
+/**
+ * Componente que cobra la orden de una fila derivada: "GA · DERECHOS".
+ *
+ * Sale de OprClasAgrup + OprTitModular, que es lo que la orden declara. No se usa
+ * `incluyeCodigo`: ese solo se completa cuando el importe guardado confirma el
+ * reparto, y la fila igual tiene que decir de que subitem es.
+ */
+function etiquetaComponenteOrden(p: PrestacionFacturableItem): string {
+    const codigo = (p.clasificacionAgrupacion ?? '').trim().toUpperCase()
+    if (!codigo) return ''
+    const titular = (p.titularModular ?? '').trim()
+    return titular ? `${codigo} · ${titular}` : codigo
+}
+
+/** La orden dice cobrar un componente pero guarda otro importe (la practica entera). */
+function importeNoCoincideConComponente(p: PrestacionFacturableItem): boolean {
+    if (p.importeComponenteEsperado == null || p.importeTotal == null) return false
+    return Math.abs(p.importeTotal - p.importeComponenteEsperado) >= 0.05
+}
+
 function resumenSubitemsIncluidos(incluyeCodigo: string | null | undefined): string {
     const seleccion = parseIncluyeCodigoSeleccion(incluyeCodigo)
     if (!seleccion) return ''
@@ -1193,6 +1216,11 @@ function derivarPrestacionItemOrden(
         matriculaAnestesista: vinculo.matriculaAnestesista ?? null,
         ordenPuestoNumero: vinculo.ordenPuestoNumero,
         ordenNumero: vinculo.ordenNumero,
+        // Cada orden cobra un componente distinto de la misma practica: sin esto la
+        // fila no decia si era el especialista, el ayudante, la anestesia o los gastos.
+        clasificacionAgrupacion: vinculo.clasificacionAgrupacion ?? null,
+        titularModular: vinculo.titularModular ?? null,
+        importeComponenteEsperado: vinculo.importeComponenteEsperado ?? null,
         // La fila ya es de una orden concreta: listar las otras la volveria a
         // presentar como si cobrara todas.
         autorizacionesVinculadas: undefined,
@@ -4600,7 +4628,16 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                             {!esVistaFacturadas && gruposPrestacionesNoOrdenadasPaginadas.map((grupo) => {
                                                 const grupoExpandido = ordenesPendientesExpand[grupo.key] ?? true
                                                 const esGrupoCirugia = Boolean(grupo.cirugiaProgramadaId)
-                                                const tieneNumeroOrden = !esGrupoCirugia && Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
+                                                // El grupo se arma por la primera orden de la practica. Si la
+                                                // practica esta repartida abre varias, y entonces la cabecera no
+                                                // puede decir que todo cuelga de esa primera: la autorizacion y el
+                                                // numero de orden son de cada una, no del grupo.
+                                                const subgruposOrden = agruparItemsPorOrden(grupo.items)
+                                                const grupoAbreVariasOrdenes = !esGrupoCirugia && subgruposOrden.length > 1
+                                                const tieneNumeroOrden =
+                                                    !esGrupoCirugia &&
+                                                    !grupoAbreVariasOrdenes &&
+                                                    Boolean(grupo.ordenPuestoNumero && grupo.ordenNumero)
                                                 const practicasSeleccionablesOrden = grupo.items.filter((it) => esPrestacionSeleccionableParaFacturar(it))
                                                 const practicasSeleccionablesOrdenUids = practicasSeleccionablesOrden.map((it) => it.uid)
                                                 const totalSeleccionablesOrden = practicasSeleccionablesOrdenUids.length
@@ -4627,11 +4664,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const etiquetaOrden =
                                                     esGrupoCirugia
                                                         ? `Cirugía #${grupo.cirugiaProgramadaId}`
+                                                        : (grupoAbreVariasOrdenes
+                                                        ? `Práctica repartida en ${subgruposOrden.length} órdenes`
                                                         : (grupo.ordenPuestoNumero && grupo.ordenNumero
                                                         ? formatOrderNumber(grupo.ordenPuestoNumero, grupo.ordenNumero)
-                                                        : 'Sin orden vinculada')
+                                                        : 'Sin orden vinculada'))
                                                 const destinoOrdenGrupo =
-                                                    grupo.ordenPuestoNumero && grupo.ordenNumero
+                                                    !grupoAbreVariasOrdenes && grupo.ordenPuestoNumero && grupo.ordenNumero
                                                         ? `/dashboard/ambulatorio/${grupo.ordenPuestoNumero}/${grupo.ordenNumero}`
                                                         : null
 
@@ -4648,7 +4687,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                         {grupoExpandido ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                                                                     </button>
                                                                     <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                                                                        {esGrupoCirugia ? 'Cirugía' : 'Orden'}
+                                                                        {esGrupoCirugia ? 'Cirugía' : (grupoAbreVariasOrdenes ? 'Práctica' : 'Orden')}
                                                                     </span>
                                                                     {destinoOrdenGrupo ? (
                                                                         <Link
@@ -4762,13 +4801,13 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                             </td>
                                                         </tr>
 
-                                                        {grupoExpandido && agruparItemsPorOrden(grupo.items).flatMap((subgrupo, _indiceSubgrupo, subgruposOrden) => {
+                                                        {grupoExpandido && subgruposOrden.flatMap((subgrupo) => {
                                                             // En un grupo de una sola orden la cabecera ya dice cual es y
                                                             // repetirla seria ruido. Se muestra en la cirugia y cuando el
                                                             // grupo abrio varias ordenes porque la practica esta repartida:
                                                             // sin eso las filas de las otras ordenes se leen como si fueran
                                                             // de la orden del encabezado.
-                                                            const mostrarCabeceraOrden = esGrupoCirugia || subgruposOrden.length > 1
+                                                            const mostrarCabeceraOrden = esGrupoCirugia || grupoAbreVariasOrdenes
                                                             const filasSubgrupo = agruparLineasDuplicadas(subgrupo.items).flatMap((linea) => {
                                                 const lineaExpandida = Boolean(lineasDuplicadasExpand[linea.key])
                                                 const resumenDuplicados = linea.items.length > 1 && !lineaExpandida
@@ -4932,6 +4971,21 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                     />
                                                                 ) : (
                                                                     <div className="text-xs leading-snug text-gray-800">{draft.descripcion || '—'}</div>
+                                                                )}
+                                                                {etiquetaComponenteOrden(p) && (
+                                                                    <div className="mt-1 flex flex-wrap gap-1">
+                                                                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                                                                            Cobra: {etiquetaComponenteOrden(p)}
+                                                                        </span>
+                                                                        {importeNoCoincideConComponente(p) && (
+                                                                            <span
+                                                                                className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+                                                                                title="La orden cobra este componente pero tiene guardado otro importe. Revisar antes de facturar."
+                                                                            >
+                                                                                Importe ≠ componente ({formatCurrency(p.importeComponenteEsperado ?? 0)})
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 )}
                                                                 {p.tipo === 'PRACTICA' && (
                                                                     <div className="mt-1 flex flex-wrap gap-1">

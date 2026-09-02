@@ -15,6 +15,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { crearPractica as crearPracticaInternacion } from '@/modules/internacion/service'
 import { claveDiaArgentina, fechaDesdeClaveArgentina } from '@/lib/utils/argentina-date'
+import { resolverObraSocialParticularId } from '@/lib/obra-social-particular'
 import {
   clasificacionDesdeIncluyeCodigo,
   contieneClasificacion,
@@ -37,84 +38,6 @@ function normalizarFechaOrdenArgentina(value: Date | string | null | undefined):
 
   const parsed = value ? new Date(value) : new Date()
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed
-}
-
-async function resolverObraSocialParticularId(): Promise<number> {
-  const particularPorIdEstandar = await prisma.obraSocial.findFirst({
-    where: {
-      id: 500,
-    },
-    select: { id: true },
-  })
-  if (particularPorIdEstandar) {
-    const particular500Activa = await prisma.obraSocial.findFirst({
-      where: { id: 500, estado: 'A' },
-      select: { id: true },
-    })
-    if (!particular500Activa) {
-      console.warn('[ORDEN] Usando OS id 500 para PARTICULAR aunque no esté activa')
-    }
-    return particularPorIdEstandar.id
-  }
-
-  const particularPorNombre = await prisma.obraSocial.findFirst({
-    where: {
-      estado: 'A',
-      OR: [
-        { nombre: { contains: 'PARTICULAR', mode: 'insensitive' } },
-        { nombre: { contains: 'SIN COBERTURA', mode: 'insensitive' } },
-        { nombre: { contains: 'PRIVADO', mode: 'insensitive' } },
-      ],
-    },
-    orderBy: { id: 'asc' },
-    select: { id: true },
-  })
-
-  if (particularPorNombre) {
-    console.warn('[ORDEN] OS PARTICULAR resuelta por nombre (fallback)')
-    return particularPorNombre.id
-  }
-
-  const particularPorNombreSinEstado = await prisma.obraSocial.findFirst({
-    where: {
-      OR: [
-        { nombre: { contains: 'PARTICULAR', mode: 'insensitive' } },
-        { nombre: { contains: 'SIN COBERTURA', mode: 'insensitive' } },
-        { nombre: { contains: 'PRIVADO', mode: 'insensitive' } },
-      ],
-    },
-    orderBy: { id: 'asc' },
-    select: { id: true },
-  })
-  if (particularPorNombreSinEstado) {
-    console.warn('[ORDEN] OS PARTICULAR resuelta por nombre sin filtro de estado (fallback)')
-    return particularPorNombreSinEstado.id
-  }
-
-  const obraSocialActivaFallback = await prisma.obraSocial.findFirst({
-    where: { estado: 'A' },
-    orderBy: { id: 'asc' },
-    select: { id: true, nombre: true },
-  })
-  if (obraSocialActivaFallback) {
-    console.warn(
-      `[ORDEN] No se encontró OS PARTICULAR. Se usa OS activa ${obraSocialActivaFallback.id} - ${obraSocialActivaFallback.nombre}`
-    )
-    return obraSocialActivaFallback.id
-  }
-
-  const obraSocialFallback = await prisma.obraSocial.findFirst({
-    orderBy: { id: 'asc' },
-    select: { id: true, nombre: true },
-  })
-  if (obraSocialFallback) {
-    console.warn(
-      `[ORDEN] No hay OS activas. Se usa OS ${obraSocialFallback.id} - ${obraSocialFallback.nombre}`
-    )
-    return obraSocialFallback.id
-  }
-
-  throw new Error('No se encontró ninguna obra social para emitir la orden')
 }
 
 const CrearOrdenDesdeAdmisionSchema = CrearOrdenSchema.extend({

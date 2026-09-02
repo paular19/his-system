@@ -745,3 +745,157 @@ log. Tampoco hay un camino automatico que las genere: `IngresoElectrocardiograma
 **Reversion:** `PraImpTotal`/`OprImpTotal` a 15.149,63, `OrdImpTotal` a 32.149,74,
 `OprClasAgrup=NULL`, `OprModulo='HE'`, `OprTitularModular=NULL`,
 `OprImprimirDuplicado=false`.
+
+---
+
+## 2026-09-02 — BENITEZ, CATALINA figuraba con IPS siendo particular
+
+**Reportado por:** Paula.
+
+**Que estaba mal:** la ficha de la paciente (PacID 68340, HC 68335) estaba bien
+—`obraSocialId` null, particular— pero sus dos internaciones, INT-173 (IngID 346) e
+INT-177 (IngID 364), tenian `OSID = 1` (IPSS). Nadie lo cargo a mano: lo escribio el
+sistema.
+
+**Causa (cadena de tres pasos):**
+
+1. No existia ninguna obra social PARTICULAR en la tabla `ObraSocial` (88 filas, ni
+   id 500 ni ningun nombre con PARTICULAR / SIN COBERTURA / PRIVADO).
+2. `Orden.OSID` es NOT NULL, asi que la orden de un particular necesita un OSID.
+   `resolverObraSocialParticularId()` agotaba sus fallbacks y terminaba en
+   "primera OS activa por id" — que en esta base es la **1, IPSS**. Toda orden de un
+   paciente sin cobertura salia a nombre del IPS.
+3. El write-back de `crearOrden` (commit 6b45d32) le copiaba al ingreso la OS de la
+   orden cuando el ingreso tenia OSID nulo. Asi el IPS pasaba de la orden al ingreso.
+
+Se habia corregido a mano dos veces (31/08 13:40 y 01/09 11:08, usuario `user_3GrKO`)
+y las dos veces se volvio a pisar con la siguiente orden: 31/08 14:07 y 01/09 14:04.
+
+**Que se escribio:**
+
+- Alta de `ObraSocial` id **500 "PARTICULAR"** (estado A) y su `PlanObraSocial`
+  (500, 1) "PARTICULAR". Sin nomenclador propio: las practicas de un particular
+  siguen valorizandose con el convenio 1, que es el unico que existe.
+- `Ingreso` 346 y 364: `OSID`, `PosID` y `IngOSNroAf` a null. 2 filas.
+
+**Cambios de codigo que acompanan (para que no se vuelva a pisar):**
+
+- `src/lib/obra-social-particular.ts` (nuevo): `resolverObraSocialParticularId()` ahora
+  corta con error explicito si no hay OS PARTICULAR, en vez de inventar la primera OS
+  activa.
+- `src/modules/orden/repository.ts`: el write-back ya no hereda la OS al ingreso cuando
+  la orden es PARTICULAR. `Ingreso.OSID = null` sigue siendo lo que el sistema entiende
+  por particular — los lotes particulares filtran por null.
+- `src/modules/facturacion/repository.ts`: los dos "El ingreso no tiene obra social
+  cargada" ya no cortan; emiten contra la OS PARTICULAR.
+
+**Como verificar:**
+
+```sql
+SELECT "IngID", "OSID", "PosID" FROM "Ingreso" WHERE "IngID" IN (346, 364);
+-- OSID y PosID deben quedar en NULL
+SELECT "OSID", "OSNom" FROM "ObraSocial" WHERE "OSID" = 500;
+```
+
+### Segunda tanda (mismo dia): los 9 ingresos y las ordenes de BENITEZ
+
+**Ingresos pasados a particular** (`OSID` y `PosID` a null). Los 9 tenian `OSID = 1`
+puesto por el sistema, paciente particular y sin nro de afiliado en ningun lado:
+
+| IngID | Ingreso | Paciente | HC |
+|-------|---------|----------|----|
+| 346 | INT-173 | BENITEZ, CATALINA | 68335 |
+| 364 | INT-177 | BENITEZ, CATALINA | 68335 |
+| 369 | AMB-224 | LEEM, BUGUN SEAN | 68342 |
+| 434 | AMB-267 | PUCA, WALTER TOMAS | 68362 |
+| 448 | AMB-280 | ANGEL, ENRIQUE AMADEO | 68368 |
+| 469 | AMB-292 | ALEMAN, ANA INES | 68376 |
+| 513 | INT-229 | RODRIGUEZ, CARLOS JOSE | 68383 |
+| 605 | AMB-382 | GODOY, ROBERTO OMAR | 68404 |
+| 619 | AMB-392 | MORALES, JUAN CARLOS | 68412 |
+
+**Ordenes de BENITEZ pasadas a PARTICULAR:** las 36 ordenes de los ingresos 345, 346 y
+364 pasaron de `OSID/PosID = 1/1` (IPSS) a `500/1` (PARTICULAR). 32 activas + 4 anuladas.
+
+No hubo que refacturar: `resolverReglaFacturacion` da `IPS_100` para IPSS y
+`DEFAULT_100` para PARTICULAR, y las dos son 100% del nomenclador con 0% de cargo al
+paciente. Se verifico antes de escribir (el script aborta si difieren). La suma de
+importes quedo igual: **4.717.488,95** antes y despues. El `NConCodig` de los 45 items
+de `OrdenPrac` sigue en 1, que es el unico convenio del nomenclador.
+
+**Como verificar:**
+
+```sql
+SELECT "IngID", "OSID", "PosID" FROM "Ingreso"
+ WHERE "IngID" IN (346,364,369,434,448,469,513,605,619);  -- todos NULL
+
+SELECT "OSID", "PosID", COUNT(*), SUM("OrdImpTotal") FROM "Orden"
+ WHERE "IngID" IN (345,346,364) GROUP BY 1,2;             -- 500 / 1 / 36 / 4717488.95
+```
+
+**Pendiente (NO corregido):**
+
+- **9 ordenes de los otros 7 pacientes** siguen a nombre de IPSS, aunque su ingreso ya
+  quedo en particular: ing 369, 434, 448, 469, 605, 619 (1 orden cada uno) y 513
+  (3 ordenes). Todas en estado A. Se corrigen igual que las de BENITEZ.
+- **Consultar con administracion**, no son el mismo caso: los ingresos **355**
+  (AMB-216, ZERPA SONIA DANIELA, HC 48491, afiliado 39040912) y **464** (AMB-289,
+  RIOS MELANI MAGALI, HC 48249, afiliado 43375353) tienen IPS y **si** tienen nro de
+  afiliado. Ahi el faltante esta en la ficha del paciente, que quedo sin obra social.
+  Si son IPS reales hay que completar la ficha, no sacarles la cobertura.
+
+### Tercera tanda (mismo dia): ZERPA y RIOS, los dos casos que habia que consultar
+
+Los dos tenian IPS en el ingreso y nro de afiliado, pero por motivos opuestos. Lo
+decisivo fue el log de auditoria, no el dato en si:
+
+- **ZERPA (ing 355)** se creo el 14/08 16:26 ya con `obraSocialId: 1` **y**
+  `numeroAfiliado: "39040912"`, por `user_3F2ZR`. Una persona eligio IPS y tipeo el
+  afiliado: cobertura real. El write-back del bug nunca escribio afiliados, solo la OS.
+- **RIOS (ing 464)** se creo el 21/08 12:36 con `obraSocialId: null` y sin afiliado. El
+  IPS le llego 18 segundos despues via el write-back de la orden 2171: era contagio.
+
+Confirmado con admision: ZERPA es afiliada (el numero bueno es el DNI), RIOS es
+particular.
+
+**ZERPA SONIA DANIELA — PacID 55888, HC 48491 — se completa la ficha:**
+
+| Registro | Antes | Despues |
+|----------|-------|---------|
+| `Paciente` 55888 `OSID`/`PosID` | null / null | 1 / 1 (IPSS) |
+| `Paciente` 55888 `PacOSNroAf` | 30040912 | 30040912 (sin cambio) |
+| `Ingreso` 355 `IngOSNroAf` | 39040912 | 30040912 |
+| `Orden` 1/1597 `OrdNumAfil` | 39040912 | 30040912 |
+
+El 39040912 era un dedazo en el segundo digito: el IPS usa el DNI como numero de
+afiliado (11.246 de 13.461 pacientes IPSS de la base). Se unifico con el DNI en los tres
+lugares para que la planilla al IPS salga con el numero correcto. La OS del ingreso y de
+la orden no se toco: ya estaba bien.
+
+**RIOS MELANI MAGALI — PacID 61382, HC 48249 — se pasa a particular:**
+
+| Registro | Antes | Despues |
+|----------|-------|---------|
+| `Ingreso` 464 `OSID`/`PosID` | 1 / 1 (IPSS) | null / null |
+| `Orden` 1/2171 `OSID`/`PosID` | 1 / 1 (IPSS) | 500 / 1 (PARTICULAR) |
+
+Importe sin cambios (17.000), por lo mismo que en BENITEZ: `IPS_100` y `DEFAULT_100`
+son las dos 100% del nomenclador sin cargo al paciente.
+
+**Como verificar:**
+
+```sql
+SELECT "OSID", "PosID", "PacOSNroAf" FROM "Paciente" WHERE "PacID" = 55888;  -- 1 / 1 / 30040912
+SELECT "OSID", "IngOSNroAf"          FROM "Ingreso"  WHERE "IngID" = 355;    -- 1 / 30040912
+SELECT "OSID", "PosID"               FROM "Ingreso"  WHERE "IngID" = 464;    -- NULL / NULL
+SELECT "OSID", "PosID"               FROM "Orden"    WHERE "PueNum" = 1 AND "OrdNum" = 2171;  -- 500 / 1
+```
+
+**Pendiente (NO corregido):**
+
+- La ficha de RIOS conserva `PacOSNroAf = 43375353` (su propio DNI, puesto por el import
+  legacy) aunque ya esta confirmada como particular. Es 1 de las 18.709 fichas con
+  afiliado y sin obra social; no se limpio para no mezclarlo con esta correccion.
+- Siguen las **9 ordenes** de los otros 7 pacientes contagiados a nombre de IPSS
+  (ing 369, 434, 448, 469, 605, 619 con una cada uno; 513 con tres), con el ingreso ya
+  en particular.

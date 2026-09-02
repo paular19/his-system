@@ -59,6 +59,7 @@ import {
     CODIGOS_PROMEDI_BASE,
 } from './promedi-rules'
 import { fusionarObservacionesConMeta } from '@/modules/internacion/observaciones-meta'
+import { resolverObraSocialParticularId } from '@/lib/obra-social-particular'
 
 const MATRICULA_AMBULATORIO_DEFAULT = 9110
 const NOMBRE_MATRICULA_9110_DEFAULT = 'CLINICA SAN RAFAEL'
@@ -3531,9 +3532,9 @@ export async function cargarOrdenesDesdePrestaciones(
     })
 
     if (!ingreso) throw new Error('Ingreso no encontrado')
-    if (!ingreso.obraSocialId) {
-        throw new Error('El ingreso no tiene obra social cargada')
-    }
+    // Un ingreso sin obra social es un paciente particular, no un dato faltante:
+    // la orden se emite igual contra la OS PARTICULAR. Aca el OSID del ingreso no
+    // se usa mas abajo, asi que alcanza con no cortar.
 
     let prestacionesOrigen = data.prestaciones
 
@@ -5065,7 +5066,9 @@ export async function crearOrdenDesdePracticaFacturacion(
     })
 
     if (!ingreso) throw new Error('Ingreso no encontrado')
-    if (!ingreso.obraSocialId) throw new Error('El ingreso no tiene obra social cargada')
+    // Sin OS el paciente es particular: la orden necesita un OSID (Orden.OSID es
+    // NOT NULL) y se emite contra la OS PARTICULAR, sin tocar el ingreso.
+    const obraSocialOrdenId = ingreso.obraSocialId ?? await resolverObraSocialParticularId()
 
     const profesionalId =
         data.profesionalId ?? ingreso.profesionalTratanteId ?? ingreso.profesionalGuardiaId ?? null
@@ -5082,7 +5085,7 @@ export async function crearOrdenDesdePracticaFacturacion(
             pacienteId: ingreso.pacienteId ?? undefined,
             nombrePaciente: ingreso.paciente?.nombreCompleto ?? ingreso.nombre ?? 'PACIENTE',
             numeroAfiliado: ingreso.numeroAfiliado ?? '',
-            obraSocialId: ingreso.obraSocialId,
+            obraSocialId: obraSocialOrdenId,
             obraSocialCoseguroId: ingreso.obraSocialCoseguroId ?? undefined,
             planCoseguroId: ingreso.planCoseguroId ?? undefined,
             profesionalId,

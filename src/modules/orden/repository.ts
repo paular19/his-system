@@ -10,6 +10,7 @@ import type {
 } from './types'
 import { generarCodigoBarras } from './types'
 import { normalizarClasificacionAgrupacion } from './clasificacion'
+import { esObraSocialParticular as esOsParticularPorId } from '@/lib/obra-social-particular'
 import {
   calcularUmbralRank,
   evaluarCoincidenciaOrden,
@@ -367,7 +368,13 @@ export async function crearOrdenInterna(
         // "El ingreso no tiene obra social cargada", y el ingreso tampoco entra
         // en el lote de la obra social. La orden es el documento de cobertura:
         // si el ingreso no tiene ninguna, hereda la de la orden.
-        if (ordenData.ingresoId) {
+        //
+        // Excepcion: la OS PARTICULAR no es cobertura, es el relleno que necesita
+        // Orden.obraSocialId (NOT NULL) cuando el paciente no tiene ninguna. Si se
+        // heredara, el ingreso dejaria de ser particular para el resto del sistema
+        // (los lotes particulares filtran por obraSocialId null) y toda correccion
+        // manual a "particular" se pisaria sola con la siguiente orden.
+        if (ordenData.ingresoId && !(await esOsParticularPorId(ordenData.obraSocialId))) {
           await tx.ingreso.updateMany({
             where: { id: ordenData.ingresoId, obraSocialId: null },
             data: { obraSocialId: ordenData.obraSocialId, planId: ordenData.planId },

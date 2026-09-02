@@ -828,6 +828,11 @@ type PrestacionPreparadaFacturacion = {
     incluyeCodigo?: string | null
     numeroAutorizacion?: string | null
     ordenIndice: number
+    // Orden e item que el panel esta facturando. Cuando vienen, mandan: no hay
+    // nada que adivinar.
+    ordenPuestoNumero?: number | null
+    ordenNumero?: number | null
+    ordenItem?: number | null
 }
 
 type VinculoOrdenExistenteFacturacion = {
@@ -923,8 +928,13 @@ async function resolverVinculosOrdenExistenteFacturacion(
                         fecha: true,
                         numeroAutorizacion: true,
                     },
+                    orderBy: { item: 'asc' },
                 },
             },
+            // El desempate final entre candidatos equivalentes es el orden en que
+            // llegan: sin orderBy lo decidia la base y una misma practica podia caer
+            // en una orden distinta en cada corrida.
+            orderBy: [{ puestoNumero: 'asc' }, { numero: 'asc' }],
         }),
         prisma.practica.findMany({
             where: {
@@ -959,6 +969,11 @@ async function resolverVinculosOrdenExistenteFacturacion(
     }
 
     const candidatos: CandidatoOrdenItem[] = []
+    // Todos los items, tengan o no numero de autorizacion propio. Los sin
+    // autorizacion no entran a la busqueda a ciegas, pero si la fila dice
+    // explicitamente que se factura ese item, se respeta: la autorizacion la
+    // aporta la practica (se valida aparte antes de escribir nada).
+    const itemsPorKey = new Map<string, CandidatoOrdenItem>()
     for (const orden of ordenesIngreso) {
         for (const it of orden.items) {
             const numeroAutorizacion = resolverNumeroAutorizacionOrdenItem(
@@ -968,6 +983,21 @@ async function resolverVinculosOrdenExistenteFacturacion(
                 orden.numero,
                 it.item
             )
+            const item: CandidatoOrdenItem = {
+                key: `${orden.puestoNumero}:${orden.numero}:${it.item}`,
+                puestoNumero: orden.puestoNumero,
+                ordenNumero: orden.numero,
+                item: it.item,
+                practicaId: it.practicaId,
+                convenioId: it.convenioId,
+                codigoPractica: normalizarCodigoPractica(it.codigoPractica),
+                cantidad: Number(it.cantidad),
+                incluyeCodigo: normalizarIncluyeCodigo(it.modulo),
+                fecha: it.fecha,
+                numeroAutorizacion,
+            }
+            itemsPorKey.set(item.key, item)
+
             if (!tieneNumeroAutorizacionValido(numeroAutorizacion)) continue
 
             candidatos.push({
@@ -1024,6 +1054,28 @@ async function resolverVinculosOrdenExistenteFacturacion(
         return requeridos.filter((token) => presentes.has(token)).length
     }
 
+    // 0) La fila dice de que orden y que item es: se factura eso y se termina.
+    // Solo se busca cuando la fila no lo dice.
+    for (const prestacion of prestacionesConPractica) {
+        const practicaId = prestacion.practicaId
+        if (!practicaId || resultado.has(practicaId)) continue
+
+        const { ordenPuestoNumero, ordenNumero, ordenItem } = prestacion
+        if (!ordenPuestoNumero || !ordenNumero || !ordenItem) continue
+
+        const key = `${ordenPuestoNumero}:${ordenNumero}:${ordenItem}`
+        const pedido = itemsPorKey.get(key)
+        if (!pedido || usados.has(key)) continue
+        if (pedido.practicaId !== null && pedido.practicaId !== practicaId) continue
+
+        usados.add(key)
+        resultado.set(practicaId, {
+            puestoNumero: pedido.puestoNumero,
+            ordenNumero: pedido.ordenNumero,
+            item: pedido.item,
+        })
+    }
+
     // 1) Priorizar vínculo explícito por PraID en OrdenPrac
     for (const prestacion of prestacionesConPractica) {
         const practicaId = prestacion.practicaId
@@ -1074,6 +1126,12 @@ async function resolverVinculosOrdenExistenteFacturacion(
         const compatibles = candidatos.filter(
             (c) =>
                 !usados.has(c.key) &&
+                // Un item ya vinculado a OTRA practica no es destino valido. `usados`
+                // solo mira las practicas que ya tienen orden asignada, asi que un item
+                // reservado por una practica todavia pendiente quedaba disponible: al
+                // facturar el honorario de especialista se lo llevaba el item de
+                // derechos de otra orden y la practica quedaba apuntando ahi.
+                (c.practicaId === null || c.practicaId === practicaId) &&
                 c.convenioId === prestacion.convenioId &&
                 c.codigoPractica === codigoPractica &&
                 incluyeCodigoCompatibleParaVinculo(
@@ -2509,7 +2567,15 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                         !incluye.gastos
                     )
                     if (incluyeSoloAyudante) {
-                        return MATRICULA_AYUDANTE_INT_DEFAULT
+                        // La fila del ayudante guarda su matricula en el item
+                        // (efectorMatricula) y en la practica. Devolver siempre el 995
+                        // generico pisaba al profesional elegido: el cambio se guardaba
+                        // en la base pero la pantalla seguia mostrando el 995.
+                        return (
+                            it.efectorMatricula ??
+                            it.practica?.matriculaEspecialista ??
+                            MATRICULA_AYUDANTE_INT_DEFAULT
+                        )
                     }
                     const tieneHE = incluyeTieneEspecialista(incluye)
                     const tituloPatologia = esTituloPatologia(it.titularModular)
@@ -3155,7 +3221,13 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                     it.practica?.matriculaEspecialista
                 )
                 : (incluyeSoloAyudante
-                    ? MATRICULA_AYUDANTE_INT_DEFAULT
+                    ? (
+                        // Idem fila con practica: manda la matricula guardada en el
+                        // item, el 995 es solo el default cuando nunca se eligio a nadie.
+                        it.efectorMatricula ??
+                        it.practica?.matriculaEspecialista ??
+                        MATRICULA_AYUDANTE_INT_DEFAULT
+                    )
                     : resolverMatriculaEspecialistaPorPatologia(
                         matriculaEspecialistaEfector ?? it.practica?.matriculaEspecialista ?? fallbackAyudanteDefault,
                         incluye,
@@ -3782,6 +3854,29 @@ export async function cargarOrdenesDesdePrestaciones(
             })
             const dataPatologia = dataOrdenPracticaPatologia()
 
+            // La autorizacion vive en la practica y la orden puede haber quedado sin
+            // ella (pasa cuando una practica se reparte en una orden por rol: solo
+            // algunas se llevan el numero). Al facturar se la estampa al item, asi la
+            // orden deja de figurar como no autorizada.
+            const autorizacionPrestacion =
+                typeof prestacion.numeroAutorizacion === 'string'
+                    ? prestacion.numeroAutorizacion.trim().slice(0, 15)
+                    : null
+            const opsAutorizacion: Prisma.PrismaPromise<Prisma.BatchPayload>[] =
+                tieneNumeroAutorizacionValido(autorizacionPrestacion)
+                    ? [
+                        prisma.ordenPractica.updateMany({
+                            where: {
+                                puestoNumero: vinculo.puestoNumero,
+                                ordenNumero: vinculo.ordenNumero,
+                                item: vinculo.item,
+                                OR: [{ numeroAutorizacion: null }, { numeroAutorizacion: '' }],
+                            },
+                            data: { numeroAutorizacion: autorizacionPrestacion },
+                        }),
+                    ]
+                    : []
+
             if (modulosCompatibles.length > 1) {
                 const ops: Prisma.PrismaPromise<Prisma.BatchPayload>[] = [
                     prisma.ordenPractica.updateMany({
@@ -3821,7 +3916,7 @@ export async function cargarOrdenesDesdePrestaciones(
                     )
                 }
 
-                return ops
+                return [...ops, ...opsAutorizacion]
             }
 
             const ops: Prisma.PrismaPromise<Prisma.BatchPayload>[] = [
@@ -3859,7 +3954,7 @@ export async function cargarOrdenesDesdePrestaciones(
                 )
             }
 
-            return ops
+            return [...ops, ...opsAutorizacion]
         })
         if (updatesOrdenPractica.length > 0) {
             await prisma.$transaction(updatesOrdenPractica)

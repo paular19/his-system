@@ -1393,7 +1393,12 @@ function buildEditState(p: PrestacionFacturableItem): EditState {
         cantidad: String(p.cantidad ?? 1),
         numeroAutorizacion: p.numeroAutorizacion ?? '',
         importeTotal: String(p.importeTotal ?? 0),
-        matriculaAyudante: tieneAyudante ? String(MATRICULA_AYUDANTE_DEFAULT) : '',
+        // En la fila que cobra solo el ayudante la matricula guardada es la del
+        // ayudante (la practica y el item tienen un solo campo de matricula), asi
+        // que va en este selector. El 995 generico es solo el default inicial.
+        matriculaAyudante: soloAyudante
+            ? String(p.matriculaEspecialista || MATRICULA_AYUDANTE_DEFAULT)
+            : (tieneAyudante ? String(MATRICULA_AYUDANTE_DEFAULT) : ''),
         matriculaEspecialista: (!soloAyudante || tieneEspecialista)
             ? (p.matriculaEspecialista
                 ? String(p.matriculaEspecialista)
@@ -2865,11 +2870,26 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         ? baseDesc + descripcionComponentes(sel)
                         : baseDesc
                     const filaDeOrden = esFilaItemDeOrden(p)
+                    // La fila sabe de que orden e item es: se manda siempre, no solo
+                    // en las repartidas. Sin esto el backend volvia a buscar a que
+                    // orden pertenecia la practica, y entre varias ordenes del mismo
+                    // codigo (especialista / anestesista / derechos) podia elegir otra.
+                    const itemUnicoDeLaFila = filaDeOrden
+                        ? null
+                        : (() => {
+                            const items = obtenerItemsOrdenRelacionados(
+                                p,
+                                (p.autorizacionesVinculadas ?? []) as AutorizacionVinculadaExtendida[]
+                            )
+                            return items.length === 1 ? items[0] : null
+                        })()
                     return {
                         practicaId: p.origen.practicaId,
-                        ordenPuestoNumero: filaDeOrden ? p.origen.ordenPuestoNumero : undefined,
-                        ordenNumero: filaDeOrden ? p.origen.ordenNumero : undefined,
-                        ordenItem: filaDeOrden ? p.origen.ordenItem : undefined,
+                        ordenPuestoNumero: filaDeOrden
+                            ? p.origen.ordenPuestoNumero
+                            : itemUnicoDeLaFila?.ordenPuestoNumero,
+                        ordenNumero: filaDeOrden ? p.origen.ordenNumero : itemUnicoDeLaFila?.ordenNumero,
+                        ordenItem: filaDeOrden ? p.origen.ordenItem : itemUnicoDeLaFila?.ordenItem,
                         convenioId: p.convenioId as number,
                         codigoPractica: (p.codigoPractica as string).trim(),
                         descripcionPractica,
@@ -2879,7 +2899,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                         importeTotal: importeTotal && importeTotal > 0 ? importeTotal : undefined,
                         matriculaEspecialista: draft
                             ? (usaMatriculaAyudante
-                                ? MATRICULA_AYUDANTE_DEFAULT
+                                ? (parseMatricula(draft.matriculaAyudante) ?? MATRICULA_AYUDANTE_DEFAULT)
                                 : (matriculaEspecialistaDraft ?? (usaMatriculaPatologia ? MATRICULA_PATOLOGIA_DEFAULT : null)))
                             : (p.matriculaEspecialista ?? (usaMatriculaPatologia ? MATRICULA_PATOLOGIA_DEFAULT : null)),
                         matriculaAnestesista: draft
@@ -3286,7 +3306,10 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                 importeTotal: Number(draft.importeTotal || 0),
                 matriculaProfesional: null,
                 matriculaEspecialista: usaMatriculaAyudante
-                    ? MATRICULA_AYUDANTE_DEFAULT
+                    // La fila del ayudante guarda su matricula en el mismo campo que el
+                    // especialista. Mandar siempre el 995 tiraba a la basura el
+                    // profesional elegido en el selector "Ayudante".
+                    ? (parseMatricula(draft.matriculaAyudante) ?? MATRICULA_AYUDANTE_DEFAULT)
                     : (draft.matriculaEspecialista
                         ? Number(draft.matriculaEspecialista)
                         : (usaMatriculaPatologia ? MATRICULA_PATOLOGIA_DEFAULT : null)),

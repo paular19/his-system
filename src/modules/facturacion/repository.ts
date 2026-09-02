@@ -3781,6 +3781,14 @@ export async function cargarOrdenesDesdePrestaciones(
             incluyeCodigo: p.incluyeCodigo,
             numeroAutorizacion: p.numeroAutorizacion,
             ordenIndice: p.ordenIndice,
+            // La orden y el item que eligio el panel. Sin esto el resolver no los
+            // ve y vuelve a buscar a ciegas: un renglon sin autorizacion propia
+            // (el honorario de una practica repartida por rol) no entra en esa
+            // busqueda, la practica quedaba sin vincular y facturar cortaba con
+            // "No se puede facturar sin orden autorizada vinculada".
+            ordenPuestoNumero: p.ordenPuestoNumero,
+            ordenNumero: p.ordenNumero,
+            ordenItem: p.ordenItem,
         }))
     )
 

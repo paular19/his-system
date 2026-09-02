@@ -4601,6 +4601,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                         </p>
                                     </div>
                                     {!esVistaFacturadas && <div className="flex items-center gap-2">
+                                        {/* El cartel de error vive arriba de todo el panel y el boton esta
+                                            varias pantallas mas abajo: cuando facturar fallaba, desde aca se
+                                            leia como que el boton no hacia nada. */}
+                                        {error && (
+                                            <span className="max-w-md rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
+                                                {error}
+                                            </span>
+                                        )}
                                         <button onClick={facturarPaciente} disabled={cargandoOrdenes} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60">{cargandoOrdenes ? 'Facturando...' : 'Facturar paciente'}</button>
                                     </div>}
                                 </div>

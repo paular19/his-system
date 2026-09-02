@@ -4536,8 +4536,12 @@ export async function actualizarPrestacionFacturacion(
                     for (const itemObjetivo of itemsObjetivo) {
                         const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
                             modulo: incluyeCodigoNormalizado,
-                            clasificacionAgrupacion: esPatologia ? 'HP' : null,
-                            titularModular: esPatologia ? 'HONORARIO PATOLOGO' : null,
+                            // Fuera de patologia no se toca: OprClasAgrup es lo unico
+                            // que dice que componente cobra la orden (GA/HE/HA/A1) en
+                            // todo lo que no tiene modulo, y ponerlo en null al guardar
+                            // borraba el reparto. `modulo` manda igual si viene.
+                            clasificacionAgrupacion: esPatologia ? 'HP' : undefined,
+                            titularModular: esPatologia ? 'HONORARIO PATOLOGO' : undefined,
                             efectorMatricula: esPatologia
                                 ? MATRICULA_PATOLOGIA_DEFAULT
                                 : (data.matriculaEspecialista ?? undefined),
@@ -4768,8 +4772,9 @@ export async function actualizarPrestacionFacturacion(
         for (const itemObjetivo of itemsObjetivo) {
             const dataOrdenPractica: Prisma.OrdenPracticaUncheckedUpdateInput = {
                 modulo: data.modulo ?? incluyeCodigoNormalizado,
-                clasificacionAgrupacion: esPatologia ? 'HP' : null,
-                titularModular: esPatologia ? 'HONORARIO PATOLOGO' : null,
+                // Ver arriba: fuera de patologia el componente de la orden no se toca.
+                clasificacionAgrupacion: esPatologia ? 'HP' : undefined,
+                titularModular: esPatologia ? 'HONORARIO PATOLOGO' : undefined,
                 efectorMatricula: esPatologia
                     ? MATRICULA_PATOLOGIA_DEFAULT
                     : (data.matriculaEjecutante !== undefined

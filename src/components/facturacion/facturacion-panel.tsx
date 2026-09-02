@@ -4990,6 +4990,14 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                                 )}
                                                                 {etiquetaComponenteOrden(p) && (
                                                                     <div className="mt-1 flex flex-wrap gap-1">
+                                                                        {/* La fila de una orden es un ORDEN_ITEM, asi que no entra en el
+                                                                            bloque de abajo: sin esto la practica repartida perdia el
+                                                                            "Incluye" que se veia cuando era una sola fila. */}
+                                                                        {resumenSubitemsIncluidos(p.clasificacionAgrupacion) && (
+                                                                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                                                                                Incluye: {resumenSubitemsIncluidos(p.clasificacionAgrupacion)}
+                                                                            </span>
+                                                                        )}
                                                                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
                                                                             Cobra: {etiquetaComponenteOrden(p)}
                                                                         </span>

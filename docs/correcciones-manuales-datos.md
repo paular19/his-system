@@ -1094,3 +1094,28 @@ se pierden los medicamentos que hayan cargado desde el panel despues del seed.
 
 **Como verificar:** `npm run db:seed-medicamentos-facturacion` es idempotente — volver a
 correrlo debe decir `Sembrados: 0 | ya existian: 11` y no pisa precios cargados a mano.
+
+---
+
+## 2026-09-02 — Columna MedicacionIngreso.MedFacturada (DDL)
+
+**Reportado por:** Paula — en el panel de facturacion (ingreso 641, orden 3246) los
+medicamentos no se podian facturar porque no tienen orden: la fila salia sin tilde y
+con el cartel "Sin autorizacion", que para un medicamento no aplica.
+
+**Que se hizo:** se agrego la columna `MedFacturada` (`BOOLEAN NOT NULL DEFAULT false`)
+a `MedicacionIngreso`. Es la marca de facturado del panel: la medicacion no genera
+orden ni item, se sigue cobrando en el lote de MEDICAMENTOS, que la levanta igual con
+el flag en true (`estado NOT IN ('S','X')`, sin mirar `MedFacturada`).
+
+**No se uso `prisma db push`** (trampa 5 de CLAUDE.md). El `migrate diff` medido antes
+seguia proponiendo `DROP SEQUENCE "Paciente_HC_seq"` y `DROP INDEX` sobre los indices
+manuales. Se aplico solo el `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+
+**Verificado despues de correr:** columna presente (`boolean`, `NOT NULL`, default
+`false`), `Paciente_HC_seq` viva, 12 indices `idx_*` presentes, y `migrate diff` ya no
+propone ningun `AlterTable` sobre `MedicacionIngreso`.
+
+**Reversion:** `ALTER TABLE "MedicacionIngreso" DROP COLUMN "MedFacturada"` y revertir
+el codigo. Se pierde que medicamentos ya se marcaron facturados; el importe de los
+lotes no cambia.

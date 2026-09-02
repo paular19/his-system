@@ -1711,6 +1711,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
                 frecuencia: true,
                 importe: true,
                 cantidad: true,
+                facturada: true,
             },
         }),
         prisma.descartableIngreso.findMany({
@@ -3310,7 +3311,7 @@ export async function obtenerContextoFacturacion(ingresoId: number): Promise<Fac
             cantidad: cantidadMedicacion,
             precioUnitario: Number(m.importe ?? 0),
             importeTotal: Number((Number(m.importe ?? 0) * cantidadMedicacion).toFixed(2)),
-            facturada: false,
+            facturada: m.facturada,
             matriculaProfesional: null,
             matriculaEspecialista: null,
             matriculaAnestesista: null,
@@ -3687,7 +3688,26 @@ export async function cargarOrdenesDesdePrestaciones(
     // la orden se emite igual contra la OS PARTICULAR. Aca el OSID del ingreso no
     // se usa mas abajo, asi que alcanza con no cortar.
 
+    // La medicacion no genera orden: facturarla es marcarla como facturada, y el
+    // importe lo sigue juntando el lote de MEDICAMENTOS (que la levanta igual con
+    // el flag en true). Va antes de las practicas para que un ingreso que solo
+    // tiene medicamentos no corte con "No hay practicas pendientes".
+    const medicacionIds = Array.from(new Set(data.medicacionIds ?? []))
+    if (medicacionIds.length > 0) {
+        await prisma.medicacionIngreso.updateMany({
+            where: { id: { in: medicacionIds }, ingresoId: data.ingresoId, estado: { not: 'X' } },
+            data: { facturada: true },
+        })
+    }
+
     let prestacionesOrigen = data.prestaciones
+
+    // Tanda de solo medicamentos: no hay nada que ordenar. Sin este corte la lista
+    // vacia de prestaciones caia en la rama de abajo y facturaba todas las
+    // practicas pendientes del ingreso, que es justo lo que no se tildo.
+    if (!data.facturarTodo && prestacionesOrigen.length === 0 && medicacionIds.length > 0) {
+        return { modo: data.modo, ordenes: [] }
+    }
 
     if (data.facturarTodo || prestacionesOrigen.length === 0) {
         const practicasPendientes = await prisma.practica.findMany({

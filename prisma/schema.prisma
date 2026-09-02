@@ -483,6 +483,11 @@ model MedicacionIngreso {
   ordenPuestoNumero Int? @map("MedOrdPue")
   ordenNumero       Int? @map("MedOrdNum")
 
+  // Marca de facturado del panel. La medicacion no genera orden: se sigue
+  // facturando en el lote de MEDICAMENTOS, que la levanta igual con este flag en
+  // true. Solo sirve para que facturacion sepa que esa fila ya la proceso.
+  facturada Boolean @default(false) @map("MedFacturada")
+
   profesionalId Int?     @map("PrfID")
   // Estado: A=Activo, S=Suspendido, F=Finalizado, X=Anulado (baja desde facturacion)
   estado        String   @map("MedEstado") @db.Char(1)

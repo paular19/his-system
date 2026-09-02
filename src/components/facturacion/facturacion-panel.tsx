@@ -477,7 +477,16 @@ function practicaTieneAutorizacionConOrden(p: PrestacionFacturableItem): boolean
     )
 }
 
+// La medicacion se carga suelta en el ingreso: no tiene convenio, codigo de
+// nomenclador ni orden, y se factura en el lote de MEDICAMENTOS. Pedirle orden y
+// autorizacion la dejaba sin tilde y con el cartel "Sin autorizacion", que para un
+// medicamento no aplica.
+function esMedicacionSeleccionableParaFacturar(p: PrestacionFacturableItem): boolean {
+    return p.tipo === 'MEDICACION' && !p.facturada
+}
+
 function esPrestacionSeleccionableParaFacturar(p: PrestacionFacturableItem): boolean {
+    if (esMedicacionSeleccionableParaFacturar(p)) return true
     return (
         (p.tipo === 'PRACTICA' || esFilaItemDeOrden(p)) &&
         Boolean(p.codigoPractica) &&
@@ -2938,7 +2947,18 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     }
                 })
 
-            if (prestaciones.length === 0) {
+            // Los medicamentos no arman item de orden: viajan aparte y el backend
+            // solo los marca facturados.
+            const medicacionIds = Array.from(
+                new Set(
+                    source
+                        .filter((p) => esMedicacionSeleccionableParaFacturar(p))
+                        .map((p) => p.origen.medicacionId)
+                        .filter((id): id is number => typeof id === 'number')
+                )
+            )
+
+            if (prestaciones.length === 0 && medicacionIds.length === 0) {
                 if (huboSeleccionExplicita) {
                     throw new Error('No hay prácticas seleccionadas para facturar')
                 }
@@ -2952,13 +2972,15 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                     ingresoId: contexto.ingreso.id,
                     facturarTodo: false,
                     prestaciones,
+                    medicacionIds,
                 }),
             })
             const json = (await res.json()) as ApiResponse<{ ordenes: Array<{ puestoNumero: number; numero: number }> }>
             if (!res.ok || !json.ok || !json.data) throw new Error(json.error ?? 'No se pudieron generar ordenes')
 
             setMensaje(
-                `Facturación registrada para paciente. Prácticas procesadas: ${prestaciones.length}.`
+                `Facturación registrada para paciente. Prácticas procesadas: ${prestaciones.length}.` +
+                (medicacionIds.length > 0 ? ` Medicamentos: ${medicacionIds.length}.` : '')
             )
             setSeleccion({})
             await cargarContexto(contexto.ingreso.id)
@@ -4922,7 +4944,7 @@ export function FacturacionPanel({ vista = 'PENDIENTES' }: FacturacionPanelProps
                                                 const practicaRepartida = practicaRepartidaEnVariasOrdenes(p)
                                                 const desgloseSelector = obtenerDesgloseSelector(p)
                                                 const seleccionable = esPrestacionSeleccionableParaFacturar(p)
-                                                const yaFacturada = p.tipo === 'PRACTICA' && p.facturada
+                                                const yaFacturada = (p.tipo === 'PRACTICA' || p.tipo === 'MEDICACION') && p.facturada
                                                 const tieneComponentes = p.tipo === 'PRACTICA' && !p.facturada && desgloseSelector != null && tieneDesglose(desgloseSelector)
                                                 const mostrarSelectorComponentes = p.tipo === 'PRACTICA' && !p.facturada
                                                 const selComp = tieneComponentes

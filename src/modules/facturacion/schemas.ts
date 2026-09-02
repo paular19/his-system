@@ -144,6 +144,10 @@ export const CargarOrdenesFacturacionSchema = z.object({
     titularModular: z.string().trim().max(100).optional().nullable(),
     facturarTodo: z.boolean().default(true),
     prestaciones: z.array(PrestacionOrdenInputSchema).default([]),
+    // La medicacion no genera orden: se marca facturada y viaja en el lote de
+    // MEDICAMENTOS. Va aparte de `prestaciones` porque no tiene convenio ni codigo
+    // de nomenclador con que armar un item.
+    medicacionIds: z.array(z.number().int().positive()).default([]),
 })
 
 export type CargarOrdenesFacturacionInput = z.infer<typeof CargarOrdenesFacturacionSchema>

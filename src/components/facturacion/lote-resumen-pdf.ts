@@ -22,6 +22,8 @@ export interface ResumenPdfLinea {
     numeroAutorizacion: string | null
     profesional: string | null
     codigoPractica: string
+    // En los lotes de medicamentos el renglon es el nombre del medicamento: no hay codigo.
+    descripcion?: string | null
     cantidad: number
     importeEspecialista: number | null
     importeAyudante: number | null
@@ -123,6 +125,7 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
         unaHojaPorPaciente = false,
     } = opciones
     const esIPSTxt = lote.origen === 'IPS_TXT'
+    const esMedicamentos = lote.tipo === 'MEDICAMENTOS'
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
     const anchoPagina = doc.internal.pageSize.getWidth()
@@ -206,7 +209,13 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
         y = posicionFinal() + 4
     } else if (detallePacientes.length === 0) {
         doc.setFontSize(9)
-        doc.text('No hay detalle de practicas para el resumen.', margen, y)
+        doc.text(
+            esMedicamentos
+                ? 'No hay detalle de medicacion para el resumen.'
+                : 'No hay detalle de practicas para el resumen.',
+            margen,
+            y
+        )
         y += 6
     } else {
         detallePacientes.forEach((paciente, indice) => {
@@ -242,13 +251,19 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
             autoTable(doc, {
                 ...estilosTabla,
                 startY: posicionFinal(),
-                head: [['Fecha', 'Nro. Aut.', 'Profesional', 'Cod.', 'Cant.', '$ Esp', '$ Ayu', '$ Ane', '$ Gto', 'Total']],
+                head: [[
+                    'Fecha',
+                    'Nro. Aut.',
+                    'Profesional',
+                    esMedicamentos ? 'Medicamento' : 'Cod.',
+                    'Cant.', '$ Esp', '$ Ayu', '$ Ane', '$ Gto', 'Total',
+                ]],
                 body: paciente.lineas.length > 0
                     ? paciente.lineas.map((linea) => [
                         formatFecha(linea.fecha),
                         linea.numeroAutorizacion || '-',
                         linea.profesional || '-',
-                        linea.codigoPractica,
+                        linea.descripcion || linea.codigoPractica,
                         formatCantidad(linea.cantidad),
                         formatMontoNullable(linea.importeEspecialista),
                         formatMontoNullable(linea.importeAyudante),
@@ -256,7 +271,12 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
                         formatMontoNullable(linea.importeGastos),
                         formatMonto(linea.importeTotal),
                     ])
-                    : [['Sin practicas autorizadas para este paciente', '', '', '', '', '', '', '', '', '']],
+                    : [[
+                        esMedicamentos
+                            ? 'Sin medicacion cargada para este paciente'
+                            : 'Sin practicas autorizadas para este paciente',
+                        '', '', '', '', '', '', '', '', '',
+                    ]],
                 foot: [['', '', '', '', '', '', '', '', 'Total Paciente', formatMonto(paciente.total)]],
                 footStyles: { fillColor: [243, 244, 246], textColor: 20, fontStyle: 'bold', halign: 'right' },
                 columnStyles: {

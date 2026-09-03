@@ -44,6 +44,8 @@ interface LoteResumenPacienteLinea {
     numeroAutorizacion: string | null
     profesional: string | null
     codigoPractica: string
+    // En los lotes de medicamentos el renglon es el nombre del medicamento: no hay codigo.
+    descripcion?: string | null
     cantidad: number
     importeEspecialista: number | null
     importeAyudante: number | null
@@ -100,6 +102,7 @@ export function LoteResumenPrint({
 }: Props) {
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const esIPSTxt = lote.origen === 'IPS_TXT'
+    const esMedicamentos = lote.tipo === 'MEDICAMENTOS'
     // Al resumen solo van las practicas alcanzadas por la regla de promedi. Si el padre
     // ya mando la lista filtrada, se respeta tal cual.
     const itemsIPSFacturables = itemsIPSTxt
@@ -200,7 +203,7 @@ export function LoteResumenPrint({
                                             <th className="px-2 py-1 text-left font-semibold">Fecha</th>
                                             <th className="px-2 py-1 text-left font-semibold">Nro. Aut.</th>
                                             <th className="px-2 py-1 text-left font-semibold">Profesional</th>
-                                            <th className="px-2 py-1 text-left font-semibold">Cod.</th>
+                                            <th className="px-2 py-1 text-left font-semibold">{esMedicamentos ? 'Medicamento' : 'Cod.'}</th>
                                             <th className="px-2 py-1 text-right font-semibold">Cant.</th>
                                             <th className="px-2 py-1 text-right font-semibold">$ Esp</th>
                                             <th className="px-2 py-1 text-right font-semibold">$ Ayu</th>
@@ -211,11 +214,13 @@ export function LoteResumenPrint({
                                     </thead>
                                     <tbody>
                                         {paciente.lineas.map((linea, index) => (
-                                            <tr key={`${paciente.clave}-${linea.codigoPractica}-${index}`} className="border-b border-gray-200">
+                                            <tr key={`${paciente.clave}-${linea.codigoPractica || linea.descripcion}-${index}`} className="border-b border-gray-200">
                                                 <td className="px-2 py-1">{formatDate(linea.fecha)}</td>
                                                 <td className="px-2 py-1">{linea.numeroAutorizacion || '-'}</td>
                                                 <td className="px-2 py-1">{linea.profesional || '-'}</td>
-                                                <td className="px-2 py-1 font-mono">{linea.codigoPractica}</td>
+                                                <td className={esMedicamentos ? 'px-2 py-1' : 'px-2 py-1 font-mono'}>
+                                                    {linea.descripcion || linea.codigoPractica}
+                                                </td>
                                                 <td className="px-2 py-1 text-right">{formatCantidad(linea.cantidad)}</td>
                                                 <td className="px-2 py-1 text-right">{formatMontoNullable(linea.importeEspecialista)}</td>
                                                 <td className="px-2 py-1 text-right">{formatMontoNullable(linea.importeAyudante)}</td>
@@ -226,7 +231,11 @@ export function LoteResumenPrint({
                                         ))}
                                         {paciente.lineas.length === 0 && (
                                             <tr>
-                                                <td colSpan={10} className="px-2 py-2 text-center text-gray-500">Sin prácticas autorizadas para este paciente</td>
+                                                <td colSpan={10} className="px-2 py-2 text-center text-gray-500">
+                                                    {esMedicamentos
+                                                        ? 'Sin medicación cargada para este paciente'
+                                                        : 'Sin prácticas autorizadas para este paciente'}
+                                                </td>
                                             </tr>
                                         )}
                                     </tbody>
@@ -241,7 +250,9 @@ export function LoteResumenPrint({
 
                     {detallePacientes.length === 0 && (
                         <div className="border border-gray-300 rounded-sm px-4 py-3 text-center text-gray-600">
-                            No hay detalle de prácticas para imprimir.
+                            {esMedicamentos
+                                ? 'No hay detalle de medicación para imprimir.'
+                                : 'No hay detalle de prácticas para imprimir.'}
                         </div>
                     )}
                 </div>

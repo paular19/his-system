@@ -19,6 +19,9 @@ export interface LineaResumenLote {
     numeroAutorizacion: string | null
     profesional: string | null
     codigoPractica: string
+    // Los lotes de medicamentos no tienen codigo de nomenclador: la linea se identifica
+    // por el nombre del medicamento.
+    descripcion?: string | null
     cantidad: number
     importeEspecialista: number | null
     importeAyudante: number | null

@@ -374,6 +374,9 @@ export function LoteDetallePage({ loteId }: Props) {
     const [ordenes, setOrdenes] = useState<OrdenAutorizadaLote[]>([])
     const [loadingOrdenes, setLoadingOrdenes] = useState(false)
     const [medicaciones, setMedicaciones] = useState<MedicacionLoteDetalle[]>([])
+    // La medicacion de todos los ingresos del lote, para el resumen impreso y el PDF:
+    // `medicaciones` es solo la del ingreso abierto en pantalla.
+    const [medicacionesPorIngreso, setMedicacionesPorIngreso] = useState<Record<number, MedicacionLoteDetalle[]>>({})
     const [procesando, setProcesando] = useState(false)
     const [ordenesEnEdicion, setOrdenesEnEdicion] = useState<Record<string, boolean>>({})
     const [editItems, setEditItems] = useState<Record<string, OrdenItemEditState>>({})
@@ -576,6 +579,52 @@ export function LoteDetallePage({ loteId }: Props) {
             cancelado = true
         }
     }, [lote, filtroMedico, filtroMatricula, loteId])
+
+    useEffect(() => {
+        // Contraparte del effect de arriba para los lotes de medicamentos: sin esto el
+        // resumen impreso y el PDF salian vacios aunque la pantalla mostrara los renglones.
+        if (!lote || lote.tipo !== 'MEDICAMENTOS') {
+            setMedicacionesPorIngreso({})
+            return
+        }
+
+        const loteActual = lote
+        let cancelado = false
+
+        async function cargarMedicacionImpresion() {
+            const sp = new URLSearchParams()
+            if (loteActual.periodo) sp.set('periodo', loteActual.periodo)
+
+            const resultados = await Promise.all(
+                loteActual.items.map(async (item) => {
+                    const res = await fetch(
+                        `/api/facturacion/lotes/ingreso/${item.ingresoId}/medicaciones?${sp.toString()}`
+                    )
+                    const json = await res.json()
+                    return {
+                        ingresoId: item.ingresoId,
+                        medicaciones: (res.ok && json.ok ? (json.data ?? []) : []) as MedicacionLoteDetalle[],
+                    }
+                })
+            )
+
+            if (cancelado) return
+
+            const next: Record<number, MedicacionLoteDetalle[]> = {}
+            for (const resultado of resultados) {
+                next[resultado.ingresoId] = resultado.medicaciones
+            }
+            setMedicacionesPorIngreso(next)
+        }
+
+        cargarMedicacionImpresion().catch(() => {
+            if (!cancelado) setMedicacionesPorIngreso({})
+        })
+
+        return () => {
+            cancelado = true
+        }
+    }, [lote, loteId])
 
     async function toggleItem(item: LoteFacturacionItemDetalle) {
         const nuevoIncluido = !item.incluido
@@ -898,9 +947,46 @@ export function LoteDetallePage({ loteId }: Props) {
             .filter((it) => !filtroCategoriaIPS || categoriaPractica(it.servicioCodigo) === filtroCategoriaIPS)
         : []
 
+    // Un lote de medicamentos no tiene ordenes ni codigo de nomenclador: cada renglon es
+    // un medicamento del ingreso, con su importe, y va entero a la columna de gastos.
+    const detalleMedicamentos = esLoteMedicamentos
+        ? itemsOrdenados.map((item) => {
+            const lineas = (medicacionesPorIngreso[item.ingresoId] ?? [])
+                .map((med) => ({
+                    subitem: 'GA' as const,
+                    ordenNumero: 0,
+                    fecha: med.fecha,
+                    numeroAutorizacion: null,
+                    profesional: null,
+                    codigoPractica: '',
+                    descripcion: med.nombre,
+                    cantidad: med.cantidad,
+                    importeEspecialista: null,
+                    importeAyudante: null,
+                    importeAnestesista: null,
+                    importeGastos: med.importeTotal,
+                    importeTotal: med.importeTotal,
+                }))
+                .sort(compararLineasResumen)
+
+            return {
+                ingresoId: item.ingresoId,
+                pacienteId: item.paciente?.id ?? null,
+                incluido: item.incluido,
+                numeroIngreso: item.ingreso.numeroIngreso,
+                paciente: item.paciente?.nombreCompleto ?? item.ingreso.nombre ?? '-',
+                numeroAfiliado: item.ingreso.numeroAfiliado,
+                total: lineas.reduce((acc, it) => acc + it.importeTotal, 0),
+                lineas,
+            }
+        })
+        : []
+
     // El resumen impreso o exportado tiene que respetar el filtro de categoria de la
     // pantalla: si se filtra por radiografias, no puede salir el lote entero.
-    const detalleIngresosBase = !esIPSTxt
+    const detalleIngresosBase = esLoteMedicamentos
+        ? detalleMedicamentos
+        : !esIPSTxt
         ? itemsOrdenados.filter((item) =>
             !filtroCategoria || (categoriasPorIngreso.get(item.ingresoId)?.has(filtroCategoria) ?? false)
         ).map((item) => {

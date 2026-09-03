@@ -1,0 +1,772 @@
+{
+ "tomado": "2026-09-03",
+ "contexto": "antes de completar honorario+gastos de 170101/340301 en el lote 70",
+ "objetivos": [
+  {
+   "ord": 637,
+   "it": 1,
+   "pra": 1369,
+   "ing": 153,
+   "cod": "170101",
+   "viejo": 15149.63,
+   "nuevo": 18699.95,
+   "solo": false
+  },
+  {
+   "ord": 2244,
+   "it": 1,
+   "pra": 3662,
+   "ing": 452,
+   "cod": "340301",
+   "viejo": 4432.97,
+   "nuevo": 6025.61,
+   "solo": true
+  },
+  {
+   "ord": 2559,
+   "it": 1,
+   "pra": 4076,
+   "ing": 452,
+   "cod": "340301",
+   "viejo": 4432.97,
+   "nuevo": 6025.61,
+   "solo": true
+  },
+  {
+   "ord": 2888,
+   "it": 1,
+   "pra": 4541,
+   "ing": 452,
+   "cod": "340301",
+   "viejo": 4432.97,
+   "nuevo": 6025.61,
+   "solo": true
+  },
+  {
+   "ord": 2041,
+   "it": 1,
+   "pra": 3370,
+   "ing": 411,
+   "cod": "170101",
+   "viejo": 18699.95,
+   "nuevo": 18699.95,
+   "solo": false
+  },
+  {
+   "ord": 3085,
+   "it": 1,
+   "pra": 4785,
+   "ing": 452,
+   "cod": "340301",
+   "viejo": 6025.61,
+   "nuevo": 6025.61,
+   "solo": true
+  }
+ ],
+ "ordenes": [
+  {
+   "puestoNumero": 1,
+   "numero": 637,
+   "ingresoId": 153,
+   "estado": "A",
+   "importeTotal": "32149.74",
+   "numeroAutorizacion": "52295740/1",
+   "items": [
+    {
+     "item": 1,
+     "codigoPractica": "170101  ",
+     "cantidad": "1",
+     "importeTotal": "15149.63",
+     "modulo": null,
+     "clasificacionAgrupacion": "HE",
+     "titularModular": "HONORARIO ESPECIALISTA",
+     "imprimirPorDuplicado": false,
+     "practicaId": 1369
+    },
+    {
+     "item": 2,
+     "codigoPractica": "420303  ",
+     "cantidad": "1",
+     "importeTotal": "17000.11",
+     "modulo": null,
+     "clasificacionAgrupacion": "HE",
+     "titularModular": "HONORARIO ESPECIALISTA",
+     "imprimirPorDuplicado": false,
+     "practicaId": 1370
+    }
+   ]
+  },
+  {
+   "puestoNumero": 1,
+   "numero": 2041,
+   "ingresoId": 411,
+   "estado": "A",
+   "importeTotal": "35700.06",
+   "numeroAutorizacion": "52296965/9",
+   "items": [
+    {
+     "item": 1,
+     "codigoPractica": "170101  ",
+     "cantidad": "1",
+     "importeTotal": "18699.95",
+     "modulo": "HE+GA   ",
+     "clasificacionAgrupacion": "HE+GA",
+     "titularModular": "HONORARIO ESPECIALISTA",
+     "imprimirPorDuplicado": true,
+     "practicaId": 3370
+    },
+    {
+     "item": 2,
+     "codigoPractica": "420303  ",
+     "cantidad": "1",
+     "importeTotal": "17000.11",
+     "modulo": "HE      ",
+     "clasificacionAgrupacion": "HE",
+     "titularModular": "HONORARIO ESPECIALISTA",
+     "imprimirPorDuplicado": true,
+     "practicaId": 3371
+    }
+   ]
+  },
+  {
+   "puestoNumero": 1,
+   "numero": 2244,
+   "ingresoId": 452,
+   "estado": "A",
+   "importeTotal": "4432.97",
+   "numeroAutorizacion": "52297339",
+   "items": [
+    {
+     "item": 1,
+     "codigoPractica": "340301  ",
+     "cantidad": "1",
+     "importeTotal": "4432.97",
+     "modulo": null,
+     "clasificacionAgrupacion": "GA",
+     "titularModular": "DERECHOS",
+     "imprimirPorDuplicado": true,
+     "practicaId": 3662
+    }
+   ]
+  },
+  {
+   "puestoNumero": 1,
+   "numero": 2559,
+   "ingresoId": 452,
+   "estado": "A",
+   "importeTotal": "4432.97",
+   "numeroAutorizacion": "52298568",
+   "items": [
+    {
+     "item": 1,
+     "codigoPractica": "340301  ",
+     "cantidad": "1",
+     "importeTotal": "4432.97",
+     "modulo": null,
+     "clasificacionAgrupacion": "GA",
+     "titularModular": "DERECHOS",
+     "imprimirPorDuplicado": true,
+     "practicaId": 4076
+    }
+   ]
+  },
+  {
+   "puestoNumero": 1,
+   "numero": 2888,
+   "ingresoId": 452,
+   "estado": "A",
+   "importeTotal": "4432.97",
+   "numeroAutorizacion": "52298544",
+   "items": [
+    {
+     "item": 1,
+     "codigoPractica": "340301  ",
+     "cantidad": "1",
+     "importeTotal": "4432.97",
+     "modulo": null,
+     "clasificacionAgrupacion": "GA",
+     "titularModular": "DERECHOS",
+     "imprimirPorDuplicado": true,
+     "practicaId": 4541
+    }
+   ]
+  },
+  {
+   "puestoNumero": 1,
+   "numero": 3085,
+   "ingresoId": 452,
+   "estado": "A",
+   "importeTotal": "6025.61",
+   "numeroAutorizacion": "52298279",
+   "items": [
+    {
+     "item": 1,
+     "codigoPractica": "340301  ",
+     "cantidad": "1",
+     "importeTotal": "6025.61",
+     "modulo": null,
+     "clasificacionAgrupacion": "GA",
+     "titularModular": "DERECHOS",
+     "imprimirPorDuplicado": true,
+     "practicaId": 4785
+    }
+   ]
+  }
+ ],
+ "practicas": [
+  {
+   "id": 1369,
+   "ingresoId": 153,
+   "codigoPractica": "170101  ",
+   "estado": "F",
+   "cantidad": "1",
+   "importeTotal": "15149.63",
+   "facturable": true,
+   "motivoNoFactura": null,
+   "puestoNumero": 1,
+   "ordenNumero": 637,
+   "ordenItem": 1
+  },
+  {
+   "id": 3370,
+   "ingresoId": 411,
+   "codigoPractica": "170101",
+   "estado": "F",
+   "cantidad": "1",
+   "importeTotal": "18699.95",
+   "facturable": true,
+   "motivoNoFactura": null,
+   "puestoNumero": 1,
+   "ordenNumero": 2041,
+   "ordenItem": 1
+  },
+  {
+   "id": 3662,
+   "ingresoId": 452,
+   "codigoPractica": "340301  ",
+   "estado": "F",
+   "cantidad": "1",
+   "importeTotal": "4432.97",
+   "facturable": true,
+   "motivoNoFactura": null,
+   "puestoNumero": 1,
+   "ordenNumero": 2244,
+   "ordenItem": 1
+  },
+  {
+   "id": 4076,
+   "ingresoId": 452,
+   "codigoPractica": "340301  ",
+   "estado": "F",
+   "cantidad": "1",
+   "importeTotal": "4432.97",
+   "facturable": true,
+   "motivoNoFactura": null,
+   "puestoNumero": 1,
+   "ordenNumero": 2559,
+   "ordenItem": 1
+  },
+  {
+   "id": 4541,
+   "ingresoId": 452,
+   "codigoPractica": "340301  ",
+   "estado": "F",
+   "cantidad": "1",
+   "importeTotal": "4432.97",
+   "facturable": true,
+   "motivoNoFactura": null,
+   "puestoNumero": 1,
+   "ordenNumero": 2888,
+   "ordenItem": 1
+  },
+  {
+   "id": 4785,
+   "ingresoId": 452,
+   "codigoPractica": "340301  ",
+   "estado": "F",
+   "cantidad": "1",
+   "importeTotal": "6025.61",
+   "facturable": true,
+   "motivoNoFactura": null,
+   "puestoNumero": 1,
+   "ordenNumero": 3085,
+   "ordenItem": 1
+  }
+ ],
+ "itemsLote": [
+  {
+   "id": 752,
+   "loteId": 66,
+   "ingresoId": 209,
+   "incluido": true,
+   "importeTotal": "464490.83",
+   "importePromedi": null
+  },
+  {
+   "id": 745,
+   "loteId": 66,
+   "ingresoId": 149,
+   "incluido": true,
+   "importeTotal": "238802.34",
+   "importePromedi": null
+  },
+  {
+   "id": 751,
+   "loteId": 66,
+   "ingresoId": 207,
+   "incluido": true,
+   "importeTotal": "1365694.72",
+   "importePromedi": null
+  },
+  {
+   "id": 768,
+   "loteId": 66,
+   "ingresoId": 240,
+   "incluido": true,
+   "importeTotal": "1802629.08",
+   "importePromedi": null
+  },
+  {
+   "id": 772,
+   "loteId": 66,
+   "ingresoId": 300,
+   "incluido": true,
+   "importeTotal": "796604.56",
+   "importePromedi": null
+  },
+  {
+   "id": 773,
+   "loteId": 66,
+   "ingresoId": 323,
+   "incluido": true,
+   "importeTotal": "1136199.27",
+   "importePromedi": null
+  },
+  {
+   "id": 774,
+   "loteId": 66,
+   "ingresoId": 352,
+   "incluido": true,
+   "importeTotal": "965505.28",
+   "importePromedi": null
+  },
+  {
+   "id": 776,
+   "loteId": 66,
+   "ingresoId": 152,
+   "incluido": true,
+   "importeTotal": "13370155.62",
+   "importePromedi": null
+  },
+  {
+   "id": 777,
+   "loteId": 66,
+   "ingresoId": 409,
+   "incluido": true,
+   "importeTotal": "1311652.54",
+   "importePromedi": null
+  },
+  {
+   "id": 786,
+   "loteId": 66,
+   "ingresoId": 329,
+   "incluido": true,
+   "importeTotal": "3552815.14",
+   "importePromedi": null
+  },
+  {
+   "id": 748,
+   "loteId": 66,
+   "ingresoId": 424,
+   "incluido": true,
+   "importeTotal": "488289.39",
+   "importePromedi": null
+  },
+  {
+   "id": 742,
+   "loteId": 66,
+   "ingresoId": 425,
+   "incluido": true,
+   "importeTotal": "108112.04",
+   "importePromedi": null
+  },
+  {
+   "id": 760,
+   "loteId": 66,
+   "ingresoId": 451,
+   "incluido": true,
+   "importeTotal": "504680.3",
+   "importePromedi": null
+  },
+  {
+   "id": 759,
+   "loteId": 66,
+   "ingresoId": 450,
+   "incluido": true,
+   "importeTotal": "5175324.85",
+   "importePromedi": null
+  },
+  {
+   "id": 744,
+   "loteId": 66,
+   "ingresoId": 507,
+   "incluido": true,
+   "importeTotal": "810974.3",
+   "importePromedi": null
+  },
+  {
+   "id": 746,
+   "loteId": 66,
+   "ingresoId": 508,
+   "incluido": true,
+   "importeTotal": "448527.03",
+   "importePromedi": null
+  },
+  {
+   "id": 741,
+   "loteId": 66,
+   "ingresoId": 511,
+   "incluido": true,
+   "importeTotal": "430576.2",
+   "importePromedi": null
+  },
+  {
+   "id": 747,
+   "loteId": 66,
+   "ingresoId": 520,
+   "incluido": true,
+   "importeTotal": "464516.08",
+   "importePromedi": null
+  },
+  {
+   "id": 764,
+   "loteId": 66,
+   "ingresoId": 525,
+   "incluido": true,
+   "importeTotal": "496748.74",
+   "importePromedi": null
+  },
+  {
+   "id": 766,
+   "loteId": 66,
+   "ingresoId": 400,
+   "incluido": true,
+   "importeTotal": "246189.45",
+   "importePromedi": null
+  },
+  {
+   "id": 753,
+   "loteId": 66,
+   "ingresoId": 211,
+   "incluido": true,
+   "importeTotal": "108112.04",
+   "importePromedi": null
+  },
+  {
+   "id": 770,
+   "loteId": 66,
+   "ingresoId": 327,
+   "incluido": true,
+   "importeTotal": "227827.84",
+   "importePromedi": null
+  },
+  {
+   "id": 765,
+   "loteId": 66,
+   "ingresoId": 360,
+   "incluido": true,
+   "importeTotal": "810845.78",
+   "importePromedi": null
+  },
+  {
+   "id": 749,
+   "loteId": 66,
+   "ingresoId": 366,
+   "incluido": true,
+   "importeTotal": "214978.33",
+   "importePromedi": null
+  },
+  {
+   "id": 761,
+   "loteId": 66,
+   "ingresoId": 370,
+   "incluido": true,
+   "importeTotal": "801451.36",
+   "importePromedi": null
+  },
+  {
+   "id": 762,
+   "loteId": 66,
+   "ingresoId": 393,
+   "incluido": true,
+   "importeTotal": "930174.91",
+   "importePromedi": null
+  },
+  {
+   "id": 758,
+   "loteId": 66,
+   "ingresoId": 358,
+   "incluido": true,
+   "importeTotal": "993597.02",
+   "importePromedi": null
+  },
+  {
+   "id": 763,
+   "loteId": 66,
+   "ingresoId": 408,
+   "incluido": true,
+   "importeTotal": "2705826.19",
+   "importePromedi": null
+  },
+  {
+   "id": 757,
+   "loteId": 66,
+   "ingresoId": 153,
+   "incluido": false,
+   "importeTotal": "3062420.21",
+   "importePromedi": null
+  },
+  {
+   "id": 743,
+   "loteId": 66,
+   "ingresoId": 107,
+   "incluido": true,
+   "importeTotal": "490609.01",
+   "importePromedi": null
+  },
+  {
+   "id": 755,
+   "loteId": 66,
+   "ingresoId": 110,
+   "incluido": true,
+   "importeTotal": "1071824.77",
+   "importePromedi": null
+  },
+  {
+   "id": 750,
+   "loteId": 66,
+   "ingresoId": 160,
+   "incluido": true,
+   "importeTotal": "1365694.72",
+   "importePromedi": null
+  },
+  {
+   "id": 754,
+   "loteId": 66,
+   "ingresoId": 235,
+   "incluido": true,
+   "importeTotal": "674952.47",
+   "importePromedi": null
+  },
+  {
+   "id": 769,
+   "loteId": 66,
+   "ingresoId": 294,
+   "incluido": true,
+   "importeTotal": "422899.54",
+   "importePromedi": null
+  },
+  {
+   "id": 771,
+   "loteId": 66,
+   "ingresoId": 314,
+   "incluido": true,
+   "importeTotal": "186102.17",
+   "importePromedi": null
+  },
+  {
+   "id": 782,
+   "loteId": 66,
+   "ingresoId": 529,
+   "incluido": true,
+   "importeTotal": "1056436.05",
+   "importePromedi": null
+  },
+  {
+   "id": 778,
+   "loteId": 66,
+   "ingresoId": 530,
+   "incluido": true,
+   "importeTotal": "1365694.72",
+   "importePromedi": null
+  },
+  {
+   "id": 783,
+   "loteId": 66,
+   "ingresoId": 542,
+   "incluido": true,
+   "importeTotal": "464516.08",
+   "importePromedi": null
+  },
+  {
+   "id": 779,
+   "loteId": 66,
+   "ingresoId": 544,
+   "incluido": true,
+   "importeTotal": "1034096.73",
+   "importePromedi": null
+  },
+  {
+   "id": 781,
+   "loteId": 66,
+   "ingresoId": 547,
+   "incluido": true,
+   "importeTotal": "407919.98",
+   "importePromedi": null
+  },
+  {
+   "id": 775,
+   "loteId": 66,
+   "ingresoId": 566,
+   "incluido": true,
+   "importeTotal": "1048442.3",
+   "importePromedi": null
+  },
+  {
+   "id": 780,
+   "loteId": 66,
+   "ingresoId": 574,
+   "incluido": true,
+   "importeTotal": "430930.12",
+   "importePromedi": null
+  },
+  {
+   "id": 785,
+   "loteId": 66,
+   "ingresoId": 581,
+   "incluido": true,
+   "importeTotal": "812103.99",
+   "importePromedi": null
+  },
+  {
+   "id": 784,
+   "loteId": 66,
+   "ingresoId": 470,
+   "incluido": true,
+   "importeTotal": "805465",
+   "importePromedi": null
+  },
+  {
+   "id": 789,
+   "loteId": 66,
+   "ingresoId": 585,
+   "incluido": true,
+   "importeTotal": "2012417.04",
+   "importePromedi": null
+  },
+  {
+   "id": 787,
+   "loteId": 66,
+   "ingresoId": 594,
+   "incluido": true,
+   "importeTotal": "191773.86",
+   "importePromedi": null
+  },
+  {
+   "id": 790,
+   "loteId": 66,
+   "ingresoId": 595,
+   "incluido": true,
+   "importeTotal": "604286.76",
+   "importePromedi": null
+  },
+  {
+   "id": 788,
+   "loteId": 66,
+   "ingresoId": 617,
+   "incluido": true,
+   "importeTotal": "186102.17",
+   "importePromedi": null
+  },
+  {
+   "id": 767,
+   "loteId": 66,
+   "ingresoId": 217,
+   "incluido": true,
+   "importeTotal": "939144.44",
+   "importePromedi": null
+  },
+  {
+   "id": 756,
+   "loteId": 66,
+   "ingresoId": 506,
+   "incluido": true,
+   "importeTotal": "870878.65",
+   "importePromedi": null
+  },
+  {
+   "id": 895,
+   "loteId": 70,
+   "ingresoId": 153,
+   "incluido": true,
+   "importeTotal": "3062420.21",
+   "importePromedi": null
+  },
+  {
+   "id": 896,
+   "loteId": 70,
+   "ingresoId": 450,
+   "incluido": false,
+   "importeTotal": "8969.53",
+   "importePromedi": null
+  },
+  {
+   "id": 897,
+   "loteId": 70,
+   "ingresoId": 411,
+   "incluido": true,
+   "importeTotal": "2937330.85",
+   "importePromedi": null
+  },
+  {
+   "id": 898,
+   "loteId": 70,
+   "ingresoId": 452,
+   "incluido": true,
+   "importeTotal": "8531593.61",
+   "importePromedi": null
+  }
+ ],
+ "lotes": [
+  {
+   "id": 66,
+   "numero": 66,
+   "fecha": "2026-09-03T00:00:00.000Z",
+   "periodo": "2026-08",
+   "obraSocialId": 511,
+   "planId": null,
+   "tipoIngresoCodigo": "INT",
+   "tipo": "PRACTICAS",
+   "rangoDesde": null,
+   "rangoHasta": null,
+   "sedeId": null,
+   "descripcion": "AGOSTO",
+   "concepto": "INTERNADO",
+   "importeTotal": "57413591.8",
+   "origen": null,
+   "estado": "PEN",
+   "fechaEstado": "2026-09-03T16:25:43.166Z",
+   "usuario": "user_3F2Zc"
+  },
+  {
+   "id": 70,
+   "numero": 70,
+   "fecha": "2026-09-03T00:00:00.000Z",
+   "periodo": null,
+   "obraSocialId": 511,
+   "planId": null,
+   "tipoIngresoCodigo": "INT",
+   "tipo": "PRACTICAS",
+   "rangoDesde": null,
+   "rangoHasta": null,
+   "sedeId": null,
+   "descripcion": "AGOSTO",
+   "concepto": "INTERNADO EXTRACAPITA",
+   "importeTotal": "14531344.67",
+   "origen": null,
+   "estado": "PEN",
+   "fechaEstado": "2026-09-03T18:48:17.347Z",
+   "usuario": "user_3F2Zc"
+  }
+ ]
+}

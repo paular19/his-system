@@ -1547,3 +1547,65 @@ el 2026-09-03 18:59 (usuario `user_3F2ZR`). Se lo volvio a `PEN` desde un script
 `reabrirLote(69, 'SISTEMA')`, o sea el mismo camino que ahora expone el boton "Volver a
 pendiente" del detalle de lote: solo cambia `LotEstado`, `LotFecEst` y `LotUsuario`, no toca
 items ni ordenes. Queda auditado en `Audit` como "Lote devuelto a pendiente".
+
+---
+
+## 2026-09-03 — Lote 70: honorarios y gastos incompletos en 170101 y 340301
+
+**Pedido por:** Paula — "en el lote 70 tengo que corregir los mismos errores en los codigos
+340301 y 170101, a algunos les falta especialista y a otros gastos; todos esos codigos deben
+contar con gastos y especialista".
+
+**Alcance:** lote 70 (OSECAC CONV DIRECT, OS 511, **sin periodo**, PEN, 3 ingresos incluidos:
+FLORES ing 153, GALARZA ing 411, DIAZ ing 452). Nomenclador convenio 1: `170101` = 15.149,63 +
+3.550,32 = 18.699,95; `340301` = 1.592,64 + 4.432,97 = 6.025,61.
+
+Auditadas 15 filas de esos dos codigos: 11 ya estaban completas, 4 a medias, 3 completas pero
+mal etiquetadas. Misma forma canonica del lote 43 y del lote 66: `OprImpTotal` al valor
+completo, `OprClasAgrup='HE+GA'`, `OprModulo=NULL`, y `PraImpTotal` igual. Titular
+(`HONORARIO ESPECIALISTA + DERECHOS`) y `OprImprimirDuplicado=true` **solo en las ordenes de
+un item**, para no mal-etiquetar los otros codigos de la orden — por eso 637 y 2041, que
+tienen dos items, conservan su titular.
+
+**A — 4 filas a las que les faltaba un componente** (+8.328,24):
+
+```
+70 | 153 | 1/637#1  | 170101 | 15149.63 -> 18699.95   (solo HE)
+70 | 452 | 1/2244#1 | 340301 |  4432.97 ->  6025.61   (solo GA)
+70 | 452 | 1/2559#1 | 340301 |  4432.97 ->  6025.61   (solo GA)
+70 | 452 | 1/2888#1 | 340301 |  4432.97 ->  6025.61   (solo GA)
+```
+
+**B — 2 filas solo de etiqueta** (importe ya completo, 0 de delta): `1/2041#1` (170101 de
+GALARZA, tenia `OprModulo='HE+GA'` en vez de NULL) y `1/3085#1` (340301 de DIAZ, `clas='GA'`).
+
+**Guardas del script** (aborta sin escribir): importe actual distinto del medido, cantidad != 1,
+practica no facturable, practica que no apunta de vuelta a esa fila, orden anulada, cabecera
+que no coincide con la suma de sus items, o cambio de importe sobre una practica que no esta
+en estado `F`. La guarda contra doble facturacion del lote 66 no tenia nada que saltear: **0
+grupos ingreso+codigo con una mitad HE y otra GA por separado**.
+
+**Lo que quedo afuera a proposito:**
+
+- `1/3198#1` (340301 de DIAZ del 01/09, pra 4940): la fila de orden apunta a la practica pero
+  **la practica no apunta de vuelta** (`PraEstad` NULL, sin autorizacion), asi que no entra al
+  lote. El script la rechazo por la guarda de vinculo. Su importe ya es el completo; queda solo
+  la etiqueta `clas='GA'`. Revisar por que quedo a medio facturar.
+- El ingreso 153 (FLORES) esta ademas en el lote 66, **destildado**: completarlo no duplica.
+
+**Totales refrescados** (dos lecturas seguidas, aborta si no coinciden):
+
+| lote | antes | despues |
+|---|---|---|
+| 70 | 14.531.344,67 | **14.777.674,45** |
+| 66 | 57.413.591,80 | 57.413.591,80 (sin cambio: FLORES esta destildada) |
+
+El salto del lote 70 es mas grande que los 8.328,24 de la correccion porque el
+`LotImpTotal` guardado venia viejo: le faltaban 238.001,54 de GALARZA (ing 411). El item de
+FLORES tambien se refresco en el lote 66 (3.062.420,21 -> 3.065.970,53) aunque no sume.
+
+**Verificado despues de correr:** el mismo barrido devuelve **15 de 15 filas COMPLETA**, 0 a
+completar, y guardado = calculado en los dos lotes (dif 0,00).
+
+**Reversion:** `docs/snapshot-lote70-completar-2026-09-03.json` tiene el estado previo completo
+(ordenes con sus items, practicas, items de lote y los lotes 66 y 70).

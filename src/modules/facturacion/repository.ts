@@ -47,6 +47,11 @@ import {
     tieneDiferencialesActivos,
 } from './diferenciales'
 import { puedeEditarPrestacionEnLote } from './editability'
+import {
+    fechaEntraEnPeriodo,
+    periodoToDateRange,
+    rangoPeriodoOpcional,
+} from './periodo-lote'
 import { crearOrdenAmbulatorio } from '@/modules/orden/service'
 import { claveDiaArgentina } from '@/lib/utils/argentina-date'
 import { obtenerTokensBusquedaFlexible } from '@/lib/utils/busqueda-flexible'
@@ -1295,28 +1300,6 @@ function buildOrdenFacturadaWhere(): Prisma.OrdenWhereInput {
             },
         ],
     }
-}
-
-function periodoToDateRange(periodo: string): { desde: Date; hasta: Date } {
-    const [yearStr, monthStr] = periodo.split('-')
-    const year = Number(yearStr)
-    const month = Number(monthStr)
-    const desde = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0))
-    const hasta = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0))
-    return { desde, hasta }
-}
-
-// Un lote sin periodo no filtra por fecha: levanta todo lo pendiente. Estos tres
-// helpers son la unica forma de leer el periodo de un lote, para que "sin periodo"
-// signifique lo mismo al crearlo, al mostrarlo y al aplicarle el promedi.
-function rangoPeriodoOpcional(periodo: string | null | undefined): { desde: Date; hasta: Date } | null {
-    if (!periodo) return null
-    return periodoToDateRange(periodo)
-}
-
-function fechaEntraEnPeriodo(fecha: Date, rango: { desde: Date; hasta: Date } | null): boolean {
-    if (!rango) return true
-    return fecha >= rango.desde && fecha < rango.hasta
 }
 
 function whereFechaEmisionPeriodo(periodo: string | null | undefined): Prisma.OrdenWhereInput {

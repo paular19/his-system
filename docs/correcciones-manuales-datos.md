@@ -1368,3 +1368,172 @@ por `includes('ACIDSAL')`.
 
 **Queda pendiente:** que facturacion corra `Aplicar PROMEDI` y recien despues
 confirme.
+
+---
+
+## 2026-09-03 — El periodo de un lote va del dia 2 al dia 1 del mes siguiente
+
+**Que cambio:** agosto tiene que incluir hasta el 01/09 inclusive. Antes
+`periodoToDateRange` devolvia `01/08 00:00 <= fecha < 01/09 00:00`, asi que el 01/09
+quedaba entero afuera (las 83 ordenes de ese dia). Ahora el rango es
+`02/08 00:00 <= fecha < 02/09 00:00`.
+
+El corrimiento va en las **dos** puntas a proposito. Si el periodo arrancara el dia 1
+y cerrara el dia 1 del mes siguiente, ese dia caeria en dos periodos y se podria
+facturar dos veces. Con el corrimiento simetrico ningun dia se repite y ninguno queda
+sin periodo.
+
+La regla se movio a `src/modules/facturacion/periodo-lote.ts` con test propio
+(`periodo-lote.test.ts`, 10 casos: el borde 01/09 vs 02/09, la no superposicion entre
+periodos consecutivos y la excepcion de 2026-08). Es el unico lugar
+que traduce periodo a fechas: lo usan la creacion del lote, el detalle, las
+medicaciones, el PROMEDI y el listado.
+
+**Lotes tocados** (los tres de este mes que estaban sin periodo):
+
+| tabla | registro | antes | despues |
+|---|---|---|---|
+| `LoteFacturacion` | 62 (`LotPeriodo`) | NULL | `2026-08` |
+| `LoteFacturacion` | 64 (`LotPeriodo`) | NULL | `2026-08` |
+| `LoteFacturacion` | 67 (`LotPeriodo`) | NULL | `2026-08` |
+
+El 66 ya tenia `2026-08`. Los cuatro lotes en PEN de esta vuelta (62, 64, 66, 67)
+quedan con el mismo periodo.
+
+**Reversion:** `UPDATE "LoteFacturacion" SET "LotPeriodo"=NULL WHERE "LotID" IN (62,64,67)`
+y volver `periodoToDateRange` al mes calendario (dia 1 a dia 1).
+
+**Impacto medido por lote** (ordenes no anuladas con autorizacion o practica en `F`):
+
+| lote | regla anterior (01/08-31/08) | regla nueva (01/08-01/09) | del 01/08 | del 01/09 |
+|---|---|---|---|---|
+| 62 | 93 / 1.581.000,00 | 93 / 1.581.000,00 | 3 / 51.000,00 | 0 |
+| 64 | 26 / 290.674,66 | 26 / 290.674,66 | 0 | 0 |
+| 66 | 534 / 68.176.499,46 | 535 / 68.184.121,86 | 5 / 2.169.372,89 | 1 / 7.622,40 |
+| 67 | 417 / 73.129.652,67 | 425 / 79.226.744,26 | 16 / 5.539.708,17 | 8 / 6.097.091,59 |
+
+Contra la regla anterior el cambio es puramente aditivo: no sale ninguna orden, solo
+entran las del 01/09. Los importes son una foto del 2026-09-03 a la tarde; el lote 66 se
+estuvo editando ese mismo dia (reparacion de vinculos), asi que sus totales se movieron
+entre dos corridas.
+
+**Excepcion, por unica vez, para el 01/08:** con el arranque en el dia 2, las ordenes
+del 01/08 caerian en el periodo `2026-07`, y **no existe ningun lote con periodo
+2026-07**: son 21 ordenes por 7.709.077,23 (ingresos 113, 152, 155, 164, 182, 204) que
+al 2026-09-03 no estaban en ningun lote confirmado, o sea que no las levantaria nadie.
+Por eso `2026-08` arranca el 01/08 y no el 02/08 — queda `01/08 00:00` hasta
+`01/09 23:59:59`. La excepcion es solo de ese periodo, esta hardcodeada en
+`PRIMER_PERIODO_CON_DIA_1` y no se contagia a septiembre (que arranca el 02/09) ni a
+agosto de otro año; los dos casos tienen test.
+
+**Otro pendiente:** el lote 45 (IPSS, `RX IPS`, creado el 28/08) sigue en PEN sin
+periodo. Se dejo asi porque es de la vuelta anterior, no de esta. Con `2026-08` perderia
+2 ordenes por 14.078,87.
+
+**Nota:** `aplicarPromediLote` escribe `LItImpPromedi` por item pero no reescribe
+`LotImpTotal`, asi que el importe guardado del lote queda viejo hasta que se recree.
+El listado usa el guardado; el detalle, el resumen y el PDF recalculan.
+
+---
+
+## 2026-09-03 — Lote 66: honorarios y gastos incompletos en 12 codigos
+
+**Reportado por:** Paula — "lote 66, mismo problema: necesitamos que salga gastos y
+especialista incluidos en cada practica, hay casos que traen gastos y otros solo
+especialista". Codigos: 170101, 340301, 341008, 340907, 340905, 340212, 180118, 180111,
+180116, 180114, 340421, 180112. Los doce tienen `NPrValEsp` y `NPrValGto` en el
+nomenclador, o sea que los doce deben cobrar los dos componentes.
+
+**Alcance:** lote 66 (OSECAC CONV DIRECT, periodo 2026-08, PEN, 49 ingresos incluidos).
+Auditados 101 grupos paciente+codigo+fecha. No era un problema sino tres:
+
+| | casos | plata |
+|---|---|---|
+| A. Practica con un solo componente cargado | 30 | faltaban 189.701,13 |
+| B. Importe completo pero etiquetado con un solo componente | 12 lineas | 0, fallaba el desglose |
+| C. Practica cargada y autorizada pero sin vincular, no llegaba al resumen | 10 | 270.781,83 sin facturar |
+
+**C se arreglo primero** porque cambia el resultado de A: al vincularlas aparecieron dos
+faltantes nuevos (los 340907 de RUIZ INT-234 y VALENCIA INT-213, que entran con gastos
+solos) y dos casos salieron de la lista de A (GIMENEZ y ZAPANA ya tenian el honorario
+cargado en otra orden).
+
+**C — vinculos reparados** (`PraEstad` NULL o 'A' y `PueNum`/`OrdNum`/`OprItem` en NULL,
+con `PraFacturar=true` y sin motivo de no facturacion):
+
+| Practica | Orden/item | Paciente | Importe |
+|---|---|---|---|
+| 3203 | 1/1923/1 | AGUERO INT-193 | 15.149,63 |
+| 3202 | 1/1924/1 | AGUERO INT-193 | 3.550,32 |
+| 2878 | 1/1681/1 | CANABIDE INT-174 | 49.634,88 |
+| 3100 | 1/1843/1 | GIMENEZ INT-188 | 15.149,63 |
+| 2839 | 1/1672/3 | RUIZ INT-175 | 49.634,88 |
+| 4247 | 1/2681/3 | RUIZ INT-234 | 42.556,48 |
+| 3676 | 1/2257/1 | VALENCIA INT-199 | 18.699,95 |
+| 3605 | 1/2198/4 | VALENCIA INT-213 | 42.556,48 |
+| 3330 | 1/2022/1 | VARELA INT-194 | 18.699,95 |
+| 2765 | 1/1628/1 | ZAPANA INT-167 | 15.149,63 |
+
+El script aborta sin escribir si alguna practica ya esta vinculada, no es facturable,
+tiene mas de una fila de orden viva, el importe no coincide con el medido, o la orden no
+tiene autorizacion. Snapshot: `docs/snapshot-lote66-vinculos-2026-09-03.json`.
+
+**A y B — 42 lineas a la forma canonica** del lote 43 (31/08, mas arriba en este
+archivo): `OprImpTotal` al valor completo, `OprClasAgrup='HE+GA'`, `OprModulo=NULL`,
+`OprTitularModular='HONORARIO ESPECIALISTA + DERECHOS'`, `OprImprimirDuplicado=true`, y
+`PraImpTotal` igual. Cabeceras recalculadas como suma de sus items; titular y duplicado
+solo en las ordenes de un item, para no mal-etiquetar los otros codigos de la orden.
+
+30 lineas cambiaron de importe (+189.701,13) y 12 solo de etiqueta. Lo mas gordo:
+GUZMAN 341008 4.383,99 -> 93.899,01 (+89.515,02), PEREZ CRUZ 180112 4.866,93 -> 18.715,53,
+GUINART 180114 2.336,12 -> 12.283,70. Snapshot: `docs/snapshot-lote66-completar-2026-09-03.json`.
+
+**Antes de escribir se verifico** que ningun otro lote activo comparta esos ingresos: los
+18 ingresos tocados aparecen ademas en los lotes 21, 25, 41, 63 y 65, **todos ANU**.
+
+**Guarda contra doble facturacion:** el script saltea cualquier codigo que, en el mismo
+ingreso, tenga un grupo sin honorario **y** otro sin gastos: pueden ser las dos mitades de
+la misma practica cargadas con fechas distintas. Salto los dos grupos de `170101` de
+ZAPANA (ordenes 1628 y 1629, creadas con 2 segundos de diferencia, fechas de item 14/08 y
+12/08). Sumadas dan 18.699,95 = un electro entero, ya esta bien; completarlas habria
+facturado dos.
+
+**Resultado medido:** de 101 grupos, 98 quedan con honorario y gastos. Los 3 restantes se
+dejaron a proposito y estan abajo.
+
+### Lo que quedo sin tocar
+
+- **ZAPANA INT-167, 170101:** el par 1628/1629 con fechas de item distintas (14/08 y
+  12/08). En plata esta bien. Si se quiere que el resumen lo muestre en una sola fecha hay
+  que unificar `OprFch`.
+- **MORENO INT-157, 340907 del 11/08 (orden 1047/3):** cantidad 3 con importe 49.634,88,
+  que son 4 unidades completas (12.408,72 x 4). O la cantidad o el importe estan mal.
+- **PEREZ CRUZ INT-190, dos 340907 del 18/08** (ordenes 1809/3 x4 por 42.556,48 y 1813/1
+  x3 por 31.917,36, 74.473,84 en total): **sin numero de autorizacion**, por eso no entran
+  al lote y no se pueden reparar vinculando. Ademas parecen duplicadas entre si.
+
+### La trampa que aparecio en el medio: el total del lote depende del codigo
+
+Durante el trabajo el total recalculado del lote 66 dio tres valores distintos con la base
+**sin cambiar**: 57.216.268,27, despues 55.063.487,31, y al final 57.413.591,80. No era
+concurrencia ni flakiness de Prisma: `src/modules/facturacion/periodo-lote.ts` y su test se
+crearon hoy 14:46 (sin commitear al momento de escribir esto) y `repository.ts` quedo
+importandolos. Cada `npx tsx` releia el archivo del disco.
+
+La diferencia son 5 ordenes de GUINART (ing 152) emitidas el `2026-08-01T15:00:00Z` —656,
+1356, 1357, 1363, 1365, 2.160.403,36 en total— que entran o no segun donde arranque el
+periodo: la regla nueva es dia 2 a dia 1 del mes siguiente, con `PRIMER_PERIODO_CON_DIA_1`
+haciendo que **2026-08 arranque el 01/08**.
+
+Con la version intermedia del codigo (dia 2, sin la excepcion) escribi `LotImpTotal` en
+55.253.188,44. Quedo 2.160.403,36 bajo y se corrigio despues a **57.413.591,80**, que es lo
+que calcula el codigo actual. Verificado: 0 items desfasados de 50, guardado = calculado.
+
+> **Si la regla de `periodo-lote.ts` vuelve a cambiar, los totales guardados de los lotes
+> PEN quedan viejos otra vez.** `LItImpTotal` y `LotImpTotal` son una foto; el detalle, el
+> resumen y el PDF recalculan siempre desde las ordenes, pero el **listado de lotes** muestra
+> la foto. Refrescar con el script de recalculo (dos lecturas seguidas, aborta si no
+> coinciden) antes de confirmar cualquier lote.
+
+**Reversion:** los dos snapshots tienen el estado previo completo (practicas, `OrdenPrac`,
+cabeceras, items de lote y el lote).

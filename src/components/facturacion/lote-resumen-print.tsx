@@ -28,7 +28,9 @@ function formatPeriodo(periodo: string | null) {
 interface Props {
     lote: LoteFacturacionDetalle
     totalIncluido: number
-    detalleIngresos?: LoteResumenIngresoDetalle[]
+    // Un bloque por paciente, no por ingreso: quien tuvo dos ingresos en el lote sale
+    // en un solo desglose con las practicas de los dos.
+    detallePacientes?: LoteResumenPacienteDetalle[]
     // Items IPS ya filtrados por el padre (regla de promedi + filtro de categoria).
     itemsIPSTxt?: LoteFacturacionDetalle['itemsIPSTxt']
     // Etiqueta de la categoria filtrada, para dejar constancia de que es parcial.
@@ -37,7 +39,7 @@ interface Props {
     unaHojaPorPaciente?: boolean
 }
 
-interface LoteResumenIngresoLinea {
+interface LoteResumenPacienteLinea {
     fecha: Date | string
     numeroAutorizacion: string | null
     profesional: string | null
@@ -50,13 +52,18 @@ interface LoteResumenIngresoLinea {
     importeTotal: number
 }
 
-interface LoteResumenIngresoDetalle {
-    ingresoId: number
-    numeroIngreso: number
+interface LoteResumenPacienteDetalle {
+    clave: string
+    numerosIngreso: number[]
     paciente: string
     numeroAfiliado: string | null
-    totalIngreso: number
-    lineas: LoteResumenIngresoLinea[]
+    total: number
+    lineas: LoteResumenPacienteLinea[]
+}
+
+function numerosIngresoTexto(numeros: number[]): string {
+    if (numeros.length === 0) return '-'
+    return numeros.map((n) => `I - ${n}`).join(', ')
 }
 
 function formatDate(value: Date | string | null | undefined) {
@@ -86,7 +93,7 @@ function totalMonto(items: Array<{ importeTotal: number }>) {
 export function LoteResumenPrint({
     lote,
     totalIncluido,
-    detalleIngresos = [],
+    detallePacientes = [],
     itemsIPSTxt,
     filtroCategoria,
     unaHojaPorPaciente = false,
@@ -97,7 +104,13 @@ export function LoteResumenPrint({
     // ya mando la lista filtrada, se respeta tal cual.
     const itemsIPSFacturables = itemsIPSTxt
         ?? (lote.itemsIPSTxt ?? []).filter((it) => aplicaPromediIPS(it.servicioCodigo))
-    const cantidadRegistros = esIPSTxt ? itemsIPSFacturables.length : itemsIncluidos.length
+    // El lote guarda un item por ingreso: contarlos como pacientes duplicaba a quien
+    // tuvo dos ingresos en el mes.
+    const contarPacientes = (items: typeof lote.items) =>
+        new Set(items.map((it) => it.paciente?.id ?? `ing:${it.ingresoId}`)).size
+    const cantidadRegistros = esIPSTxt
+        ? itemsIPSFacturables.length
+        : detallePacientes.reduce((acc, p) => acc + p.lineas.length, 0)
 
     return (
         <div className="font-sans text-[11px] text-gray-900 p-6">
@@ -145,11 +158,11 @@ export function LoteResumenPrint({
 
             <div className="grid grid-cols-3 gap-4 mb-6 bg-gray-100 rounded p-4">
                 <div className="text-center">
-                    <div className="text-2xl font-bold">{esIPSTxt ? (lote.itemsIPSTxt?.length ?? 0) : lote.items.length}</div>
+                    <div className="text-2xl font-bold">{esIPSTxt ? (lote.itemsIPSTxt?.length ?? 0) : contarPacientes(lote.items)}</div>
                     <div className="text-xs text-gray-500">{esIPSTxt ? 'Registros IPS' : 'Pacientes en lote'}</div>
                 </div>
                 <div className="text-center">
-                    <div className="text-2xl font-bold">{esIPSTxt ? itemsIPSFacturables.length : itemsIncluidos.length}</div>
+                    <div className="text-2xl font-bold">{esIPSTxt ? itemsIPSFacturables.length : contarPacientes(itemsIncluidos)}</div>
                     <div className="text-xs text-gray-500">{esIPSTxt ? 'Prácticas facturadas' : 'Incluidos'}</div>
                 </div>
                 <div className="text-center">
@@ -160,9 +173,9 @@ export function LoteResumenPrint({
 
             {!esIPSTxt && (
                 <div className="space-y-6">
-                    {detalleIngresos.map((ingreso) => (
+                    {detallePacientes.map((paciente) => (
                         <section
-                            key={ingreso.ingresoId}
+                            key={paciente.clave}
                             className={`break-inside-avoid-page${unaHojaPorPaciente ? ' lote-hoja-paciente' : ''}`}
                         >
                             {unaHojaPorPaciente && (
@@ -173,9 +186,12 @@ export function LoteResumenPrint({
                             )}
                             <div className="border border-gray-300 rounded-sm">
                                 <div className="grid grid-cols-12 gap-2 border-b border-gray-300 px-3 py-2 text-[12px] font-semibold bg-gray-50">
-                                    <div className="col-span-5">PACIENTE: <span className="font-normal">{ingreso.paciente}</span></div>
-                                    <div className="col-span-4">Nro. Af.: <span className="font-normal">{ingreso.numeroAfiliado ?? '-'}</span></div>
-                                    <div className="col-span-3 text-right">Ingreso: <span className="font-normal">I - {ingreso.numeroIngreso}</span></div>
+                                    <div className="col-span-5">PACIENTE: <span className="font-normal">{paciente.paciente}</span></div>
+                                    <div className="col-span-4">Nro. Af.: <span className="font-normal">{paciente.numeroAfiliado ?? '-'}</span></div>
+                                    <div className="col-span-3 text-right">
+                                        {paciente.numerosIngreso.length > 1 ? 'Ingresos: ' : 'Ingreso: '}
+                                        <span className="font-normal">{numerosIngresoTexto(paciente.numerosIngreso)}</span>
+                                    </div>
                                 </div>
 
                                 <table className="w-full border-collapse text-[10px]">
@@ -194,8 +210,8 @@ export function LoteResumenPrint({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {ingreso.lineas.map((linea, index) => (
-                                            <tr key={`${ingreso.ingresoId}-${linea.codigoPractica}-${index}`} className="border-b border-gray-200">
+                                        {paciente.lineas.map((linea, index) => (
+                                            <tr key={`${paciente.clave}-${linea.codigoPractica}-${index}`} className="border-b border-gray-200">
                                                 <td className="px-2 py-1">{formatDate(linea.fecha)}</td>
                                                 <td className="px-2 py-1">{linea.numeroAutorizacion || '-'}</td>
                                                 <td className="px-2 py-1">{linea.profesional || '-'}</td>
@@ -208,22 +224,22 @@ export function LoteResumenPrint({
                                                 <td className="px-2 py-1 text-right font-semibold">{formatMonto(linea.importeTotal)}</td>
                                             </tr>
                                         ))}
-                                        {ingreso.lineas.length === 0 && (
+                                        {paciente.lineas.length === 0 && (
                                             <tr>
-                                                <td colSpan={10} className="px-2 py-2 text-center text-gray-500">Sin prácticas autorizadas para este ingreso</td>
+                                                <td colSpan={10} className="px-2 py-2 text-center text-gray-500">Sin prácticas autorizadas para este paciente</td>
                                             </tr>
                                         )}
                                     </tbody>
                                 </table>
 
                                 <div className="border-t border-gray-300 px-3 py-1.5 text-right text-[11px] font-semibold bg-gray-50">
-                                    Total Ingreso: {formatMonto(ingreso.totalIngreso)}
+                                    Total Paciente: {formatMonto(paciente.total)}
                                 </div>
                             </div>
                         </section>
                     ))}
 
-                    {detalleIngresos.length === 0 && (
+                    {detallePacientes.length === 0 && (
                         <div className="border border-gray-300 rounded-sm px-4 py-3 text-center text-gray-600">
                             No hay detalle de prácticas para imprimir.
                         </div>

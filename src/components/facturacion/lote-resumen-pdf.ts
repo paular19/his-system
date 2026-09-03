@@ -30,23 +30,30 @@ export interface ResumenPdfLinea {
     importeTotal: number
 }
 
-export interface ResumenPdfIngreso {
-    ingresoId: number
-    numeroIngreso: number
+export interface ResumenPdfPaciente {
+    clave: string
+    numerosIngreso: number[]
     paciente: string
     numeroAfiliado: string | null
-    totalIngreso: number
+    total: number
     lineas: ResumenPdfLinea[]
+}
+
+function numerosIngresoTexto(numeros: number[]): string {
+    if (numeros.length === 0) return 'Ingreso: -'
+    const valores = numeros.map((n) => `I - ${n}`).join(', ')
+    return numeros.length > 1 ? `Ingresos: ${valores}` : `Ingreso: ${valores}`
 }
 
 export interface ResumenPdfOpciones {
     lote: LoteFacturacionDetalle
     totalIncluido: number
-    detalleIngresos: ResumenPdfIngreso[]
+    // Un bloque por paciente: sus dos ingresos del lote van en el mismo desglose.
+    detallePacientes: ResumenPdfPaciente[]
     itemsIPSTxt?: LoteIPSTxtItemDetalle[]
     // Etiqueta de la categoria filtrada, para dejar constancia de que el PDF es parcial.
     filtroCategoria?: string | null
-    // Nombre del paciente cuando el PDF es de un solo ingreso.
+    // Nombre del paciente cuando el PDF es de un solo paciente.
     pacienteUnico?: string | null
     // Arranca cada paciente en una hoja nueva.
     unaHojaPorPaciente?: boolean
@@ -109,7 +116,7 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
     const {
         lote,
         totalIncluido,
-        detalleIngresos,
+        detallePacientes,
         itemsIPSTxt = [],
         filtroCategoria,
         pacienteUnico,
@@ -197,12 +204,12 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
             },
         })
         y = posicionFinal() + 4
-    } else if (detalleIngresos.length === 0) {
+    } else if (detallePacientes.length === 0) {
         doc.setFontSize(9)
         doc.text('No hay detalle de practicas para el resumen.', margen, y)
         y += 6
     } else {
-        detalleIngresos.forEach((ingreso, indice) => {
+        detallePacientes.forEach((paciente, indice) => {
             // Con una hoja por paciente el primero sigue abajo de la portada; los demas
             // arrancan en hoja nueva con un encabezado minimo que repite el lote.
             if (unaHojaPorPaciente && indice > 0) {
@@ -223,9 +230,9 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
                 ...estilosTabla,
                 startY: y,
                 head: [[
-                    `PACIENTE: ${ingreso.paciente}`,
-                    `Nro. Af.: ${ingreso.numeroAfiliado ?? '-'}`,
-                    `Ingreso: I - ${ingreso.numeroIngreso}`,
+                    `PACIENTE: ${paciente.paciente}`,
+                    `Nro. Af.: ${paciente.numeroAfiliado ?? '-'}`,
+                    numerosIngresoTexto(paciente.numerosIngreso),
                 ]],
                 body: [],
                 headStyles: { fillColor: [229, 231, 235], textColor: 20, fontStyle: 'bold' },
@@ -236,8 +243,8 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
                 ...estilosTabla,
                 startY: posicionFinal(),
                 head: [['Fecha', 'Nro. Aut.', 'Profesional', 'Cod.', 'Cant.', '$ Esp', '$ Ayu', '$ Ane', '$ Gto', 'Total']],
-                body: ingreso.lineas.length > 0
-                    ? ingreso.lineas.map((linea) => [
+                body: paciente.lineas.length > 0
+                    ? paciente.lineas.map((linea) => [
                         formatFecha(linea.fecha),
                         linea.numeroAutorizacion || '-',
                         linea.profesional || '-',
@@ -249,8 +256,8 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
                         formatMontoNullable(linea.importeGastos),
                         formatMonto(linea.importeTotal),
                     ])
-                    : [['Sin practicas autorizadas para este ingreso', '', '', '', '', '', '', '', '', '']],
-                foot: [['', '', '', '', '', '', '', '', 'Total Ingreso', formatMonto(ingreso.totalIngreso)]],
+                    : [['Sin practicas autorizadas para este paciente', '', '', '', '', '', '', '', '', '']],
+                foot: [['', '', '', '', '', '', '', '', 'Total Paciente', formatMonto(paciente.total)]],
                 footStyles: { fillColor: [243, 244, 246], textColor: 20, fontStyle: 'bold', halign: 'right' },
                 columnStyles: {
                     4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' },
@@ -264,7 +271,7 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
 
     const cantidadRegistros = esIPSTxt
         ? itemsIPSTxt.length
-        : detalleIngresos.reduce((acc, ing) => acc + ing.lineas.length, 0)
+        : detallePacientes.reduce((acc, p) => acc + p.lineas.length, 0)
 
     if (y > doc.internal.pageSize.getHeight() - 18) {
         doc.addPage()
@@ -278,7 +285,7 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.text(
-        `Registros: ${cantidadRegistros}${esIPSTxt ? '' : `  ·  Pacientes: ${detalleIngresos.length}`}`,
+        `Registros: ${cantidadRegistros}${esIPSTxt ? '' : `  ·  Pacientes: ${detallePacientes.length}`}`,
         margen,
         y + 6
     )

@@ -22,6 +22,7 @@ import {
     type ObraSocialPromedi,
     type SubitemPromedi,
 } from '@/modules/facturacion/promedi-rules'
+import { agruparResumenPorPaciente, compararLineasResumen } from '@/modules/facturacion/resumen-paciente'
 import {
     CATEGORIAS_PRACTICA,
     CATEGORIA_PRACTICA_LABEL,
@@ -110,11 +111,6 @@ function fechaToGroupingKey(value: Date | string): string {
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return String(value)
     return date.toISOString()
-}
-
-function fechaAOrden(value: Date | string): number {
-    const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? Number.POSITIVE_INFINITY : date.getTime()
 }
 
 function normalizarTexto(value: string | null | undefined): string {
@@ -975,32 +971,27 @@ export function LoteDetallePage({ loteId }: Props) {
                         return acc
                     }, new Map<string, (typeof lineasBase)[number]>())
                     .values()
-            ).sort((a, b) => {
-                // El resumen sale por fecha de realizacion de la practica: las ordenes de
-                // un mismo paciente pueden intercalarse (una emitida antes puede tener
-                // practicas posteriores).
-                const porFecha = fechaAOrden(a.fecha) - fechaAOrden(b.fecha)
-                if (porFecha !== 0) return porFecha
-                const porOrden = a.ordenNumero - b.ordenNumero
-                if (porOrden !== 0) return porOrden
-                return a.codigoPractica.localeCompare(b.codigoPractica)
-            })
+            ).sort(compararLineasResumen)
 
             return {
                 ingresoId: item.ingresoId,
+                pacienteId: item.paciente?.id ?? null,
                 incluido: item.incluido,
                 numeroIngreso: item.ingreso.numeroIngreso,
                 paciente: item.paciente?.nombreCompleto ?? item.ingreso.nombre ?? '-',
                 numeroAfiliado: item.ingreso.numeroAfiliado,
-                totalIngreso: lineas.reduce((acc, it) => acc + it.importeTotal, 0),
+                total: lineas.reduce((acc, it) => acc + it.importeTotal, 0),
                 lineas,
             }
         })
         : []
 
     // Al resumen del lote entero solo van los pacientes tildados. Destildar uno lo sacaba
-    // del total en pantalla pero seguia saliendo impreso.
-    const detalleIngresosIncluidos = detalleIngresosBase.filter((item) => item.incluido)
+    // del total en pantalla pero seguia saliendo impreso. Se agrupa despues de filtrar,
+    // asi el bloque de un paciente con un ingreso destildado muestra solo el otro.
+    const detallePacientesIncluidos = agruparResumenPorPaciente(
+        detalleIngresosBase.filter((item) => item.incluido)
+    )
 
     const pacienteSeleccionadoIncluido =
         selectedIngresoId === null
@@ -1008,9 +999,11 @@ export function LoteDetallePage({ loteId }: Props) {
             : (lote.items.find((it) => it.ingresoId === selectedIngresoId)?.incluido ?? false)
 
     // Un paciente destildado no sale impreso nunca, ni en el resumen del lote ni solo.
+    // Imprimir "este paciente" desde una fila trae el bloque entero: si tiene dos
+    // ingresos en el lote, los dos.
     const detalleParaImpresion = printIngresoId === null
-        ? detalleIngresosIncluidos
-        : detalleIngresosIncluidos.filter((item) => item.ingresoId === printIngresoId)
+        ? detallePacientesIncluidos
+        : detallePacientesIncluidos.filter((bloque) => bloque.ingresoIds.includes(printIngresoId))
 
     const filtroResumenActivo = esIPSTxt ? filtroCategoriaIPS : filtroCategoria
     const etiquetaFiltroCategoria = filtroResumenActivo
@@ -1025,7 +1018,7 @@ export function LoteDetallePage({ loteId }: Props) {
                 (s, it) => s + (it.importePromedi !== null ? Number(it.importePromedi) : Number(it.impTotal)),
                 0
             )
-            : detalleIngresosIncluidos.reduce((s, ing) => s + ing.totalIngreso, 0)
+            : detallePacientesIncluidos.reduce((s, bloque) => s + bloque.total, 0)
 
     // Genera el PDF sin pasar por el dialogo de impresion del navegador.
     async function descargarPdf(ingresoId: number | null = null) {
@@ -1033,16 +1026,16 @@ export function LoteDetallePage({ loteId }: Props) {
         setGenerandoPdf(true)
         try {
             const detalle = ingresoId === null
-                ? detalleIngresosIncluidos
-                : detalleIngresosIncluidos.filter((item) => item.ingresoId === ingresoId)
+                ? detallePacientesIncluidos
+                : detallePacientesIncluidos.filter((bloque) => bloque.ingresoIds.includes(ingresoId))
             const totalPdf = ingresoId === null
                 ? totalResumen
-                : (detalle[0]?.totalIngreso ?? 0)
+                : (detalle[0]?.total ?? 0)
 
             await descargarResumenPdf({
                 lote: lote!,
                 totalIncluido: totalPdf,
-                detalleIngresos: detalle,
+                detallePacientes: detalle,
                 unaHojaPorPaciente: ingresoId === null && separarPorPaciente,
                 itemsIPSTxt: itemsIPSTxtParaResumen,
                 filtroCategoria: etiquetaFiltroCategoria,
@@ -1781,8 +1774,8 @@ export function LoteDetallePage({ loteId }: Props) {
                     lote={lote}
                     totalIncluido={printIngresoId === null
                         ? totalResumen
-                        : (detalleParaImpresion.find((item) => item.ingresoId === printIngresoId)?.totalIngreso ?? 0)}
-                    detalleIngresos={detalleParaImpresion}
+                        : (detalleParaImpresion[0]?.total ?? 0)}
+                    detallePacientes={detalleParaImpresion}
                     itemsIPSTxt={esIPSTxt ? itemsIPSTxtParaResumen : undefined}
                     filtroCategoria={etiquetaFiltroCategoria}
                     unaHojaPorPaciente={printIngresoId === null && separarPorPaciente}

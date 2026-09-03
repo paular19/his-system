@@ -1253,3 +1253,118 @@ deja como esta: volver a 63 rompe las altas siguientes.
 
 **Como verificar:** el profesional aparece en los selectores de profesional
 (admision, internacion, ordenes) buscando por `APERTI`.
+
+---
+
+## 2026-09-03 — Lote 60 / SULCA: las dos radiografias del 340211 a medias
+
+**Reportado por:** Paula — "lote 60, codigo 340211 debe incluir honorarios y gastos
+siempre, chequear a que pacientes falta alguno de esos items".
+
+**Alcance real:** de los 14 pacientes del lote 60 (ACIDSAL, PEN, sin periodo) el
+340211 lo tiene uno solo, SULCA PASCUALA (ingreso 456 / INT-207). Los otros 13 no
+tienen el codigo cargado ni en ordenes ni en `Practica`.
+
+**Que estaba mal:** el 340211 (RADIOGRAFIA DE HOMBRO, HUMERO, PELVIS, CADERA Y
+FEMUR) vale HE 1.592,64 + GA 5.319,56 = 6.912,20. SULCA tenia dos radiografias y a
+cada una le faltaba un componente:
+
+| fecha | orden | cargado | faltaba |
+|---|---|---|---|
+| 21/08 | 1/2400 it.1 | GA 5.319,56 | HE 1.592,64 |
+| 25/08 | 1/2656 it.1 | HE 1.592,64 | GA 5.319,56 |
+
+Encima la practica 3870 (la GA del 21/08) habia quedado sin marcar como facturada
+— `PraEstad` NULL y `PueNum`/`OrdNum`/`OprItem` en NULL — asi que
+`practicaFacturadaEnOrden` la descartaba y esa linea **ni siquiera entraba al
+resumen**: en pantalla el 340211 mostraba 1.592,64 de honorario y 0 de gastos. Su
+hermana de la misma orden (3871, el 340212) si estaba bien vinculada, o sea que es
+una fila rota puntual y no toda la orden.
+
+**Por que se descarto que fueran una sola radiografia:** las dos lineas suman
+exactamente 6.912,20 y en ese ingreso las otras radiografias estan cargadas
+combinadas (340212 del 21/08 = 4.963,85 = 4.432,97 GA + 530,88 HE; 340301 del 23/08
+= 6.025,61 = 4.432,97 + 1.592,64), asi que la hipotesis "el honorario del 25/08 es
+el que faltaba del 21/08, cargado tarde" era plausible. **Paula confirmo que son dos
+radiografias distintas** (la del 25/08 es del dia de la cirugia de femur), asi que
+se completaron las dos.
+
+**Forma que se replico:** en toda la base el 340211 va con sus dos componentes,
+GA 5.319,56 + HE 1.592,64, misma fecha y misma matricula (18 ingresos revisados; 16
+asi, uno combinado en una sola linea de 6.912,20, y este el unico partido en dos
+fechas). En este ingreso la app separa por componente en ordenes distintas
+(`OrdTitularModular` = `DERECHOS` vs `HONORARIO ESPECIALISTA`), asi que los faltantes
+se crearon como ordenes propias en vez de meterlos en las existentes.
+
+**Registros tocados:**
+
+| tabla | registro | antes | despues |
+|---|---|---|---|
+| `Practica` | 3870 (`PraEstad`, `PueNum`, `OrdNum`, `OprItem`) | NULL, NULL, NULL, NULL | `F`, 1, 2400, 1 |
+| `Practica` | 5211 (nueva) | — | 340211, 21/08, 1.592,64, `F`, link 1/3379 it.1 |
+| `Orden` + `OrdenPrac` | 1/3379 (nueva) | — | HE 1.592,64, 21/08, `OprClasAgrup='HE'`, `OprModulo='HE'`, mat 9995, aut 423070 |
+| `Practica` | 5212 (nueva) | — | 340211, 25/08, 5.319,56, `F`, link 1/3380 it.1 |
+| `Orden` + `OrdenPrac` | 1/3380 (nueva) | — | GA 5.319,56, 25/08, `OprClasAgrup='GA'`, `OprModulo=NULL`, mat 9995, aut 423070 |
+
+Las dos ordenes se crearon con `crearOrdenInterna` (el mismo camino que usa la app,
+con su numeracion y reintento por colision), no por SQL: numeros 3379 y 3380, puesto
+1, `TorCodig='CAM'`, profesional 21 (BREM RUBEN DARIO), OS 346 plan 1, cabecera
+copiada de 1/2400 y 1/2656. El `OrdNumAut` se estampo despues en un update aparte
+porque `crearOrdenInterna` no lo recibe.
+
+**Snapshot previo:** `docs/snapshot-ing456-340211-2026-09-03.json` (practicas,
+`OrdenPrac`, ordenes 2400/2656, item de lote y lote 60 antes del cambio).
+
+**Reversion:** `DELETE FROM "OrdenPrac" WHERE "PueNum"=1 AND "OrdNum" IN (3379,3380)`,
+`DELETE FROM "Orden" WHERE "PueNum"=1 AND "OrdNum" IN (3379,3380)`,
+`DELETE FROM "Practica" WHERE "PraID" IN (5211,5212)` y devolver la 3870 a
+`PraEstad=NULL, PueNum=NULL, OrdNum=NULL, OprItem=NULL`.
+
+**Como verificar:** en el detalle del lote 60, SULCA (INT-207) muestra cuatro lineas
+de 340211 — 21/08 con 1.592,64 en `$ Esp` y 5.319,56 en `$ Gto`, y lo mismo el 25/08.
+Medido: el codigo aporta 3.185,28 de honorarios + 10.639,12 de gastos = 13.824,40
+(antes 1.592,64). El total recalculado del lote paso de 3.829.481,14 a 3.841.712,90
+en ese ingreso, +12.231,76.
+
+**Queda pendiente (no se toco):** el `LotImpTotal` guardado del lote 60 sigue en
+28.764.531,13 mientras el detalle recalcula 28.795.462,84. La diferencia son estos
+12.231,76 mas 18.699,95 del ingreso 527 (GUTIERREZ SANTOS GENARO) que ya estaban
+desfasados de antes. El importe guardado solo lo usa el listado de lotes; el detalle,
+el resumen y el PDF recalculan siempre desde las ordenes.
+
+---
+
+## 2026-09-03 — Lote 67 (ACIDSAL): vuelto a pendiente para aplicar el PROMEDI
+
+**Que paso:** el lote 67 (ACIDSAL - Cod.346, `PRACTICAS`, descripcion `AGOSTO`,
+concepto `INTERNADO`, sin periodo) se confirmo hoy 17:07 sin haber corrido antes
+`Aplicar PROMEDI`. Medido en la base: 41 items, los 41 incluidos y **0 con
+`LItImpPromedi`** cargado, con `LotImpTotal` = 61.964.539,28 (el bruto, sin el 13%
+de la regla ACIDSAL).
+
+Confirmar un lote solo cambia el estado — `confirmarLote` llama a
+`cambiarEstadoLote(id, 'CON')` y nada mas: no marca ordenes ni practicas — asi que
+volverlo a `PEN` no deja nada colgado. Hace falta porque
+`aplicarPromediLote` corta con "Solo se puede aplicar PROMEDI a un lote pendiente"
+(`repository.ts:6808`) y la API de estado solo acepta `CON`/`ANU`, sin camino para
+volver a pendiente desde la UI.
+
+**Registros tocados:**
+
+| tabla | registro | antes | despues |
+|---|---|---|---|
+| `LoteFacturacion` | 67 (`LotEstado`) | `CON` | `PEN` |
+| `LoteFacturacion` | 67 (`LotFchEstado`) | 2026-09-03 17:07:18 | 2026-09-03 17:17:22 |
+
+El `UsuCodig` se dejo como estaba (`user_3F2Zc`, el que confirmo). No se toco ningun
+item ni el `LotImpTotal`.
+
+**Reversion:** `UPDATE "LoteFacturacion" SET "LotEstado"='CON' WHERE "LotID"=67`.
+
+**Como verificar:** el lote 67 vuelve a aparecer editable, con el boton de
+`Aplicar PROMEDI` habilitado. La obra social resuelve regla `ACIDSAL` (13%) —
+`resolverReglaPromedi` normaliza `"ACIDSAL - Cod.346"` a `ACIDSALCOD346` y matchea
+por `includes('ACIDSAL')`.
+
+**Queda pendiente:** que facturacion corra `Aplicar PROMEDI` y recien despues
+confirme.

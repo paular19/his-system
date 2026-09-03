@@ -32,10 +32,10 @@ model Paciente {
   fechaNacimiento DateTime? @map("PacFchNac") @db.Timestamp(6)
 
   // Demografía
-  sexo        String? @map("PacSexo") @db.Char(1)
-  estadoCivil String? @map("PacEstCiv") @db.Char(1)
-  paisId      Int?    @map("PaiID")
-  profesionId Int?    @map("PfeID")
+  sexo                  String? @map("PacSexo") @db.Char(1)
+  estadoCivil           String? @map("PacEstCiv") @db.Char(1)
+  paisId                Int?    @map("PaiID")
+  profesionId           Int?    @map("PfeID")
   profesionalCabeceraId Int?    @map("PrfIDCabecera")
 
   // Ubicación
@@ -259,13 +259,13 @@ model Ingreso {
   obraSocial    ObraSocial?     @relation(fields: [obraSocialId], references: [id])
   plan          PlanObraSocial? @relation(fields: [obraSocialId, planId], references: [obraSocialId, id])
 
-  paciente            Paciente?                @relation(fields: [pacienteId], references: [id])
-  tipoIngreso         TipoIngreso              @relation(fields: [tipoIngresoCodigo], references: [codigo])
-  tipoInternacion     TipoInternacion?         @relation(fields: [tipoInternacionCodigo], references: [codigo])
-  motivoEgreso        MotivoEgreso?            @relation(fields: [motivoEgresoCodigo], references: [codigo])
-  profesionalGuardia  Profesional?             @relation("IngresoGuardia", fields: [profesionalGuardiaId], references: [id])
-  profesionalTratante Profesional?             @relation("IngresoTratante", fields: [profesionalTratanteId], references: [id])
-  cama                Cama?                    @relation(fields: [camaId], references: [id])
+  paciente            Paciente?                   @relation(fields: [pacienteId], references: [id])
+  tipoIngreso         TipoIngreso                 @relation(fields: [tipoIngresoCodigo], references: [codigo])
+  tipoInternacion     TipoInternacion?            @relation(fields: [tipoInternacionCodigo], references: [codigo])
+  motivoEgreso        MotivoEgreso?               @relation(fields: [motivoEgresoCodigo], references: [codigo])
+  profesionalGuardia  Profesional?                @relation("IngresoGuardia", fields: [profesionalGuardiaId], references: [id])
+  profesionalTratante Profesional?                @relation("IngresoTratante", fields: [profesionalTratanteId], references: [id])
+  cama                Cama?                       @relation(fields: [camaId], references: [id])
   turnos              Turno[]
   ingresoPatologias   IngresoPatologia[]
   movimientosIngreso  MovimientoIngreso[]
@@ -273,7 +273,7 @@ model Ingreso {
   ordenes             Orden[]
   practicas           Practica[]
   informes            InformeHospitalizacion[]
-  cirugiasProgramadas CirugiaProgramada[]      @relation("CirugiaProgramadaToIngreso")
+  cirugiasProgramadas CirugiaProgramada[]         @relation("CirugiaProgramadaToIngreso")
   ingresoSubtipo      IngresoSubtipo?
   informeAmbulatorio  InformeAmbulatorio?
   evoluciones         EvolucionIngreso[]
@@ -281,7 +281,7 @@ model Ingreso {
   medicaciones        MedicacionIngreso[]
   descartables        DescartableIngreso[]
   electrocardiogramas ElectrocardiogramaIngreso[]
-  lotesItems          LoteFacturacionItem[]    @relation("IngresoLotes")
+  lotesItems          LoteFacturacionItem[]       @relation("IngresoLotes")
 
   @@unique([tipoIngresoCodigo, numeroIngreso])
   @@index([pacienteId])
@@ -1165,20 +1165,20 @@ model OrdenPractica {
   porcentajeCargoPac   Decimal? @map("OprPorcenCargoPac") @db.Decimal(5, 2)
 
   // Facturación
-  tipoFacturacion      String  @map("OprTipFact") @db.Char(1)
+  tipoFacturacion         String  @map("OprTipFact") @db.Char(1)
   clasificacionAgrupacion String? @map("OprClasAgrup") @db.VarChar(30)
-  modulo               String? @map("OprModulo") @db.Char(8)
-  titularModular       String? @map("OprTitularModular") @db.VarChar(100)
-  imprimirPorDuplicado Boolean @default(false) @map("OprImprimirDuplicado")
-  efectorMatricula     Int?    @map("OprMatric")
+  modulo                  String? @map("OprModulo") @db.Char(8)
+  titularModular          String? @map("OprTitularModular") @db.VarChar(100)
+  imprimirPorDuplicado    Boolean @default(false) @map("OprImprimirDuplicado")
+  efectorMatricula        Int?    @map("OprMatric")
 
   // Vinculación con práctica ejecutada
   practicaId Int? @map("PraID")
 
   // Relaciones
-  orden               Orden                @relation(fields: [puestoNumero, ordenNumero], references: [puestoNumero, numero], onDelete: Cascade, onUpdate: Cascade)
-  practica            Practica?            @relation(fields: [practicaId], references: [id])
-  nomencladorPractica NomencladorPractica? @relation(fields: [convenioId, codigoPractica], references: [convenioId, codigo])
+  orden               Orden                       @relation(fields: [puestoNumero, ordenNumero], references: [puestoNumero, numero], onDelete: Cascade, onUpdate: Cascade)
+  practica            Practica?                   @relation(fields: [practicaId], references: [id])
+  nomencladorPractica NomencladorPractica?        @relation(fields: [convenioId, codigoPractica], references: [convenioId, codigo])
   electrocardiogramas ElectrocardiogramaIngreso[]
 
   @@id([puestoNumero, ordenNumero, item])
@@ -1197,7 +1197,7 @@ model ElectrocardiogramaIngreso {
   fechaRegistro DateTime @default(now()) @map("EcgFchRegistro") @db.Timestamp(6)
   usuario       String   @map("UsuCodig") @db.VarChar(10)
 
-  ingreso   Ingreso        @relation(fields: [ingresoId], references: [id], onDelete: Cascade)
+  ingreso           Ingreso        @relation(fields: [ingresoId], references: [id], onDelete: Cascade)
   ordenItemRelacion OrdenPractica? @relation(fields: [puestoNumero, ordenNumero, ordenItem], references: [puestoNumero, ordenNumero, item], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([ingresoId, fecha])
@@ -1326,11 +1326,11 @@ model LoteFacturacion {
   fechaEstado DateTime @map("LotFchEstado") @db.Timestamp(6)
   usuario     String   @map("UsuCodig") @db.Char(10)
 
-  obraSocial  ObraSocial?           @relation("LoteObraSocial", fields: [obraSocialId], references: [id])
-  plan        PlanObraSocial?       @relation("LotePlan", fields: [obraSocialId, planId], references: [obraSocialId, id])
-  items       LoteFacturacionItem[]
+  obraSocial       ObraSocial?                    @relation("LoteObraSocial", fields: [obraSocialId], references: [id])
+  plan             PlanObraSocial?                @relation("LotePlan", fields: [obraSocialId, planId], references: [obraSocialId, id])
+  items            LoteFacturacionItem[]
   ordenesExcluidas LoteFacturacionOrdenExcluida[]
-  itemsIPSTxt LoteIPSTxtItem[]
+  itemsIPSTxt      LoteIPSTxtItem[]
 
   @@index([estado])
   @@index([periodo])
@@ -1343,8 +1343,8 @@ model LoteFacturacionItem {
   loteId    Int @map("LotID")
   ingresoId Int @map("IngID")
 
-  incluido     Boolean @default(true) @map("LItIncluido")
-  importeTotal Decimal @default(0) @map("LItImpTotal") @db.Decimal(18, 2)
+  incluido       Boolean  @default(true) @map("LItIncluido")
+  importeTotal   Decimal  @default(0) @map("LItImpTotal") @db.Decimal(18, 2)
   importePromedi Decimal? @map("LItImpPromedi") @db.Decimal(18, 2)
 
   lote    LoteFacturacion @relation(fields: [loteId], references: [id], onDelete: Cascade)
@@ -1489,4 +1489,89 @@ model ArchivoPaciente {
   @@index([apellido, nombre])
   @@index([busqueda])
   @@map("ArchivoPaciente")
+}
+
+// ============================================
+// ARCHIVO HISTORICO - MAESTROS Y MOVIMIENTOS
+// Copia congelada del sistema anterior, igual que ArchivoPaciente.
+// Sin relaciones Prisma a proposito: los nombres de obra social, plan,
+// motivo de egreso y profesional van desnormalizados en la fila. La FK de
+// plan es compuesta (OSID, PosID) y ese es justo el patron que hace panic
+// al query engine (ver CLAUDE.md), asi que no se declara ninguna relacion.
+// ============================================
+
+model ArchivoObraSocial {
+  obraSocialIdViejo Int     @id
+  nombre            String  @db.VarChar(200)
+  sigla             String? @db.VarChar(50)
+  estado            String? @db.Char(1)
+
+  importadoAt DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([nombre])
+  @@map("ArchivoObraSocial")
+}
+
+model ArchivoPlanObraSocial {
+  obraSocialIdViejo Int
+  planIdViejo       Int
+  descripcion       String? @db.VarChar(200)
+  estado            String? @db.Char(1)
+
+  importadoAt DateTime @default(now()) @db.Timestamp(6)
+
+  @@id([obraSocialIdViejo, planIdViejo])
+  @@map("ArchivoPlanObraSocial")
+}
+
+model ArchivoIngreso {
+  ingresoIdViejo  Int  @id
+  pacienteIdViejo Int
+  numeroIngreso   Int?
+
+  // A = ambulatorio, I = internado. esInternacion evita repetir el criterio.
+  tipoIngresoCodigo      String? @db.VarChar(3)
+  tipoIngresoDescripcion String? @db.VarChar(100)
+  esInternacion          Boolean @default(false)
+
+  fechaIngreso        DateTime? @db.Timestamp(6)
+  fechaEgreso         DateTime? @db.Timestamp(6)
+  fechaEgresoPrevista DateTime? @db.Timestamp(6)
+  fechaObito          DateTime? @db.Timestamp(6)
+
+  tipoInternacionCodigo      String? @db.VarChar(3)
+  tipoInternacionDescripcion String? @db.VarChar(100)
+
+  // Los codigos viejos son de 3 letras (ALT/OBI/VOL/ANU/TRA) y no coinciden
+  // con MotivoEgreso del HIS nuevo, que usa 2. Por eso se guarda el par completo.
+  motivoEgresoCodigo      String? @db.VarChar(3)
+  motivoEgresoDescripcion String? @db.VarChar(100)
+
+  obraSocialIdViejo Int?
+  obraSocialNombre  String? @db.VarChar(200)
+  planIdViejo       Int?
+  planDescripcion   String? @db.VarChar(200)
+  numeroAfiliado    String? @db.VarChar(50)
+
+  patologiaId                    Int?
+  patologiaDescripcion           String? @db.VarChar(500)
+  descripcionPatologia           String? @db.VarChar(500)
+  descripcionPatologiaDefinitiva String? @db.VarChar(500)
+
+  profesionalTratanteId     Int?
+  profesionalTratanteNombre String? @db.VarChar(200)
+  profesionalGuardiaId      Int?
+  profesionalGuardiaNombre  String? @db.VarChar(200)
+
+  edad          Int?
+  estado        String? @db.Char(1)
+  observaciones String? @db.Text
+  usuario       String? @db.VarChar(10)
+
+  importadoAt DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([pacienteIdViejo])
+  @@index([pacienteIdViejo, esInternacion])
+  @@index([fechaIngreso])
+  @@map("ArchivoIngreso")
 }

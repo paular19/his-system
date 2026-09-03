@@ -1119,3 +1119,111 @@ propone ningun `AlterTable` sobre `MedicacionIngreso`.
 **Reversion:** `ALTER TABLE "MedicacionIngreso" DROP COLUMN "MedFacturada"` y revertir
 el codigo. Se pierde que medicamentos ya se marcaron facturados; el importe de los
 lotes no cambia.
+
+---
+
+## 2026-09-02 — ACIDSAL lotes 43 y 60: filas que cobraban un solo componente
+
+**Reportado por:** Paula — en los resumenes 43 y 60 de ACIDSAL (OS 346, ambos en PEN)
+habia codigos que traian solo especialista o solo gastos, cuando todos ellos se cobran
+con los dos componentes.
+
+**Que se hizo:** se corrigieron 20 filas (5 en el lote 43, 15 en el lote 60) de los
+codigos 170101, 200222, 340212, 340213, 340301, 340421 y 340905, todas con la practica
+en estado F y la orden no anulada. Por cada fila:
+
+- `OrdenPrac.OprImpTotal` = (valorEspecialista + valorGastos) x cantidad del nomenclador
+  del convenio 1; `OprModulo` = NULL (COMPLETA).
+- `Practica.PraImpTotal` = mismo importe.
+- `Orden.OrdImpTotal` += delta de sus filas (venia coincidiendo con la suma de items).
+- `LoteFacturacionItem.LItImpTotal` y `LoteFacturacion.LotImpTotal` += delta.
+
+Solo 2 de las 20 tenian `OprModulo` explicito (`GA` en 1/2126#1, `HE` en 1/2991#1); las
+otras 18 decian COMPLETA con importe de un componente, o sea la practica se creo con un
+precio parcial y el modulo nunca lo reflejo. El origen es la carga, no el panel: al
+elegir una practica del nomenclador `seleccionPorDefecto()` ya marca los dos componentes.
+
+**Delta:** lote 43 +$8.671,04 (total $32.918.896,06 -> $32.927.567,10); lote 60
++$103.167,83 (total $28.661.363,30 -> $28.764.531,13).
+
+**Lo que NO se toco:**
+- `170101` de los ingresos 527 y 534 (lote 60): repartido en dos filas, una GA y una HE,
+  que suman el completo. Corregirlo habria duplicado el cobro.
+- `340211` (1/2656#1, ing 456, solo HE) y `340907` (1/2670#2, ing 456, 3x solo GA):
+  mismo patron pero fuera de la lista pedida. 340907 es radioscopia en quirofano, donde
+  el reparto por componente puede ser legitimo. Faltan $10.628,36 entre las dos.
+- Las practicas de cirugia (80xxx, 72xxxx), que se reparten por componente/profesional
+  a proposito.
+
+**Verificado despues de correr:** el barrido que encontro las filas vuelve 0 pendientes
+en el lote 43 y solo las 2 filas excluidas a proposito en el lote 60.
+
+**Filas corregidas** (lote | ingreso | orden#item | codigo | importe viejo -> nuevo):
+
+```
+43 | 191 | 1/625#1  | 340905 |  8865.93 ->  11166.41
+43 | 331 | 1/1429#1 | 340301 |  4432.97 ->   6025.61
+43 | 178 | 1/1447#1 | 340301 |  4432.97 ->   6025.61
+43 | 241 | 1/1406#1 | 340301 |  4432.97 ->   6025.61
+43 | 382 | 1/1752#1 | 340301 |  4432.97 ->   6025.61
+60 | 527 | 1/2874#1 | 340301 |  4432.97 ->   6025.61
+60 | 282 | 1/1080#1 | 170101 | 15149.63 ->  18699.95
+60 | 282 | 1/1082#1 | 340301 |  4432.97 ->   6025.61
+60 | 412 | 1/2642#1 | 340421 |  1238.72 ->   5671.69
+60 | 412 | 1/3031#1 | 200222 | 87823.58 -> 145895.36
+60 | 431 | 1/2126#1 | 170101 |  3550.32 ->  18699.95   (modulo GA -> COMPLETA)
+60 | 518 | 1/2687#1 | 340301 |  4432.97 ->   6025.61
+60 | 282 | 1/2991#1 | 170101 | 15149.63 ->  18699.95   (modulo HE -> COMPLETA)
+60 | 412 | 1/3099#1 | 340905 |  8865.93 ->  11166.41
+60 | 282 | 1/2641#1 | 340301 |  1592.64 ->   6025.61
+60 | 473 | 1/2338#1 | 340213 |  5319.56 ->   6912.20
+60 | 456 | 1/2400#2 | 340212 |  4432.97 ->   4963.85
+60 | 456 | 1/2402#1 | 340301 |  4432.97 ->   6025.61
+60 | 577 | 1/2868#1 | 340301 |  4432.97 ->   6025.61
+60 | 518 | 1/2870#1 | 340301 |  4432.97 ->   6025.61
+```
+
+**Reversion:** no hay script. Para volver atras hay que reponer el importe viejo de la
+tabla de arriba en `OrdenPrac` y `Practica`, restar el delta en `Orden`, en el item del
+lote y en el lote, y devolver `OprModulo` a `GA` / `HE` en las dos filas marcadas.
+
+---
+
+## 2026-09-02 — Ingresos y obras sociales del sistema anterior (DDL + import)
+
+**Pedido por:** Paula — traer al modulo de archivo, ademas de lo que ya mostraba,
+DNI, nombre completo, internaciones anteriores, fechas de ingreso/egreso, obra
+social y tipo de egreso.
+
+**De donde salieron:** la base del sistema anterior estaba restaurada en la maquina
+local (instancia `.\SQLEXPRESS`, bases `SanRafael` y `SanRafaelLegacy`, identicas).
+No hizo falta pedir ningun export nuevo.
+
+**Que se hizo:**
+
+1. DDL: se crearon `ArchivoObraSocial`, `ArchivoPlanObraSocial` y `ArchivoIngreso`
+   desde `prisma/sql/archivo-ingresos.sql` con `npm run db:archivo-ddl`.
+2. Import: `npm run db:import-archivo-ingresos` leyo del SQL Server local via
+   `sqlcmd` (NDJSON con `FOR JSON PATH`) y cargo 395 obras sociales, 382 planes y
+   8.665 ingresos.
+
+**No se uso `prisma db push`** (trampa 5 de CLAUDE.md). El `migrate diff` medido antes
+traia 12 `DROP`: `DROP SEQUENCE "Paciente_HC_seq"` y 11 `DROP INDEX` sobre indices
+manuales. Se aplicaron solo los 3 CreateTable + 4 CreateIndex, con `IF NOT EXISTS`.
+El script aborta si el archivo SQL contiene `DROP`, `ALTER`, `TRUNCATE` o `DELETE`.
+
+**Verificado despues de correr:** 3/3 tablas creadas, `Paciente_HC_seq` viva, 12
+indices `idx_*` presentes. Encoding correcto (`MUÑOZ ROCÍO SOFÍA`,
+`INSUFICIENCIA CARDÍACA`); las 29 filas con `?` son signos de pregunta reales de los
+diagnosticos, no mojibake. Horas sin corrimiento (una internacion de dia guardada
+08:30 -> 10:22 se lee igual). Obra social del paciente resuelta en 54.153 de 54.154.
+
+**Lo que NO entro, a proposito:** 322 ingresos sin `PacID` (153 de ellos
+internaciones). No se pueden colgar de ningun paciente del archivo.
+
+**Reversion:** `DROP TABLE "ArchivoIngreso", "ArchivoPlanObraSocial",
+"ArchivoObraSocial"` y revertir el codigo. No se toco ninguna tabla existente.
+
+**Como verificar:** `npm run db:import-archivo-ingresos -- --dry-run` no escribe nada
+y reporta los conteos del origen; volver a correr el import sin `--reemplazar` debe
+insertar 0 filas (usa `skipDuplicates`).

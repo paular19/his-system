@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import type { Metadata } from 'next'
 import { Archive, FileSearch, Search } from 'lucide-react'
+import { HistorialIngresos } from '@/components/archivo/historial-ingresos'
 import { Header } from '@/components/layout/header'
 import { PaginationControls } from '@/components/ui/pagination-controls'
 import { getUsuarioSesion } from '@/lib/auth'
@@ -75,6 +76,12 @@ export default async function ArchivoPage({ searchParams }: PageProps) {
                 {resumen.total.toLocaleString('es-AR')} pacientes archivados ·{' '}
                 {resumen.conHistoriaClinica.toLocaleString('es-AR')} con historia clinica vieja ·{' '}
                 {(resumen.total - resumen.conHistoriaClinica).toLocaleString('es-AR')} sin numero asignado
+              </p>
+              <p className="text-xs text-amber-800">
+                {resumen.conIngresos.toLocaleString('es-AR')} tienen ingresos cargados (
+                {resumen.totalInternaciones.toLocaleString('es-AR')} internaciones). El sistema
+                anterior recien se uso desde fines de 2024, asi que la mayoria de los pacientes del
+                archivo no tiene ninguno: eso es lo esperado, no un dato faltante.
               </p>
             </div>
           </div>
@@ -166,11 +173,19 @@ export default async function ArchivoPage({ searchParams }: PageProps) {
                         <span className="text-gray-700">
                           {item.celular1 ?? item.telefonoFijo ?? item.celular2 ?? '-'}
                         </span>
+                        <span className="text-gray-400">Obra social</span>
+                        <span className="text-gray-700">{item.obraSocialNombre ?? '-'}</span>
                         <span className="text-gray-400">Alta en el sistema viejo</span>
                         <span className="text-gray-700">{formatearFechaCalendario(item.fechaAlta)}</span>
                       </div>
 
                       <p className="text-xs text-gray-500 line-clamp-2">{item.domicilio ?? '-'}</p>
+
+                      <HistorialIngresos
+                        ingresos={item.ingresos}
+                        totalInternaciones={item.totalInternaciones}
+                        totalAmbulatorios={item.totalAmbulatorios}
+                      />
                     </div>
                   )
                 })}
@@ -181,20 +196,23 @@ export default async function ArchivoPage({ searchParams }: PageProps) {
                 <table className="w-full text-sm table-auto">
                   <thead>
                     <tr className="border-b bg-gray-50 text-left">
-                      <th className="px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[14%]">
+                      <th className="px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[11%]">
                         HC vieja
                       </th>
-                      <th className="px-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[26%]">
+                      <th className="px-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[24%]">
                         Paciente
                       </th>
-                      <th className="px-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[16%]">
+                      <th className="px-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[12%]">
                         Nacimiento
                       </th>
-                      <th className="px-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[28%]">
+                      <th className="px-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[22%]">
                         Contacto / Domicilio
                       </th>
-                      <th className="px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[16%]">
+                      <th className="px-2 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[10%]">
                         Alta sistema viejo
+                      </th>
+                      <th className="px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wider w-[21%]">
+                        Ingresos anteriores
                       </th>
                     </tr>
                   </thead>
@@ -217,6 +235,14 @@ export default async function ArchivoPage({ searchParams }: PageProps) {
                             <div className="text-xs text-gray-400">
                               {item.tipoDocumento?.trim()} {item.numeroDocumento ?? '-'}
                             </div>
+                            {item.obraSocialNombre != null && (
+                              <div className="text-xs text-gray-500 line-clamp-1">
+                                {item.obraSocialNombre}
+                                {item.numeroAfiliado != null && (
+                                  <span className="text-gray-400"> · {item.numeroAfiliado}</span>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="px-2 py-2.5 text-gray-600 align-top">
                             {formatearFechaCalendario(item.fechaNacimiento)}
@@ -230,8 +256,15 @@ export default async function ArchivoPage({ searchParams }: PageProps) {
                               {item.domicilio ?? '-'}
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-gray-600 align-top">
+                          <td className="px-2 py-2.5 text-gray-600 align-top">
                             {formatearFechaCalendario(item.fechaAlta)}
+                          </td>
+                          <td className="px-3 py-2.5 align-top">
+                            <HistorialIngresos
+                              ingresos={item.ingresos}
+                              totalInternaciones={item.totalInternaciones}
+                              totalAmbulatorios={item.totalAmbulatorios}
+                            />
                           </td>
                         </tr>
                       )

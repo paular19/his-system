@@ -124,6 +124,51 @@ Vive **aislada a proposito**:
   tabla (`npm run db:import-archivo -- --archivo="..." --reemplazar`) o los términos dejan de
   matchear en silencio.
 
+### Ingresos y obras sociales del sistema viejo
+
+Además de `ArchivoPaciente` hay tres tablas más, con las mismas reglas de aislamiento:
+`ArchivoObraSocial` (395), `ArchivoPlanObraSocial` (382) y `ArchivoIngreso` (8.665).
+
+**La base vieja está restaurada localmente**, no hay que pedir exports: instancia
+`.\SQLEXPRESS`, bases `SanRafael` y `SanRafaelLegacy` (idénticas). El import lee de ahí con
+`sqlcmd` — sin dependencias nuevas — y las filas viajan como NDJSON (`FOR JSON PATH`), así los
+saltos de línea de las observaciones no rompen el parseo:
+
+```bash
+npm run db:archivo-ddl                              # crea las tablas (ver trampa 5)
+npm run db:import-archivo-ingresos -- --dry-run
+npm run db:import-archivo-ingresos -- --reemplazar
+```
+
+Dos detalles del extractor que ya costaron una vuelta:
+
+- `sqlcmd` necesita `-u` (salida UTF-16LE, se lee con `readFile(..., 'utf16le')`). Sin eso
+  escribe en la codepage de consola y `MUÑOZ` sale `MU?OZ`.
+- El JSON trae la hora sin zona. Hay que agregarle la `Z` antes de `new Date()`: la app formatea
+  leyendo las partes en UTC, así que interpretarla como local corre todo tres horas.
+
+Qué esperar de estos datos, medido:
+
+- Solo **3.606 de los 54.154** pacientes del archivo tienen algún ingreso. El sistema anterior se
+  puso en producción a fines de 2024 (`Ingreso` arranca el 2024-12-23, `Orden` el 2024-02-14) y
+  los pacientes se migraron en bloque. **No hay internaciones anteriores a eso**: las ~95 filas
+  con fecha 2001-2023 son carga de prueba (IDs consecutivos, todas `20/02/<año>`, usuario
+  SUPERVISOR). Que un paciente no tenga ingresos es lo normal, no un bug del import.
+- De 8.665 ingresos, **2.646 son internaciones** (`esInternacion`, `TigCodig = 'I'`) y el resto
+  ambulatorios. Fecha de egreso en 2.622 y motivo en 2.606: el 70% no tiene egreso cargado.
+- Los motivos de egreso viejos son de 3 letras (`ALT`/`OBI`/`VOL`/`ANU`/`TRA`) y **no coinciden**
+  con `MotivoEgreso` del HIS nuevo, que usa 2 (`AL`/`AV`/`FA`/`FU`/`TR`). Por eso se guarda el par
+  código + descripción, sin mapear.
+- Quedan afuera 322 ingresos sin `PacID` (153 de ellos internaciones): no se pueden colgar de
+  ningún paciente del archivo.
+- `ArchivoObraSocial` existe porque el maestro nuevo no alcanza: tiene 89 obras sociales contra
+  las 395 del viejo, y resolver `ArchivoPaciente.obraSocialIdViejo` contra `ObraSocial` dejaba
+  18.326 pacientes sin nombre (214 ids huérfanos). Contra la tabla del archivo resuelven 54.153
+  de 54.154.
+- Estas tablas **no declaran relaciones Prisma**. La FK de plan es compuesta `(OSID, PosID)`, que
+  es justo el patrón de la trampa 1; los nombres van desnormalizados en cada fila y el cruce con
+  el paciente se hace en memoria (`obtenerIngresosDePacientes`).
+
 ---
 
 ## Trabajar con la base

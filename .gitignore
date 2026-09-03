@@ -19,3 +19,6 @@ escaner.pdf
 
 # Notas de trabajo locales
 docs/plan-cumplimiento.md
+
+# Scripts temporales de diagnostico contra la base (ver CLAUDE.md)
+tmp-*.ts

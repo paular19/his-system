@@ -1,0 +1,290 @@
+{
+ "tomado": "2026-09-03",
+ "contexto": "antes de corregir la fechaEmision de la orden 1/3325 (plan alimentario 28/08 de ANDRADA)",
+ "orden": {
+  "puestoNumero": 1,
+  "numero": 3325,
+  "ingresoId": 450,
+  "descripcion": null,
+  "fechaEmision": "2026-09-28T15:00:00.000Z",
+  "fechaPedido": "2026-09-28T15:00:00.000Z",
+  "numeroAutorizacion": null,
+  "pacienteId": 68372,
+  "nombrePaciente": "ANDRADA, MAXIMO LIONEL",
+  "numeroAfiliado": "49273988",
+  "obraSocialId": 511,
+  "planId": 1,
+  "obraSocialCoseguroId": null,
+  "planCoseguroId": null,
+  "profesionalId": 21,
+  "tipoOrdenCodigo": "CAM",
+  "patologiaId": null,
+  "descripcionPatologia": "SINDROME CONVULSIVO REFRACTARIO- NAC",
+  "importeTotal": "8969.53",
+  "importeCargoPac": null,
+  "titularModular": null,
+  "imprimirPorDuplicado": false,
+  "estado": "A",
+  "fechaEstado": "2026-09-03T13:36:15.419Z",
+  "usuarioRegistro": "user_3F2Zc",
+  "items": [
+   {
+    "puestoNumero": 1,
+    "ordenNumero": 3325,
+    "item": 1,
+    "convenioId": 1,
+    "codigoPractica": "190303  ",
+    "convenioValorId": null,
+    "tipoDiferencialCodigo": null,
+    "numeroAutorizacion": "52298229",
+    "fecha": "2026-08-28T15:00:00.000Z",
+    "cantidad": "1",
+    "cantidadModuloIntegral": null,
+    "importeTotal": "8969.53",
+    "importeCargoPaciente": null,
+    "porcentajeCargoPac": null,
+    "tipoFacturacion": "H",
+    "clasificacionAgrupacion": null,
+    "modulo": null,
+    "titularModular": null,
+    "imprimirPorDuplicado": false,
+    "efectorMatricula": null,
+    "practicaId": 5120
+   }
+  ]
+ },
+ "practica5120": {
+  "id": 5120,
+  "ingresoId": 450,
+  "convenioId": 1,
+  "codigoPractica": "190303",
+  "convenioValorId": 0,
+  "fecha": "2026-08-28T15:00:00.000Z",
+  "cantidad": "1",
+  "numeroAutorizacion": "52298229",
+  "numeroProtocoloLab": null,
+  "diagnosticoLab": null,
+  "matriculaEspecialista": null,
+  "matriculaAnestesista": null,
+  "obraSocialId": 511,
+  "planId": null,
+  "facturable": true,
+  "motivoNoFactura": null,
+  "importeTotal": "8969.53",
+  "puestoNumero": 1,
+  "ordenNumero": 3325,
+  "ordenItem": 1,
+  "estado": "F",
+  "usuarioRegistro": "user_3F2Zc",
+  "fechaUsuario": null
+ },
+ "lote66": {
+  "id": 66,
+  "numero": 66,
+  "fecha": "2026-09-03T00:00:00.000Z",
+  "periodo": "2026-08",
+  "obraSocialId": 511,
+  "planId": null,
+  "tipoIngresoCodigo": "INT",
+  "tipo": "PRACTICAS",
+  "rangoDesde": null,
+  "rangoHasta": null,
+  "sedeId": null,
+  "descripcion": "AGOSTO",
+  "concepto": "INTERNADO",
+  "importeTotal": "57413591.8",
+  "origen": null,
+  "estado": "PEN",
+  "fechaEstado": "2026-09-03T16:25:43.166Z",
+  "usuario": "user_3F2Zc"
+ },
+ "lote70": {
+  "id": 70,
+  "numero": 70,
+  "fecha": "2026-09-03T00:00:00.000Z",
+  "periodo": null,
+  "obraSocialId": 511,
+  "planId": null,
+  "tipoIngresoCodigo": "INT",
+  "tipo": "PRACTICAS",
+  "rangoDesde": null,
+  "rangoHasta": null,
+  "sedeId": null,
+  "descripcion": "AGOSTO",
+  "concepto": "INTERNADO EXTRACAPITA",
+  "importeTotal": "14777674.45",
+  "origen": null,
+  "estado": "PEN",
+  "fechaEstado": "2026-09-03T18:48:17.347Z",
+  "usuario": "user_3F2Zc"
+ },
+ "item66": {
+  "id": 759,
+  "loteId": 66,
+  "ingresoId": 450,
+  "incluido": true,
+  "importeTotal": "5175324.85",
+  "importePromedi": null
+ },
+ "item70": {
+  "id": 896,
+  "loteId": 70,
+  "ingresoId": 450,
+  "incluido": false,
+  "importeTotal": "8969.53",
+  "importePromedi": null
+ },
+ "exclusiones70": [
+  {
+   "id": 40,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2544
+  },
+  {
+   "id": 41,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 3036
+  },
+  {
+   "id": 42,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 3039
+  },
+  {
+   "id": 43,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2779
+  },
+  {
+   "id": 44,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 3034
+  },
+  {
+   "id": 45,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 3040
+  },
+  {
+   "id": 46,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2778
+  },
+  {
+   "id": 47,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2865
+  },
+  {
+   "id": 48,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 3037
+  },
+  {
+   "id": 49,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 3038
+  },
+  {
+   "id": 50,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 3181
+  },
+  {
+   "id": 51,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 3230
+  },
+  {
+   "id": 52,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2101
+  },
+  {
+   "id": 53,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2102
+  },
+  {
+   "id": 54,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2166
+  },
+  {
+   "id": 55,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2232
+  },
+  {
+   "id": 56,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2247
+  },
+  {
+   "id": 57,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2248
+  },
+  {
+   "id": 58,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2231
+  },
+  {
+   "id": 59,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2458
+  },
+  {
+   "id": 60,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2459
+  },
+  {
+   "id": 61,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2460
+  },
+  {
+   "id": 62,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2461
+  },
+  {
+   "id": 63,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2685
+  },
+  {
+   "id": 64,
+   "loteId": 70,
+   "puestoNumero": 1,
+   "ordenNumero": 2549
+  }
+ ],
+ "exclusiones66": []
+}

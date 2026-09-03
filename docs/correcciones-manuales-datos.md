@@ -1609,3 +1609,67 @@ completar, y guardado = calculado en los dos lotes (dif 0,00).
 
 **Reversion:** `docs/snapshot-lote70-completar-2026-09-03.json` tiene el estado previo completo
 (ordenes con sus items, practicas, items de lote y los lotes 66 y 70).
+
+---
+
+## 2026-09-03 — Orden 1/3325 (ANDRADA): plan alimentario del 28/08 con fecha de septiembre
+
+**Reportado por:** Paula — "en el lote 66 faltan dos ordenes de ANDRADA MAXIMO LIONEL: el plan
+alimentario del 28/8 y la fisioterapia del 1/9".
+
+**Que se midio antes de tocar nada** (ingreso 450, INT-204, IPS, 20/08 -> 01/09):
+
+- La **fisioterapia del 01/09** no faltaba: practica 4919 (`250110`) -> orden 1/3181,
+  7.622,40, `fechaEmision` 01/09. Entra al periodo 2026-08 porque el periodo cierra el dia 1
+  del mes siguiente, y el lote 70 la tiene en sus `ordenesExcluidas`. Las 12 sesiones del
+  21/08 al 01/09 estaban todas en el 66.
+- El **plan alimentario del 28/08** si faltaba: practica 5120 (`190303` PLAN ALIMENTARIO DE
+  ALTA, 28/08, estado F, 8.969,53) -> orden 1/3325, emitida a mano el 03/09 13:36 con
+  **`OrdFchEmi` y `OrdFchPed` = 2026-09-28** en vez de 2026-08-28. Mes tipeado mal.
+
+**Por que se perdia:** el armado del lote filtra por `fechaEmision` (`whereFechaEmisionPeriodo`),
+no por la fecha de la practica. Con 28/09 la orden quedaba fuera de 2026-08 y solo la levantaba
+el lote 70, que no tiene periodo. Y ahi tampoco se cobraba: el item del ingreso 450 en el 70
+esta **destildado** (`LItIncluido = false`), asi que sus 8.969,53 no sumaban a ningun total.
+
+**Que se toco** (script `tmp-fix-3325.ts`, borrado despues):
+
+```
+Orden 1/3325       OrdFchEmi / OrdFchPed  2026-09-28 -> 2026-08-28
+OrdenPrac 1/3325#1 OprFch                 ya estaba en 2026-08-28 (se reescribio igual)
+LoteFacturacionOrdenExcluida  alta (lote 70, 1, 3325)
+```
+
+La exclusion en el 70 es necesaria: ese lote no filtra por fecha, asi que sin ella la orden
+quedaba en los dos lotes a la vez. Los importes guardados se refrescaron con
+`toggleOrdenLote(70, 1, 3325, false)` y `toggleOrdenLote(66, 1, 3325, true)`.
+
+**Guardas del script** (aborta sin escribir): orden inexistente, de otro ingreso, anulada,
+`fechaEmision` distinta de la medida, cantidad de items != 1, codigo != `190303`,
+`practicaId` != 5120, practica que no es del 28/08, que no este en estado `F` o que no apunte
+de vuelta a la orden, lotes 66 o 70 que no esten pendientes, o ingreso 450 repetido en un lote.
+
+**Verificado despues de correr:**
+
+| | antes | despues |
+|---|---|---|
+| ordenes visibles del ing 450 en el lote 66 | 25 | **26** (entra 1/3325) |
+| item del ing 450 en el lote 66 | 5.175.324,85 | **5.184.294,38** |
+| lote 66 | 57.413.591,80 | **57.422.561,33** (+8.969,53) |
+| lote 70 | 14.777.674,45 | 14.777.674,45 (sin cambio: el item estaba destildado) |
+
+En el lote 70 el guardado, el calculado por `obtenerLote` y la suma de items incluidos dan los
+tres 14.777.674,45.
+
+**Lo que quedo afuera a proposito** — dos practicas del mismo ingreso **sin ninguna orden**, que
+no estan en ningun lote y hay que decidir si se cobran:
+
+| practica | fecha | codigo | descripcion | importe |
+|---|---|---|---|---|
+| 4727 | 26/08 | 190303 | PLAN ALIMENTARIO DE ALTA | 8.969,53 |
+| 4608 | 28/08 | 190401 | SOPORTE NUTRICIONAL EN INTERNADO | 25.114,17 |
+
+La 4727 tenia la orden 1/3033, que quedo anulada (`OrdEstad = 'X'`) y nunca se refacturo.
+
+**Reversion:** `docs/snapshot-orden3325-fecha-2026-09-03.json` tiene la orden con su item, la
+practica 5120, los dos lotes y sus items del ingreso 450, y las exclusiones previas de ambos.

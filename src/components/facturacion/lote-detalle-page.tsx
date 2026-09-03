@@ -396,6 +396,7 @@ export function LoteDetallePage({ loteId }: Props) {
     const [separarPorPaciente, setSepararPorPaciente] = useState(false)
     const [generandoPdf, setGenerandoPdf] = useState(false)
     const [errorPdf, setErrorPdf] = useState('')
+    const [errorEstado, setErrorEstado] = useState('')
     const [vistaPromedi, setVistaPromedi] = useState(false)
     const printRef = useRef<HTMLDivElement>(null)
     const [ordenesPorIngreso, setOrdenesPorIngreso] = useState<Record<number, OrdenAutorizadaLote[]>>({})
@@ -613,16 +614,28 @@ export function LoteDetallePage({ loteId }: Props) {
         }
     }
 
-    async function cambiarEstado(estado: 'CON' | 'ANU') {
-        if (!confirm(`¿Confirmar ${estado === 'CON' ? 'la confirmación' : 'la anulación'} del lote?`)) return
+    async function cambiarEstado(estado: 'PEN' | 'CON' | 'ANU') {
+        const accion =
+            estado === 'CON'
+                ? 'la confirmación'
+                : estado === 'ANU'
+                    ? 'la anulación'
+                    : 'la vuelta a pendiente'
+        if (!confirm(`¿Confirmar ${accion} del lote?`)) return
         setProcesando(true)
+        setErrorEstado('')
         try {
             const res = await fetch(`/api/facturacion/lotes/${loteId}/estado`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ estado }),
             })
-            if (res.ok) cargar()
+            if (res.ok) {
+                cargar()
+            } else {
+                const data = await res.json().catch(() => null)
+                setErrorEstado(data?.error ?? 'No se pudo cambiar el estado del lote')
+            }
         } finally {
             setProcesando(false)
         }
@@ -1150,6 +1163,15 @@ export function LoteDetallePage({ loteId }: Props) {
                                 Anular
                             </button>
                         )}
+                        {lote.estado === 'CON' && (
+                            <button
+                                onClick={() => cambiarEstado('PEN')}
+                                disabled={procesando}
+                                className="border border-yellow-400 text-yellow-800 px-3 py-1.5 rounded text-sm hover:bg-yellow-50 disabled:opacity-50"
+                            >
+                                Volver a pendiente
+                            </button>
+                        )}
                         <button
                             onClick={() => router.back()}
                             className="border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
@@ -1158,6 +1180,12 @@ export function LoteDetallePage({ loteId }: Props) {
                         </button>
                     </div>
                 </div>
+
+                {errorEstado && (
+                    <div className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 print:hidden">
+                        {errorEstado}
+                    </div>
+                )}
 
                 {errorPdf && (
                     <div className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 print:hidden">

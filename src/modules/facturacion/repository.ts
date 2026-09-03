@@ -6250,9 +6250,17 @@ export async function actualizarLote(
     }
 }
 
+export async function obtenerEstadoLote(id: number): Promise<string | null> {
+    const lote = await prisma.loteFacturacion.findUnique({
+        where: { id },
+        select: { estado: true },
+    })
+    return lote?.estado ?? null
+}
+
 export async function cambiarEstadoLote(
     id: number,
-    estado: 'CON' | 'ANU',
+    estado: 'PEN' | 'CON' | 'ANU',
     usuario: string
 ): Promise<void> {
     const usuarioCod = usuario.trim().slice(0, 10) || 'SISTEMA'

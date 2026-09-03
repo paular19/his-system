@@ -1537,3 +1537,13 @@ que calcula el codigo actual. Verificado: 0 items desfasados de 50, guardado = c
 
 **Reversion:** los dos snapshots tienen el estado previo completo (practicas, `OrdenPrac`,
 cabeceras, items de lote y el lote).
+
+---
+
+## 2026-09-03 — Lote 69 devuelto a pendiente
+
+El lote 69 (`GUARDIA ACIDSAL AGOSTO`, obra social 346, 612.000) se habia confirmado por error
+el 2026-09-03 18:59 (usuario `user_3F2ZR`). Se lo volvio a `PEN` desde un script que llama a
+`reabrirLote(69, 'SISTEMA')`, o sea el mismo camino que ahora expone el boton "Volver a
+pendiente" del detalle de lote: solo cambia `LotEstado`, `LotFecEst` y `LotUsuario`, no toca
+items ni ordenes. Queda auditado en `Audit` como "Lote devuelto a pendiente".

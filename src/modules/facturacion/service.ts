@@ -350,6 +350,23 @@ export async function confirmarLote(id: number, usuario: string, ip?: string) {
     })
 }
 
+export async function reabrirLote(id: number, usuario: string, ip?: string) {
+    const estado = await repo.obtenerEstadoLote(id)
+    if (!estado) throw new Error('Lote no encontrado')
+    if (estado !== 'CON') throw new Error('Solo se puede volver a pendiente un lote confirmado')
+
+    await repo.cambiarEstadoLote(id, 'PEN', usuario)
+
+    await registrarAudit({
+        usuario,
+        accion: 'MODIFICAR',
+        entidad: 'LoteFacturacion',
+        registroId: id,
+        detalle: 'Lote devuelto a pendiente',
+        direccionIp: ip,
+    })
+}
+
 export async function anularLote(id: number, usuario: string, ip?: string) {
     await repo.cambiarEstadoLote(id, 'ANU', usuario)
 

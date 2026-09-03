@@ -3,9 +3,9 @@ import { getUsuarioSesion } from '@/lib/auth'
 import { tienePermiso } from '@/lib/auth/rbac'
 import { apiForbidden, apiOk, manejarErrorApi } from '@/lib/utils/response'
 import { z } from 'zod'
-import { confirmarLote, anularLote } from '@/modules/facturacion/service'
+import { confirmarLote, anularLote, reabrirLote } from '@/modules/facturacion/service'
 
-const EstadoSchema = z.object({ estado: z.enum(['CON', 'ANU']) })
+const EstadoSchema = z.object({ estado: z.enum(['PEN', 'CON', 'ANU']) })
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -21,6 +21,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
         if (estado === 'CON') {
             await confirmarLote(Number(id), usuario.codigoUsuario, ip)
+        } else if (estado === 'PEN') {
+            await reabrirLote(Number(id), usuario.codigoUsuario, ip)
         } else {
             await anularLote(Number(id), usuario.codigoUsuario, ip)
         }

@@ -1227,3 +1227,29 @@ internaciones). No se pueden colgar de ningun paciente del archivo.
 **Como verificar:** `npm run db:import-archivo-ingresos -- --dry-run` no escribe nada
 y reporta los conteos del origen; volver a correr el import sin `--reemplazar` debe
 insertar 0 filas (usa `skipDuplicates`).
+
+---
+
+## 2026-09-03 — Alta del profesional APERTI FACUNDO (MP 5523)
+
+**Pedido por:** Paula.
+
+**Que se hizo:** se inserto una fila en `Profesional` — `PrfID` 1038,
+`PrfNombre` `APERTI FACUNDO`, `PrfMatric` 5523, `PrfEstad` `A`, `UsuCodig`
+`SUPERVISOR`, sin especialidad ni tipo (como las otras 1.016 filas importadas).
+Se hizo por SQL porque la app no tiene alta de profesionales.
+
+**Antes se verifico** que no existiera: 0 filas con nombre que contenga `APERTI`
+y 0 con matricula 5523. Total antes 1.036, despues 1.037.
+
+**Escritura extra necesaria:** la secuencia `Profesional_PrfID_seq` estaba en 63
+mientras el `max(PrfID)` era 1037 — los profesionales se habian importado con ID
+explicito y la secuencia nunca se reposiciono. Un insert con autoincrement habria
+chocado la PK. Se corrio `setval('public."Profesional_PrfID_seq"', 1037, true)`
+antes del insert; quedo en 1038. Esto tambien destraba cualquier alta futura.
+
+**Reversion:** `DELETE FROM "Profesional" WHERE "PrfID" = 1038`. La secuencia se
+deja como esta: volver a 63 rompe las altas siguientes.
+
+**Como verificar:** el profesional aparece en los selectores de profesional
+(admision, internacion, ordenes) buscando por `APERTI`.

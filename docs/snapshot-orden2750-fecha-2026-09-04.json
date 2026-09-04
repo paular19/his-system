@@ -1,0 +1,793 @@
+{
+ "tomado": "2026-09-04",
+ "contexto": "antes de mover OrdFchEmi/OrdFchPed de la orden 1/2750 al 27/08",
+ "orden": {
+  "puestoNumero": 1,
+  "numero": 2750,
+  "ingresoId": 496,
+  "descripcion": null,
+  "fechaEmision": "2026-02-25T15:00:00.000Z",
+  "fechaPedido": "2026-02-25T15:00:00.000Z",
+  "numeroAutorizacion": null,
+  "pacienteId": 63023,
+  "nombrePaciente": "ARAOZ, MARTHA NELIDA",
+  "numeroAfiliado": "4433226",
+  "obraSocialId": 511,
+  "planId": 1,
+  "obraSocialCoseguroId": null,
+  "planCoseguroId": null,
+  "profesionalId": 861,
+  "tipoOrdenCodigo": "CAM",
+  "patologiaId": null,
+  "descripcionPatologia": null,
+  "importeTotal": "17000",
+  "importeCargoPac": null,
+  "titularModular": "HONORARIO ESPECIALISTA",
+  "imprimirPorDuplicado": false,
+  "estado": "A",
+  "fechaEstado": "2026-08-27T15:01:54.582Z",
+  "usuarioRegistro": "user_3GrKO"
+ },
+ "ordenPrac": [
+  {
+   "puestoNumero": 1,
+   "ordenNumero": 2750,
+   "item": 1,
+   "convenioId": 1,
+   "codigoPractica": "420101  ",
+   "convenioValorId": null,
+   "tipoDiferencialCodigo": null,
+   "numeroAutorizacion": "52297781",
+   "fecha": "2026-08-27T15:00:00.000Z",
+   "cantidad": "1",
+   "cantidadModuloIntegral": null,
+   "importeTotal": "17000",
+   "importeCargoPaciente": null,
+   "porcentajeCargoPac": null,
+   "tipoFacturacion": "H",
+   "clasificacionAgrupacion": null,
+   "modulo": null,
+   "titularModular": null,
+   "imprimirPorDuplicado": false,
+   "efectorMatricula": 9110,
+   "practicaId": 4361
+  }
+ ],
+ "practicas": [
+  {
+   "id": 4361,
+   "ingresoId": 496,
+   "convenioId": 1,
+   "codigoPractica": "420101",
+   "convenioValorId": 0,
+   "fecha": "2026-08-27T15:00:00.000Z",
+   "cantidad": "1",
+   "numeroAutorizacion": "52297781",
+   "numeroProtocoloLab": null,
+   "diagnosticoLab": null,
+   "matriculaEspecialista": 9110,
+   "matriculaAnestesista": null,
+   "obraSocialId": 511,
+   "planId": null,
+   "facturable": true,
+   "motivoNoFactura": null,
+   "importeTotal": "17000",
+   "puestoNumero": 1,
+   "ordenNumero": 2750,
+   "ordenItem": 1,
+   "estado": "F",
+   "usuarioRegistro": "user_3GrKO",
+   "fechaUsuario": "2026-08-27T15:02:21.224Z"
+  }
+ ],
+ "loteItems": [
+  {
+   "id": 641,
+   "loteId": 62,
+   "ingresoId": 271,
+   "incluido": true,
+   "importeTotal": "34000",
+   "importePromedi": null
+  },
+  {
+   "id": 642,
+   "loteId": 62,
+   "ingresoId": 272,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 643,
+   "loteId": 62,
+   "ingresoId": 273,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 644,
+   "loteId": 62,
+   "ingresoId": 274,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 645,
+   "loteId": 62,
+   "ingresoId": 275,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 647,
+   "loteId": 62,
+   "ingresoId": 278,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 648,
+   "loteId": 62,
+   "ingresoId": 279,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 649,
+   "loteId": 62,
+   "ingresoId": 280,
+   "incluido": true,
+   "importeTotal": "34000",
+   "importePromedi": null
+  },
+  {
+   "id": 666,
+   "loteId": 62,
+   "ingresoId": 295,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 650,
+   "loteId": 62,
+   "ingresoId": 281,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 652,
+   "loteId": 62,
+   "ingresoId": 285,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 655,
+   "loteId": 62,
+   "ingresoId": 283,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 602,
+   "loteId": 62,
+   "ingresoId": 109,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 615,
+   "loteId": 62,
+   "ingresoId": 190,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 653,
+   "loteId": 62,
+   "ingresoId": 277,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 656,
+   "loteId": 62,
+   "ingresoId": 399,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 646,
+   "loteId": 62,
+   "ingresoId": 276,
+   "incluido": true,
+   "importeTotal": "34000",
+   "importePromedi": null
+  },
+  {
+   "id": 651,
+   "loteId": 62,
+   "ingresoId": 284,
+   "incluido": true,
+   "importeTotal": "34000",
+   "importePromedi": null
+  },
+  {
+   "id": 616,
+   "loteId": 62,
+   "ingresoId": 210,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 617,
+   "loteId": 62,
+   "ingresoId": 213,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 657,
+   "loteId": 62,
+   "ingresoId": 418,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 669,
+   "loteId": 62,
+   "ingresoId": 419,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 623,
+   "loteId": 62,
+   "ingresoId": 229,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 663,
+   "loteId": 62,
+   "ingresoId": 421,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 625,
+   "loteId": 62,
+   "ingresoId": 233,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 605,
+   "loteId": 62,
+   "ingresoId": 231,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 626,
+   "loteId": 62,
+   "ingresoId": 237,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 624,
+   "loteId": 62,
+   "ingresoId": 238,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 627,
+   "loteId": 62,
+   "ingresoId": 255,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 680,
+   "loteId": 62,
+   "ingresoId": 422,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 654,
+   "loteId": 62,
+   "ingresoId": 289,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 662,
+   "loteId": 62,
+   "ingresoId": 293,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 664,
+   "loteId": 62,
+   "ingresoId": 298,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 665,
+   "loteId": 62,
+   "ingresoId": 301,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 608,
+   "loteId": 62,
+   "ingresoId": 423,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 670,
+   "loteId": 62,
+   "ingresoId": 312,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 673,
+   "loteId": 62,
+   "ingresoId": 321,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 678,
+   "loteId": 62,
+   "ingresoId": 322,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 674,
+   "loteId": 62,
+   "ingresoId": 325,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 675,
+   "loteId": 62,
+   "ingresoId": 326,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 672,
+   "loteId": 62,
+   "ingresoId": 332,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 677,
+   "loteId": 62,
+   "ingresoId": 336,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 606,
+   "loteId": 62,
+   "ingresoId": 361,
+   "incluido": true,
+   "importeTotal": "34000",
+   "importePromedi": null
+  },
+  {
+   "id": 611,
+   "loteId": 62,
+   "ingresoId": 363,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 633,
+   "loteId": 62,
+   "ingresoId": 371,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 661,
+   "loteId": 62,
+   "ingresoId": 410,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 634,
+   "loteId": 62,
+   "ingresoId": 373,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 629,
+   "loteId": 62,
+   "ingresoId": 385,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 631,
+   "loteId": 62,
+   "ingresoId": 386,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 630,
+   "loteId": 62,
+   "ingresoId": 392,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 635,
+   "loteId": 62,
+   "ingresoId": 403,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 638,
+   "loteId": 62,
+   "ingresoId": 404,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 636,
+   "loteId": 62,
+   "ingresoId": 445,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 639,
+   "loteId": 62,
+   "ingresoId": 407,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 671,
+   "loteId": 62,
+   "ingresoId": 420,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 620,
+   "loteId": 62,
+   "ingresoId": 440,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 658,
+   "loteId": 62,
+   "ingresoId": 447,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 632,
+   "loteId": 62,
+   "ingresoId": 458,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 667,
+   "loteId": 62,
+   "ingresoId": 479,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 610,
+   "loteId": 62,
+   "ingresoId": 491,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 679,
+   "loteId": 62,
+   "ingresoId": 495,
+   "incluido": true,
+   "importeTotal": "34000",
+   "importePromedi": null
+  },
+  {
+   "id": 614,
+   "loteId": 62,
+   "ingresoId": 496,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 603,
+   "loteId": 62,
+   "ingresoId": 501,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 604,
+   "loteId": 62,
+   "ingresoId": 502,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 660,
+   "loteId": 62,
+   "ingresoId": 517,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 622,
+   "loteId": 62,
+   "ingresoId": 522,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 628,
+   "loteId": 62,
+   "ingresoId": 528,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 612,
+   "loteId": 62,
+   "ingresoId": 541,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 621,
+   "loteId": 62,
+   "ingresoId": 535,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 676,
+   "loteId": 62,
+   "ingresoId": 537,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 607,
+   "loteId": 62,
+   "ingresoId": 540,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 618,
+   "loteId": 62,
+   "ingresoId": 543,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 609,
+   "loteId": 62,
+   "ingresoId": 545,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 613,
+   "loteId": 62,
+   "ingresoId": 546,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 640,
+   "loteId": 62,
+   "ingresoId": 553,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 619,
+   "loteId": 62,
+   "ingresoId": 578,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 637,
+   "loteId": 62,
+   "ingresoId": 579,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 659,
+   "loteId": 62,
+   "ingresoId": 582,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 668,
+   "loteId": 62,
+   "ingresoId": 583,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 681,
+   "loteId": 62,
+   "ingresoId": 589,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 684,
+   "loteId": 62,
+   "ingresoId": 591,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 682,
+   "loteId": 62,
+   "ingresoId": 596,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 683,
+   "loteId": 62,
+   "ingresoId": 597,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 685,
+   "loteId": 62,
+   "ingresoId": 606,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 686,
+   "loteId": 62,
+   "ingresoId": 615,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  },
+  {
+   "id": 687,
+   "loteId": 62,
+   "ingresoId": 616,
+   "incluido": true,
+   "importeTotal": "17000",
+   "importePromedi": null
+  }
+ ],
+ "lote": {
+  "id": 62,
+  "numero": 62,
+  "fecha": "2026-09-03T00:00:00.000Z",
+  "periodo": "2026-08",
+  "obraSocialId": 511,
+  "planId": null,
+  "tipoIngresoCodigo": null,
+  "tipo": "PRACTICAS",
+  "rangoDesde": null,
+  "rangoHasta": null,
+  "sedeId": null,
+  "descripcion": null,
+  "concepto": "OSECAC GUARDIA AGOSTO",
+  "importeTotal": "1564000",
+  "origen": null,
+  "estado": "PEN",
+  "fechaEstado": "2026-09-03T13:25:38.811Z",
+  "usuario": "user_3FHF0"
+ }
+}

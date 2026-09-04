@@ -1725,3 +1725,52 @@ etiquetados, 0 fuera del resumen).
 
 **Snapshot / reversion:** `docs/snapshot-lote64-340301-2026-09-04.json` (practicas, las 2
 filas de `OrdenPrac`, la cabecera, los items del lote y el lote).
+
+---
+
+## 2026-09-04 — Orden 1/2750 (ARAOZ): la cabecera quedo en febrero
+
+**Reportado por:** Paula — "ARAOZ MARTHA NELIDA orden 2363 y 2750, por que no salen en el
+resumen", y despues "ya se cambio la fecha de la 2750, debe incluirse".
+
+**Las dos ordenes son del ingreso 496** (INT-310, ambulatorio, OSECAC), que esta en el lote
+62 ("OSECAC GUARDIA AGOSTO", PEN, periodo 2026-08) y en el 58 (ANU). Eran dos problemas
+distintos:
+
+- **2363 nunca falto:** entra al lote 62 con 17.000. La paciente tiene ademas el ingreso
+  508 (INT-226, internacion 25-27/08) que va en el lote **66**. Buscar estas ordenes en el
+  resumen del 66 no las encuentra: pertenecen al ingreso ambulatorio, no al de internacion.
+- **2750 estaba fuera del periodo:** `OrdFchEmi` = 2026-02-25 cuando la orden se creo el
+  2026-08-27 15:01 y el ingreso arranca el 24/08. Era la unica orden de toda la base creada
+  desde agosto con fecha de emision anterior a junio.
+
+**Que estaba mal despues del primer arreglo:** el cambio de fecha se habia aplicado a medias.
+`Practica.PraFch` y `OrdenPrac.OprFch` ya estaban en 2026-08-27, pero la cabecera seguia en
+2026-02-25 en `OrdFchEmi` **y** `OrdFchPed`. El lote filtra por `Orden.fechaEmision`
+(`whereFechaEmisionPeriodo`), no por la fecha del item, asi que la orden seguia afuera
+aunque en la ficha se viera con fecha de agosto.
+
+> **Sintoma a reconocer:** una prestacion que se ve con la fecha correcta en la ficha pero
+> no aparece en el lote. La fecha del item y la de la cabecera son campos distintos y pueden
+> quedar desalineados; el lote mira la de la cabecera.
+
+**Registros tocados** (misma forma que las ordenes 1829-1833 del 28/08, mas arriba):
+
+| tabla | registro | antes | despues |
+|---|---|---|---|
+| `Orden` | 1/2750 (`OrdFchEmi`) | 2026-02-25 15:00 | 2026-08-27 15:00 |
+| `Orden` | 1/2750 (`OrdFchPed`) | 2026-02-25 15:00 | 2026-08-27 15:00 |
+
+No se toco `Practica` ni `OrdenPrac`: ya estaban en 27/08. El script aborta si el item o la
+practica no tienen exactamente esa fecha, si la orden esta anulada, si el lote no esta en
+PEN, si con la fecha nueva seguiria fuera del periodo, o si otro lote activo tiene el
+ingreso (solo esta el 58, ANU).
+
+**Importes:** ingreso 496 de 17.000 a **34.000**; lote 62 de 1.564.000 a **1.581.000**.
+`LItImpTotal` y `LotImpTotal` recalculados desde las ordenes con doble lectura de control.
+0 items desfasados de 86. El lote sigue en PEN.
+
+**Verificacion:** el lote 62 levanta las dos ordenes del ingreso — 2363 (24/08) y 2750
+(27/08), 17.000 cada una.
+
+**Reversion:** `docs/snapshot-orden2750-fecha-2026-09-04.json`.

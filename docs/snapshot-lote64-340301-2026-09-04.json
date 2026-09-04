@@ -1,0 +1,371 @@
+{
+ "tomado": "2026-09-04",
+ "contexto": "antes de completar 340301/340302 de ALVAREZ SANTILLAN (ing 335) en el lote 64",
+ "objetivos": [
+  {
+   "ord": 1388,
+   "it": 1,
+   "cod": "340301",
+   "pra": 2371,
+   "impActual": 4432.97,
+   "impNuevo": 6025.61
+  },
+  {
+   "ord": 1388,
+   "it": 2,
+   "cod": "340302",
+   "pra": 2372,
+   "impActual": 3723.7,
+   "impNuevo": 4254.58
+  }
+ ],
+ "practicas": [
+  {
+   "id": 2371,
+   "ingresoId": 335,
+   "convenioId": 1,
+   "codigoPractica": "340301",
+   "convenioValorId": 0,
+   "fecha": "2026-08-13T15:00:00.000Z",
+   "cantidad": "1",
+   "numeroAutorizacion": "52296424",
+   "numeroProtocoloLab": null,
+   "diagnosticoLab": null,
+   "matriculaEspecialista": null,
+   "matriculaAnestesista": null,
+   "obraSocialId": 511,
+   "planId": null,
+   "facturable": true,
+   "motivoNoFactura": null,
+   "importeTotal": "4432.97",
+   "puestoNumero": 1,
+   "ordenNumero": 1388,
+   "ordenItem": 1,
+   "estado": "F",
+   "usuarioRegistro": "user_3GrKO",
+   "fechaUsuario": "2026-08-13T13:36:34.426Z"
+  },
+  {
+   "id": 2372,
+   "ingresoId": 335,
+   "convenioId": 1,
+   "codigoPractica": "340302",
+   "convenioValorId": 0,
+   "fecha": "2026-08-13T13:35:00.000Z",
+   "cantidad": "1",
+   "numeroAutorizacion": "52296424",
+   "numeroProtocoloLab": null,
+   "diagnosticoLab": null,
+   "matriculaEspecialista": null,
+   "matriculaAnestesista": null,
+   "obraSocialId": 511,
+   "planId": null,
+   "facturable": true,
+   "motivoNoFactura": null,
+   "importeTotal": "3723.7",
+   "puestoNumero": 1,
+   "ordenNumero": 1388,
+   "ordenItem": 2,
+   "estado": "F",
+   "usuarioRegistro": "user_3GrKO",
+   "fechaUsuario": "2026-08-13T13:36:34.426Z"
+  }
+ ],
+ "ordenPrac": [
+  {
+   "puestoNumero": 1,
+   "ordenNumero": 1388,
+   "item": 1,
+   "convenioId": 1,
+   "codigoPractica": "340301  ",
+   "convenioValorId": null,
+   "tipoDiferencialCodigo": null,
+   "numeroAutorizacion": "52296424",
+   "fecha": "2026-08-13T15:00:00.000Z",
+   "cantidad": "1",
+   "cantidadModuloIntegral": null,
+   "importeTotal": "4432.97",
+   "importeCargoPaciente": null,
+   "porcentajeCargoPac": null,
+   "tipoFacturacion": "H",
+   "clasificacionAgrupacion": "HE",
+   "modulo": null,
+   "titularModular": "HONORARIO ESPECIALISTA",
+   "imprimirPorDuplicado": false,
+   "efectorMatricula": 9110,
+   "practicaId": 2371
+  },
+  {
+   "puestoNumero": 1,
+   "ordenNumero": 1388,
+   "item": 2,
+   "convenioId": 1,
+   "codigoPractica": "340302  ",
+   "convenioValorId": null,
+   "tipoDiferencialCodigo": null,
+   "numeroAutorizacion": "52296424",
+   "fecha": "2026-08-13T13:35:00.000Z",
+   "cantidad": "1",
+   "cantidadModuloIntegral": null,
+   "importeTotal": "3723.7",
+   "importeCargoPaciente": null,
+   "porcentajeCargoPac": null,
+   "tipoFacturacion": "H",
+   "clasificacionAgrupacion": null,
+   "modulo": "GA      ",
+   "titularModular": null,
+   "imprimirPorDuplicado": false,
+   "efectorMatricula": 9110,
+   "practicaId": 2372
+  }
+ ],
+ "orden": {
+  "puestoNumero": 1,
+  "numero": 1388,
+  "ingresoId": 335,
+  "descripcion": null,
+  "fechaEmision": "2026-08-13T15:00:00.000Z",
+  "fechaPedido": "2026-08-13T15:00:00.000Z",
+  "numeroAutorizacion": null,
+  "pacienteId": 68338,
+  "nombrePaciente": "ALVAREZ SANTILLAN, RICARDO DANIEL",
+  "numeroAfiliado": "42813363",
+  "obraSocialId": 511,
+  "planId": 1,
+  "obraSocialCoseguroId": null,
+  "planCoseguroId": null,
+  "profesionalId": 57,
+  "tipoOrdenCodigo": "CAM",
+  "patologiaId": null,
+  "descripcionPatologia": null,
+  "importeTotal": "8156.67",
+  "importeCargoPac": null,
+  "titularModular": "HONORARIO ESPECIALISTA",
+  "imprimirPorDuplicado": false,
+  "estado": "A",
+  "fechaEstado": "2026-08-13T13:36:46.753Z",
+  "usuarioRegistro": "user_3GrKO"
+ },
+ "loteItems": [
+  {
+   "id": 724,
+   "loteId": 64,
+   "ingresoId": 548,
+   "incluido": true,
+   "importeTotal": "22156.24",
+   "importePromedi": null
+  },
+  {
+   "id": 725,
+   "loteId": 64,
+   "ingresoId": 580,
+   "incluido": true,
+   "importeTotal": "11876.05",
+   "importePromedi": null
+  },
+  {
+   "id": 726,
+   "loteId": 64,
+   "ingresoId": 453,
+   "incluido": true,
+   "importeTotal": "6025.61",
+   "importePromedi": null
+  },
+  {
+   "id": 727,
+   "loteId": 64,
+   "ingresoId": 396,
+   "incluido": true,
+   "importeTotal": "6025.61",
+   "importePromedi": null
+  },
+  {
+   "id": 728,
+   "loteId": 64,
+   "ingresoId": 446,
+   "incluido": true,
+   "importeTotal": "32612.65",
+   "importePromedi": null
+  },
+  {
+   "id": 729,
+   "loteId": 64,
+   "ingresoId": 474,
+   "incluido": true,
+   "importeTotal": "6912.2",
+   "importePromedi": null
+  },
+  {
+   "id": 730,
+   "loteId": 64,
+   "ingresoId": 449,
+   "incluido": true,
+   "importeTotal": "11876.05",
+   "importePromedi": null
+  },
+  {
+   "id": 731,
+   "loteId": 64,
+   "ingresoId": 299,
+   "incluido": true,
+   "importeTotal": "6025.61",
+   "importePromedi": null
+  },
+  {
+   "id": 732,
+   "loteId": 64,
+   "ingresoId": 401,
+   "incluido": true,
+   "importeTotal": "6912.2",
+   "importePromedi": null
+  },
+  {
+   "id": 733,
+   "loteId": 64,
+   "ingresoId": 315,
+   "incluido": true,
+   "importeTotal": "13824.4",
+   "importePromedi": null
+  },
+  {
+   "id": 734,
+   "loteId": 64,
+   "ingresoId": 324,
+   "incluido": true,
+   "importeTotal": "6912.2",
+   "importePromedi": null
+  },
+  {
+   "id": 735,
+   "loteId": 64,
+   "ingresoId": 335,
+   "incluido": true,
+   "importeTotal": "8156.67",
+   "importePromedi": null
+  },
+  {
+   "id": 736,
+   "loteId": 64,
+   "ingresoId": 344,
+   "incluido": true,
+   "importeTotal": "12051.22",
+   "importePromedi": null
+  },
+  {
+   "id": 737,
+   "loteId": 64,
+   "ingresoId": 490,
+   "incluido": true,
+   "importeTotal": "33674.41",
+   "importePromedi": null
+  },
+  {
+   "id": 738,
+   "loteId": 64,
+   "ingresoId": 555,
+   "incluido": true,
+   "importeTotal": "6025.61",
+   "importePromedi": null
+  },
+  {
+   "id": 739,
+   "loteId": 64,
+   "ingresoId": 568,
+   "incluido": true,
+   "importeTotal": "11876.05",
+   "importePromedi": null
+  },
+  {
+   "id": 715,
+   "loteId": 64,
+   "ingresoId": 356,
+   "incluido": true,
+   "importeTotal": "6025.61",
+   "importePromedi": null
+  },
+  {
+   "id": 720,
+   "loteId": 64,
+   "ingresoId": 188,
+   "incluido": true,
+   "importeTotal": "6912.2",
+   "importePromedi": null
+  },
+  {
+   "id": 719,
+   "loteId": 64,
+   "ingresoId": 185,
+   "incluido": true,
+   "importeTotal": "6025.61",
+   "importePromedi": null
+  },
+  {
+   "id": 717,
+   "loteId": 64,
+   "ingresoId": 254,
+   "incluido": true,
+   "importeTotal": "6912.2",
+   "importePromedi": null
+  },
+  {
+   "id": 718,
+   "loteId": 64,
+   "ingresoId": 357,
+   "incluido": true,
+   "importeTotal": "10280.19",
+   "importePromedi": null
+  },
+  {
+   "id": 716,
+   "loteId": 64,
+   "ingresoId": 433,
+   "incluido": true,
+   "importeTotal": "6912.2",
+   "importePromedi": null
+  },
+  {
+   "id": 721,
+   "loteId": 64,
+   "ingresoId": 435,
+   "incluido": true,
+   "importeTotal": "12051.22",
+   "importePromedi": null
+  },
+  {
+   "id": 723,
+   "loteId": 64,
+   "ingresoId": 557,
+   "incluido": true,
+   "importeTotal": "13824.4",
+   "importePromedi": null
+  },
+  {
+   "id": 722,
+   "loteId": 64,
+   "ingresoId": 559,
+   "incluido": true,
+   "importeTotal": "18788.25",
+   "importePromedi": null
+  }
+ ],
+ "lote": {
+  "id": 64,
+  "numero": 64,
+  "fecha": "2026-09-03T00:00:00.000Z",
+  "periodo": "2026-08",
+  "obraSocialId": 511,
+  "planId": null,
+  "tipoIngresoCodigo": "AMB",
+  "tipo": "PRACTICAS",
+  "rangoDesde": null,
+  "rangoHasta": null,
+  "sedeId": null,
+  "descripcion": null,
+  "concepto": "OSECAC RX AMBUL AGOSTO",
+  "importeTotal": "290674.66",
+  "origen": null,
+  "estado": "PEN",
+  "fechaEstado": "2026-09-03T14:07:26.898Z",
+  "usuario": "user_3FHF0"
+ }
+}

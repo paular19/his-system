@@ -1673,3 +1673,55 @@ La 4727 tenia la orden 1/3033, que quedo anulada (`OrdEstad = 'X'`) y nunca se r
 
 **Reversion:** `docs/snapshot-orden3325-fecha-2026-09-03.json` tiene la orden con su item, la
 practica 5120, los dos lotes y sus items del ingreso 450, y las exclusiones previas de ambos.
+
+---
+
+## 2026-09-04 — Lote 64: 340301 y 340302 sin honorario (ALVAREZ SANTILLAN)
+
+**Reportado por:** Paula — "en el resumen 64 los codigos 340301 y 340302 tambien estan
+incompletos, que a ninguno le falte especialista ni gastos".
+
+**Alcance:** lote 64 (OSECAC CONV DIRECT, periodo 2026-08, PEN). 14 grupos
+paciente+codigo+fecha con esos dos codigos, **12 ya estaban bien**. Los 2 incompletos son
+del mismo paciente y la misma orden: ALVAREZ SANTILLAN, RICARDO DANIEL (ing 335 / INT-199),
+orden 1/1388 del 13/08.
+
+**Que estaba mal:** los dos items traian el importe de **gastos** y ningun honorario.
+
+| Orden/item | Codigo | PraID | De | A | Falta |
+|---|---|---|---|---|---|
+| 1/1388/1 | 340301 | 2371 | 4.432,97 | 6.025,61 | HE 1.592,64 |
+| 1/1388/2 | 340302 | 2372 | 3.723,70 | 4.254,58 | HE 530,88 |
+
+Detalle que confunde al leerlo en pantalla: el item 1 tenia `OprClasAgrup='HE'` **con el
+importe de gastos** (4.432,97 es el `NPrValGto` del 340301), y la cabecera
+`OrdTitularModular='HONORARIO ESPECIALISTA'`. La etiqueta miente; el importe no. El item 2
+tenia `OprModulo='GA'` y ninguna clasificacion.
+
+**Se verifico antes** que el honorario no existiera en otro lado: en todo el ingreso 335 hay
+**solo esas 2 filas** de 340301/340302 contando las ordenes anuladas, y no hay orden
+hermana de `DERECHOS`/`HONORARIO ESPECIALISTA` como si tienen otros pacientes cargados en
+el mismo minuto (1386/1387, 1391/1392). O sea que los honorarios nunca se cargaron; no es
+un vinculo roto ni una practica partida.
+
+**Fix:** la misma forma canonica del lote 43 y del lote 66 — `OprImpTotal` al valor
+completo, `OprClasAgrup='HE+GA'`, `OprModulo=NULL`,
+`OprTitularModular='HONORARIO ESPECIALISTA + DERECHOS'`, `OprImprimirDuplicado=true`, y
+`PraImpTotal` igual. Cabecera 1388: 8.156,67 -> 10.280,19.
+
+**Sobre la cabecera:** el precedente del lote 43 dice no tocar `OrdTitularModular` en
+ordenes multi-item, para no mal-etiquetar los otros codigos. Aca la 1388 tiene 2 items y
+**los dos** pasan a HE+GA, asi que esa razon no aplica y el titular se actualizo. El script
+lo decide solo: reetiqueta la cabecera unicamente si todos los items de la orden cambian.
+
+**Antes de escribir se verifico** que ningun otro lote activo tome esas ordenes: el ingreso
+335 aparece ademas en el lote 39, **ANU**.
+
+**Importes:** lote 64 de 290.674,66 a **292.798,18** (+2.123,52). Guardado y calculado
+coincidian antes del cambio y vuelven a coincidir despues. Sigue en PEN.
+
+**Verificacion:** los 14 grupos quedan con honorario y gastos (0 incompletos, 0 mal
+etiquetados, 0 fuera del resumen).
+
+**Snapshot / reversion:** `docs/snapshot-lote64-340301-2026-09-04.json` (practicas, las 2
+filas de `OrdenPrac`, la cabecera, los items del lote y el lote).

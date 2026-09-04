@@ -441,6 +441,36 @@ export async function aplicarPromediLote(id: number, usuario: string, ip?: strin
     return resultado
 }
 
+export async function aplicarDescuentoLote(id: number, usuario: string, ip?: string) {
+    const resultado = await repo.aplicarDescuentoLote(id)
+
+    await registrarAudit({
+        usuario,
+        accion: 'MODIFICAR',
+        entidad: 'LoteFacturacion',
+        registroId: id,
+        detalle: `Descuento OSECAC 20% aplicado - importe total: ${resultado.importeTotal}`,
+        direccionIp: ip,
+    })
+
+    return resultado
+}
+
+export async function revertirAjusteLote(id: number, usuario: string, ip?: string) {
+    const resultado = await repo.revertirAjusteLote(id)
+
+    await registrarAudit({
+        usuario,
+        accion: 'MODIFICAR',
+        entidad: 'LoteFacturacion',
+        registroId: id,
+        detalle: `Ajuste revertido - importe total sin ajuste: ${resultado.importeTotal}`,
+        direccionIp: ip,
+    })
+
+    return resultado
+}
+
 export async function obtenerItemsIPSTxt(loteId: number) {
     return repo.obtenerItemsIPSTxt(loteId)
 }

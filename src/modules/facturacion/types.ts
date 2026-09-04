@@ -1,3 +1,5 @@
+import type { AjusteLote } from './promedi-rules'
+
 export type TipoPrestacionFacturable =
     | 'ORDEN_ITEM'
     | 'PRACTICA'
@@ -180,6 +182,9 @@ export interface LoteFacturacionListItem {
     concepto: string | null
     importeTotal: number
     promediAplicado: boolean
+    // Que ajuste llevan los importes: PROMEDI (porcentaje por regla) o DESC20
+    // (descuento del 20% de OSECAC sobre el total facturado).
+    ajuste: AjusteLote | null
     tipoIngresoCodigo: string | null
     rangoDesde: number | null
     rangoHasta: number | null

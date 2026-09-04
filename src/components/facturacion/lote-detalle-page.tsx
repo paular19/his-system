@@ -11,13 +11,15 @@ import { descargarResumenPdf } from './lote-resumen-pdf'
 import { fechaHoraAInputLocal, formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 import { recalcularImportePorCambioCantidad } from '@/lib/facturacion/importes'
 import {
+    admiteDescuentoTotal,
     aplicaPromediIPS,
     aplicaPromediPorObraYSubitem,
-    calcularImportePromediPorCodigo,
+    calcularImporteAjustado,
     porcentajePromediPorObra,
     repartirLineaCombinada,
     resolverReglaPromedi,
     resolverSubitemPromedi,
+    type AjusteLote,
     type LineaSubitemPromedi,
     type ObraSocialPromedi,
     type SubitemPromedi,
@@ -120,7 +122,8 @@ function normalizarTexto(value: string | null | undefined): string {
         .toUpperCase()
 }
 
-function importePromediAplicado(
+function importeAjustadoLinea(
+    ajuste: AjusteLote,
     codigoRaw: string,
     importe: number,
     porcentaje: number,
@@ -128,7 +131,8 @@ function importePromediAplicado(
     subitem: SubitemPromedi
 ): number {
     // El PROMEDI debe evaluarse por práctica/item y no por paciente o ingreso.
-    return calcularImportePromediPorCodigo(codigoRaw, importe, porcentaje, obraSocialPromedi, subitem)
+    // El descuento de OSECAC, en cambio, se aplica parejo a todas las líneas.
+    return calcularImporteAjustado(ajuste, codigoRaw, importe, porcentaje, obraSocialPromedi, subitem)
 }
 
 // Arma la linea que consume el resolver de subitem. El importe y el desglose del
@@ -313,6 +317,7 @@ type OrdenItemAgrupadoTabla = {
 // tienen que seguir viendose separadas.
 function agruparItemsOrdenParaTabla(
     items: OrdenAutorizadaLote['items'],
+    ajuste: AjusteLote,
     porcentajePromedi: number,
     obraSocialPromedi: ObraSocialPromedi,
     profesionalNombre: string | null | undefined
@@ -331,7 +336,8 @@ function agruparItemsOrdenParaTabla(
             item.importeTotal.toFixed(2),
         ].join('|')
 
-        const importePromedi = importePromediAplicado(
+        const importePromedi = importeAjustadoLinea(
+            ajuste,
             item.codigoPractica,
             item.importeTotal,
             porcentajePromedi,
@@ -388,6 +394,8 @@ export function LoteDetallePage({ loteId }: Props) {
     const [ordenesAbiertas, setOrdenesAbiertas] = useState<Record<string, boolean>>({})
     const [ordenesExpandidas, setOrdenesExpandidas] = useState<Record<string, boolean>>({})
     const [mostrarConfirmPromedi, setMostrarConfirmPromedi] = useState(false)
+    const [mostrarConfirmDescuento, setMostrarConfirmDescuento] = useState(false)
+    const [mostrarConfirmRevertir, setMostrarConfirmRevertir] = useState(false)
     const [errorPromedi, setErrorPromedi] = useState('')
     const [filtroMedico, setFiltroMedico] = useState('')
     const [filtroMatricula, setFiltroMatricula] = useState('')
@@ -831,6 +839,41 @@ export function LoteDetallePage({ loteId }: Props) {
         }
     }
 
+    async function aplicarDescuento() {
+        setErrorPromedi('')
+        setProcesando(true)
+        try {
+            const res = await fetch(`/api/facturacion/lotes/${loteId}/descuento`, { method: 'POST' })
+            const json = await res.json()
+            if (!res.ok || !json.ok) {
+                setErrorPromedi(json.error ?? 'Error al aplicar el descuento')
+                return
+            }
+            setMostrarConfirmDescuento(false)
+            cargar()
+        } finally {
+            setProcesando(false)
+        }
+    }
+
+    async function revertirAjuste() {
+        setErrorPromedi('')
+        setProcesando(true)
+        try {
+            const res = await fetch(`/api/facturacion/lotes/${loteId}/promedi`, { method: 'DELETE' })
+            const json = await res.json()
+            if (!res.ok || !json.ok) {
+                setErrorPromedi(json.error ?? 'Error al revertir el ajuste')
+                return
+            }
+            setMostrarConfirmRevertir(false)
+            setVistaPromedi(false)
+            cargar()
+        } finally {
+            setProcesando(false)
+        }
+    }
+
     function imprimir(ingresoId: number | null = null) {
         setPrintIngresoId(ingresoId)
         requestAnimationFrame(() => requestAnimationFrame(() => window.print()))
@@ -858,6 +901,14 @@ export function LoteDetallePage({ loteId }: Props) {
     // ACIDSAL tiene regla propia: mismos codigos alcanzados que IPS, pero al 13%.
     const reglaPromedi = resolverReglaPromedi(lote.obraSocial?.nombre)
     const puedeAplicarPromedi = esPendiente && !lote.promediAplicado && (esIPSTxt || (lote.tipo === 'PRACTICAS' && reglaPromedi !== null))
+    // El descuento del -20% es solo de OSECAC y no convive con el PROMEDI: se aplica uno
+    // u otro, y para cambiar hay que revertir primero.
+    const puedeAplicarDescuento =
+        esPendiente && !lote.promediAplicado && !esIPSTxt && admiteDescuentoTotal(lote.obraSocial?.nombre)
+    const puedeRevertirAjuste = esPendiente && lote.promediAplicado
+    const ajusteVigente: AjusteLote = lote.ajuste ?? 'PROMEDI'
+    const esDescuentoTotal = ajusteVigente === 'DESC20'
+    const etiquetaVistaAjuste = esDescuentoTotal ? 'Con descuento' : 'PROMEDI'
     // El lote IPS TXT ya es de IPS por origen, aunque no tenga obra social cargada.
     const obraSocialPromedi: ObraSocialPromedi = esIPSTxt ? 'IPS' : (reglaPromedi ?? 'IPS')
     const porcentajePromediDecimal = porcentajePromediPorObra(obraSocialPromedi)
@@ -999,7 +1050,8 @@ export function LoteDetallePage({ loteId }: Props) {
                     const lineaSubitem = lineaSubitemDeItem(linea, orden.profesional?.nombre)
                     const subitemLinea = resolverSubitemPromedi(lineaSubitem)
                     const importeLinea = vistaPromedi
-                        ? importePromediAplicado(
+                        ? importeAjustadoLinea(
+                            ajusteVigente,
                             linea.codigoPractica,
                             linea.importeTotal,
                             porcentajePromediDecimal,
@@ -1164,7 +1216,7 @@ export function LoteDetallePage({ loteId }: Props) {
                         {tienePromedi && (
                             <div className="flex gap-1 pt-2">
                                 <button onClick={() => setVistaPromedi(false)} className={`rounded px-3 py-1 text-xs ${!vistaPromedi ? 'bg-blue-600 text-white' : 'border'}`}>General</button>
-                                <button onClick={() => setVistaPromedi(true)} className={`rounded px-3 py-1 text-xs ${vistaPromedi ? 'bg-blue-600 text-white' : 'border'}`}>PROMEDI</button>
+                                <button onClick={() => setVistaPromedi(true)} className={`rounded px-3 py-1 text-xs ${vistaPromedi ? 'bg-blue-600 text-white' : 'border'}`}>{etiquetaVistaAjuste}</button>
                             </div>
                         )}
                         <div className="text-sm text-gray-600 space-x-4">
@@ -1220,6 +1272,30 @@ export function LoteDetallePage({ loteId }: Props) {
                                 className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50 font-medium"
                             >
                                 Aplicar PROMEDI ({porcentajePromediLabel}%)
+                            </button>
+                        )}
+                        {puedeAplicarDescuento && (
+                            <button
+                                onClick={() => {
+                                    setErrorPromedi('')
+                                    setMostrarConfirmDescuento(true)
+                                }}
+                                disabled={procesando}
+                                className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm hover:bg-amber-700 disabled:opacity-50 font-medium"
+                            >
+                                OSECAC −20%
+                            </button>
+                        )}
+                        {puedeRevertirAjuste && (
+                            <button
+                                onClick={() => {
+                                    setErrorPromedi('')
+                                    setMostrarConfirmRevertir(true)
+                                }}
+                                disabled={procesando}
+                                className="border border-gray-300 text-gray-600 px-3 py-1.5 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Quitar {esDescuentoTotal ? 'descuento' : 'PROMEDI'}
                             </button>
                         )}
                         {esPendiente && !esIPSTxt && (
@@ -1589,6 +1665,7 @@ export function LoteDetallePage({ loteId }: Props) {
                                                 : orden.items
                                             const itemsTabla = agruparItemsOrdenParaTabla(
                                                 itemsOrden,
+                                                ajusteVigente,
                                                 porcentajePromediOrden,
                                                 obraSocialPromedi,
                                                 orden.profesional?.nombre
@@ -1938,6 +2015,97 @@ export function LoteDetallePage({ loteId }: Props) {
                                 className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50"
                             >
                                 {procesando ? 'Aplicando...' : 'Aplicar y Confirmar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {mostrarConfirmDescuento && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 print:hidden">
+                    <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-gray-200">
+                        <div className="px-5 py-4 border-b border-gray-100">
+                            <h3 className="text-base font-semibold text-gray-900">Descuento OSECAC (−20%)</h3>
+                        </div>
+                        <div className="px-5 py-4 space-y-3">
+                            <p className="text-sm text-gray-700">
+                                Se le descuenta el <strong>20%</strong> al total facturado del lote. A diferencia del
+                                PROMEDI, se aplica a <strong>todas</strong> las prácticas: ninguna queda en cero.
+                            </p>
+                            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                                Total actual: <strong>{formatMonto(totalIncluido)}</strong>
+                                <br />
+                                Total con descuento: <strong>{formatMonto(totalIncluido * 0.8)}</strong>
+                            </div>
+                            {errorPromedi && (
+                                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                    {errorPromedi}
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+                            <button
+                                onClick={() => {
+                                    if (!procesando) {
+                                        setMostrarConfirmDescuento(false)
+                                        setErrorPromedi('')
+                                    }
+                                }}
+                                disabled={procesando}
+                                className="border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={aplicarDescuento}
+                                disabled={procesando}
+                                className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm hover:bg-amber-700 disabled:opacity-50"
+                            >
+                                {procesando ? 'Aplicando...' : 'Aplicar descuento'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {mostrarConfirmRevertir && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 print:hidden">
+                    <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-gray-200">
+                        <div className="px-5 py-4 border-b border-gray-100">
+                            <h3 className="text-base font-semibold text-gray-900">
+                                Quitar {esDescuentoTotal ? 'descuento' : 'PROMEDI'}
+                            </h3>
+                        </div>
+                        <div className="px-5 py-4 space-y-3">
+                            <p className="text-sm text-gray-700">
+                                Los importes vuelven al 100%: se borra el ajuste guardado en cada paciente del lote.
+                                Después se puede volver a aplicar el PROMEDI o el descuento.
+                            </p>
+                            {errorPromedi && (
+                                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                    {errorPromedi}
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+                            <button
+                                onClick={() => {
+                                    if (!procesando) {
+                                        setMostrarConfirmRevertir(false)
+                                        setErrorPromedi('')
+                                    }
+                                }}
+                                disabled={procesando}
+                                className="border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={revertirAjuste}
+                                disabled={procesando}
+                                className="bg-red-600 text-white px-3 py-1.5 rounded text-sm hover:bg-red-700 disabled:opacity-50"
+                            >
+                                {procesando ? 'Revirtiendo...' : 'Quitar ajuste'}
                             </button>
                         </div>
                     </div>

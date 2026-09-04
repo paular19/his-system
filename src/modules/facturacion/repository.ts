@@ -62,7 +62,10 @@ import {
     resolverReglaPromedi,
     resolverSubitemPromedi,
     subitemEntraEnPromedi,
+    admiteDescuentoTotal,
+    importeConDescuentoTotal,
     CODIGOS_PROMEDI_BASE,
+    type AjusteLote,
 } from './promedi-rules'
 import { fusionarObservacionesConMeta } from '@/modules/internacion/observaciones-meta'
 import { resolverObraSocialParticularId } from '@/lib/obra-social-particular'
@@ -5494,6 +5497,7 @@ const LOTE_SELECT = {
     tipo: true,
     estado: true,
     origen: true,
+    ajuste: true,
     sedeId: true,
     descripcion: true,
     concepto: true,
@@ -5518,6 +5522,8 @@ function mapLoteRow(row: Prisma.LoteFacturacionGetPayload<{ select: typeof LOTE_
         estado: row.estado as EstadoLote,
         importeTotal: Number(row.importeTotal),
         promediAplicado,
+        // Los lotes ajustados antes de que existiera la columna son todos PROMEDI.
+        ajuste: (row.ajuste as AjusteLote | null) ?? (promediAplicado ? 'PROMEDI' : null),
     }
 }
 
@@ -6845,6 +6851,8 @@ export async function aplicarPromediLote(
 
             const total = redondear2Repo(Number(sumResult._sum.importePromedi ?? 0))
 
+            await tx.loteFacturacion.update({ where: { id: loteId }, data: { ajuste: 'PROMEDI' } })
+
             return { totalPromedi: total, cantidadItems: itemsCount }
         })
 
@@ -6992,9 +7000,96 @@ export async function aplicarPromediLote(
 
     await prisma.$transaction([
         ...updatesItems,
+        prisma.loteFacturacion.update({ where: { id: loteId }, data: { ajuste: 'PROMEDI' } }),
     ])
 
     return { importeTotal: totalPromedi, cantidadItems: loteItems.length }
+}
+
+// Descuento comercial de OSECAC: al total facturado se le saca el 20%, sin mirar
+// codigos ni subitems. No es un PROMEDI: aca no hay practicas que queden en cero,
+// todas las lineas se facturan al 80%.
+export async function aplicarDescuentoLote(
+    loteId: number
+): Promise<{ importeTotal: number; cantidadItems: number }> {
+    const lote = await prisma.loteFacturacion.findUnique({
+        where: { id: loteId },
+        select: { id: true, estado: true, obraSocial: { select: { nombre: true } } },
+    })
+
+    if (!lote) throw new Error('Lote no encontrado')
+    if (lote.estado !== 'PEN') throw new Error('Solo se puede aplicar el descuento a un lote pendiente')
+    if (!admiteDescuentoTotal(lote.obraSocial?.nombre)) {
+        throw new Error('El descuento del 20% solo aplica a lotes de OSECAC')
+    }
+
+    const items = await prisma.loteFacturacionItem.findMany({
+        where: { loteId },
+        select: { id: true, incluido: true, importeTotal: true },
+    })
+
+    if (items.length === 0) {
+        await prisma.loteFacturacion.update({ where: { id: loteId }, data: { ajuste: 'DESC20' } })
+        return { importeTotal: 0, cantidadItems: 0 }
+    }
+
+    const conDescuento = items.map((it) => ({
+        id: it.id,
+        incluido: it.incluido,
+        importe: importeConDescuentoTotal(Number(it.importeTotal)),
+    }))
+
+    await prisma.$transaction([
+        ...conDescuento.map((it) =>
+            prisma.loteFacturacionItem.update({
+                where: { id: it.id },
+                data: { importePromedi: it.importe },
+            })
+        ),
+        prisma.loteFacturacion.update({ where: { id: loteId }, data: { ajuste: 'DESC20' } }),
+    ])
+
+    const total = redondear2Repo(
+        conDescuento.reduce((s, it) => (it.incluido ? s + it.importe : s), 0)
+    )
+
+    return { importeTotal: total, cantidadItems: items.length }
+}
+
+// Deja el lote como estaba antes del ajuste: los importes vuelven a ser los del
+// nomenclador, sin porcentaje ni descuento.
+export async function revertirAjusteLote(
+    loteId: number
+): Promise<{ importeTotal: number; cantidadItems: number }> {
+    const lote = await prisma.loteFacturacion.findUnique({
+        where: { id: loteId },
+        select: { id: true, estado: true },
+    })
+
+    if (!lote) throw new Error('Lote no encontrado')
+    if (lote.estado !== 'PEN') throw new Error('Solo se puede revertir el ajuste de un lote pendiente')
+
+    const [items] = await prisma.$transaction([
+        prisma.loteFacturacionItem.updateMany({
+            where: { loteId, importePromedi: { not: null } },
+            data: { importePromedi: null },
+        }),
+        prisma.loteIPSTxtItem.updateMany({
+            where: { loteId, importePromedi: { not: null } },
+            data: { importePromedi: null },
+        }),
+        prisma.loteFacturacion.update({ where: { id: loteId }, data: { ajuste: null } }),
+    ])
+
+    const incluidos = await prisma.loteFacturacionItem.aggregate({
+        where: { loteId, incluido: true },
+        _sum: { importeTotal: true },
+    })
+
+    return {
+        importeTotal: redondear2Repo(Number(incluidos._sum.importeTotal ?? 0)),
+        cantidadItems: items.count,
+    }
 }
 
 export async function obtenerItemsIPSTxt(loteId: number): Promise<LoteIPSTxtItemDetalle[]> {

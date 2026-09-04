@@ -1,5 +1,5 @@
 import type { LoteFacturacionDetalle, LoteIPSTxtItemDetalle } from '@/modules/facturacion/types'
-import { etiquetaPromediAplicado, resolverReglaPromedi } from '@/modules/facturacion/promedi-rules'
+import { etiquetaAjusteAplicado, resolverReglaPromedi } from '@/modules/facturacion/promedi-rules'
 import { formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 const TIPO_LABEL: Record<string, string> = {
@@ -129,7 +129,10 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
     const esMedicamentos = lote.tipo === 'MEDICAMENTOS'
     // Los importes de un lote con promedi ya salen ajustados: hay que decirlo en el papel.
     const textoPromedi = lote.promediAplicado
-        ? etiquetaPromediAplicado(esIPSTxt ? 'IPS' : resolverReglaPromedi(lote.obraSocial?.nombre))
+        ? etiquetaAjusteAplicado(
+            lote.ajuste,
+            esIPSTxt ? 'IPS' : resolverReglaPromedi(lote.obraSocial?.nombre)
+        )
         : null
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })

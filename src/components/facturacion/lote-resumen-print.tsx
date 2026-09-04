@@ -1,7 +1,7 @@
 import type { LoteFacturacionDetalle } from '@/modules/facturacion/types'
 import {
     aplicaPromediIPS,
-    etiquetaPromediAplicado,
+    etiquetaAjusteAplicado,
     resolverReglaPromedi,
 } from '@/modules/facturacion/promedi-rules'
 import { formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
@@ -118,9 +118,13 @@ export function LoteResumenPrint({
     const cantidadRegistros = esIPSTxt
         ? itemsIPSFacturables.length
         : detallePacientes.reduce((acc, p) => acc + p.lineas.length, 0)
-    // Los importes del lote con promedi ya salen ajustados: hay que decirlo en el papel.
+    // Los importes de un lote ajustado (promedi o descuento) ya salen con el ajuste
+    // aplicado: hay que decirlo en el papel.
     const textoPromedi = lote.promediAplicado
-        ? etiquetaPromediAplicado(esIPSTxt ? 'IPS' : resolverReglaPromedi(lote.obraSocial?.nombre))
+        ? etiquetaAjusteAplicado(
+            lote.ajuste,
+            esIPSTxt ? 'IPS' : resolverReglaPromedi(lote.obraSocial?.nombre)
+        )
         : null
 
     return (
@@ -166,7 +170,7 @@ export function LoteResumenPrint({
                     <p><strong>Tipo:</strong> {TIPO_LABEL[lote.tipo]}</p>
                     <p><strong>Estado:</strong> {ESTADO_LABEL[lote.estado]}</p>
                     <p><strong>Cantidad de registros:</strong> {cantidadRegistros}</p>
-                    <p><strong>PROMEDI:</strong> {textoPromedi ?? 'No aplicado'}</p>
+                    <p><strong>Ajuste:</strong> {textoPromedi ?? 'No aplicado'}</p>
                     {filtroCategoria && (
                         <p><strong>Filtrado por:</strong> {filtroCategoria} (resumen parcial)</p>
                     )}

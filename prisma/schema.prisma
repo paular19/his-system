@@ -1321,6 +1321,10 @@ model LoteFacturacion {
   // Origen del lote: null=normal, IPS_TXT=importado desde planilla IPS
   origen String? @map("LotOrigen") @db.VarChar(20)
 
+  // Ajuste aplicado sobre los importes: null=ninguno, PROMEDI=porcentaje por regla,
+  // DESC20=descuento del 20% sobre el total facturado (solo OSECAC).
+  ajuste String? @map("LotAjuste") @db.VarChar(20)
+
   // Estado: PEN=Pendiente, CON=Confirmado, ANU=Anulado
   estado      String   @map("LotEstado") @db.Char(3)
   fechaEstado DateTime @map("LotFchEstado") @db.Timestamp(6)

@@ -72,6 +72,44 @@ export function etiquetaPromediAplicado(regla: ObraSocialPromedi | null): string
     return `PROMEDI aplicado (${regla} ${Math.round(porcentajePromediPorObra(regla) * 100)}%)`
 }
 
+// ============================================
+// AJUSTES DE LOTE
+// ============================================
+
+// Un lote se puede ajustar de dos maneras distintas, y no son la misma cuenta:
+//
+// - PROMEDI: se factura un porcentaje del importe, pero solo de los codigos alcanzados
+//   por la regla y solo del subitem de gastos. Lo que queda afuera no se factura (va a
+//   cero), asi que el total puede bajar muchisimo.
+// - DESC20: descuento comercial de OSECAC. Se le saca el 20% al total facturado, sin
+//   mirar codigos ni subitems: todas las lineas quedan al 80%.
+//
+// Conviven: un lote de OSECAC puede llevar uno o el otro, por eso el lote guarda cual
+// se aplico en vez de deducirlo de la obra social.
+export type AjusteLote = 'PROMEDI' | 'DESC20'
+
+export const PORCENTAJE_DESCUENTO_TOTAL = 0.20
+
+// El descuento del -20% es exclusivo de OSECAC.
+export function admiteDescuentoTotal(nombre: string | null | undefined): boolean {
+    return esObraSocialOsecac(nombre)
+}
+
+export function importeConDescuentoTotal(importeTotal: number): number {
+    if (!Number.isFinite(importeTotal)) return 0
+    return redondear2(importeTotal * (1 - PORCENTAJE_DESCUENTO_TOTAL))
+}
+
+export function etiquetaAjusteAplicado(
+    ajuste: AjusteLote | null,
+    regla: ObraSocialPromedi | null
+): string {
+    if (ajuste === 'DESC20') {
+        return `Descuento OSECAC (-${Math.round(PORCENTAJE_DESCUENTO_TOTAL * 100)}%)`
+    }
+    return etiquetaPromediAplicado(regla)
+}
+
 // La clinica se factura a si misma los gastos con dos matriculas propias: 9995
 // ("CLINICA SAN RAFAEL", internacion) y 9110 ("SAN RAFAEL S.A. MP CMS", ambulatorio).
 // Es la misma columna "Mat." que imprime el resumen del sistema anterior.
@@ -280,6 +318,20 @@ export function calcularImportePromediPorCodigo(
 
     const porcentajeNormalizado = Math.abs(porcentajePromedi) > 1 ? porcentajePromedi / 100 : porcentajePromedi
     return redondear2(importeBase * porcentajeNormalizado)
+}
+
+// Importe que se factura de una linea segun el ajuste que lleve el lote. Es el unico
+// punto donde se decide entre las dos cuentas: pantalla, resumen y PDF pasan por aca.
+export function calcularImporteAjustado(
+    ajuste: AjusteLote,
+    codigoPractica: string | null | undefined,
+    importeTotal: number,
+    porcentajePromedi: number,
+    obraSocial: ObraSocialPromedi,
+    subitem: SubitemPromedi
+): number {
+    if (ajuste === 'DESC20') return importeConDescuentoTotal(importeTotal)
+    return calcularImportePromediPorCodigo(codigoPractica, importeTotal, porcentajePromedi, obraSocial, subitem)
 }
 // ============================================
 // FILAS COMBINADAS (varios componentes en la misma linea)

@@ -1774,3 +1774,34 @@ ingreso (solo esta el 58, ANU).
 (27/08), 17.000 cada una.
 
 **Reversion:** `docs/snapshot-orden2750-fecha-2026-09-04.json`.
+
+---
+
+## 2026-09-04 — PROMEDI revertido en el lote 64 + columna `LotAjuste`
+
+**Reportado por:** Paula, sobre el lote 64 (OSECAC CONV DIRECT - Cod.511, PEN, periodo
+2026-08).
+
+**Que estaba mal:** se le aplico PROMEDI. Ninguna practica del lote esta alcanzada por la
+regla, asi que los 25 items quedaron con `LItImpPromedi = 0` y el total facturado paso de
+**292.798,18 a 0**. No es un bug del calculo: OSECAC no se factura por PROMEDI sino con un
+descuento comercial del 20% sobre el total.
+
+**Escrituras:**
+
+| tabla | registros | antes | despues |
+|---|---|---|---|
+| `LoteFacturacion` | — | (sin columna) | `ALTER TABLE ... ADD COLUMN IF NOT EXISTS "LotAjuste" VARCHAR(20)` |
+| `LoteFacturacion` | 15 lotes | `LotAjuste` null | `'PROMEDI'` (backfill de los ya ajustados) |
+| `LoteFacturacionItem` | 25 del lote 64 | `LItImpPromedi = 0` | `NULL` |
+| `LoteFacturacion` | 64 | `LotAjuste` | `NULL` |
+
+El `ALTER` se aplico a mano con `$executeRawUnsafe`, **no** con `db push`: el
+`migrate diff` del dia sigue trayendo el `DROP SEQUENCE "Paciente_HC_seq"` y los 11
+`DROP INDEX` de la trampa 5.
+
+**Verificacion:** lote 64 con 0 items ajustados y total incluido 292.798,18;
+`Paciente_HC_seq` viva y 9 indices `trgm` presentes despues del ALTER.
+
+**Reversion:** volver a aplicar PROMEDI desde la pantalla del lote (el boton sigue
+disponible mientras el lote este en PEN).

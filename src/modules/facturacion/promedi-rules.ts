@@ -65,6 +65,13 @@ export function porcentajePromediPorObra(obraSocial: ObraSocialPromedi): number 
     return PORCENTAJE_PROMEDI[obraSocial]
 }
 
+// El resumen impreso tiene que dejar constancia de que los importes ya salieron
+// ajustados: sin esto, un lote con promedi y uno sin promedi se imprimen iguales.
+export function etiquetaPromediAplicado(regla: ObraSocialPromedi | null): string {
+    if (!regla) return 'PROMEDI aplicado'
+    return `PROMEDI aplicado (${regla} ${Math.round(porcentajePromediPorObra(regla) * 100)}%)`
+}
+
 // La clinica se factura a si misma los gastos con dos matriculas propias: 9995
 // ("CLINICA SAN RAFAEL", internacion) y 9110 ("SAN RAFAEL S.A. MP CMS", ambulatorio).
 // Es la misma columna "Mat." que imprime el resumen del sistema anterior.

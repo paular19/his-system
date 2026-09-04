@@ -1,4 +1,5 @@
 import type { LoteFacturacionDetalle, LoteIPSTxtItemDetalle } from '@/modules/facturacion/types'
+import { etiquetaPromediAplicado, resolverReglaPromedi } from '@/modules/facturacion/promedi-rules'
 import { formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 const TIPO_LABEL: Record<string, string> = {
@@ -126,6 +127,10 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
     } = opciones
     const esIPSTxt = lote.origen === 'IPS_TXT'
     const esMedicamentos = lote.tipo === 'MEDICAMENTOS'
+    // Los importes de un lote con promedi ya salen ajustados: hay que decirlo en el papel.
+    const textoPromedi = lote.promediAplicado
+        ? etiquetaPromediAplicado(esIPSTxt ? 'IPS' : resolverReglaPromedi(lote.obraSocial?.nombre))
+        : null
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
     const anchoPagina = doc.internal.pageSize.getWidth()
@@ -144,7 +149,7 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.text(
-        `Lote #${lote.numero}  ·  ${TIPO_LABEL[lote.tipo] ?? lote.tipo}  ·  ${ESTADO_LABEL[lote.estado] ?? lote.estado}`,
+        `Lote #${lote.numero}  ·  ${TIPO_LABEL[lote.tipo] ?? lote.tipo}  ·  ${ESTADO_LABEL[lote.estado] ?? lote.estado}${textoPromedi ? `  ·  ${textoPromedi}` : ''}`,
         anchoPagina - margen,
         15,
         { align: 'right' }
@@ -160,6 +165,7 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
 
     let y = 26
     const aclaraciones: string[] = []
+    if (textoPromedi) aclaraciones.push(textoPromedi)
     if (pacienteUnico) aclaraciones.push(`Paciente: ${pacienteUnico}`)
     if (filtroCategoria) aclaraciones.push(`Filtrado por: ${filtroCategoria} (resumen parcial)`)
     if (lote.concepto) aclaraciones.push(`Concepto: ${lote.concepto}`)
@@ -226,7 +232,7 @@ export async function generarResumenPdf(opciones: ResumenPdfOpciones): Promise<B
                 doc.setFontSize(7)
                 doc.setTextColor(120)
                 doc.text(
-                    `Lote #${lote.numero}  ·  ${lote.obraSocial?.nombre ?? 'Particular'}  ·  Periodo: ${formatPeriodo(lote.periodo)}`,
+                    `Lote #${lote.numero}  ·  ${lote.obraSocial?.nombre ?? 'Particular'}  ·  Periodo: ${formatPeriodo(lote.periodo)}${textoPromedi ? `  ·  ${textoPromedi}` : ''}`,
                     margen,
                     10
                 )

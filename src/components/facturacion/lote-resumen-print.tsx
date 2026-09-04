@@ -1,5 +1,9 @@
 import type { LoteFacturacionDetalle } from '@/modules/facturacion/types'
-import { aplicaPromediIPS } from '@/modules/facturacion/promedi-rules'
+import {
+    aplicaPromediIPS,
+    etiquetaPromediAplicado,
+    resolverReglaPromedi,
+} from '@/modules/facturacion/promedi-rules'
 import { formatearFechaArgentina, formatearFechaHoraArgentina } from '@/lib/utils/argentina-date'
 
 const TIPO_LABEL: Record<string, string> = {
@@ -114,6 +118,10 @@ export function LoteResumenPrint({
     const cantidadRegistros = esIPSTxt
         ? itemsIPSFacturables.length
         : detallePacientes.reduce((acc, p) => acc + p.lineas.length, 0)
+    // Los importes del lote con promedi ya salen ajustados: hay que decirlo en el papel.
+    const textoPromedi = lote.promediAplicado
+        ? etiquetaPromediAplicado(esIPSTxt ? 'IPS' : resolverReglaPromedi(lote.obraSocial?.nombre))
+        : null
 
     return (
         <div className="font-sans text-[11px] text-gray-900 p-6">
@@ -126,6 +134,11 @@ export function LoteResumenPrint({
                 <div>
                     <h1 className="text-2xl font-bold">Resumen de Facturación</h1>
                     <p className="text-gray-600 mt-1">Lote #{lote.numero} · {TIPO_LABEL[lote.tipo]}</p>
+                    {textoPromedi && (
+                        <p className="mt-1 inline-block rounded border border-gray-800 px-2 py-0.5 text-[11px] font-semibold">
+                            {textoPromedi}
+                        </p>
+                    )}
                 </div>
                 <div className="text-right text-sm text-gray-600 space-y-1">
                     <p>Fecha: {formatearFechaArgentina(lote.fecha)}</p>
@@ -153,6 +166,7 @@ export function LoteResumenPrint({
                     <p><strong>Tipo:</strong> {TIPO_LABEL[lote.tipo]}</p>
                     <p><strong>Estado:</strong> {ESTADO_LABEL[lote.estado]}</p>
                     <p><strong>Cantidad de registros:</strong> {cantidadRegistros}</p>
+                    <p><strong>PROMEDI:</strong> {textoPromedi ?? 'No aplicado'}</p>
                     {filtroCategoria && (
                         <p><strong>Filtrado por:</strong> {filtroCategoria} (resumen parcial)</p>
                     )}
@@ -183,7 +197,10 @@ export function LoteResumenPrint({
                         >
                             {unaHojaPorPaciente && (
                                 <div className="mb-1 flex justify-between text-[10px] text-gray-500">
-                                    <span>Lote #{lote.numero} · {lote.obraSocial?.nombre ?? 'Particular'}</span>
+                                    <span>
+                                        Lote #{lote.numero} · {lote.obraSocial?.nombre ?? 'Particular'}
+                                        {textoPromedi ? ` · ${textoPromedi}` : ''}
+                                    </span>
                                     <span>Período: {formatPeriodo(lote.periodo)}</span>
                                 </div>
                             )}

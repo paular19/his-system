@@ -410,6 +410,9 @@ export function LoteDetallePage({ loteId }: Props) {
     const [errorEstado, setErrorEstado] = useState('')
     const [vistaPromedi, setVistaPromedi] = useState(false)
     const printRef = useRef<HTMLDivElement>(null)
+    // Que (lote, ajuste) ya sincronizo la vista. Sin esto, cada recarga del lote
+    // pisaria el toggle que la usuaria haya movido a mano.
+    const vistaAjusteSincronizadaRef = useRef<string | null>(null)
     const [ordenesPorIngreso, setOrdenesPorIngreso] = useState<Record<number, OrdenAutorizadaLote[]>>({})
 
     const cargar = useCallback(async () => {
@@ -430,6 +433,17 @@ export function LoteDetallePage({ loteId }: Props) {
     }, [loteId, filtroMedico, filtroMatricula])
 
     useEffect(() => { cargar() }, [cargar])
+
+    // El importe ajustado (PROMEDI o descuento) es el que se factura, asi que un lote
+    // con ajuste tiene que abrir mostrandolo: el total y la impresion salian con los
+    // importes al 100% hasta que alguien apretaba el toggle.
+    useEffect(() => {
+        if (!lote) return
+        const clave = `${lote.id}:${lote.ajuste ?? ''}`
+        if (vistaAjusteSincronizadaRef.current === clave) return
+        vistaAjusteSincronizadaRef.current = clave
+        setVistaPromedi(lote.promediAplicado)
+    }, [lote])
 
     useEffect(() => {
         let cancelado = false
@@ -833,6 +847,7 @@ export function LoteDetallePage({ loteId }: Props) {
                 return
             }
             setMostrarConfirmPromedi(false)
+            setVistaPromedi(true)
             cargar()
         } finally {
             setProcesando(false)
@@ -850,6 +865,7 @@ export function LoteDetallePage({ loteId }: Props) {
                 return
             }
             setMostrarConfirmDescuento(false)
+            setVistaPromedi(true)
             cargar()
         } finally {
             setProcesando(false)
@@ -913,6 +929,15 @@ export function LoteDetallePage({ loteId }: Props) {
     const obraSocialPromedi: ObraSocialPromedi = esIPSTxt ? 'IPS' : (reglaPromedi ?? 'IPS')
     const porcentajePromediDecimal = porcentajePromediPorObra(obraSocialPromedi)
     const porcentajePromediLabel = Math.round(porcentajePromediDecimal * 100)
+    // El titulo del total tiene que decir si el numero ya viene ajustado: el mismo
+    // recuadro muestra el bruto o el neto segun la vista.
+    const etiquetaTotalAFacturar = esIPSTxt
+        ? 'Total a facturar con PROMEDI'
+        : lote.promediAplicado && vistaPromedi
+            ? `Total a facturar (${esDescuentoTotal ? 'con descuento -20%' : `PROMEDI ${porcentajePromediLabel}%`})`
+            : lote.promediAplicado
+                ? 'Total sin el ajuste aplicado'
+                : 'Total a facturar'
     const itemsIncluidos = lote.items.filter((it) => it.incluido)
     const itemsOrdenados = [...lote.items].sort((a, b) =>
         (a.paciente?.nombreCompleto ?? a.ingreso.nombre ?? '').localeCompare(
@@ -1383,7 +1408,7 @@ export function LoteDetallePage({ loteId }: Props) {
                     </div>
                     <div className="text-center">
                         <div className={`text-2xl font-bold ${esIPSTxt ? 'text-green-700' : 'text-gray-800'}`}>{formatMonto(totalIncluido)}</div>
-                        <div className="text-gray-500">{esIPSTxt ? 'Total a facturar con PROMEDI' : 'Total a facturar'}</div>
+                        <div className="text-gray-500">{etiquetaTotalAFacturar}</div>
                     </div>
                 </div>
             </div>
